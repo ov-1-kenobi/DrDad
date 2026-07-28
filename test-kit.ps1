@@ -106,10 +106,34 @@ Test-Case "scaffold stamps the project with the kit version" {
   } finally { Remove-Sandbox $sb }
 }
 
-Test-Case "dev-path placeholder preserved in configs" {
-  # install.ps1 rewrites this token; a hard-coded absolute path here would break every fresh install.
-  $s = Get-Content (Join-Path $kit "templates\_common\.mcp.json") -Raw
-  Assert ($s -match 'AD-kit') "templates\_common\.mcp.json lost the AD-kit placeholder"
+Test-Case "dev-path placeholder preserved in ALL configs (move-safety)" {
+  # install.ps1 rewrites this token on the target machine. A baked-in absolute path here means a
+  # folder-copy install lands broken - which is the primary distribution path, so check every config.
+  foreach ($rel in @(".mcp.json", "templates\_common\.mcp.json", "templates\unity\.mcp.json")) {
+    $p = Join-Path $kit $rel
+    if (-not (Test-Path $p)) { continue }
+    $s = Get-Content $p -Raw
+    Assert ($s -match 'AD-kit') "$rel lost the AD-kit placeholder"
+    Assert ($s -notmatch 'claude-local') "$rel has this machine's path baked in"
+  }
+}
+
+Test-Case "package-kit produces a clean, installable copy" {
+  $sb = New-Sandbox
+  try {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "package-kit.ps1") -OutDir $sb -Folder | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "package-kit exited $LASTEXITCODE"
+    $v = (Get-Content (Join-Path $kit "VERSION") -Raw).Trim()
+    $out = Join-Path $sb "AD-kit-v$v"
+    Assert (Test-Path $out) "package folder not created"
+    foreach ($f in @("VERSION","install.cmd","models.json","test-kit.ps1","local-tools\Tools.cs")) {
+      Assert (Test-Path (Join-Path $out $f)) "package missing $f"
+    }
+    foreach ($junk in @("local-tools\bin","local-tools\obj","_tempReference","docs\.index",".git")) {
+      Assert (-not (Test-Path (Join-Path $out $junk))) "package should not contain $junk"
+    }
+    Assert ((Get-Content (Join-Path $out ".mcp.json") -Raw) -match 'AD-kit') "packaged .mcp.json lost the placeholder"
+  } finally { Remove-Sandbox $sb }
 }
 
 # ---------------------------------------------------------------- inventory consistency
