@@ -17,7 +17,8 @@
       "Read", "Grep", "Glob", "Edit", "Write",
       "mcp__local-tools",
       "Bash(dotnet:*)", "Bash(pytest:*)", "Bash(ruff:*)", "Bash(mypy:*)",
-      "Bash(git:*)", "Bash(ollama:*)", "Bash(npm:*)", "Bash(pio:*)", "Bash(python:*)"
+      "Bash(git:*)", "Bash(ollama:*)", "Bash(npm:*)", "Bash(pio:*)", "Bash(python:*)",
+      "Bash(powershell:*)", "Bash(pwsh:*)"
     ]
   }
 }

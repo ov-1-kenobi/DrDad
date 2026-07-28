@@ -39,9 +39,10 @@ its dependencies satisfied, STOP and report the blocked tasks.
 
 ## Per STORY (when close-unit reports `story <id> -> DONE`)
 5. **grade-agent** -> grade the completed STORY. It writes `grades/<story id>_GRADE.md` and returns the
-   grade + prioritized, tagged suggestions. **Gate:** `Test-Path grades/<story id>_GRADE.md` must be True
-   and the file must contain "Grade" - if not, send it back to WRITE the card. A chat-only grade does not
-   count.
+   grade + prioritized, tagged suggestions. **Gate (run these checks - a stub card is NOT a grade):** the
+   file must exist, be **at least 800 bytes**, and contain **`## Grade history`**, **`## Assessment`** and
+   **`## Suggestions`**. A one-line card saying "all criteria met" FAILS the gate - send it back to write a
+   real assessment citing `file:line`.
 6. **hygiene-agent** (give it the story id) -> applies the card's `[mechanical]` items plus its standard
    format/lint + project-file & dependency pass, then rebuilds.
 7. If the grade is below B, or the card has critical `[dev]` suggestions: relay them to **dev-agent**, then

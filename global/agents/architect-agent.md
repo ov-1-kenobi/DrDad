@@ -48,7 +48,15 @@ Then **reindex** (`index_datasheets`), and tell the orchestrator which stories/t
 pinned contract so they can be re-checked (tag: `[scribe]`/`[blueprint]`).
 
 Rules:
-- Every contract MUST carry a worked example - a contract without one is not pinned.
+- **Number contracts `C1`, `C2`, ... ** - stories, tasks and grades cite them by id ("per C1"). A named
+  heading with no id cannot be cited and is not a pinned contract.
+- Every contract MUST carry a **`- **Worked example:**`** line with CONCRETE values (real bytes, real
+  hashes, real inputs -> exact expected output). Before you finish, re-read what you wrote and verify each
+  contract has one; a contract without a worked example is NOT pinned - fix it or drop it.
+- **Never contradict the design doc.** Before pinning, check the doc for an existing statement about the
+  same thing (layout, format, naming). If the design already says `blocks/<cid>/diff.blk`, do NOT pin a
+  flat layout. If the design is genuinely ambiguous or self-contradictory, that IS the finding: present the
+  options and let the human choose, then pin the choice AND note which design text it supersedes.
 - Keep contracts minimal: pin what the stories NEED, not everything imaginable. 3-7 contracts is typical.
 - If a contract decision reveals a requirements gap, that goes back to the human as a `/forge` question -
   do not invent requirements.

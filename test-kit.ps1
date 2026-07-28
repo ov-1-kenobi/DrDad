@@ -219,6 +219,31 @@ Test-Case "no agent shadows a built-in agent type" {
   Assert (-not $clash) "collides with a built-in agent type: $($clash -join ', ')"
 }
 
+Test-Case "every executable a command tells the model to run is permitted" {
+  # A command that shells out to something missing from settings.json's allow list hits a permission
+  # prompt and gets silently skipped in an autonomous loop. That is exactly how close-unit.ps1 never ran
+  # for a whole /build session: 'powershell' was not allowed.
+  $allow = (Get-Content (Join-Path $kit "settings.json") -Raw | ConvertFrom-Json).permissions.allow
+  $allowed = @($allow | ForEach-Object { if ($_ -match '^Bash\(([^:)]+)') { $Matches[1] } })
+  foreach ($f in Get-ChildItem (Join-Path $kit "global\commands") -Filter *.md) {
+    $text = Get-Content $f.FullName -Raw
+    foreach ($mm in [regex]::Matches($text, '(?m)^\s*(?:```\s*)?([a-z][a-z0-9_.-]*)\s+[^\r\n]*(?:\.ps1|\.cmd|--reindex)')) {
+      $exe = $mm.Groups[1].Value
+      if ($exe -in @('rem','note','it','the','and','powershell','pwsh','cmd')) {
+        Assert ($allowed -contains $exe -or $exe -notin @('powershell','pwsh','cmd')) `
+          "$($f.Name) runs '$exe' but settings.json does not allow Bash($exe`:*)"
+      }
+    }
+  }
+  # explicit: the close-out script is the load-bearing one
+  $usesPs = @(Get-ChildItem (Join-Path $kit "global\commands") -Filter *.md |
+              Where-Object { (Get-Content $_.FullName -Raw) -match 'powershell\s' })
+  if ($usesPs.Count -gt 0) {
+    Assert ($allowed -contains 'powershell') `
+      "$(($usesPs.Name) -join ', ') invoke powershell but Bash(powershell:*) is not in the allow list"
+  }
+}
+
 Test-Case "each command has description frontmatter" {
   foreach ($f in Get-ChildItem (Join-Path $kit "global\commands") -Filter *.md) {
     $head = (Get-Content $f.FullName -TotalCount 5) -join "`n"

@@ -2,6 +2,31 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.1 - 2026-07-28
+
+Fixes found by the first full validation run on real hardware (LeanHash, qwen3-coder-next).
+
+### Fixed
+- **`close-unit.ps1` could never run.** `/build` and `/spec` invoke it via `powershell`, which was missing
+  from `settings.json`'s permission allow list - so every call hit a permission prompt and was skipped.
+  A whole `/build` session produced zero commits and zero ticked tasks because of it. Added
+  `Bash(powershell:*)` + `Bash(pwsh:*)`, and a test that fails if any command invokes an executable the
+  allow list does not permit.
+- **Rubber-stamp grades passed the gate.** 135-byte cards reading "All acceptance criteria met" satisfied
+  the old existence check. The gate now requires >=800 bytes plus `## Grade history`, `## Assessment` and
+  `## Suggestions`; grade-agent is told a card with no cited `file:line` is a failed grade.
+- **Whole-file regeneration let the planner invent a different project** (peer networking, a Prometheus
+  endpoint, "[PR #n merged]" in a repo with no remote). `/blueprint` and planner-agent now shard ONE STORY
+  AT A TIME, must trace every task to a real story id, may invent nothing absent from DESIGN/STORIES, may
+  not claim unverifiable status, and must emit the exact task-block shape `close-unit.ps1` matches.
+- **Contracts were unusable**: no worked examples, no `C1..Cn` ids to cite, and one contradicted the design
+  doc's own storage layout. architect-agent now numbers contracts, self-checks that every one carries a
+  concrete worked example, and must reconcile with (never silently contradict) the design.
+- **librarian** now checks scope contamination FIRST - nouns in STORIES/TASKS that trace to nothing in
+  DESIGN, and unverifiable claims - and flags stub grade cards.
+- **`upgrade-project`** now untracks already-committed `bin/obj/docs/.index` (a `.gitignore` alone does not),
+  so checkpoint commits stop carrying build-output noise.
+
 ## 0.9.0 - 2026-07-12
 
 First versioned release. Feature-complete and self-tested; held below 1.0 until a full

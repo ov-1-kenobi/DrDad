@@ -51,6 +51,23 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
       Add-Content $gi (($missing -join "`r`n"))
       Write-Host "  .gitignore: added $($missing.Count) secret-file pattern(s)" -ForegroundColor Green
     }
+    if ($cur -notcontains "bin/") {
+      Add-Content $gi "bin/`r`nobj/`r`ndocs/.index/"
+      Write-Host "  .gitignore: added build-output patterns" -ForegroundColor Green
+    }
+  }
+  # A .gitignore does NOT untrack files already in the index - build output committed before the upgrade
+  # keeps showing up in every diff (and in close-unit's commits). Untrack it now; files stay on disk.
+  if (Test-Path (Join-Path $proj ".git")) {
+    Push-Location $proj
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try {
+      $tracked = @(git ls-files | Where-Object { $_ -match '(^|/)(bin|obj)/' -or $_ -match '^docs/\.index/' })
+      if ($tracked.Count -gt 0) {
+        git rm -r --cached --quiet -- $tracked 2>$null | Out-Null
+        Write-Host "  git: untracked $($tracked.Count) build-output/index file(s) (still on disk)" -ForegroundColor Green
+      }
+    } catch { } finally { $ErrorActionPreference = $prevEap; Pop-Location }
   }
   if (-not (Test-Path (Join-Path $proj ".git"))) {
     Push-Location $proj

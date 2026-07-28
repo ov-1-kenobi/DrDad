@@ -42,7 +42,12 @@ Project root - create `grades/` if needed; NOT under `docs/`.
 Keep it a living "report card": APPEND a new dated row to the history each time you grade, and rewrite the
 current assessment + suggestions. The skeleton below is MANDATORY - copy its sections verbatim and fill
 them in; do NOT invent your own report structure, and never omit the `## Grade history` table (the trend
-across iterations is the point of the card). Short content in the right sections beats long freeform:
+across iterations is the point of the card). Short content in the right sections beats long freeform.
+
+**A rubber stamp is a FAILED grade.** "All acceptance criteria met" with no evidence is worthless and the
+orchestrator will reject it. Every card must name specific files and lines you actually READ, and say what
+you verified per axis. If the implementation genuinely is clean, prove it: cite the code that satisfies each
+acceptance criterion. If you did not read the code, you cannot grade it - say so instead of guessing:
 
 ```markdown
 # Story <id> - <title> : report card
