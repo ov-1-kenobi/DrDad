@@ -170,6 +170,18 @@ if (-not (Test-Path $settings)) {
     } else { Say "OK" "auth" "no conflicting auth settings" }
     if ($s.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS) { Say "OK" "max output tokens" $s.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS }
     else { Say "WARN" "max output tokens" "unset" "add CLAUDE_CODE_MAX_OUTPUT_TOKENS to settings env" }
+
+    # The bug that cost a whole /build session: commands invoke close-unit.ps1 via powershell. If that is
+    # not in the allow list, the call hits a permission prompt and the loop silently skips ALL bookkeeping
+    # (no ticks, no story roll-ups, no checkpoint commits).
+    $allowed = @($s.permissions.allow | ForEach-Object { if ($_ -match '^Bash\(([^:)]+)') { $Matches[1] } })
+    if ($allowed -contains 'powershell') { Say "OK" "close-out permitted" "Bash(powershell:*) allowed" }
+    else {
+      Say "FAIL" "close-out NOT permitted" "/build cannot run close-unit.ps1 - bookkeeping will be skipped" `
+          "re-run install.cmd (adds Bash(powershell:*)), then RESTART Claude Code"
+    }
+    if ($s.permissions.defaultMode -eq 'acceptEdits') { Say "OK" "permission mode" "acceptEdits" }
+    else { Say "WARN" "permission mode" "$($s.permissions.defaultMode) - agents may stall on prompts" "set permissions.defaultMode to acceptEdits" }
   } catch { Say "FAIL" "settings.json" "invalid JSON" "re-run install.cmd" }
 }
 $iCmd = (Get-ChildItem (Join-Path $claudeDir "commands") -Filter *.md -ErrorAction SilentlyContinue).Count
