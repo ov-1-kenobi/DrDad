@@ -1,0 +1,23 @@
+# build output
+local-tools/bin/
+local-tools/obj/
+
+# the kit's own RAG index (regenerable)
+docs/.index/
+
+# dropped reference projects / scratch (not kit source)
+_tempReference/
+
+# session + tooling state
+.claude/
+__pycache__/
+*.pyc
+
+# secrets must never be committed (scan-secrets.ps1 + the pre-commit hook enforce this)
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.key
+secrets/

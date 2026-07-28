@@ -1,0 +1,59 @@
+# uninstall.ps1 - reverse what install.ps1 did to %USERPROFILE%\.claude.
+# Default: remove the kit's commands/agents and restore settings.json from its .bak.
+# -Full:   also remove the Ollama -cc model variants and the OLLAMA_* tuning env vars.
+# Never removes: the kit folder, the npm Claude Code CLI, or the VS Code extension (manual).
+#
+# Usage:  powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 [-Full]
+
+param([switch]$Full)
+$ErrorActionPreference = "Stop"
+$claude = Join-Path $env:USERPROFILE ".claude"
+
+# Keep these lists in sync with install.ps1 (global\commands and global\agents).
+$commands = @("scaffold","forge","blueprint","proto","spec","build","assets","tidy","scribe","diagram","librarian")
+$agents   = @("requirements-agent","architect-agent","planner-agent","dev-agent","grade-agent","qa-agent","doc-researcher","hygiene-agent","scribe-agent","librarian-agent")
+
+Write-Host "== Removing kit commands ==" -ForegroundColor Cyan
+foreach ($c in $commands) {
+  $p = Join-Path $claude "commands\$c.md"
+  if (Test-Path $p) { Remove-Item $p -Force; Write-Host "  removed commands\$c.md" }
+}
+
+Write-Host "== Removing kit agents ==" -ForegroundColor Cyan
+foreach ($a in $agents) {
+  $p = Join-Path $claude "agents\$a.md"
+  if (Test-Path $p) { Remove-Item $p -Force; Write-Host "  removed agents\$a.md" }
+}
+
+Write-Host "== Restoring settings.json ==" -ForegroundColor Cyan
+$settings = Join-Path $claude "settings.json"
+$bak = "$settings.bak"
+if (Test-Path $bak) {
+  Copy-Item $bak $settings -Force
+  Write-Host "  restored settings.json from settings.json.bak"
+} else {
+  Write-Host "  no settings.json.bak found - leaving settings.json as-is." -ForegroundColor Yellow
+  Write-Host "  (It redirects Claude Code to local Ollama; delete/edit it by hand to get defaults back.)" -ForegroundColor Yellow
+}
+
+if ($Full) {
+  Write-Host "`n== -Full: removing model variants ==" -ForegroundColor Cyan
+  if (Get-Command ollama -ErrorAction SilentlyContinue) {
+    $list = (ollama list | Out-String)
+    # Variant names come from models.json so this never goes stale.
+    $mp = Join-Path $PSScriptRoot "models.json"
+    $variants = if (Test-Path $mp) { (Get-Content $mp -Raw | ConvertFrom-Json).models.name } else { @() }
+    foreach ($m in $variants) {
+      if ($list -like "*$m*") { ollama rm $m; Write-Host "  removed $m" } else { Write-Host "  ($m not present)" }
+    }
+  } else { Write-Host "  ollama not found - skipped" -ForegroundColor Yellow }
+
+  Write-Host "== -Full: removing Ollama tuning env vars ==" -ForegroundColor Cyan
+  foreach ($v in @("OLLAMA_FLASH_ATTENTION","OLLAMA_KV_CACHE_TYPE","OLLAMA_KEEP_ALIVE")) {
+    [Environment]::SetEnvironmentVariable($v, $null, "User"); Write-Host "  unset $v (User)"
+  }
+}
+
+Write-Host "`n== DONE ==" -ForegroundColor Green
+Write-Host "Manual (not removed): the kit folder, npm '@anthropic-ai/claude-code', the VS Code extension." -ForegroundColor Green
+Write-Host "Restart Claude Code so it stops loading the removed commands/agents." -ForegroundColor Green

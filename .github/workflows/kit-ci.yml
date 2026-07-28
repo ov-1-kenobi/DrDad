@@ -1,0 +1,29 @@
+name: kit-ci
+
+# The kit's safety net: every push/PR runs test-kit.ps1 on a Windows runner. No Ollama, no GPU and no
+# network are needed (beyond NuGet restore), so the whole suite is CI-friendly.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Configure git identity (scaffold/close-unit tests commit)
+        shell: powershell
+        run: |
+          git config --global user.name  "kit-ci"
+          git config --global user.email "kit-ci@local"
+          git config --global init.defaultBranch main
+
+      - name: Run the kit test suite
+        shell: powershell
+        run: .\test-kit.ps1

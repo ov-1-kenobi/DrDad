@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- net8.0 = broad LTS build target; RollForward lets the built exe run on any installed
+         .NET >= 8 runtime (e.g. you only have the 9 or 10 runtime). -->
+    <RollForward>LatestMajor</RollForward>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>local-tools</AssemblyName>
+    <RootNamespace>LocalTools</RootNamespace>
+  </PropertyGroup>
+
+  <!-- If 'dotnet restore' says a version is missing, bump it to the latest it lists. -->
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="1.4.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="PdfPig" Version="0.1.14" />
+    <PackageReference Include="AngleSharp" Version="1.5.1" />
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.9" />
+    <!-- Sensor tools: ONNX detector (CPU - detectors are tiny; swap to
+         Microsoft.ML.OnnxRuntime.Gpu if you want CUDA) + SkiaSharp (MIT) for image decode/resize. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+  </ItemGroup>
+
+</Project>

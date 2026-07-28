@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "SINGLE SOURCE OF TRUTH for models. sync-models.ps1 generates each -cc variant from this (Ollama's",
+    "default context is far too small for the agent loop, so every model needs num_ctx raised);",
+    "use-model.ps1 reads the aliases; install.ps1 calls sync; uninstall.ps1 -Full removes these names;",
+    "ad-doctor.ps1 reports what is present. To add a model: append one entry here. That is the whole job.",
+    "approxVramGb is the Q4-ish footprint - on 16 GB, <=15 runs on the GPU and bigger offloads to RAM.",
+    "autoPull: pulled automatically by sync/install. Others are built only if you already pulled the base."
+  ],
+  "numCtx": 65536,
+  "embedModel": "nomic-embed-text",
+  "visionModel": "gemma3:4b",
+  "smallFastModel": "gemma3:4b",
+  "models": [
+    {
+      "alias": "dev",
+      "name": "devstral-cc",
+      "from": "devstral",
+      "role": "Devstral Small 24B dense - fast GPU-resident coding, /proto, quick /spec. No CJK drift.",
+      "approxVramGb": 14,
+      "autoPull": true,
+      "default": true
+    },
+    {
+      "alias": "coder",
+      "name": "qwen3-coder-30b-cc",
+      "from": "qwen3-coder:30b",
+      "role": "Qwen3-Coder 30B-A3B MoE - recommended everyday /build: strong tools, mostly GPU-resident.",
+      "approxVramGb": 18,
+      "autoPull": false,
+      "default": false
+    },
+    {
+      "alias": "oss",
+      "name": "gpt-oss-20b-cc",
+      "from": "gpt-oss:20b",
+      "role": "gpt-oss-20b MoE - fully GPU-resident planner: /scribe, /librarian, /forge. Most literal.",
+      "approxVramGb": 14,
+      "autoPull": false,
+      "default": false
+    },
+    {
+      "alias": "plan",
+      "name": "gemma4-cc",
+      "from": "gemma4",
+      "role": "Gemma 4 ~26B generalist - deep design chat / architecture in /forge.",
+      "approxVramGb": 16,
+      "autoPull": false,
+      "default": false
+    },
+    {
+      "alias": "quality",
+      "name": "qwen3-coder-next-cc",
+      "from": "qwen3-coder-next:q4_K_M",
+      "role": "Qwen3-Coder-Next 80B-A3B - most capable: /forge contracts, /blueprint, hardest /build. Offloads to RAM (slow).",
+      "approxVramGb": 45,
+      "autoPull": false,
+      "default": false
+    },
+    {
+      "alias": "fast",
+      "name": "qwen3-14b-cc",
+      "from": "qwen3:14b",
+      "role": "Dense 14B - quickest, fully on GPU: light edits.",
+      "approxVramGb": 9,
+      "autoPull": true,
+      "default": false
+    }
+  ]
+}

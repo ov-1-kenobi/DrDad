@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy this into each PROJECT's root folder. Edit LOCALTOOLS_DOCS_DIR to point at THIS project's docs/ folder. The 'command' (the shared server exe) is the same for every project. Set LOCALTOOLS_AUTO_REINDEX to \"1\" to auto-refresh the index when docs change (default \"0\").",
+  "mcpServers": {
+    "local-tools": {
+      "command": "C:\\Projects\\Claude\\MCP\\AD-kit\\local-tools\\bin\\Release\\net8.0\\local-tools.exe",
+      "env": {
+        "LOCALTOOLS_DOCS_DIR": "C:\\Path\\To\\ThisProject\\docs",
+        "OLLAMA_HOST": "http://localhost:11434",
+        "RAG_EMBED_MODEL": "nomic-embed-text",
+        "LOCALTOOLS_AUTO_REINDEX": "0"
+      }
+    }
+  }
+}
