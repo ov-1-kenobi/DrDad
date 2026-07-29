@@ -35,8 +35,12 @@ vision model transcribes it to text - and use that as design input.)
    - Propose 2-3 architectures/stacks that FIT (let requirements lead - do NOT default to a favorite). Give
      tradeoffs, recommend one, WAIT for my choice.
    - Record the chosen stack + rationale in the doc's "Solution architecture" section.
-   - Fill CLAUDE.md's Stack + Build/test/run + Placeholder + Human-in-loop from the matching stack profile in
-     `templates/<stack>` (dotnet/avalonia/python/embedded/unity/generic).
+   - Fill CLAUDE.md's Stack + Build/test/run + Placeholder + Human-in-loop + any hygiene section by copying
+     them from the matching **stack profile fragment** `templates/<stack>/PROFILE.md`
+     (dotnet | avalonia | python | embedded | unity). Copy ONLY those sections - the profile is a fragment
+     and deliberately contains nothing else; every other section is kit-owned and already in CLAUDE.md.
+   - **Do not copy version numbers out of a profile.** The profiles tell you to detect the installed
+     toolchain (e.g. `dotnet --list-sdks`) and record the chosen version here. Follow that.
 6. When requirements + epics + CONTRACTS + architecture are set, OFFER to set `Status: LOCKED` and, on my
    OK, flip the header + reindex. Do NOT offer to lock while a load-bearing contract is unpinned (the
    architect-agent reports lock-readiness). Then tell me: run `/scribe` to break the epics into stories

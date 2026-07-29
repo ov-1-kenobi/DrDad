@@ -23,18 +23,26 @@ imports, dead-code removal, manifest/dep tidy). Skip `[dev]` and `[human]` items
 Do, in order:
 1. **Format / lint:** run the project's formatter + linter from CLAUDE.md (e.g. `dotnet format`, `ruff`,
    `mypy`, eslint). Auto-fix what's safe; report what needs a human decision.
-2. **Project files <-> disk sync:** confirm the manifest matches reality -
+2. **No machine-specific paths in project files** (the "builds here, fails on a clean machine" bug):
+   scan build files - `.csproj`/`.props`/`.targets`/`nuget.config`, `platformio.ini`, `CMakeLists.txt`,
+   `pyproject.toml`, `package.json` - for absolute or user-specific paths (`C:\`, `D:\`, `/home/`,
+   `/Users/`, `$env:USERPROFILE`). Common offenders: `PackageOutputPath`, `OutputPath`, `HintPath`,
+   `<Import Project=...>`, and local NuGet feeds in `RestoreSources`. Replace with a relative path or an
+   MSBuild well-known (`$(MSBuildThisFileDirectory)`, `$(SolutionDir)`) and report it as `[mechanical]`.
+   A local TOOL path in CLAUDE.md (e.g. the Unity editor exe) is fine - a path in a committed build file
+   is not.
+3. **Project files <-> disk sync:** confirm the manifest matches reality -
    - .NET: the .sln references the right projects; no `<Compile>`/`<ProjectReference>` pointing at missing
      files; new source files are actually in the build (SDK-style globs usually cover this).
    - Python: imports resolve; referenced modules/packages exist.
    - JS / other: entry points and references point at files that exist.
    Fix obvious drift (add a missing project reference, remove a dead include); flag structural questions.
-3. **Dependencies:** every package that is USED is DECLARED, and every DECLARED package is USED -
+4. **Dependencies:** every package that is USED is DECLARED, and every DECLARED package is USED -
    - .NET: `dotnet restore` succeeds; add a missing `PackageReference` for a used namespace; flag unused ones.
    - Python: used imports are in requirements/pyproject; `pip check` is clean; flag unused.
    - JS: imports are in package.json; nothing missing/extraneous.
    Add genuinely-missing deps (pin a version). NEVER remove a dependency on your own - flag removals for me.
-4. **Re-verify:** run CLAUDE.md's build command to confirm nothing broke; report PASS/FAIL.
+5. **Re-verify:** run CLAUDE.md's build command to confirm nothing broke; report PASS/FAIL.
 
 Output: what you FIXED, what you FLAGGED (with the reason), and the build result. When unsure, report rather
 than guess - never invent package versions or delete dependencies without flagging.

@@ -106,6 +106,52 @@ Test-Case "scaffold stamps the project with the kit version" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "stack profiles are FRAGMENTS (no kit-owned sections to go stale)" {
+  # They used to be full CLAUDE.md files and drifted badly behind templates/generic (old Modes wording,
+  # no Secrets, no Task-tool rule). Keeping them fragments makes that impossible.
+  $owned = @('## Modes', '## Design doc', '## Working agreement', '## Web / grounding', '## Secrets',
+             '## Proven commands')
+  foreach ($p in Get-ChildItem (Join-Path $kit "templates") -Directory) {
+    if ($p.Name -in @('generic', '_common')) { continue }
+    $prof = Join-Path $p.FullName "PROFILE.md"
+    Assert (Test-Path $prof) "$($p.Name) has no PROFILE.md"
+    Assert (-not (Test-Path (Join-Path $p.FullName "CLAUDE.md"))) `
+      "$($p.Name) still has a CLAUDE.md - stack profiles must be PROFILE.md fragments"
+    $t = Get-Content $prof -Raw
+    foreach ($s in $owned) {
+      Assert ($t -notmatch [regex]::Escape($s)) "$($p.Name)/PROFILE.md contains kit-owned section '$s'"
+    }
+  }
+}
+
+Test-Case "stack profiles pin no toolchain version number" {
+  # A hardcoded '.NET 8' is stale the day .NET 9 ships. Profiles must tell the model to DETECT instead.
+  foreach ($p in Get-ChildItem (Join-Path $kit "templates") -Directory) {
+    $prof = Join-Path $p.FullName "PROFILE.md"
+    if (-not (Test-Path $prof)) { continue }
+    $n = 0
+    foreach ($line in Get-Content $prof) {
+      $n++
+      # allow the Unity editor-path placeholder <VER> and prose about LTS/odd-even
+      if ($line -match '(?i)\.NET\s+\d+(\.\d+)?\b' -or $line -match '(?i)\bnet\d+\.0\b' -or $line -match '(?i)\bPython\s+3\.\d+\b') {
+        Assert $false "$($p.Name)/PROFILE.md line $n pins a version: $($line.Trim())"
+      }
+    }
+  }
+}
+
+Test-Case "the kit's own server keeps a broad TFM + RollForward" {
+  # Deliberate: net8.0 + RollForward=LatestMajor builds on 8+ and RUNS on any 8+ runtime. Bumping the TFM
+  # would narrow compatibility AND break the exe path baked into every .mcp.json.
+  $csproj = Get-Content (Join-Path $kit "local-tools\local-tools.csproj") -Raw
+  Assert ($csproj -match '<TargetFramework>net8\.0</TargetFramework>') "server TFM changed - .mcp.json exe paths would break"
+  Assert ($csproj -match '<RollForward>LatestMajor</RollForward>') "RollForward=LatestMajor missing - the exe would demand exactly .NET 8"
+  foreach ($rel in @(".mcp.json", "templates\_common\.mcp.json", "templates\unity\.mcp.json")) {
+    $p = Join-Path $kit $rel
+    if (Test-Path $p) { Assert ((Get-Content $p -Raw) -match 'net8\.0') "$rel exe path does not match the server TFM" }
+  }
+}
+
 Test-Case "dev-path placeholder preserved in ALL configs (move-safety)" {
   # install.ps1 rewrites this token on the target machine. A baked-in absolute path here means a
   # folder-copy install lands broken - which is the primary distribution path, so check every config.

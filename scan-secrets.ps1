@@ -51,7 +51,10 @@ $heuristic = @("Password/secret literal", "Azure client secret")
 
 # Obvious non-secrets - placeholders, env references, docs.
 $placeholder = '(?i)(<[^>]*>|\$\{|%[A-Z_]+%|\$env:|xxx+|changeme|your[-_]|example|placeholder|dummy|redacted|\*\*\*|todo|n/?a$|process\.env|os\.environ|getenv)'
-$skipDirs = @('.git','bin','obj','node_modules','__pycache__','.index','.vs','packages','dist','.venv')
+# '_tempReference' holds dropped reference projects, not kit source. It is skipped by default so the kit's
+# own gate is about the kit - but the skip is ANNOUNCED (never silent), and you can scan it deliberately
+# with -Path _tempReference. Do not add anything else here without the same reasoning.
+$skipDirs = @('.git','bin','obj','node_modules','__pycache__','.index','.vs','packages','dist','.venv','_tempReference')
 $skipExt  = @('.dll','.exe','.pdb','.png','.jpg','.jpeg','.gif','.webp','.bmp','.ico','.zip','.7z','.gz',
               '.onnx','.pdf','.wav','.mp3','.m4a','.flac','.ogg','.bin','.so','.dylib','.nupkg','.cache')
 
@@ -96,6 +99,15 @@ foreach ($f in $files) {
       })
       break   # one finding per line is enough
     }
+  }
+}
+
+# Announce skipped reference drops - a silent skip is how a real credential hides.
+if (-not $Staged) {
+  $refDir = Join-Path (Resolve-Path -LiteralPath $Path).Path "_tempReference"
+  if (Test-Path $refDir) {
+    Write-Host "scan-secrets: NOTE - skipped _tempReference\ (reference drops, not kit source)." -ForegroundColor DarkYellow
+    Write-Host "              scan it deliberately with:  scan-secrets.cmd -Path `"$refDir`"" -ForegroundColor DarkYellow
   }
 }
 

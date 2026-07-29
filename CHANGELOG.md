@@ -2,6 +2,33 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.2 - 2026-07-28
+
+### Changed
+- **Stack profiles are now FRAGMENTS** (`templates/<stack>/PROFILE.md`, was `CLAUDE.md`). They had drifted
+  badly behind `templates/generic` - old `## Modes` wording, no Secrets, no Task-tool rule - and a file
+  named CLAUDE.md that is not a complete CLAUDE.md invites mis-cribbing. Each now carries ONLY what
+  `/forge` copies: Stack, Placeholder convention, Build/test, Human-in-loop, hygiene. Tests enforce that
+  they contain no kit-owned sections.
+- **No toolchain version is pinned in a profile.** `.NET 8` was hardcoded and stale. Profiles now tell the
+  model to DETECT the installed toolchain (`dotnet --list-sdks` -> highest major -> `net<major>.0`) and
+  record the choice in the design doc. C# version follows the TFM automatically - do not set LangVersion.
+  Guidance added on LTS vs newest, and on targeting lower for published libraries. A test fails on any
+  version number in a profile.
+- **Unity is called out as the exception**: the editor caps the C#/.NET level, so never retarget or set
+  LangVersion there.
+
+### Added
+- **Project-file hygiene convention** (the `PackageOutputPath` lesson, generalized): never put an absolute
+  or machine-specific path in a build file - `PackageOutputPath`, `OutputPath`, `HintPath`, `Import`,
+  local NuGet feeds. Use relative paths or `$(MSBuildThisFileDirectory)` / `$(SolutionDir)`. Plus the
+  **clean-machine rule**: a fresh clone + the documented SDK must build and test with no manual setup.
+- **hygiene-agent now scans for it** across `.csproj/.props/.targets/nuget.config`, `platformio.ini`,
+  `CMakeLists.txt`, `pyproject.toml`, `package.json` and reports it `[mechanical]`.
+- Test guarding the kit's own `net8.0` + `RollForward=LatestMajor` (deliberate: builds on 8+, runs on any
+  8+ runtime, and the TFM is baked into every `.mcp.json` exe path).
+- `scan-secrets` skips `_tempReference/` (reference drops, not kit source) but **announces the skip** and
+  tells you how to scan it explicitly - a silent skip is how a real credential hides.
 ## 0.9.1 - 2026-07-28
 
 Fixes found by the first full validation run on real hardware (LeanHash, qwen3-coder-next).
