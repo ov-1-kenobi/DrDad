@@ -29,6 +29,7 @@ All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R
   8+ runtime, and the TFM is baked into every `.mcp.json` exe path).
 - `scan-secrets` skips `_tempReference/` (reference drops, not kit source) but **announces the skip** and
   tells you how to scan it explicitly - a silent skip is how a real credential hides.
+
 ## 0.9.1 - 2026-07-28
 
 Fixes found by the first full validation run on real hardware (LeanHash, qwen3-coder-next).
