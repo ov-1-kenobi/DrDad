@@ -31,6 +31,7 @@ permission fix is validated) and the architect produced 18 numbered contracts wi
 - **planner-agent used absolute paths** (`D:\projects\...`) in `Touches:`; now repo-relative.
 - **librarian regenerated STATUS four times** in one session (~155k tokens); now once per invocation.
 - /forge also prompts to pin the toolchain for a clean machine (e.g. `global.json` for .NET).
+
 ## 0.9.2 - 2026-07-28
 
 ### Changed
