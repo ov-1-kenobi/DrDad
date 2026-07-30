@@ -2,6 +2,13 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.4 - 2026-07-30
+
+### Fixed
+- **`install.ps1` did not rewrite the dev-path placeholder in AGENT files** (only commands). 0.9.3 gave
+  `librarian-agent` an absolute path to `doc-stats.ps1`, so after a folder-copy install it pointed at the
+  authoring machine and the counter could not run - the STATUS miscount would have persisted. Agents now get
+  the same rewrite as commands, with a test that fails if either folder ships an unrewritten placeholder.
 ## 0.9.3 - 2026-07-30
 
 Fixes from the mediamotor_iiif run - the first run where `close-unit.ps1` actually executed (the 0.9.1

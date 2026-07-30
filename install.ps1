@@ -66,7 +66,11 @@ New-Item -ItemType Directory -Force (Join-Path $claude "agents")   | Out-Null
 Get-ChildItem (Join-Path $root "global\commands") -File | ForEach-Object {
   Write-NoBom (Join-Path $claude "commands\$($_.Name)") ((Get-Content $_.FullName -Raw -Encoding UTF8).Replace($old, $root))
 }
-Copy-Item (Join-Path $root "global\agents\*") (Join-Path $claude "agents") -Force
+# Agents get the SAME placeholder rewrite as commands - librarian-agent invokes doc-stats.ps1 by absolute
+# path, and a plain copy would leave it pointing at the dev machine's folder.
+Get-ChildItem (Join-Path $root "global\agents") -File | ForEach-Object {
+  Write-NoBom (Join-Path $claude "agents\$($_.Name)") ((Get-Content $_.FullName -Raw -Encoding UTF8).Replace($old, $root))
+}
 Write-Host "  commands: /scaffold /forge /blueprint /proto /spec /build /assets /tidy /scribe /diagram /librarian /grade   agents: requirements/architect/planner/dev/grade/scribe/hygiene/qa/doc-researcher/librarian"
 
 Write-Host "`n== 7) Install settings.json (Ollama redirect + offline flags) ==" -ForegroundColor Cyan

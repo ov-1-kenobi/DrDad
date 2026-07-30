@@ -265,6 +265,26 @@ Test-Case "no agent shadows a built-in agent type" {
   Assert (-not $clash) "collides with a built-in agent type: $($clash -join ', ')"
 }
 
+Test-Case "install rewrites the dev-path placeholder in BOTH commands and agents" {
+  # A plain Copy-Item for agents left librarian-agent's absolute doc-stats.ps1 path pointing at the DEV
+  # machine, so the counter silently could not run after a folder-copy install.
+  $lines = Get-Content (Join-Path $kit "install.ps1")
+  foreach ($dir in @('commands', 'agents')) {
+    $hasPlaceholder = @(Get-ChildItem (Join-Path $kit "global\$dir") -Filter *.md |
+                        Where-Object { (Get-Content $_.FullName -Raw) -match 'AD-kit' }).Count -gt 0
+    if (-not $hasPlaceholder) { continue }
+    # find the line that enumerates that folder, then look a few lines ahead for the placeholder rewrite
+    $idx = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+      if ($lines[$i] -like "*global\$dir*" -and $lines[$i] -like "*Get-ChildItem*") { $idx = $i; break }
+    }
+    Assert ($idx -ge 0) "install.ps1 does not enumerate global\$dir with Get-ChildItem (a plain Copy-Item cannot rewrite paths)"
+    $window = ($lines[$idx..([Math]::Min($idx + 4, $lines.Count - 1))] -join "`n")
+    Assert ($window -like '*Replace($old*') `
+      "install.ps1 enumerates global\$dir but does not Replace(`$old ...) - the dev-path placeholder would ship unrewritten"
+  }
+}
+
 Test-Case "every executable a command tells the model to run is permitted" {
   # A command that shells out to something missing from settings.json's allow list hits a permission
   # prompt and gets silently skipped in an autonomous loop. That is exactly how close-unit.ps1 never ran
