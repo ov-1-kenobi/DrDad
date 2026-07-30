@@ -2,6 +2,35 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.3 - 2026-07-30
+
+Fixes from the mediamotor_iiif run - the first run where `close-unit.ps1` actually executed (the 0.9.1
+permission fix is validated) and the architect produced 18 numbered contracts with worked examples.
+
+### Added
+- **`/grade <unit>`** - there was NO user-invokable way to write a missing grade card, so a model invented
+  `/grade`, a fictional `grade-agent --prompt ... > /dev/null` CLI, and a bash loop over agents. The command
+  now exists, grades ONE unit, and gates the result.
+- **`doc-stats.ps1`** - deterministic counts for `docs/STATUS.md`. The librarian hand-counted and wrote
+  "Stories: 1/1  Tasks: 1/1" for a project with 13 stories (5 done) and 16 tasks (6 done). It must now RUN
+  this and use the numbers verbatim; it also lists every DONE unit whose grade card is missing or a stub.
+
+### Fixed
+- **grade-agent produced nothing from a batch request** (40 tool uses, 54k tokens, zero files written). It
+  now grades EXACTLY ONE unit per invocation and must write-then-verify before reporting - the same
+  one-at-a-time rule that fixed /scribe and /blueprint.
+- **/librarian handed the user homework instead of routing.** It now must spawn owner agents itself; only
+  `[human]` findings come back. Explicitly: never tell the user to run an agent, never invent a CLI for one.
+- **/forge did not fill CLAUDE.md** - Stack/Build/test were left as `<decided in /forge...>` placeholders, so
+  dev and qa had no build or test command and improvised their own reporting files (TEST_RESULTS.md,
+  TEST_SUMMARY.md, VariantProcessorTests_RESULT.md at the repo root). /forge now has a mechanical fill gate,
+  and /build greps for the placeholders and REFUSES to start.
+- **Scope-contamination check was crying wolf**: naming a class or file a task will create
+  (`ResolverService.cs`) is implementation detail, not invented scope. The rule now targets capabilities,
+  protocols, integrations and dependencies only.
+- **planner-agent used absolute paths** (`D:\projects\...`) in `Touches:`; now repo-relative.
+- **librarian regenerated STATUS four times** in one session (~155k tokens); now once per invocation.
+- /forge also prompts to pin the toolchain for a clean machine (e.g. `global.json` for .NET).
 ## 0.9.2 - 2026-07-28
 
 ### Changed

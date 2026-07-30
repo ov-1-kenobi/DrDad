@@ -13,6 +13,12 @@ Grading is deliberately at the STORY boundary, not per task: a whole story is th
 quality is meaningfully assessable, and per-task grading cost so much that it got skipped. If the
 orchestrator explicitly hands you a single task id instead, grade that - the shape below is unchanged.
 
+**EXACTLY ONE UNIT PER INVOCATION.** If you are handed several units (or "all the DONE units"), grade the
+FIRST one, write its card, and return saying the rest need their own invocations. Attempting a batch means
+reading many diffs, exhausting your context, and returning with NOTHING WRITTEN - which has happened.
+**WRITE THE FILE BEFORE YOU REPORT.** Your reply is not the deliverable; `grades/<id>_GRADE.md` on disk is.
+Re-read it after writing to confirm it landed.
+
 To pin this agent to a specific model, add a `model:` line to the frontmatter above (e.g.
 `model: qwen3-coder-next-cc`); omit it to inherit the session model. On 16 GB VRAM, pinning a model that
 differs from the session model makes Ollama reload it each grade step - usually not worth it.

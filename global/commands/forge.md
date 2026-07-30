@@ -40,7 +40,13 @@ vision model transcribes it to text - and use that as design input.)
      (dotnet | avalonia | python | embedded | unity). Copy ONLY those sections - the profile is a fragment
      and deliberately contains nothing else; every other section is kit-owned and already in CLAUDE.md.
    - **Do not copy version numbers out of a profile.** The profiles tell you to detect the installed
-     toolchain (e.g. `dotnet --list-sdks`) and record the chosen version here. Follow that.
+     toolchain (e.g. `dotnet --list-sdks`) and record the chosen version here. Follow that. Also pin the
+     toolchain for a clean machine where the ecosystem supports it (e.g. a `global.json` for .NET).
+   - **GATE - verify CLAUDE.md actually got filled.** Grep it for `<decided in`, `<set in`, `<how to stub`,
+     `# Project: <name>`. If ANY remain, the step is NOT done - fill them now. A CLAUDE.md still holding
+     placeholders means dev-agent and qa-agent have **no build or test command**, so they improvise their
+     own test reporting (that is where stray TEST_RESULTS.md / TEST_SUMMARY.md files come from) and `/build`
+     cannot verify anything. Replace the project name too.
 6. When requirements + epics + CONTRACTS + architecture are set, OFFER to set `Status: LOCKED` and, on my
    OK, flip the header + reindex. Do NOT offer to lock while a load-bearing contract is unpinned (the
    architect-agent reports lock-readiness). Then tell me: run `/scribe` to break the epics into stories

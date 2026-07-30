@@ -6,10 +6,17 @@ Run the **librarian-agent** to keep the document set honest. Spawn it via the **
 (subagent_type: "librarian-agent") - it is an AGENT, not a skill; calling the Skill tool with an agent
 name fails with "Unknown skill".
 
+**YOU do the fixing, not me.** You are the orchestrator and you have the Task tool. Never hand back a list
+of "next actions you'll need to perform", never tell me to run an agent, and never invent a CLI for one
+(there is no `grade-agent` executable and no `/grade`-per-unit loop to script). Spawn the owner agent
+yourself, one finding at a time, and report what changed. Only `[human]` findings come back to me.
+
 - **Empty / audit:** spawn it in **AUDIT** mode. Relay its compact tagged findings, then for each one I
   approve, ROUTE it to its owner - you are the orchestrator; the librarian never edits:
   - `[scribe]` -> scribe-agent (FIX that story)     - `[blueprint]` -> planner-agent (repair TASKS)
-  - `[grade]` -> grade-agent (write the missing card) - `[dev]` -> dev-agent
+  - `[grade]` -> **one grade-agent per unit** (or `/grade <id>` repeatedly). NEVER ask one agent to card
+    several units - it returns having written nothing. Verify each file after it is written.
+  - `[dev]` -> dev-agent
   - `[forge]` -> tell me to run `/forge` (DESIGN edits need the unlock flow) - do not edit DESIGN here
   - `[git-recover]` -> librarian-agent in RECOVER mode, then run its restore command on my OK
   - `[index]` -> already fixed (reindexed) - just report it

@@ -25,9 +25,12 @@ it fabricate peers, metrics endpoints and merged PRs that never existed):
   file from memory, and never summarize the file back into itself.
 - **Every task must trace to a real story id that exists in STORIES.md.** If you cannot quote the story
   text you are sharding, STOP - do not invent the story.
-- **Invent nothing outside the doc.** No feature, component, protocol, endpoint or dependency may appear in
-  a task unless it appears in DESIGN.md or STORIES.md. No "[PR #n merged]" or other status you cannot
+- **Invent no SCOPE outside the doc.** No capability, protocol, integration or external dependency may
+  appear in a task unless DESIGN.md or STORIES.md asks for it. (Naming a class or file you will create is
+  fine - that is implementation detail, not new scope.) No "[PR #n merged]" or other status you cannot
   verify - you have no access to PRs.
+- **`Touches:` uses REPO-RELATIVE paths** (`src/Foo/Bar.cs`), never absolute (`D:\projects\...`). An
+  absolute path makes the task map useless on any other machine or checkout.
 - The task-block SHAPE below is NOT optional. `close-unit.ps1` ticks `### [ ] <id> - <title>   (Story Sx)`
   by regex; prose bullets or a table cannot be closed out and will break the build loop.
 

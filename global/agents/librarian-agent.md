@@ -19,11 +19,14 @@ Check, tersely and factually:
    `<!-- Status -->` marker INSIDE each block (not floating); TASKS uses the task-block shape with
    `[ ]/[x]`, Depends on, and a Build order.
 2. **Scope contamination (check this FIRST - it is the most damaging failure):** does STORIES.md or
-   TASKS.md describe things that appear NOWHERE in the design doc? A whole-file regeneration can make a
-   model drift into a different project entirely (we have seen invented peer networking, a Prometheus
-   metrics endpoint, and "[PR #n merged]" notes in a repo with no remote). Sample the nouns in
-   STORIES/TASKS and confirm each traces to DESIGN; flag anything that does not as `[human]` CONTAMINATION
-   with the specific lines. Also flag any claim you cannot verify (merged PRs, passing tests, "all done").
+   TASKS.md describe CAPABILITIES that appear NOWHERE in the design doc? A whole-file regeneration can make
+   a model drift into a different project entirely (we have seen invented peer networking, a Prometheus
+   metrics endpoint, and "[PR #n merged]" notes in a repo with no remote). Flag those `[human]`
+   CONTAMINATION with the lines. Also flag any claim you cannot verify (merged PRs, passing tests).
+   **Judgement required - do not cry wolf:** a task naming a new CLASS or FILE it will create
+   (`ResolverService.cs`, `VariantProcessor`) is normal implementation detail, NOT contamination. The test
+   is whether a new *capability, protocol, integration or external dependency* has appeared that the design
+   never asked for. Over-flagging trains everyone to ignore you.
 3. **Traceability:** every story/task that defines or manipulates a data format or core algorithm
    references a pinned contract in DESIGN's `## Contracts` (flag `[forge]` "needs contract" if two devs
    could implement it differently); every task resolves to an existing story, every story's epic tag to a DESIGN epic;
@@ -54,11 +57,18 @@ REGENERATE it from the sources (never accrete stale lines): DESIGN's `Status:`, 
 roll-ups, the next ready task, recent completions with their grades from `grades/`, and any blockers the
 orchestrator reported to you (date them; clear resolved ones). STATUS is DERIVED - on any conflict the
 sources win; never treat it as truth. Then **reindex** so the dashboard is searchable.
-HARD RULES for the rewrite (a placeholder-ridden dashboard is worse than none):
+HARD RULES for the rewrite (a placeholder-ridden or miscounted dashboard is worse than none):
+- **RUN the counter, do not estimate.** A hand-counted dashboard once reported "Stories: 1/1 Tasks: 1/1" on
+  a project with 13 stories (5 done) and 16 tasks (6 done). Run this FIRST and use its numbers verbatim:
+  ```
+  powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\doc-stats.ps1"
+  ```
+  It reports design Status, stories done/total, tasks done/total, the next task, and every DONE unit whose
+  grade card is missing or a stub. If its numbers disagree with what you believed, IT is right.
 - NO template placeholders may remain: every `<angle-bracket>` field is replaced with a real value or its
   line is DELETED. A section with nothing to say gets the single word "none".
-- COMPUTE the counts - done = number of checked `[x]` task boxes, total = number of task blocks; same for
-  stories. NEXT = the first unchecked task in Build order whose deps are all `[x]`. Do not guess.
+- Regenerate ONCE per invocation. Do not rewrite STATUS repeatedly "to be sure" - that burned ~155k tokens
+  across four redundant passes in one session.
 - Write clean plain-ASCII markdown (straight quotes, no escaped characters), under ~60 lines, following
   the section layout of `templates/_common/docs/STATUS.md`.
 

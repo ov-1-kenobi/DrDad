@@ -7,7 +7,10 @@ Spawn agents with the **Task tool**, subagent_type = the agent's exact name (e.g
 NOT skills. Never enter plan mode - this loop IS the plan.
 
 Read `CLAUDE.md` for doc paths, build command, test command, placeholder convention, human-verification.
-If Stack / Build / test are still placeholders, STOP - `/forge`'s architecture step is not done.
+**Mechanical gate - actually grep, do not eyeball:** if `CLAUDE.md` still contains `<decided in`, `<set in`,
+`<how to stub` or `# Project: <name>`, STOP and tell me to finish `/forge`'s architecture step. Without a
+real build/test command the dev and qa agents cannot verify anything and will invent their own reporting
+files. This has happened - do not proceed past it.
 Read the design doc's `Status:` - `LOCKED` -> SPEC mode, `DRAFT` -> PROTO mode - and pass the mode to every
 subagent. Read `docs/STATUS.md` if present to orient. The docs are indexed: have subagents
 `search_datasheets` rather than re-read whole files. ONE status file (`docs/STATUS.md`, librarian-written):
