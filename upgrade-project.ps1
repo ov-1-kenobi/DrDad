@@ -1,10 +1,10 @@
 # upgrade-project.ps1 - retrofit an EXISTING AD project to the current kit (deterministic, no model).
 # The kit evolves; projects scaffolded earlier keep an old CLAUDE.md and miss new docs - and local models
 # then improvise (root STATUS.md files, missed conventions). This closes that gap:
-#   - docs\STATUS.md + docs\COMMANDS.md created from templates if missing
+#   - docs\STATUS.md + docs\RECIPES.md created from templates if missing
 #   - git init + .gitignore + baseline commit if the project has no repo
 #   - CLAUDE.md: KIT-OWNED sections refreshed from the current template; YOUR sections preserved
-#     (kit-owned: Modes / flow, Design doc(s), Proven commands, Web / grounding, Working agreement;
+#     (kit-owned: Modes / flow, Design doc(s), Proven recipes, Web / grounding, Working agreement;
 #      preserved: Project name, Stack, Placeholder convention, Build / test, Human-in-loop, anything custom)
 #
 # Usage:  upgrade-project.ps1 [projectDir]     (default: current folder; safe to re-run)
@@ -26,8 +26,19 @@ Write-Host "Upgrading AD project at $proj" -ForegroundColor Cyan
 Write-Host "  project was built with kit $was -> upgrading to $kitVer" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force (Join-Path $proj "docs") | Out-Null
 
+# --- 1a) Migrate the old name: docs\COMMANDS.md was renamed to RECIPES.md (it clashed conceptually with
+#         the kit's slash COMMANDS). Preserve the project's accumulated entries.
+$oldRecipes = Join-Path $proj "docs\COMMANDS.md"
+$newRecipes = Join-Path $proj "docs\RECIPES.md"
+if ((Test-Path $oldRecipes) -and -not (Test-Path $newRecipes)) {
+  Move-Item $oldRecipes $newRecipes
+  $t = [System.IO.File]::ReadAllText($newRecipes).Replace('COMMANDS.md', 'RECIPES.md')
+  [System.IO.File]::WriteAllText($newRecipes, $t, (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host "  migrated docs\COMMANDS.md -> docs\RECIPES.md (entries preserved)" -ForegroundColor Green
+}
+
 # --- 1) Missing docs from templates (never overwrite existing) ---
-foreach ($doc in @("STATUS.md","COMMANDS.md")) {
+foreach ($doc in @("STATUS.md","RECIPES.md")) {
   $dst = Join-Path $proj "docs\$doc"
   if (-not (Test-Path $dst)) {
     Copy-Item (Join-Path $templates "_common\docs\$doc") $dst
@@ -85,7 +96,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 # --- 3) CLAUDE.md section refresh (kit-owned sections from the template; yours preserved) ---
 # Sections are blocks starting at a '## ' header. Kit-owned blocks are matched by header PREFIX so older
 # header wordings still match (e.g. '## Modes (forge / proto / spec)' -> '## Modes').
-$kitPrefixes = @("## Modes", "## Design doc", "## Proven commands", "## Secrets", "## Web / grounding", "## Working agreement")
+$kitPrefixes = @("## Modes", "## Design doc", "## Proven recipes", "## Secrets", "## Web / grounding", "## Working agreement")
 
 function Split-Sections([string[]]$lines) {
   $sections = @(); $current = New-Object System.Collections.Generic.List[string]; $header = ""

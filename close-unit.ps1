@@ -27,6 +27,45 @@ $notes = New-Object System.Collections.Generic.List[string]
 $problems = New-Object System.Collections.Generic.List[string]
 $warns = New-Object System.Collections.Generic.List[string]
 
+# Pull a command out of CLAUDE.md's "## Build / test" block ("Build" or "Test").
+function Get-ClaudeCommand([string]$kind) {
+  $cm = Join-Path $proj "CLAUDE.md"
+  if (-not (Test-Path $cm)) { return "" }
+  $m = [regex]::Match((Get-Content $cm -Raw), "(?m)^\s*-\s*\*{0,2}$kind\*{0,2}\s*:\s*``?([^``\r\n]+?)``?\s*$")
+  if (-not $m.Success) { return "" }
+  $v = $m.Groups[1].Value.Trim()
+  if ($v -match '^<' -or $v -match 'set in .forge') { return "" }   # unfilled placeholder
+  return $v
+}
+
+# Run a command in a CHILD shell (never Invoke-Expression: a string containing 'exit' would kill us).
+function Invoke-Verify([string]$cmd) {
+  Push-Location $proj
+  $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try   { $out = (cmd /c "$cmd" | Out-String); $code = $LASTEXITCODE }
+  catch { $out = $_.Exception.Message; $code = 1 }
+  finally { $ErrorActionPreference = $prevEap; Pop-Location }
+  return [pscustomobject]@{ Output = $out; Code = $code }
+}
+
+function Show-Tail([string]$text) {
+  foreach ($l in ($text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 15)) {
+    Write-Host "    $l" -ForegroundColor DarkYellow
+  }
+}
+
+# How many tests actually ran? -1 = could not tell. A story must never close on 0 or unknown: mediamotor
+# had six test projects missing from the .sln, so 'dotnet test' printed "Build succeeded" and ran NOTHING.
+function Get-TestCount([string]$out) {
+  foreach ($rx in @('(?im)^\s*Total:\s*(\d+)', '(?i)Total tests:\s*(\d+)', '(?i)Tests run:\s*(\d+)',
+                    '(?i)(\d+)\s+passed', '(?i)Passed:\s*(\d+)', '(?i)(\d+)\s+test\(s\)')) {
+    $m = [regex]::Match($out, $rx)
+    if ($m.Success) { return [int]$m.Groups[1].Value }
+  }
+  if ($out -match '(?i)(no tests? (were run|to run|ran|available)|zero tests|found 0 test)') { return 0 }
+  return -1
+}
+
 # A grade card must be a real assessment, not a stub. Same thresholds the /build gate uses.
 function Test-GradeCard([string]$unitId) {
   $card = Join-Path $proj "grades\$($unitId)_GRADE.md"
@@ -79,38 +118,69 @@ function Set-StoryDone([string]$storyId) {
 # Learned the hard way: a project once had 5 stories marked DONE, 6 tasks ticked and 4 checkpoint commits
 # while `dotnet build` failed with 21 errors and NO tests had ever run (the test projects were not even in
 # the .sln). Ticking a box over a broken build manufactures confident green state - refuse to do it.
-if (-not $SkipVerify) {
-  $cmd = $BuildCommand
-  if (-not $cmd) {
-    $cm = Join-Path $proj "CLAUDE.md"
-    if (Test-Path $cm) {
-      $m = [regex]::Match((Get-Content $cm -Raw), '(?m)^\s*-\s*\*{0,2}Build\*{0,2}\s*:\s*`?([^`\r\n]+?)`?\s*$')
-      if ($m.Success) { $cmd = $m.Groups[1].Value.Trim() }
-    }
+# Will this close COMPLETE a story? Work it out BEFORE mutating anything, so tests can gate it.
+$predictedStory = $null
+if ((Test-Path $tasksFile) -and (Select-String -Path $tasksFile -Pattern "^###\s*\[[ x]\]\s*$esc\b" -Quiet)) {
+  $taskLines = @(Get-Content $tasksFile -Encoding UTF8 | Where-Object { $_ -match '^###\s*\[[ x]\]' })
+  $mine = $taskLines | Where-Object { $_ -match "^###\s*\[[ x]\]\s*$esc\b" } | Select-Object -First 1
+  if ($mine -and $mine -match '\(Story\s+([A-Za-z0-9._-]+)\)') {
+    $st = $Matches[1]
+    $open = @($taskLines | Where-Object {
+      $_ -match '^###\s*\[ \]' -and $_ -match ('\(Story\s+' + [regex]::Escape($st) + '\)') })
+    if ($open.Count -le 1) { $predictedStory = $st }   # this task is the last one open
   }
-  if ($cmd -match '^<' -or $cmd -match 'set in .forge') { $cmd = "" }   # unfilled placeholder
+}
+elseif ((Test-Path $storiesFile) -and (Select-String -Path $storiesFile -Pattern "\b$esc\b" -Quiet)) {
+  $predictedStory = $Id
+}
 
+if (-not $SkipVerify) {
+  $cmd = if ($BuildCommand) { $BuildCommand } else { Get-ClaudeCommand 'Build' }
   if (-not $cmd) {
     Write-Host "[close-unit] WARNING: no build command found in CLAUDE.md - closing WITHOUT verification." -ForegroundColor Yellow
     Write-Host "             Fill CLAUDE.md's 'Build:' line (that is /forge's job) so units get verified." -ForegroundColor Yellow
   } else {
-    Write-Host "[close-unit] verifying: $cmd" -ForegroundColor Cyan
-    # Run it in a CHILD shell, never Invoke-Expression: a command string containing 'exit' would otherwise
-    # terminate this script (and appear to succeed without doing the bookkeeping).
-    Push-Location $proj
-    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    $buildOut = ""
-    try   { $buildOut = (cmd /c "$cmd" | Out-String); $code = $LASTEXITCODE }
-    catch { $code = 1; $buildOut = $_.Exception.Message }
-    finally { $ErrorActionPreference = $prevEap; Pop-Location }
-    if ($code -ne 0) {
-      Write-Host "[close-unit] BUILD FAILED (exit $code) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
-      $tail = ($buildOut -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 15)
-      foreach ($l in $tail) { Write-Host "    $l" -ForegroundColor DarkYellow }
+    Write-Host "[close-unit] build: $cmd" -ForegroundColor Cyan
+    $r = Invoke-Verify $cmd
+    if ($r.Code -ne 0) {
+      Write-Host "[close-unit] BUILD FAILED (exit $($r.Code)) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+      Show-Tail $r.Output
       Write-Host "             Fix the build, then re-run. (-SkipVerify overrides, but then 'done' means nothing.)" -ForegroundColor Red
       exit 1
     }
     $notes.Add("build verified ($cmd)")
+  }
+
+  # A STORY may only close on tests that actually RAN. Tasks skip this (too slow per task, and a partial
+  # story is not claiming verification yet).
+  if ($predictedStory) {
+    $tcmd = Get-ClaudeCommand 'Test'
+    if (-not $tcmd) {
+      $warns.Add("story $predictedStory closing WITHOUT tests - no 'Test:' command in CLAUDE.md")
+    } else {
+      Write-Host "[close-unit] tests (story $predictedStory): $tcmd" -ForegroundColor Cyan
+      $t = Invoke-Verify $tcmd
+      $count = Get-TestCount $t.Output
+      if ($t.Code -ne 0) {
+        Write-Host "[close-unit] TESTS FAILED (exit $($t.Code)) - story $predictedStory is NOT closed. Nothing changed." -ForegroundColor Red
+        Show-Tail $t.Output
+        exit 1
+      }
+      if ($count -eq 0) {
+        Write-Host "[close-unit] TESTS RAN ZERO TESTS - story $predictedStory is NOT closed. Nothing changed." -ForegroundColor Red
+        Write-Host "             A green run of 0 tests verifies nothing. Usual cause: test projects missing from" -ForegroundColor Red
+        Write-Host "             the solution (dotnet sln add tests/**/*.csproj)." -ForegroundColor Red
+        Show-Tail $t.Output
+        exit 1
+      }
+      if ($count -lt 0) {
+        Write-Host "[close-unit] Could not find any evidence tests ran - story $predictedStory is NOT closed." -ForegroundColor Red
+        Write-Host "             No test count in the output. Fix the test command, or use -SkipVerify knowingly." -ForegroundColor Red
+        Show-Tail $t.Output
+        exit 1
+      }
+      $notes.Add("tests verified ($count test(s) ran)")
+    }
   }
 }
 

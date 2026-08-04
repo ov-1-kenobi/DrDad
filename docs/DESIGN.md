@@ -54,7 +54,7 @@ mode system, and one-command model switching. No Anthropic account; offline afte
 - [x] R11: Optional voice loop (`voice.py` + `voice.cmd`, Python managed by uv - a standalone utility, NOT an
       MCP server): push-to-talk mic -> faster-whisper STT (GPU) -> headless `claude -p --continue` (direct
       child-process stdio; no window handles/TUI scraping) -> Windows SAPI TTS. Run from the project folder.
-- [x] R12: Per-project proven-commands log: `/scaffold` creates `docs/COMMANDS.md` (indexed). All sessions +
+- [x] R12: Per-project proven-commands log: `/scaffold` creates `docs/RECIPES.md` (indexed). All sessions +
       the shell-running agents (dev/qa/hygiene) CONSULT it via `search_datasheets` before unfamiliar shell
       ops and APPEND on new successes (Command / Does / When / Gotcha / Verified), then reindex - so future
       agents look up syntax that actually worked on this machine instead of re-guessing per model. No secrets.
@@ -70,8 +70,8 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       ONE status file: ad-hoc root STATUS/BUILD_SUMMARY/NOTES files are prohibited (CLAUDE.md + /build)
       and flagged by the librarian audit.
 - [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
-      kit deterministically - adds missing `docs/STATUS.md`/`COMMANDS.md`, git safety net if absent, and
-      refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven commands/Web/Working agreement)
+      kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
+      refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)
       by header-prefix splice while preserving user sections (Stack/Build/test/Placeholder/Human-in-loop).
       Run after kit updates; a stale project CLAUDE.md makes local models improvise.
 - [x] R21: **Model manifest + doctor** (closing the install / model-management gaps versus other local dev

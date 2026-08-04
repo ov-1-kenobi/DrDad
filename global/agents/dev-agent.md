@@ -38,7 +38,7 @@ Output:
 If you add or change any file in the docs corpus (design doc, notes, datasheets), **reindex** afterward so
 following agents see it: `index_datasheets` (no path), or `reindex.cmd <docsDir>` (docs dir per CLAUDE.md).
 
-**Proven commands (`docs/COMMANDS.md`):** before an unfamiliar shell operation, `search_datasheets` for a
+**Proven recipes (`docs/RECIPES.md`):** before an unfamiliar shell operation, `search_datasheets` for a
 proven pattern - it holds syntax that actually worked on THIS machine. When a NEW command succeeds
 (especially one you had to fix), append a small entry (Command / Does / When / Gotcha / Verified) and
 reindex. Never record secrets.

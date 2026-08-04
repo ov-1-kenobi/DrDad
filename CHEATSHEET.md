@@ -79,7 +79,7 @@ per-unit agent spawns from 5-8 to 2. To pin the grader to its own model, add `mo
 ## Design-doc status header (gates the modes)
 `/scaffold` creates DESIGN (`docs/DESIGN.md` or `docs/TEDD.md`) as `Status: DRAFT`. **Only DESIGN carries
 Status**; `STORIES.md` (`/scribe`) and `TASKS.md` (`/blueprint`) are working docs, editable even while LOCKED.
-`docs/COMMANDS.md` (created by `/scaffold`) is the proven-commands log: agents search it for shell syntax
+`docs/RECIPES.md` (created by `/scaffold`) is the proven-commands log: agents search it for shell syntax
 that worked on this machine and append new successes (then reindex).
 `docs/STATUS.md` (created by `/scaffold`) is the dashboard - done/next/blockers; librarian-owned + derived.
 Read it first when resuming; refresh with `/librarian status`.

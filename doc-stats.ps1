@@ -77,6 +77,25 @@ foreach ($u in ($doneUnits | Select-Object -Unique)) {
   if ($len -lt 800 -or -not $hasHist) { $missing += "$u (stub: $len bytes$(if(-not $hasHist){', no history'}))" }
 }
 
+# --- test projects that exist on disk but are NOT in the solution ---
+# `dotnet test` on a .sln that lists no test projects exits 0 having run NOTHING. Six orphaned test
+# projects are how a build with 21 errors carried five "DONE" stories.
+$orphanTests = @()
+$sln = Get-ChildItem $proj -Filter *.sln -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($sln) {
+  $slnText = Get-Content $sln.FullName -Raw
+  $testProjs = Get-ChildItem $proj -Recurse -Filter *.csproj -File -ErrorAction SilentlyContinue |
+    Where-Object {
+      $parts = $_.FullName.Split([char]92)
+      $_.FullName -match '(\\tests?\\|\.Tests?\.csproj$|Tests\.csproj$)' -and
+      -not ($parts | Where-Object { $_ -in @('bin','obj','.claude','.git','node_modules','worktrees') }) }
+  foreach ($tp in $testProjs) {
+    if ($slnText -notmatch [regex]::Escape($tp.Name)) {
+      $orphanTests += $tp.FullName.Substring($proj.Length).TrimStart([char]92)
+    }
+  }
+}
+
 $result = [ordered]@{
   design        = $designName
   designStatus  = $designStatus
@@ -86,6 +105,7 @@ $result = [ordered]@{
   tasksDone     = $tasksDone.Count
   nextTask      = if ($next) { "$($next.Id)$(if($next.Story){" (Story $($next.Story))"})" } else { "none" }
   gradesMissing = $missing
+  orphanTests   = $orphanTests
 }
 
 if ($Json) { $result | ConvertTo-Json -Depth 5; exit 0 }
@@ -100,6 +120,13 @@ if ($missing.Count) {
   foreach ($m in $missing) { Write-Host "      $m" -ForegroundColor Yellow }
 } else {
   Write-Host "  grades missing: none" -ForegroundColor Green
+}
+if ($orphanTests.Count) {
+  Write-Host ("  ORPHAN TESTS  : {0} test project(s) NOT in the solution - 'dotnet test' skips them silently" -f $orphanTests.Count) -ForegroundColor Red
+  foreach ($o in $orphanTests) { Write-Host "      $o" -ForegroundColor Red }
+  Write-Host "      fix: dotnet sln add <each path above>" -ForegroundColor Red
+} elseif ($sln) {
+  Write-Host "  test projects : all in the solution" -ForegroundColor Green
 }
 Write-Host ""
 Write-Host "Use these numbers verbatim in docs/STATUS.md - do not estimate." -ForegroundColor Cyan

@@ -229,7 +229,7 @@ if ($ProjectDir) {
     } else { Say "FAIL" ".mcp.json" "missing" "new-project.cmd / upgrade-project.cmd" }
 
     foreach ($d in @("DESIGN.md","TEDD.md")) { if (Test-Path (Join-Path $p "docs\$d")) { Say "OK" "design doc" "docs\$d" } }
-    foreach ($d in @("STATUS.md","COMMANDS.md")) {
+    foreach ($d in @("STATUS.md","RECIPES.md")) {
       if (Test-Path (Join-Path $p "docs\$d")) { Say "OK" "doc" "docs\$d" }
       else { Say "WARN" "doc" "docs\$d missing" "upgrade-project.cmd `"$p`"" }
     }

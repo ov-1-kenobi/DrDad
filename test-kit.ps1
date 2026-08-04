@@ -110,7 +110,7 @@ Test-Case "stack profiles are FRAGMENTS (no kit-owned sections to go stale)" {
   # They used to be full CLAUDE.md files and drifted badly behind templates/generic (old Modes wording,
   # no Secrets, no Task-tool rule). Keeping them fragments makes that impossible.
   $owned = @('## Modes', '## Design doc', '## Working agreement', '## Web / grounding', '## Secrets',
-             '## Proven commands')
+             '## Proven recipes')
   foreach ($p in Get-ChildItem (Join-Path $kit "templates") -Directory) {
     if ($p.Name -in @('generic', '_common')) { continue }
     $prof = Join-Path $p.FullName "PROFILE.md"
@@ -479,7 +479,7 @@ Test-Case "scaffold general: docs + wiring + git + hook" {
   try {
     $p = Join-Path $sb "gen"
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $p | Out-Null
-    foreach ($f in @("CLAUDE.md", ".mcp.json", "docs\DESIGN.md", "docs\COMMANDS.md", "docs\STATUS.md", ".gitignore")) {
+    foreach ($f in @("CLAUDE.md", ".mcp.json", "docs\DESIGN.md", "docs\RECIPES.md", "docs\STATUS.md", ".gitignore")) {
       Assert (Test-Path (Join-Path $p $f)) "missing $f"
     }
     Assert (-not (Test-Path (Join-Path $p "docs\TEDD.md"))) "stray TEDD.md"
@@ -553,10 +553,66 @@ Test-Case "upgrade-project refreshes kit sections, preserves user sections, idem
     Assert ($cm -match 'Task tool') "Modes section not refreshed (no Task-tool rule)"
     Assert ($cm -notmatch '__DESIGN_DOC__') "token not resolved"
     Assert ($cm -notmatch 'old wording that must be replaced') "stale Modes body survived"
-    foreach ($f in @("docs\STATUS.md", "docs\COMMANDS.md")) { Assert (Test-Path (Join-Path $p $f)) "missing $f" }
+    foreach ($f in @("docs\STATUS.md", "docs\RECIPES.md")) { Assert (Test-Path (Join-Path $p $f)) "missing $f" }
     $before = $cm
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") $p | Out-Null
     Assert ((Get-Content "$p\CLAUDE.md" -Raw) -eq $before) "not idempotent"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit refuses a STORY close when tests run zero tests" {
+  # The mediamotor failure: six test projects missing from the .sln, so `dotnet test` exited 0 having run
+  # NOTHING while five stories were marked DONE. A green run of 0 tests must never close a story.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | init |`n`n## Assessment`n" + ('detail. ' * 120) + "`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+
+    # a test command that succeeds but reports nothing (the silent no-op) -> refuse
+    "# Project: t`n`n## Build / test`n- Build: ``echo ok```n- Test:  ``echo Build succeeded``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "closed a story on a test run with no evidence any test ran"
+    Assert (-not (Select-String "$p\docs\STORIES.md" -Pattern 'Status: DONE' -Quiet)) "marked the story DONE anyway"
+
+    # explicit zero -> refuse
+    "# Project: t`n`n## Build / test`n- Build: ``echo ok```n- Test:  ``echo Total: 0``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "closed a story on Total: 0"
+
+    # real test count -> accept
+    "# Project: t`n`n## Build / test`n- Build: ``echo ok```n- Test:  ``echo Total: 12``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -RequireGrade | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "rejected a story whose tests actually ran"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "upgrade-project migrates docs\COMMANDS.md -> RECIPES.md preserving entries" {
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "old"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Project: Legacy`n`n## Stack`n- Language / runtime: .NET`n`n## Build / test`n- Build: dotnet build" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Set-Content "$p\docs\DESIGN.md" "# Design`n`nStatus: LOCKED" -Encoding UTF8
+    "# Proven commands - Legacy`n- **Command:** ``dotnet test --filter X``  MY-UNIQUE-ENTRY" |
+      Set-Content "$p\docs\COMMANDS.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") $p 2>&1 | Out-Null
+    Assert (Test-Path "$p\docs\RECIPES.md") "RECIPES.md not created"
+    Assert (-not (Test-Path "$p\docs\COMMANDS.md")) "old COMMANDS.md left behind"
+    Assert ((Get-Content "$p\docs\RECIPES.md" -Raw) -match 'MY-UNIQUE-ENTRY') "migration lost the project's entries"
   } finally { Remove-Sandbox $sb }
 }
 

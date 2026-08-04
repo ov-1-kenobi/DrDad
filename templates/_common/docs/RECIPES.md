@@ -1,4 +1,4 @@
-# Proven commands - <project>
+# Proven recipes - <project>
 <!-- Commands that actually WORKED on THIS machine, with enough context to reuse them. Indexed by
      local-tools, so any agent can `search_datasheets` for the correct syntax instead of guessing
      (different models guess shell syntax differently - this is the antidote).

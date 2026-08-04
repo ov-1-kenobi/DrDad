@@ -274,8 +274,8 @@ a local model loop when editing it:
    from the design doc. What remains in DESIGN is the contract: goal, requirements, epics, architecture.
 3. **(Optional) build the task map:** `/blueprint` shards `STORIES.md` into `docs/TASKS.md`.
 4. **Refresh CLAUDE.md + missing pieces deterministically:** run `upgrade-project.cmd <projectDir>` - it
-   adds `docs/STATUS.md` + `docs/COMMANDS.md` if missing, git-inits with a baseline commit if needed, and
-   refreshes CLAUDE.md's kit-owned sections (Modes/flow, Design docs, Proven commands, Web/grounding,
+   adds `docs/STATUS.md` + `docs/RECIPES.md` if missing, git-inits with a baseline commit if needed, and
+   refreshes CLAUDE.md's kit-owned sections (Modes/flow, Design docs, Proven recipes, Web/grounding,
    Working agreement) while PRESERVING your Stack / Build / test / Placeholder / Human-in-loop. Do this
    after every kit update - a stale CLAUDE.md is why local models improvise (root STATUS files, missed
    conventions).

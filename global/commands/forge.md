@@ -42,6 +42,12 @@ vision model transcribes it to text - and use that as design input.)
    - **Do not copy version numbers out of a profile.** The profiles tell you to detect the installed
      toolchain (e.g. `dotnet --list-sdks`) and record the chosen version here. Follow that. Also pin the
      toolchain for a clean machine where the ecosystem supports it (e.g. a `global.json` for .NET).
+   - **INGEST THE LIBRARY DOCS NOW - do not defer this.** For every third-party library the architecture
+     commits to, `web_search` its official API reference and `ingest_url` the pages you will actually need
+     (the types/methods the stories touch), then reindex. List what you ingested under "Solution
+     architecture". Rationale: a dev-agent that cannot find a signature INVENTS one - a single project shipped
+     16 compile errors from guessed Magick.NET calls. Putting the real docs in the corpus at design time is
+     the only reliable fix; "remember to look it up later" is not.
    - **GATE - verify CLAUDE.md actually got filled.** Grep it for `<decided in`, `<set in`, `<how to stub`,
      `# Project: <name>`. If ANY remain, the step is NOT done - fill them now. A CLAUDE.md still holding
      placeholders means dev-agent and qa-agent have **no build or test command**, so they improvise their

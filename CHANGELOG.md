@@ -2,6 +2,27 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.7 - 2026-07-30
+
+Closes the verification gap end to end: a story can no longer be closed unless the code builds, real tests
+ran, and a real grade card exists.
+
+### Added
+- **`close-unit.ps1` verifies TESTS at story close.** It works out BEFORE mutating anything whether this
+  close completes a story (last open task of that story, or a story id directly); if so it runs CLAUDE.md's
+  `Test:` command and refuses on failure, on **zero tests**, or when it can find **no evidence any test ran**.
+  "Build succeeded" with no test count is exactly the mediamotor no-op and is now a hard stop.
+- **`doc-stats.ps1` reports ORPHAN TEST PROJECTS** - test `.csproj` files on disk that are absent from the
+  `.sln`, the cause of that silent no-op. Verified against the real project: finds exactly its 6 orphans.
+- **`/forge` ingests library API docs at design time.** For every third-party library the architecture
+  commits to, it `web_search` + `ingest_url` the API reference into the corpus and records what it ingested.
+  A dev-agent that cannot find a signature invents one (16 guessed Magick.NET calls); putting the real docs
+  in the RAG at design time is the only reliable fix.
+
+### Changed
+- **`docs/COMMANDS.md` -> `docs/RECIPES.md`** (section: "Proven recipes"). "COMMANDS" collided
+  conceptually with the kit's slash commands, so "check COMMANDS.md" was misreadable. `upgrade-project`
+  migrates the old file and preserves its accumulated entries.
 ## 0.9.6 - 2026-07-30
 
 A consistency audit of every command/agent file. Finding: instruction VOLUME is not the problem (~2% of a

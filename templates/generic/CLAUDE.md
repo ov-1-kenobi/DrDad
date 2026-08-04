@@ -34,12 +34,12 @@ plan mode to run these commands - execute their steps directly; if you land in p
   refresh with `/librarian status`; never hand-edit it or treat it as the source of truth.
 - All indexed in `local-tools`; use `search_datasheets` / `doc-researcher`, cite them.
 
-## Proven commands (docs/COMMANDS.md - all sessions AND subagents follow this)
-- **Consult first:** before an unfamiliar shell operation, `search_datasheets` for it - COMMANDS.md holds
+## Proven recipes (docs/RECIPES.md - all sessions AND subagents follow this)
+- **Consult first:** before an unfamiliar shell operation, `search_datasheets` for it - RECIPES.md holds
   syntax that actually WORKED on this machine (models guess shell syntax differently; do not re-guess).
 - **Record on success:** when a NEW command works - especially one that failed first and you found the
   working syntax - append a small entry (Command / Does / When / Gotcha / Verified date+model) to
-  `docs/COMMANDS.md`, then reindex (`index_datasheets`). Don't log routine re-runs; update entries instead.
+  `docs/RECIPES.md`, then reindex (`index_datasheets`). Don't log routine re-runs; update entries instead.
 - Never record secrets/tokens in it.
 
 ## Placeholder convention
@@ -55,7 +55,7 @@ plan mode to run these commands - execute their steps directly; if you land in p
 
 ## Secrets (hard rules - a pre-commit hook enforces the last one)
 - **Never put a real credential in this repo.** Not in `docs/` (everything there is chunked into a
-  PLAINTEXT search index), not in `COMMANDS.md`, not in a story/task/contract, not in a comment, not in
+  PLAINTEXT search index), not in `RECIPES.md`, not in a story/task/contract, not in a comment, not in
   chat. Reference secrets **by NAME only**: `AWS_PROFILE`, `AZURE_CLIENT_ID`, `MYAPI_TOKEN`.
 - Real values live in **environment variables** or a **gitignored `.env`** (commit `.env.example` with
   empty values instead). Config files that hold secrets belong in `.gitignore`.

@@ -26,7 +26,7 @@ that fact instead of reading whole docs; it keeps your context lean.
 - Produce a human-verification checklist for anything that can't be auto-tested (look, feel,
   timing, on-device behavior) when CLAUDE.md defines such steps.
 
-**Proven commands (`docs/COMMANDS.md`):** before an unfamiliar test/shell invocation, `search_datasheets`
+**Proven recipes (`docs/RECIPES.md`):** before an unfamiliar test/shell invocation, `search_datasheets`
 for a proven pattern. When a NEW command succeeds (especially a test filter/runner syntax you had to fix),
 append a small entry (Command / Does / When / Gotcha / Verified) and reindex (`index_datasheets`).
 

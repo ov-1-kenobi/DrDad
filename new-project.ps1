@@ -55,7 +55,7 @@ if (Test-Path $verFile) {
 }
 
 # Proven-commands log (indexed; agents look up working shell syntax here and append new successes).
-Copy-Item (Join-Path $templates "_common\docs\COMMANDS.md") (Join-Path $proj "docs\COMMANDS.md") -Force
+Copy-Item (Join-Path $templates "_common\docs\RECIPES.md") (Join-Path $proj "docs\RECIPES.md") -Force
 # Status dashboard (indexed; librarian-agent is its only writer - done/next/blockers at a glance).
 Copy-Item (Join-Path $templates "_common\docs\STATUS.md") (Join-Path $proj "docs\STATUS.md") -Force
 
@@ -98,7 +98,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   Write-Host "  git not found - skipping the safety net (install git so /build can checkpoint + recover)" -ForegroundColor Yellow
 }
 
-Write-Host "  created: CLAUDE.md (generic), .mcp.json (docs -> $proj\docs), docs\$docName (Status: DRAFT), docs\COMMANDS.md, docs\STATUS.md" -ForegroundColor Green
+Write-Host "  created: CLAUDE.md (generic), .mcp.json (docs -> $proj\docs), docs\$docName (Status: DRAFT), docs\RECIPES.md, docs\STATUS.md" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Green
 Write-Host "  1. Open $proj in VS Code (Claude Code); approve the local-tools server."
