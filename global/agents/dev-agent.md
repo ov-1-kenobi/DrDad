@@ -20,6 +20,14 @@ and placeholder convention are in CLAUDE.md.
 - Prefer several SMALL Edits over one big replacement. If an edit leaves a file mangled (methods spliced,
   will not compile) STOP - do NOT hand-reconstruct it from memory; report it so the orchestrator restores
   the last good version from git, then retry smaller.
+- **NEVER invent a third-party API signature.** This is the top source of real build failures: one project
+  produced 16 compile errors from guessed Magick.NET calls (a `ResizeStrategy` type that does not exist,
+  `Crop` with the wrong arity, `int` where `ushort`/`Percentage` was required). For any library you are not
+  certain of: `search_datasheets` first (its docs may already be in the corpus), else `web_search` +
+  `ingest_url` the official API page so it IS in the corpus, else STOP and ask. A plausible-looking
+  signature you did not verify is a bug you are choosing to write.
+- **Build before you report.** Run CLAUDE.md's build command and fix errors in the code you just wrote.
+  Reporting success on code that does not compile wastes the whole downstream loop.
 - Build/compile using CLAUDE.md's build command; fix errors before finishing.
 
 Output:

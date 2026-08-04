@@ -36,6 +36,13 @@
   hard-coded into a project file.
 - Prefer central versioning (`Directory.Build.props`, `Directory.Packages.props` for CPM) over per-project
   drift; keep every project in the solution on the same TFM unless there is a documented reason.
+- **Every test project must be added to the `.sln`** (`dotnet sln add tests/**/*.csproj`). `dotnet test` on a
+  solution that lists no test projects succeeds while running NOTHING - a silent no-op that makes every
+  "tests pass" claim meaningless.
+- **Namespace-shadowing trap:** if your namespace ends in a segment that matches an SDK root namespace
+  (e.g. `MyApp.Storage.Azure` vs the `Azure` SDK), then `Azure.ETag` resolves to YOUR sub-namespace and you
+  get `CS0234: 'ETag' does not exist in the namespace 'MyApp.Storage.Azure'`. Fix with `global::Azure.ETag`
+  or a `using` alias - better, do not name a namespace segment after an SDK root.
 
 ## Human-in-loop
 - Usually none. For HTTP endpoints, optionally a manual curl/HTTP smoke - I'll confirm if asked.

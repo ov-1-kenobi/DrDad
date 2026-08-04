@@ -34,6 +34,10 @@ Do, in order:
 3. **Project files <-> disk sync:** confirm the manifest matches reality -
    - .NET: the .sln references the right projects; no `<Compile>`/`<ProjectReference>` pointing at missing
      files; new source files are actually in the build (SDK-style globs usually cover this).
+   - **EVERY test project on disk must be IN the solution.** Compare `tests/*/*.csproj` (or wherever they
+     live) against the projects listed in the `.sln`. A test project missing from the solution makes
+     `dotnet test` a silent no-op - one project had SIX orphaned test projects, so nothing was ever verified
+     while stories were being marked DONE. Add them (`dotnet sln add tests/**/*.csproj`) and report it.
    - Python: imports resolve; referenced modules/packages exist.
    - JS / other: entry points and references point at files that exist.
    Fix obvious drift (add a missing project reference, remove a dead include); flag structural questions.

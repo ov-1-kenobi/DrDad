@@ -2,6 +2,30 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.5 - 2026-07-30
+
+The mediamotor_iiif build results exposed the worst failure yet: **5 stories marked DONE, 6 tasks ticked and
+4 checkpoint commits over a build failing with 21 errors and ZERO tests ever run** (all six test projects
+existed on disk but none were in the .sln, so `dotnet test` was a silent no-op). The bookkeeping was
+perfect; it was bookkeeping over unverified work, which is worse than none.
+
+### Fixed
+- **`close-unit.ps1` now VERIFIES THE BUILD before it ticks anything.** It reads the `Build:` command from
+  CLAUDE.md (or `-BuildCommand`), runs it in a CHILD shell, and on failure prints the last 15 lines and
+  exits non-zero having changed NOTHING - no tick, no roll-up, no commit. `-SkipVerify` overrides, with a
+  warning that "done" then means nothing. If no build command is discoverable it warns loudly and proceeds.
+- **qa-agent: a run that discovers ZERO tests is a FAIL**, not a pass - no test count, or "Build succeeded"
+  with no results, means nothing was verified. It is also forbidden from writing its own test-report file
+  (TEST_RESULTS.md / TEST_SUMMARY.md / *_RESULT.md were fabricated "all pass" summaries).
+- **hygiene-agent: every test project on disk must be IN the solution.** Six orphaned test projects are what
+  made every "tests pass" claim meaningless.
+- **dev-agent: never invent a third-party API signature.** 16 of the 21 errors were guessed Magick.NET calls
+  (a `ResizeStrategy` type that does not exist, `Crop` with the wrong arity, `int` where `ushort`/
+  `Percentage` was required). Rule: `search_datasheets`, else `web_search` + `ingest_url` the official API
+  docs into the corpus, else STOP - and build before reporting.
+- **dotnet profile:** test projects must be in the .sln, plus the namespace-shadowing trap - a namespace
+  ending in an SDK root name (`MyApp.Storage.Azure`) makes `Azure.ETag` resolve to your own sub-namespace
+  (`CS0234`); use `global::Azure.ETag` or do not shadow the SDK root.
 ## 0.9.4 - 2026-07-30
 
 ### Fixed

@@ -560,6 +560,44 @@ Test-Case "upgrade-project refreshes kit sections, preserves user sections, idem
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "close-unit REFUSES to close a unit whose build fails" {
+  # The failure this guards: 5 stories DONE, 6 tasks ticked, 4 checkpoint commits - over a build with 21
+  # errors and zero tests ever run. Bookkeeping must never outrun verification.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Task map`n`n## Tasks`n`n### [ ] T1.1 - thing   (Story S1)`n- **Goal:** x" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    # a CLAUDE.md whose build command fails
+    "# Project: t`n`n## Build / test`n- Build: ``exit 1```n- Test:  ``exit 0``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") `
+      -Id T1.1 -Title "thing" -ProjectDir $p -NoReindex 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "close-unit closed the unit despite a failing build"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]' -Quiet)) "it ticked the task anyway"
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $log = (git log --oneline | Out-String)
+    $ErrorActionPreference = $prev; Pop-Location
+    Assert ($log -notmatch 'T1\.1') "it committed anyway"
+
+    # and with a passing build it DOES close
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") `
+      -Id T1.1 -Title "thing" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "close-unit failed even with a passing build"
+    Assert (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.1' -Quiet) "did not tick after a passing build"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "close-unit: tick, roll-up timing, idempotent, commit, loud failure" {
   if (-not $haveGit) { return }
   $sb = New-Sandbox

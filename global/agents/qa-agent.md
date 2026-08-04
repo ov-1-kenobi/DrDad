@@ -14,6 +14,13 @@ that fact instead of reading whole docs; it keeps your context lean.
   contract's WORKED EXAMPLE into your first test verbatim - exact inputs, exact expected output. It is a
   ready-made test vector; failing it means the implementation diverged from the contract.
 - Run CLAUDE.md's test command. Report PASS or FAIL.
+- **A run that discovers ZERO tests is a FAIL, not a pass.** Read the runner's summary: if there is no test
+  count, or it reports 0 tests, or it only says "Build succeeded" with no results, then nothing was
+  verified. Say so explicitly and investigate - the usual cause is test projects missing from the solution
+  (`dotnet test` on a .sln that lists none is a silent no-op). Never report PASS on an empty run.
+- **Never write your own test-report file.** No TEST_RESULTS.md / TEST_SUMMARY.md / *_RESULT.md - the
+  runner's output is the evidence and your verdict goes in the reply. Inventing a report file is how a
+  project ended up with four fabricated "all tests pass" summaries and a build that failed with 21 errors.
 - On FAIL: give the exact failing assertion and the most likely cause, then hand back to the
   dev-agent. Do NOT fix the feature yourself.
 - Produce a human-verification checklist for anything that can't be auto-tested (look, feel,

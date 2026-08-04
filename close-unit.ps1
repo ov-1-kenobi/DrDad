@@ -14,8 +14,10 @@ param(
   [Parameter(Mandatory)][string]$Id,
   [string]$Title = "",
   [string]$ProjectDir = ".",
+  [string]$BuildCommand = "",
   [switch]$NoCommit,
-  [switch]$NoReindex
+  [switch]$NoReindex,
+  [switch]$SkipVerify
 )
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
@@ -59,6 +61,45 @@ function Set-StoryDone([string]$storyId) {
     }
   }
   $problems.Add("story $storyId not found in STORIES.md")
+}
+
+# --- 0) VERIFY THE BUILD before touching any bookkeeping ---
+# Learned the hard way: a project once had 5 stories marked DONE, 6 tasks ticked and 4 checkpoint commits
+# while `dotnet build` failed with 21 errors and NO tests had ever run (the test projects were not even in
+# the .sln). Ticking a box over a broken build manufactures confident green state - refuse to do it.
+if (-not $SkipVerify) {
+  $cmd = $BuildCommand
+  if (-not $cmd) {
+    $cm = Join-Path $proj "CLAUDE.md"
+    if (Test-Path $cm) {
+      $m = [regex]::Match((Get-Content $cm -Raw), '(?m)^\s*-\s*\*{0,2}Build\*{0,2}\s*:\s*`?([^`\r\n]+?)`?\s*$')
+      if ($m.Success) { $cmd = $m.Groups[1].Value.Trim() }
+    }
+  }
+  if ($cmd -match '^<' -or $cmd -match 'set in .forge') { $cmd = "" }   # unfilled placeholder
+
+  if (-not $cmd) {
+    Write-Host "[close-unit] WARNING: no build command found in CLAUDE.md - closing WITHOUT verification." -ForegroundColor Yellow
+    Write-Host "             Fill CLAUDE.md's 'Build:' line (that is /forge's job) so units get verified." -ForegroundColor Yellow
+  } else {
+    Write-Host "[close-unit] verifying: $cmd" -ForegroundColor Cyan
+    # Run it in a CHILD shell, never Invoke-Expression: a command string containing 'exit' would otherwise
+    # terminate this script (and appear to succeed without doing the bookkeeping).
+    Push-Location $proj
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $buildOut = ""
+    try   { $buildOut = (cmd /c "$cmd" | Out-String); $code = $LASTEXITCODE }
+    catch { $code = 1; $buildOut = $_.Exception.Message }
+    finally { $ErrorActionPreference = $prevEap; Pop-Location }
+    if ($code -ne 0) {
+      Write-Host "[close-unit] BUILD FAILED (exit $code) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+      $tail = ($buildOut -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 15)
+      foreach ($l in $tail) { Write-Host "    $l" -ForegroundColor DarkYellow }
+      Write-Host "             Fix the build, then re-run. (-SkipVerify overrides, but then 'done' means nothing.)" -ForegroundColor Red
+      exit 1
+    }
+    $notes.Add("build verified ($cmd)")
+  }
 }
 
 # --- 1) tick the unit ---
