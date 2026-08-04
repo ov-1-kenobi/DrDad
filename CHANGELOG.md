@@ -26,6 +26,7 @@ perfect; it was bookkeeping over unverified work, which is worse than none.
 - **dotnet profile:** test projects must be in the .sln, plus the namespace-shadowing trap - a namespace
   ending in an SDK root name (`MyApp.Storage.Azure`) makes `Azure.ETag` resolve to your own sub-namespace
   (`CS0234`); use `global::Azure.ETag` or do not shadow the SDK root.
+
 ## 0.9.4 - 2026-07-30
 
 ### Fixed
@@ -33,6 +34,7 @@ perfect; it was bookkeeping over unverified work, which is worse than none.
   `librarian-agent` an absolute path to `doc-stats.ps1`, so after a folder-copy install it pointed at the
   authoring machine and the counter could not run - the STATUS miscount would have persisted. Agents now get
   the same rewrite as commands, with a test that fails if either folder ships an unrewritten placeholder.
+
 ## 0.9.3 - 2026-07-30
 
 Fixes from the mediamotor_iiif run - the first run where `close-unit.ps1` actually executed (the 0.9.1
