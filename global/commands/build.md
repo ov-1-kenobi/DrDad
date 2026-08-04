@@ -49,7 +49,11 @@ its dependencies satisfied, STOP and report the blocked tasks.
 6. **hygiene-agent** (give it the story id) -> applies the card's `[mechanical]` items plus its standard
    format/lint + project-file & dependency pass, then rebuilds.
 7. If the grade is below B, or the card has critical `[dev]` suggestions: relay them to **dev-agent**, then
-   re-grade (max 3 rounds). Then run `close-unit.ps1 -Id <story id> -Title "<story> polish"` to commit it.
+   re-grade (max 3 rounds). Then commit the story with the grade REQUIRED - the script fails if the card is
+   missing or a stub, so you cannot close a story ungraded:
+   ```
+   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\close-unit.ps1" -Id <story id> -Title "<story> polish" -RequireGrade
+   ```
 8. Present any manual steps + the human-verification checklist and WAIT for my confirmation.
 
 ## End of scope

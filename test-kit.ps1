@@ -560,6 +560,38 @@ Test-Case "upgrade-project refreshes kit sections, preserves user sections, idem
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+
+    # no card at all -> refuse
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -SkipVerify -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "closed a story with no grade card"
+
+    # stub card -> still refuse
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    "# Grade - S1`nStatus: A" | Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -SkipVerify -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "accepted a stub grade card"
+
+    # real card -> accept
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + ('detail. ' * 120) + "`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "rejected a real grade card"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "close-unit REFUSES to close a unit whose build fails" {
   # The failure this guards: 5 stories DONE, 6 tasks ticked, 4 checkpoint commits - over a build with 21
   # errors and zero tests ever run. Bookkeeping must never outrun verification.

@@ -17,13 +17,25 @@ param(
   [string]$BuildCommand = "",
   [switch]$NoCommit,
   [switch]$NoReindex,
-  [switch]$SkipVerify
+  [switch]$SkipVerify,
+  [switch]$RequireGrade
 )
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 $notes = New-Object System.Collections.Generic.List[string]
 $problems = New-Object System.Collections.Generic.List[string]
+$warns = New-Object System.Collections.Generic.List[string]
+
+# A grade card must be a real assessment, not a stub. Same thresholds the /build gate uses.
+function Test-GradeCard([string]$unitId) {
+  $card = Join-Path $proj "grades\$($unitId)_GRADE.md"
+  if (-not (Test-Path $card)) { return "no grade card (grades\$($unitId)_GRADE.md)" }
+  $len = (Get-Item $card).Length
+  if ($len -lt 800) { return "grade card is a stub ($len bytes, needs >=800)" }
+  if (-not (Select-String -Path $card -Pattern '##\s*Grade history' -Quiet)) { return "grade card has no '## Grade history'" }
+  return $null
+}
 
 function Save-Text([string]$path, [string[]]$lines) {
   [System.IO.File]::WriteAllText($path, (($lines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
@@ -126,16 +138,28 @@ if ((Test-Path $tasksFile) -and (Select-String -Path $tasksFile -Pattern "^###\s
     $all = Get-Content $tasksFile -Encoding UTF8 |
            Where-Object { $_ -match '^###\s*\[[ x]\]' -and $_ -match ('\(Story\s+' + [regex]::Escape($parentStory) + '\)') }
     $done = @($all | Where-Object { $_ -match '^###\s*\[x\]' }).Count
-    if ($all.Count -gt 0 -and $done -eq $all.Count) { Set-StoryDone $parentStory }
+    if ($all.Count -gt 0 -and $done -eq $all.Count) { Set-StoryDone $parentStory; $storyClosed = $parentStory }
     else { $notes.Add("story $parentStory : $done/$($all.Count) tasks done - not rolling up yet") }
   }
 }
 elseif ((Test-Path $storiesFile) -and (Select-String -Path $storiesFile -Pattern "\b$esc\b" -Quiet)) {
   Set-StoryDone $Id      # no task map: the unit IS a story
+  $storyClosed = $Id
 }
 else {
   Write-Host "[close-unit] '$Id' not found in TASKS.md or STORIES.md - check the id (nothing committed)." -ForegroundColor Red
   exit 1
+}
+
+# --- 2b) a DONE story needs a real grade card ---
+# Grading is the step that keeps getting skipped. At task level this only warns (the card is written AFTER
+# the story rolls up, per /build's order); pass -RequireGrade at the story-level close to make it binding.
+if ($storyClosed) {
+  $gradeIssue = Test-GradeCard $storyClosed
+  if ($gradeIssue) {
+    if ($RequireGrade) { $problems.Add("story $storyClosed : $gradeIssue - run /grade $storyClosed") }
+    else { $warns.Add("story $storyClosed : $gradeIssue - run /grade $storyClosed") }
+  } else { $notes.Add("story $storyClosed : grade card present") }
 }
 
 # --- 3) reindex so the next unit's agents see the updated state ---
@@ -186,6 +210,7 @@ if ($closedTask -and -not (Select-String -Path $tasksFile -Pattern "^###\s*\[x\]
 
 Write-Host "== close-unit $Id ==" -ForegroundColor Cyan
 foreach ($n in $notes) { Write-Host "  ok   $n" -ForegroundColor Green }
+foreach ($w in $warns) { Write-Host "  WARN $w" -ForegroundColor Yellow }
 foreach ($p in $problems) { Write-Host "  FAIL $p" -ForegroundColor Red }
 if ($problems.Count -gt 0) { Write-Host "close-unit INCOMPLETE - fix the above before moving on." -ForegroundColor Red; exit 1 }
 Write-Host "close-unit OK" -ForegroundColor Green

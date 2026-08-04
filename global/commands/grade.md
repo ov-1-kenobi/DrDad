@@ -22,7 +22,7 @@ repeatedly (or spawn one grade-agent per unit, sequentially), verifying each fil
 `## Assessment` and `## Suggestions`. If not, send the agent back - a one-line "all criteria met" is not a
 grade. Then commit it:
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\close-unit.ps1" -Id <unit id> -Title "grade card"
+powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\close-unit.ps1" -Id <unit id> -Title "grade card" -RequireGrade
 ```
 
 **Be decisive - act, don't narrate.** Spawn the agent yourself; never tell me to run an agent or invent a

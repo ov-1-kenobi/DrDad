@@ -15,7 +15,8 @@ If I haven't said which, ASK first. DESIGN's `Status:` header is the source of t
   overwrite/delete parts of other stories; keep numbering and ordering sequential and sensible.
 - `/blueprint` - shard STORIES.md into `docs/TASKS.md` (bite-sized tasks + deps), reindexed. Optional.
 - `/spec` - implement the LOCKED design faithfully (works a task/story); gaps -> questions.
-- `/build [scope]` - orchestrate requirements -> dev -> grade -> hygiene -> qa; gated on DESIGN LOCKED.
+- `/build [scope]` - per TASK: dev -> qa -> `close-unit.ps1` (which verifies the build, ticks, commits);
+  per STORY: grade -> hygiene. Gated on DESIGN LOCKED and on CLAUDE.md having real build/test commands.
 Docs: DESIGN.md/TEDD.md = contract (lockable) | STORIES.md = story backlog | TASKS.md = task map.
 Lock scope: only DESIGN carries `Status:`; `/forge` and `/proto` flip DRAFT <-> LOCKED on your confirmation.
 STORIES.md and TASKS.md stay editable even while DESIGN is LOCKED. Never edit DESIGN prose when LOCKED; never `/spec` a DRAFT DESIGN.

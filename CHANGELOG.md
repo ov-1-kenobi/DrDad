@@ -2,6 +2,23 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.6 - 2026-07-30
+
+A consistency audit of every command/agent file. Finding: instruction VOLUME is not the problem (~2% of a
+64K window); the problems are contradictions between files and rules still enforced by prose.
+
+### Fixed
+- **The always-loaded project `CLAUDE.md` described the OLD `/build` order** ("requirements -> dev -> grade
+  -> hygiene -> qa"). Every session read that first, then read `build.md` saying something different, and had
+  to arbitrate. It now states the real order: per TASK dev -> qa -> close-unit; per STORY grade -> hygiene.
+- **CHEATSHEET listed `generic` as a stack profile.** It is the always-installed base, not a profile - the
+  profiles are `templates/<stack>/PROFILE.md` for dotnet|avalonia|python|embedded|unity.
+
+### Added
+- **`close-unit.ps1 -RequireGrade`** - the last soft gate is now mechanical. Closing a STORY with no grade
+  card, a stub under 800 bytes, or no `## Grade history` FAILS. At task level it only warns (the card is
+  written after roll-up, per /build's order). `/build` step 7 and `/grade` both pass `-RequireGrade`, so a
+  story can no longer be closed ungraded - grading was the step that kept getting skipped.
 ## 0.9.5 - 2026-07-30
 
 The mediamotor_iiif build results exposed the worst failure yet: **5 stories marked DONE, 6 tasks ticked and

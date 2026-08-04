@@ -56,7 +56,8 @@ model-load time; `OLLAMA_KEEP_ALIVE=30m` keeps it warm after.
 | `/librarian [recover <file>]` | Cross-doc audit (schema/traceability/DONE-rollups/grade cards), findings routed to owner agents; `recover` = git triage for a mangled file | **oss**/dev | after /build scope; messy sessions |
 
 Scaffold is stack-agnostic. The STACK is chosen later in `/forge` (architecture step), cribbed from a
-profile in `templates/<stack>` (dotnet | avalonia | python | embedded | unity | generic).
+profile fragment `templates/<stack>/PROFILE.md` (dotnet | avalonia | python | embedded | unity).
+(`templates/generic/CLAUDE.md` is the always-installed base, not a stack profile.)
 
 ## The pipeline
 ```
