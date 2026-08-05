@@ -65,12 +65,23 @@ foreach ($m in $targets) {
     $installed = (ollama list | Out-String)   # refresh so the report reflects what we just did
   }
 
+  # Fit = WEIGHTS + KV CACHE vs the VRAM budget. Weights alone is misleading: at 64K the cache adds
+  # a few GB, which is what pushes several "14 GB" models over a 16 GB card.
+  $vramBudget = if ($mf.assumeVramGb) { $mf.assumeVramGb } else { 16 }
+  $kvGb = if (($m.PSObject.Properties.Name -contains 'kvGb') -and $m.kvGb) { $m.kvGb }
+          elseif ($mf.kvCacheGbAt64k) { $mf.kvCacheGbAt64k } else { 0 }
+  $effGb = $m.approxVramGb + $kvGb
+  $fit = if (($effGb + 1.5) -le $vramBudget) { "fits GPU" }
+         elseif ($effGb -le ($vramBudget + 1)) { "BORDERLINE" }
+         else { "offloads" }
+
   $rows.Add([pscustomobject]@{
     Alias   = $m.alias
     Variant = $m.name
     Base    = $m.from
-    VRAM    = "$($m.approxVramGb) GB"
-    Fits16  = if ($m.approxVramGb -le 15) { "yes" } else { "offloads" }
+    Weights = "$($m.approxVramGb) GB"
+    PlusKV  = "$effGb GB"
+    Fit     = $fit
     Present = if (Test-Model $m.name) { "yes" } else { "NO" }
     Action  = if ($Report) { "-" } else { $action }
   })
@@ -78,6 +89,11 @@ foreach ($m in $targets) {
 
 Write-Host ""
 $rows | Format-Table -AutoSize
+if ($rows | Where-Object { $_.Fit -eq "BORDERLINE" }) {
+  Write-Host "BORDERLINE = weights + KV cache land within ~1 GB of your $((if($mf.assumeVramGb){$mf.assumeVramGb}else{16})) GB card." -ForegroundColor Yellow
+  Write-Host "             It usually runs, but expect partial offload - your results may vary. Lower numCtx in" -ForegroundColor Yellow
+  Write-Host "             models.json (32768) to pull it back onto the GPU." -ForegroundColor Yellow
+}
 Write-Host "Switch with: use-model.cmd <alias>   (then start a NEW Claude Code session)" -ForegroundColor Green
 $missing = $rows | Where-Object { $_.Present -eq "NO" }
 if ($missing) {

@@ -4,12 +4,12 @@
 ## Models
 
 **Keep-it-straight map (alias -> model -> use):**
-- **`plan`    -> Gemma 4 26B** - deep planning / `/design` / architecture chat (generalist).
+- **`oss`     -> gpt-oss-20b (MoE)** - THE planner: `/design`, `/stories`, `/audit`. Most literal.
 - **`dev`     -> Devstral 24B** - GPU-resident, FAST; daily iteration, `/proto`, quick `/spec`, no CJK.
 - **`fast`    -> 14B (Qwen)** - snappy light edits.
 - **`quality` -> Next (Qwen 80B)** - most capable; **default for `/build`** and hard `/spec`. Slower (RAM-offload).
 
-> Workflow: **Gemma (`plan`)** to design -> **Next (`quality`)** for hands-off `/build` & hard `/spec` ->
+> Workflow: **gpt-oss (`oss`)** to design -> **Next (`quality`)** for hands-off `/build` & hard `/spec` ->
 > drop to **Devstral (`dev`)** for fast iteration, **14B (`fast`)** for trivial edits.
 
 Switch with the scripts below, then **start a NEW Claude Code session** (this build has no `/model` chooser).
@@ -18,7 +18,7 @@ Switch with the scripts below, then **start a NEW Claude Code session** (this bu
 |------------------------|------------------------------------|----------------------------------|--------------------|
 | `qwen3-coder-next-cc`  | 80B-A3B Next (offloads to RAM)     | **DEFAULT for /build** + hard /spec; most capable | `use-quality.cmd`  |
 | `devstral-cc`          | Devstral 24B, fits GPU (EU/Apache) | **fast** iteration, /proto, quick /spec, no CJK | `use-model.cmd dev` |
-| `gemma4-cc`            | Gemma 4 ~26B, fits GPU (Google)    | **deep planning** - /design, architecture chat | `use-model.cmd plan` |
+| `gpt-oss-20b-cc`       | ~21B MoE (A3.6B), smallest reasoner | **planning** - /design, /stories, /audit | `use-model.cmd oss` |
 | `qwen3-14b-cc`         | dense 14B, fully on GPU, fastest   | quick light edits                | `use-fast.cmd`     |
 | any tag you built      | e.g. a custom `-cc`                | as needed                        | `use-model.cmd <name>` |
 
@@ -26,14 +26,14 @@ Not chat models (don't switch to these - used automatically): `nomic-embed-text`
 `gemma3:4b` (small/fast background helper).
 
 Rule of thumb: **Next (`quality`) for `/build` & hard `/spec`** - most capable, best tools, worth the
-offload when you fire-and-forget. **Devstral (`dev`)** for fast GPU-resident iteration. **Gemma 4 (`plan`)**
-for `/design` design. **14B (`fast`)** for snappy light edits.
+offload when you fire-and-forget. **Devstral (`dev`)** for fast GPU-resident iteration. **gpt-oss (`oss`)**
+for `/design`, `/stories`, `/audit`. **14B (`fast`)** for snappy light edits.
 
 ## Switching
 ```
 use-quality.cmd          -> qwen3-coder-next-cc   (DEFAULT for /build + hard /spec: most capable)
 use-model.cmd dev        -> devstral-cc          (fast iteration coding, /proto, quick /spec)
-use-model.cmd plan       -> gemma4-cc            (deep planning / /design / architecture chat)
+use-model.cmd oss        -> gpt-oss-20b-cc       (planning: /design / /stories / /audit)
 use-fast.cmd             -> qwen3-14b-cc          (fast / light edits)
 use-model.cmd <name>     -> any Ollama tag
 ```
@@ -44,7 +44,7 @@ model-load time; `OLLAMA_KEEP_ALIVE=30m` keeps it warm after.
 | Command            | Does                                                        | Model           | When                          |
 |--------------------|-------------------------------------------------------------|-----------------|-------------------------------|
 | `/scaffold <kind>` | **Stack-agnostic** AD init: CLAUDE.md/.mcp.json/docs + the design doc as **DRAFT**. `kind` = general (`DESIGN.md`) or experience (`TEDD.md`); no stack chosen. `new-project.cmd <kind>` is the same. | either | starting a project |
-| `/design [topic]`   | **Design-first**: requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step) + stack (LATE); NO stories/code; offers to LOCK | **plan**; **quality**/cloud for contracts | plan before building |
+| `/design [topic]`   | **Design-first**: requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step) + stack (LATE); NO stories/code; offers to LOCK | **oss**; **quality**/cloud for contracts | plan before building |
 | `/stories [arg]`    | Manage **STORIES.md**: expand epics into stories, normalize/dedupe, `migrate` old in-doc stories out | **oss**/quality | build the story backlog |
 | `/taskmap [story]` | Shard **STORIES.md** -> dependency-ordered bite-sized **task map** (`docs/TASKS.md`), reindex | **quality** (Next) | after /stories, before /build or /spec |
 | `/proto [idea]`    | Build-as-you-go greybox + document decisions                | **dev**         | firing from the hip           |
@@ -69,7 +69,7 @@ profile fragment `templates/<stack>/PROFILE.md` (dotnet | avalonia | python | em
   ->  you verify (run it; report back)
 (/proto is the lightweight alt to /design+/stories: co-design DESIGN + jot stories as you go.)
 ```
-Model per phase: **plan** (Gemma) for /design; **quality** (Next) for /taskmap, /build and hard /spec; **dev** (Devstral) for fast /proto and iteration.
+Model per phase: **oss** (gpt-oss) for /design, /stories, /audit; **quality** (Next) for /taskmap, /build and hard /spec; **dev** (Devstral) for fast /proto and iteration.
 
 `/build` cost discipline: **per TASK only dev + qa run**, then `close-unit.ps1` does the bookkeeping
 deterministically. **grade + hygiene run per STORY** (grade card = `grades/<story id>_GRADE.md`), which cut
@@ -124,5 +124,5 @@ never via `local-tools`. If the model claims otherwise, it's confused - point it
 ## Quick decision guide
 - /build, hard /spec (hands-off, capability)       -> **quality** Next (`use-quality.cmd`)
 - Fast coding iteration / /proto                   -> **dev** Devstral (`use-model.cmd dev`)
-- Deep design / /design / architecture chat         -> **plan** Gemma 4 (`use-model.cmd plan`)
+- Design / /stories / /audit                       -> **oss** gpt-oss-20b (`use-model.cmd oss`)
 - Snappy light edits                               -> **fast** 14B (`use-fast.cmd`)

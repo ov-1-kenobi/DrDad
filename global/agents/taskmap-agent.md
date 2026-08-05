@@ -11,7 +11,7 @@ application code, build, or test.
 
 To pin this agent to a model, add a `model:` line to the frontmatter above; otherwise it inherits the
 session model. This is a reasoning-heavy, run-once step (latency-tolerant) - run it on a capable model
-(`use-quality.cmd` / Next is the recommended default; Gemma 4 `plan` or a high-effort reasoner also work).
+(`use-quality.cmd` / Next is the recommended default; `oss` (gpt-oss-20b) at high effort also works).
 
 Inputs:
 - Stories live in **STORIES.md**; the chosen Solution architecture / stack lives in DESIGN.md (or TEDD.md).

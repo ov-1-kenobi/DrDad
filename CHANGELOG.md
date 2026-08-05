@@ -2,6 +2,36 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.9 - 2026-08-05
+
+The fit math stops lying. `approxVramGb` was always weights-only, so three models advertised as
+"fits 16 GB" actually spill once the 64K KV cache is allocated. And the planner is now `oss`.
+
+### Changed
+- **`plan` alias retired -> `oss` is THE planner** (`/design`, `/stories`, `/audit`). gpt-oss-20b is MoE
+  (~A3.6B active), the most literal instruction-follower of the wired set, and cheaper to run than the
+  dense alternative. Gemma 4 stays available as the optional dense generalist under the new alias
+  **`gemma`**, honestly labelled: dense AND over the budget at 64K, so it partially offloads.
+- **VRAM fit accounts for the KV cache.** `models.json` gained `assumeVramGb` (16) and `kvCacheGbAt64k`
+  (3, at `OLLAMA_KV_CACHE_TYPE=q8_0`); a per-model `kvGb` overrides it if you measure a real one.
+  `sync-models.ps1 -Report` replaced the `Fits16` column with `Weights` / `PlusKV` / `Fit`, and
+  `ad-doctor` computes the same figure. Three states, not two:
+  | state | rule | means |
+  |---|---|---|
+  | `fits GPU` | weights+kv+1.5 <= budget | GPU-resident, full speed |
+  | `BORDERLINE` | weights+kv <= budget+1 | usually runs; expect partial offload, variable speed |
+  | `offloads` | above that | spills to RAM by design (fine for MoE, slow for dense) |
+  `ad-doctor` now emits a **WARN** on BORDERLINE with the fix (lower `numCtx` to 32768) instead of
+  silently claiming a fit. Under this math `dev` and `oss` are BORDERLINE at 64K, not comfortable.
+
+### Fixed
+- README's version banner said **0.9.0** for eight releases. Now asserted against `VERSION` by a test.
+- `CHEATSHEET.md` still routed planning to Gemma in three places, and one line read "/design design"
+  (a leftover from the `/forge` rename). README's file table still named the retired `docs/COMMANDS.md`.
+
+### Tests
+60 cases (was 59): README-banner-matches-VERSION, plus `models.json` must carry `assumeVramGb` +
+`kvCacheGbAt64k` and must not re-introduce a `plan` alias.
 ## 0.9.8 - 2026-08-05
 
 Cosmetic but load-bearing: the pipeline now reads as what it does, with no glossary.

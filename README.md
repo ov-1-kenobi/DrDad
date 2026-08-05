@@ -1,6 +1,6 @@
 # AD - AI Design-Doc-Driven Development
 
-**Version 0.9.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.9.9** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `ad-doctor.cmd`.
 
@@ -61,12 +61,12 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `models.json` | **Single source of truth for models**: alias, `-cc` variant name, upstream tag, role, approx VRAM, which get auto-pulled, which is default, and the `num_ctx` every variant needs (Ollama defaults to ~4K and breaks the agent loop). Add a model = one JSON entry. |
 | `sync-models.ps1` / `.cmd` | Reconciles Ollama with `models.json`: pulls bases, **generates** each `-cc` Modelfile, builds the variants, prints a table (`-Report` to look without changing, `-All` to pull the big optional ones, `-Only <alias>`). |
 | `ad-doctor.ps1` / `.cmd` | **Readiness check** (`brew doctor` style): prerequisites, Ollama + every declared model, the built server + its MCP tool list, the global install, and - with `-ProjectDir` - a project's wiring/index/git/hook. Read-only; prints the fix commands. |
-| `use-model.ps1` | One-command model switch: `dev` `plan` `fast` `quality`. Restart Claude Code after. |
+| `use-model.ps1` | One-command model switch: `dev` `coder` `oss` `fast` `quality` `gemma`. Restart Claude Code after. |
 | `use-fast.cmd` / `use-quality.cmd` | Double-click switches to the fast / quality model. |
 | `use-model.cmd` | Batch wrapper: `use-model.cmd fast \| quality \| <model-name>`. |
 | `reindex.cmd` | Rebuild a project's RAG index from the CLI / a scheduled task: `reindex.cmd <docsDir>`. |
-| `upgrade-project.ps1` / `.cmd` | **Retrofit an existing project** to the current kit: adds missing docs (STATUS/COMMANDS), git safety net, refreshes CLAUDE.md's kit-owned sections (your Stack/Build/test preserved). Run after kit updates. |
-| `test-kit.ps1` / `.cmd` | **The kit's own test suite** (24 cases) - run after ANY change to the kit; it *is* the validation gate. No Ollama/GPU/network needed. Also runs in CI (`.github/workflows/kit-ci.yml`). |
+| `upgrade-project.ps1` / `.cmd` | **Retrofit an existing project** to the current kit: adds missing docs (STATUS/RECIPES), git safety net, refreshes CLAUDE.md's kit-owned sections (your Stack/Build/test preserved). Run after kit updates. |
+| `test-kit.ps1` / `.cmd` | **The kit's own test suite** - run after ANY change to the kit; it *is* the validation gate. No Ollama/GPU/network needed. Also runs in CI (`.github/workflows/kit-ci.yml`). |
 | `scan-secrets.ps1` / `.cmd` | **Credential scanner.** Blocks secrets from reaching git or the plaintext RAG index. Never prints the matched value - only file:line, pattern name, and a fingerprint. |
 | `install-hooks.ps1` | Installs the project's `pre-commit` hook (runs `scan-secrets -Staged`). Called by scaffold + upgrade; re-runnable. |
 | `close-unit.ps1` | **Deterministic unit close-out** used by `/build` and `/spec`: ticks the task in TASKS.md, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits, and verifies. Non-zero exit = not closed. Mechanical bookkeeping is scripted because models skip prose checklists. |
@@ -255,7 +255,7 @@ general software, `docs/TEDD.md` for an experience) as `Status: DRAFT`. Then gro
 The design is split by lifecycle: **DESIGN.md/TEDD.md** (contract - requirements/epics/stack, the only lockable doc) | **STORIES.md** (backlog) | **TASKS.md** (task map).
 Lock/unlock: `/design` and `/proto` flip DESIGN `Status:` DRAFT <-> LOCKED **on your confirmation**. STORIES/TASKS stay editable even while DESIGN is LOCKED; never `/spec` a DRAFT DESIGN.
 Pipeline: `/scaffold` (DRAFT DESIGN) -> `/design` -> `/stories` -> (optional) `/taskmap` -> lock DESIGN -> `/spec` or `/build`.
-Tip: `/design` on `use-model.cmd plan` (Gemma 4); `/stories` on `oss`; `use-quality.cmd` (Next) for `/taskmap`, hands-off `/build`, hard `/spec`; `use-model.cmd dev` (Devstral) for fast `/proto` and iteration.
+Tip: `/design` and `/stories` on `use-model.cmd oss`; `use-quality.cmd` (Next) for `/taskmap`, hands-off `/build`, hard `/spec`; `use-model.cmd dev` (Devstral) for fast `/proto` and iteration.
 
 The commands read the project type from `CLAUDE.md`, so the same loop works for Unity, .NET,
 Python, embedded, or anything. It self-loops on auto-testable work; manual/hardware/visual
@@ -314,7 +314,7 @@ on its own (even outside `/build`). It's a one-phrase change to each agent's `de
 Four roles (full table in `CHEATSHEET.md`):
 - **`quality` -> `qwen3-coder-next-cc`** - 80B-A3B Next, most capable. **Default for `/build` & hard `/spec`** (slower, RAM-offloaded - worth it when you fire-and-forget).
 - **`dev` -> `devstral-cc`** - Devstral 24B, fits the GPU. Fast iteration coding, `/proto`, quick `/spec`; no CJK.
-- **`plan` -> `gemma4-cc`** - Gemma 4, generalist for deep design / `/design` / architecture chat.
+- **`oss` -> `gpt-oss-20b-cc`** - MoE (~A3.6B), THE planner: `/design`, `/stories`, `/audit`. Most literal instruction-follower.
 - **`fast` -> `qwen3-14b-cc`** - dense 14B, quickest, for light edits.
 
 Switch the whole session, then start a new Claude Code session. Any of these:
@@ -381,7 +381,7 @@ right alongside the kit. This kit already mirrors its pattern in miniature; BMAD
 2. Start a new Claude Code session so it picks up the new agents/commands.
 
 **Which model for which phase** (use the switchers):
-- **Planning** (PRD + architecture - reasoning-heavy): `use-model.cmd plan` -> `gemma4-cc` (generalist),
+- **Planning** (PRD + architecture - reasoning-heavy): `use-model.cmd oss` -> `gpt-oss-20b-cc` (MoE reasoner),
   or `use-quality.cmd` -> Next for the hardest design. Keep projects small, or do heavy planning with
   cloud Claude when you have internet, then continue offline.
 - **Implementation** (Dev against BMAD's detailed story files): `use-quality.cmd` -> Next for hands-off

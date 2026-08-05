@@ -5,7 +5,7 @@ argument-hint: [optional story id to scope to; empty = all of STORIES.md]
 Run the **taskmap-agent** to turn the stories into an executable task map.
 
 **Best run on `use-quality.cmd` (Next)** - decomposition + dependency reasoning is the heaviest thinking in
-the pipeline, and this is a run-once step so the offload latency is fine. Gemma 4 (`plan`) or a high-effort
+the pipeline, and this is a run-once step so the offload latency is fine. `oss` (gpt-oss-20b) or a high-effort
 reasoner also work.
 
 Read `CLAUDE.md` for the doc paths. Source = **STORIES.md**; the chosen stack/architecture is in DESIGN.md

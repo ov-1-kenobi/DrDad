@@ -97,11 +97,26 @@ if (-not (Test-Path $manifest)) {
       else { Say "WARN" "support model" "$s missing" "ollama pull $s   (RAG embeddings / describe_image)" }
     }
     $built = 0
+    # Fit must include the KV cache: at numCtx 64K it adds a few GB, which is what pushes several
+    # "14 GB" models over a 16 GB card. Weights-only numbers read as comfortable when they are not.
+    $budget = if ($vramGb) { $vramGb } elseif ($mf.assumeVramGb) { $mf.assumeVramGb } else { 16 }
     foreach ($m in $mf.models) {
       $have = $installedModels -match [regex]::Escape($m.name)
-      $fit = if ($vramGb -and $m.approxVramGb -gt $vramGb) { "offloads to RAM" } else { "fits GPU" }
-      if ($have) { $built++; Say "OK" "model $($m.alias)" "$($m.name) (~$($m.approxVramGb) GB, $fit)" }
-      else { Say "WARN" "model $($m.alias)" "$($m.name) not built" "ollama pull $($m.from); sync-models.cmd -Only $($m.alias)" }
+      $kvGb = if (($m.PSObject.Properties.Name -contains 'kvGb') -and $m.kvGb) { $m.kvGb }
+              elseif ($mf.kvCacheGbAt64k) { $mf.kvCacheGbAt64k } else { 0 }
+      $effGb = $m.approxVramGb + $kvGb
+      $detail = "$($m.name) (~$($m.approxVramGb) GB + ~$kvGb KV = $effGb GB vs $budget GB)"
+      if (-not $have) {
+        Say "WARN" "model $($m.alias)" "$($m.name) not built" "ollama pull $($m.from); sync-models.cmd -Only $($m.alias)"
+      } elseif (($effGb + 1.5) -le $budget) {
+        $built++; Say "OK" "model $($m.alias)" "$detail - fits GPU"
+      } elseif ($effGb -le ($budget + 1)) {
+        $built++
+        Say "WARN" "model $($m.alias)" "$detail - BORDERLINE, partial offload likely (results may vary)" `
+            "lower numCtx in models.json to 32768 to pull '$($m.alias)' back onto the GPU"
+      } else {
+        $built++; Say "OK" "model $($m.alias)" "$detail - offloads to RAM (expected for this size)"
+      }
     }
     if ($built -eq 0) { Say "FAIL" "chat models" "none built" "sync-models.cmd   (builds every variant whose base is pulled)" }
   }

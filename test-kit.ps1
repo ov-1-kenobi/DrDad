@@ -357,10 +357,22 @@ Test-Case "each command has description frontmatter" {
 Write-Host "-- models --" -ForegroundColor Cyan
 $mfPath = Join-Path $kit "models.json"
 
+Test-Case "README's version banner matches VERSION" {
+  # It said 0.9.0 for eight releases. The version is the first thing a reader sees.
+  $v = (Get-Content (Join-Path $kit "VERSION") -Raw).Trim()
+  $readme = Get-Content (Join-Path $kit "README.md") -Raw
+  Assert ($readme -match "\*\*Version\s+$([regex]::Escape($v))\*\*") "README banner does not say **Version $v**"
+}
+
 Test-Case "models.json is valid and complete" {
   Assert (Test-Path $mfPath) "models.json missing"
   $mf = Get-Content $mfPath -Raw | ConvertFrom-Json
   Assert ($mf.numCtx -ge 32768) "numCtx too small for the agent loop: $($mf.numCtx)"
+  # Fit must be computable including the KV cache - weights-only numbers read as comfortable when they
+  # are not (three "14-16 GB" models are actually at or over a 16 GB card at 64K context).
+  Assert ($mf.assumeVramGb -ge 1) "models.json needs assumeVramGb for the fit calculation"
+  Assert ($mf.kvCacheGbAt64k -ge 1) "models.json needs kvCacheGbAt64k - fit must account for the KV cache"
+  Assert (-not ($mf.models | Where-Object { $_.alias -eq 'plan' })) "'plan' was retired - oss is the planner"
   Assert ($mf.embedModel) "no embedModel"
   Assert ($mf.models.Count -ge 1) "no models declared"
   foreach ($m in $mf.models) {
