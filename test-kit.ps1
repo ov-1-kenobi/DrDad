@@ -310,6 +310,42 @@ Test-Case "every executable a command tells the model to run is permitted" {
   }
 }
 
+Test-Case "install.ps1's command echo matches the actual commands" {
+  # The echo drifted during the 0.9.8 rename (it advertised agents that do not exist). It is the first
+  # thing a user reads after installing, so it must not lie.
+  $echo = (Get-Content (Join-Path $kit "install.ps1") | Where-Object { $_ -like '*commands: /scaffold*' }) -join ' '
+  Assert $echo "install.ps1 has no command echo line"
+  # Only the part before 'agents:' - the agents half uses '/' as a separator, not as a command prefix.
+  $cmdPart = ($echo -split 'agents:')[0]
+  foreach ($c in $commands) { Assert ($cmdPart -match "/$([regex]::Escape($c))\b") "install echo omits /$c" }
+  foreach ($m in [regex]::Matches($cmdPart, '/([a-z][a-z0-9-]*)')) {
+    Assert ($commands -contains $m.Groups[1].Value) "install echo advertises /$($m.Groups[1].Value) which is not a command"
+  }
+}
+
+Test-Case "no retired name is still shipped as a command or agent" {
+  # install.ps1 deletes retired names from ~/.claude; the kit itself must not re-add them.
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  $m = [regex]::Match($inst, '\$retiredCommands\s*=\s*@\(([^)]*)\)')
+  Assert $m.Success "install.ps1 has no `$retiredCommands list"
+  $retired = [regex]::Matches($m.Groups[1].Value, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
+  foreach ($r in $retired) {
+    Assert ($commands -notcontains $r) "'$r' is listed as retired but still exists as a command"
+  }
+  $ma = [regex]::Match($inst, '\$retiredAgents\s*=\s*@\(([^)]*)\)')
+  if ($ma.Success) {
+    foreach ($r in ([regex]::Matches($ma.Groups[1].Value, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })) {
+      Assert ($agents -notcontains $r) "'$r' is listed as retired but still exists as an agent"
+    }
+  }
+}
+
+Test-Case "every .ps1 has a .cmd wrapper" {
+  foreach ($f in Get-ChildItem $kit -Filter *.ps1 -File) {
+    Assert (Test-Path (Join-Path $kit "$($f.BaseName).cmd")) "$($f.Name) has no .cmd wrapper"
+  }
+}
+
 Test-Case "each command has description frontmatter" {
   foreach ($f in Get-ChildItem (Join-Path $kit "global\commands") -Filter *.md) {
     $head = (Get-Content $f.FullName -TotalCount 5) -join "`n"

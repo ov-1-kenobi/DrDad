@@ -13,11 +13,11 @@ yourself, one finding at a time, and report what changed. Only `[human]` finding
 
 - **Empty / audit:** spawn it in **AUDIT** mode. Relay its compact tagged findings, then for each one I
   approve, ROUTE it to its owner - you are the orchestrator; the librarian never edits:
-  - `[scribe]` -> scribe-agent (FIX that story)     - `[blueprint]` -> planner-agent (repair TASKS)
+  - `[scribe]` -> scribe-agent (FIX that story)     - `[taskmap]` -> taskmap-agent (repair TASKS)
   - `[grade]` -> **one grade-agent per unit** (or `/grade <id>` repeatedly). NEVER ask one agent to card
     several units - it returns having written nothing. Verify each file after it is written.
   - `[dev]` -> dev-agent
-  - `[forge]` -> tell me to run `/forge` (DESIGN edits need the unlock flow) - do not edit DESIGN here
+  - `[design]` -> tell me to run `/design` (DESIGN edits need the unlock flow) - do not edit DESIGN here
   - `[git-recover]` -> librarian-agent in RECOVER mode, then run its restore command on my OK
   - `[index]` -> already fixed (reindexed) - just report it
 - **`status`:** spawn the librarian-agent in **STATUS** mode - it regenerates `docs/STATUS.md` (the

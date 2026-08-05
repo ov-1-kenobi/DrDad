@@ -1,5 +1,5 @@
 # Task map - <project>
-<!-- Managed by /blueprint (planner-agent) from STORIES.md. Regenerate after stories change - done-state
+<!-- Managed by /taskmap (taskmap-agent) from STORIES.md. Regenerate after stories change - done-state
      (`[x]`) is preserved. /build and /spec work the next unchecked task whose dependencies are all `[x]`.
      Each task is self-contained and traces to its story by tag. This is a working doc (no Status header);
      it implements the LOCKED DESIGN. -->

@@ -1,5 +1,5 @@
 # Stack profile: Unity (C#)
-<!-- A FRAGMENT, not a CLAUDE.md. /forge copies these sections into the project's CLAUDE.md during the
+<!-- A FRAGMENT, not a CLAUDE.md. /design copies these sections into the project's CLAUDE.md during the
      architecture step. Kit-owned sections come from templates/generic/CLAUDE.md - do not duplicate them.
      Note: Unity projects use docs/TEDD.md as the design doc (an "experience"). -->
 

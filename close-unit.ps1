@@ -34,7 +34,7 @@ function Get-ClaudeCommand([string]$kind) {
   $m = [regex]::Match((Get-Content $cm -Raw), "(?m)^\s*-\s*\*{0,2}$kind\*{0,2}\s*:\s*``?([^``\r\n]+?)``?\s*$")
   if (-not $m.Success) { return "" }
   $v = $m.Groups[1].Value.Trim()
-  if ($v -match '^<' -or $v -match 'set in .forge') { return "" }   # unfilled placeholder
+  if ($v -match '^<' -or $v -match 'set in .design') { return "" }   # unfilled placeholder
   return $v
 }
 
@@ -138,7 +138,7 @@ if (-not $SkipVerify) {
   $cmd = if ($BuildCommand) { $BuildCommand } else { Get-ClaudeCommand 'Build' }
   if (-not $cmd) {
     Write-Host "[close-unit] WARNING: no build command found in CLAUDE.md - closing WITHOUT verification." -ForegroundColor Yellow
-    Write-Host "             Fill CLAUDE.md's 'Build:' line (that is /forge's job) so units get verified." -ForegroundColor Yellow
+    Write-Host "             Fill CLAUDE.md's 'Build:' line (that is /design's job) so units get verified." -ForegroundColor Yellow
   } else {
     Write-Host "[close-unit] build: $cmd" -ForegroundColor Cyan
     $r = Invoke-Verify $cmd

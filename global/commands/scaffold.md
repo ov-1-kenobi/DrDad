@@ -7,7 +7,7 @@ down the AD structure AND creates the right design doc as `Status: DRAFT`.
 
 Kit path: `C:\Projects\Claude\MCP\AD-kit`   (install rewrites this to the real location)
 
-First decide the project KIND (this picks the design doc; the STACK is still decided LATE in `/forge`):
+First decide the project KIND (this picks the design doc; the STACK is still decided LATE in `/design`):
 - **general** -> `docs/DESIGN.md` - a general software project (CLI, service, app, library, ...).
 - **experience** -> `docs/TEDD.md` - an interactive / game / XR / infographic / simulation experience.
 
@@ -18,7 +18,7 @@ Run from the current project folder (it scaffolds into the current directory):
 powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\new-project.ps1" $ARGUMENTS
 ```
 After it runs, report exactly what it created (CLAUDE.md, .mcp.json, and `docs/DESIGN.md` or `docs/TEDD.md`
-as DRAFT), then tell me to: approve the `local-tools` server, then run `/forge` (design-first) or `/proto`
+as DRAFT), then tell me to: approve the `local-tools` server, then run `/design` (design-first) or `/proto`
 - they grow the DRAFT doc and decide the stack LATE (which fills CLAUDE.md's build/test). Do NOT fill the
 stack in yet.
 

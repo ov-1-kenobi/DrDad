@@ -20,7 +20,7 @@ comes back.
 ### 2. Custom agents (reusable, scoped) - define once
 Markdown files with YAML frontmatter + a system prompt, in `%USERPROFILE%\.claude\agents\`
 (global) or `.claude/agents/` (per-project). **This kit installs ten globally** via
-`install.ps1` (source in `global/agents/`): `requirements-agent`, `architect-agent`, `planner-agent`,
+`install.ps1` (source in `global/agents/`): `requirements-agent`, `architect-agent`, `taskmap-agent`,
 `dev-agent`, `grade-agent`, `qa-agent`, `doc-researcher`, `hygiene-agent`, `scribe-agent`,
 `librarian-agent`. Example shape:
 
@@ -70,7 +70,7 @@ and `search_datasheets` reads it fresh from disk on every call. Two rules the ag
 2. **Reindex after you change docs.** Any agent/command that writes to the docs corpus (a design doc,
    TEDD, ASSETS, ingested page) reindexes right after - `index_datasheets` (in-session, no path) or
    `reindex.cmd <docsDir>` (CLI) - so the NEXT agent's search sees the update, not a stale copy.
-   `/forge`, `/proto`, `/build`, `/assets`, `/blueprint`, `/scribe`, the planner-agent, the scribe-agent, the requirements-agent, and the dev-agent all do this;
+   `/design`, `/proto`, `/build`, `/assets`, `/taskmap`, `/stories`, the taskmap-agent, the scribe-agent, the requirements-agent, and the dev-agent all do this;
    read-only agents (`doc-researcher`, `qa-agent`, `grade-agent`) and the code-only `hygiene-agent` just
    search (`grade-agent` writes only its `grades/<id>_GRADE.md` report card, which lives outside `docs/`).
    (`ingest_url` reindexes itself; `LOCALTOOLS_AUTO_REINDEX=1` also auto-refreshes on staleness.)

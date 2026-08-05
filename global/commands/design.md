@@ -1,9 +1,9 @@
 ---
-description: FORGE mode - design-first. Shape the design doc: requirements, epics, and the stack (decided LATE). No stories, no code.
+description: DESIGN mode - design-first. Shape the design doc: requirements, epics, and the stack (decided LATE). No stories, no code.
 argument-hint: [the idea / area to flesh out]
 ---
-We are in **FORGE mode** - we shape the DESIGN doc (the contract): requirements, epics, and eventually the
-stack. We do NOT write stories here (that is `/scribe` -> STORIES.md) and we do NOT write code.
+We are in **DESIGN mode** - we shape the DESIGN doc (the contract): requirements, epics, and eventually the
+stack. We do NOT write stories here (that is `/stories` -> STORIES.md) and we do NOT write code.
 
 **Be decisive - act, don't narrate.** Create/edit files directly; do not ask permission for read-only steps
 (Read/Grep/search). Use the `doc-researcher` subagent (Task tool, subagent_type: "doc-researcher" - not a
@@ -22,7 +22,7 @@ vision model transcribes it to text - and use that as design input.)
 2. **Capture requirements** under `## Requirements` (numbered, testable, stack-agnostic - WHAT, not HOW). For
    open questions, propose 2-3 options with tradeoffs, recommend one, WAIT for my choice. Reindex after edits.
 3. **Group into epics** under `## Epics` - lightweight, coarse feature groups (`E1`, `E2`, ...). Keep it light:
-   a small project may have one epic or none. These are what `/scribe` expands into stories.
+   a small project may have one epic or none. These are what `/stories` expands into stories.
 4. **Contracts - pin the load-bearing decisions (the step that keeps local dev models from improvising):**
    spawn the **architect-agent** via the **Task tool** (subagent_type: "architect-agent" - an AGENT, not a
    skill). It hunts UNDERSPECIFIED contracts (data formats, core-function semantics like "what exactly does
@@ -30,7 +30,7 @@ vision model transcribes it to text - and use that as design input.)
    into the doc's `## Contracts` section WITH a worked example. Relay its options to me and WAIT for my
    picks. (Best run on `quality`/Next or a frontier model - it is rare and one-shot; you can also run JUST
    this step online, then build fully offline.)
-   - Retrofit mode: `/forge contracts` runs ONLY this step on an existing design (unlock first if LOCKED).
+   - Retrofit mode: `/design contracts` runs ONLY this step on an existing design (unlock first if LOCKED).
 5. **Solution architecture - decide LATE, once requirements + epics look stable:**
    - Propose 2-3 architectures/stacks that FIT (let requirements lead - do NOT default to a favorite). Give
      tradeoffs, recommend one, WAIT for my choice.
@@ -55,5 +55,5 @@ vision model transcribes it to text - and use that as design input.)
      cannot verify anything. Replace the project name too.
 6. When requirements + epics + CONTRACTS + architecture are set, OFFER to set `Status: LOCKED` and, on my
    OK, flip the header + reindex. Do NOT offer to lock while a load-bearing contract is unpinned (the
-   architect-agent reports lock-readiness). Then tell me: run `/scribe` to break the epics into stories
-   (STORIES.md), then `/blueprint` for tasks, then `/spec` or `/build`.
+   architect-agent reports lock-readiness). Then tell me: run `/stories` to break the epics into stories
+   (STORIES.md), then `/taskmap` for tasks, then `/spec` or `/build`.

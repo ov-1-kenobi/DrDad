@@ -7,7 +7,7 @@ Status: DRAFT
 <one paragraph: what the game is and the core experience>
 
 ## Stories
-<!-- /forge and requirements-agent write self-contained stories here. Each embeds everything the dev
+<!-- /design and requirements-agent write self-contained stories here. Each embeds everything the dev
      needs, so /spec and /build can implement one with full context in-prompt. -->
 ### Story S1: <title>   <!-- Status: TODO | DONE -->
 - **Goal:** <one line>

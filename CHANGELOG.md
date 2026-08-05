@@ -2,6 +2,35 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.9.8 - 2026-08-05
+
+Cosmetic but load-bearing: the pipeline now reads as what it does, with no glossary.
+`/scaffold -> /design -> /stories -> /taskmap -> /build`
+
+### Changed
+- **Commands renamed** (all four were private metaphors; a model that half-remembers a metaphor guesses):
+  | old | new |
+  |---|---|
+  | `/forge` | `/design` |
+  | `/scribe` | `/stories` |
+  | `/blueprint` | `/taskmap` |
+  | `/librarian` | `/audit` |
+  `/blueprint` existed only because `/tasks` is a Claude Code built-in; `/taskmap` is free and says what it
+  is. All four new names verified free of built-in and BMAD collisions.
+- **`planner-agent` -> `taskmap-agent`** - "architect" vs "planner" did not distinguish contract-pinning
+  from task-sharding. Agent names that describe a ROLE well are kept: `scribe-agent` (writes STORIES) and
+  `librarian-agent` (audits the doc set) stay, because the command is the verb and the agent is the actor.
+- Audit owner tags follow: `[forge]` -> `[design]`, `[blueprint]` -> `[taskmap]`.
+
+### Added
+- **`install.ps1` deletes RETIRED names** from `~/.claude` before installing (`forge`, `scribe`,
+  `blueprint`, `librarian`, `plan`, `planner-agent`), so upgrading does not leave the old command
+  installed beside the new one for a model to invoke. No uninstall-first dance needed.
+- **`.cmd` wrappers for every `.ps1`** - added `close-unit.cmd`, `doc-stats.cmd`, `install-hooks.cmd`,
+  `ollama-tuning.cmd`. Commands/agents still invoke the `.ps1` via `powershell` (that is what the
+  permission allow list covers); the wrappers are for running them by hand.
+- Three drift tests: the install echo must match the real command list, no retired name may still ship,
+  and every `.ps1` must have a `.cmd`.
 ## 0.9.7 - 2026-07-30
 
 Closes the verification gap end to end: a story can no longer be closed unless the code builds, real tests

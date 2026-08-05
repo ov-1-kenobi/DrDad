@@ -63,6 +63,19 @@ foreach ($rel in @(".mcp.json","templates\_common\.mcp.json","templates\unity\.m
 Write-Host "`n== 6) Install global commands + agents to $claude ==" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force (Join-Path $claude "commands") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $claude "agents")   | Out-Null
+
+# Remove RETIRED names first. Renames would otherwise leave the old command installed alongside the new
+# one, and a model could invoke the stale copy. Keep this list append-only.
+$retiredCommands = @("forge","scribe","blueprint","librarian","plan")     # 0.9.8 rename; /plan predates it
+$retiredAgents   = @("planner-agent")
+foreach ($r in $retiredCommands) {
+  $rp = Join-Path $claude "commands\$r.md"
+  if (Test-Path $rp) { Remove-Item $rp -Force; Write-Host "  removed retired /$r" -ForegroundColor Yellow }
+}
+foreach ($r in $retiredAgents) {
+  $rp = Join-Path $claude "agents\$r.md"
+  if (Test-Path $rp) { Remove-Item $rp -Force; Write-Host "  removed retired $r" -ForegroundColor Yellow }
+}
 Get-ChildItem (Join-Path $root "global\commands") -File | ForEach-Object {
   Write-NoBom (Join-Path $claude "commands\$($_.Name)") ((Get-Content $_.FullName -Raw -Encoding UTF8).Replace($old, $root))
 }
@@ -71,7 +84,7 @@ Get-ChildItem (Join-Path $root "global\commands") -File | ForEach-Object {
 Get-ChildItem (Join-Path $root "global\agents") -File | ForEach-Object {
   Write-NoBom (Join-Path $claude "agents\$($_.Name)") ((Get-Content $_.FullName -Raw -Encoding UTF8).Replace($old, $root))
 }
-Write-Host "  commands: /scaffold /forge /blueprint /proto /spec /build /assets /tidy /scribe /diagram /librarian /grade   agents: requirements/architect/planner/dev/grade/scribe/hygiene/qa/doc-researcher/librarian"
+Write-Host "  commands: /scaffold /design /taskmap /proto /spec /build /assets /tidy /stories /diagram /audit /grade   agents: requirements/architect/taskmap/dev/grade/scribe/hygiene/qa/doc-researcher/librarian"
 
 Write-Host "`n== 7) Install settings.json (Ollama redirect + offline flags) ==" -ForegroundColor Cyan
 $dst = Join-Path $claude "settings.json"

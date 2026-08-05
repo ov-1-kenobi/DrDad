@@ -1,7 +1,7 @@
 # new-project.ps1 - deterministic, STACK-AGNOSTIC AD-kit scaffolder (no local-model involved).
 # Lays down the AD structure: a generic CLAUDE.md + .mcp.json (wired) + docs/ + the design doc as DRAFT.
 # The KIND (general vs experience) picks WHICH design doc is created; the STACK is still decided LATE
-# in /forge once the stories are implementable.
+# in /design once the stories are implementable.
 #
 # Usage:
 #   new-project.ps1 general                 (general software -> docs\DESIGN.md, into the CURRENT folder)
@@ -36,7 +36,7 @@ $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 Write-Host "Scaffolding a stack-agnostic AD project ($Kind) at $proj" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force (Join-Path $proj "docs") | Out-Null
 
-# Generic, stack-agnostic CLAUDE.md (build/test/stack get filled during /forge's architecture step).
+# Generic, stack-agnostic CLAUDE.md (build/test/stack get filled during /design's architecture step).
 Copy-Item (Join-Path $templates "generic\CLAUDE.md") (Join-Path $proj "CLAUDE.md") -Force
 # Record the chosen design doc path in CLAUDE.md (replace the __DESIGN_DOC__ token).
 $cm = Join-Path $proj "CLAUDE.md"
@@ -102,7 +102,7 @@ Write-Host "  created: CLAUDE.md (generic), .mcp.json (docs -> $proj\docs), docs
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Green
 Write-Host "  1. Open $proj in VS Code (Claude Code); approve the local-tools server."
-Write-Host "  2. Run /forge (design-first) or /proto (build-as-you-go) - grow docs\$docName while DRAFT."
-Write-Host "     /forge decides the stack LATE and fills CLAUDE.md's build/test."
-Write-Host "  3. When stories + architecture are set, /forge or /proto will offer to set Status: LOCKED."
-Write-Host "  4. Optional: /blueprint shards stories into docs\TASKS.md. Then /spec or /build to implement."
+Write-Host "  2. Run /design (design-first) or /proto (build-as-you-go) - grow docs\$docName while DRAFT."
+Write-Host "     /design decides the stack LATE and fills CLAUDE.md's build/test."
+Write-Host "  3. When stories + architecture are set, /design or /proto will offer to set Status: LOCKED."
+Write-Host "  4. Optional: /taskmap shards stories into docs\TASKS.md. Then /spec or /build to implement."

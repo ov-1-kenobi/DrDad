@@ -8,7 +8,7 @@ NOT skills. Never enter plan mode - this loop IS the plan.
 
 Read `CLAUDE.md` for doc paths, build command, test command, placeholder convention, human-verification.
 **Mechanical gate - actually grep, do not eyeball:** if `CLAUDE.md` still contains `<decided in`, `<set in`,
-`<how to stub` or `# Project: <name>`, STOP and tell me to finish `/forge`'s architecture step. Without a
+`<how to stub` or `# Project: <name>`, STOP and tell me to finish `/design`'s architecture step. Without a
 real build/test command the dev and qa agents cannot verify anything and will invent their own reporting
 files. This has happened - do not proceed past it.
 Read the design doc's `Status:` - `LOCKED` -> SPEC mode, `DRAFT` -> PROTO mode - and pass the mode to every
@@ -30,7 +30,7 @@ its dependencies satisfied, STOP and report the blocked tasks.
 2. **dev-agent** -> implement per CLAUDE.md conventions; collect its summary + any manual steps.
    - If it reports a file got MANGLED: spawn **librarian-agent** in RECOVER mode, restore on my OK, retry
      with a smaller edit. Never let it hand-reconstruct a broken file.
-   - If it returns "needs contract": STOP - that decision belongs to `/forge`, not this loop.
+   - If it returns "needs contract": STOP - that decision belongs to `/design`, not this loop.
 3. **qa-agent** -> write/run the tests. FAIL -> back to dev-agent with the details (max 3 rounds, then stop
    and summarize). PASS -> continue.
 4. **Close it out by RUNNING the script** - do not perform these steps by hand:

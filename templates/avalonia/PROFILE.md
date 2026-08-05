@@ -1,5 +1,5 @@
 # Stack profile: Avalonia (C# / XAML / MVVM)
-<!-- A FRAGMENT, not a CLAUDE.md. /forge copies these sections into the project's CLAUDE.md during the
+<!-- A FRAGMENT, not a CLAUDE.md. /design copies these sections into the project's CLAUDE.md during the
      architecture step. Kit-owned sections (Modes, Design docs, Secrets, Working agreement) come from
      templates/generic/CLAUDE.md - never duplicate them here. -->
 

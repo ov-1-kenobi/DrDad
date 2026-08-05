@@ -25,4 +25,4 @@ Loop:
 5. Short "look at this" note (what to check), then iterate.
 
 When the spec feels solid, OFFER to set `Status: LOCKED` (on my OK, flip the header + reindex), then
-suggest `/blueprint` (optional task map) and `/spec` or `/build`.
+suggest `/taskmap` (optional task map) and `/spec` or `/build`.

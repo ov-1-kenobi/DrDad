@@ -2,11 +2,11 @@
 
 Status: LOCKED
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
-     Flip to DRAFT (and use /forge or /proto) only to change the design itself. -->
+     Flip to DRAFT (and use /design or /proto) only to change the design itself. -->
 
 ## Goal
 Run the real Claude Code agentic loop **fully offline** on Windows + an NVIDIA GPU, driven by local
-Ollama models, with a single C# MCP server for document RAG, per-project corpora, a forge/proto/spec/build
+Ollama models, with a single C# MCP server for document RAG, per-project corpora, a design/proto/spec/build
 mode system, and one-command model switching. No Anthropic account; offline after first setup.
 
 ## Requirements
@@ -22,17 +22,17 @@ mode system, and one-command model switching. No Anthropic account; offline afte
 - [x] R3: Per-project corpora - each project's `.mcp.json` sets `LOCALTOOLS_DOCS_DIR` to its own `docs\`.
 - [x] R4: Staleness handling - opt-in `LOCALTOOLS_AUTO_REINDEX=1` (re-index at search when docs changed) and a
       `--reindex <docsDir>` CLI mode (+ `reindex.cmd`) for one-offs/scheduling.
-- [x] R5: Modes as global slash commands: `/forge` (design-first, no code), `/proto` (build-as-you-go),
+- [x] R5: Modes as global slash commands: `/design` (design-first, no code), `/proto` (build-as-you-go),
       `/spec` (implement a LOCKED doc), `/build` (orchestrate the agent team), `/assets` (Unity art list),
-      `/scaffold` (stack-agnostic init), `/scribe` (manage STORIES.md), `/blueprint` (shard STORIES.md into
+      `/scaffold` (stack-agnostic init), `/stories` (manage STORIES.md), `/taskmap` (shard STORIES.md into
       a task map), `/tidy` (code hygiene + project/dependency integrity), `/diagram` (Mermaid architecture
-      view of DESIGN.md -> docs/ARCHITECTURE.md), `/librarian` (cross-doc audit + routed fixes; `recover
+      view of DESIGN.md -> docs/ARCHITECTURE.md), `/audit` (cross-doc audit + routed fixes; `recover
       <file>` = git triage for a mangled file).
-- [x] R6: Agent team installed globally: `requirements-agent`, `architect-agent`, `planner-agent`, `dev-agent`,
+- [x] R6: Agent team installed globally: `requirements-agent`, `architect-agent`, `taskmap-agent`, `dev-agent`,
       `grade-agent`, `qa-agent`, `doc-researcher`, `hygiene-agent`, `scribe-agent`, `librarian-agent` (read-only cross-doc
       auditor: schema/traceability/state-consistency/grade-card presence; findings tagged by owner and
       routed by the orchestrator; git RECOVER triage). `scribe-agent` manages STORIES.md (expand
-      epics into stories, normalize, migrate); `planner-agent` shards STORIES.md into `docs/TASKS.md` (a
+      epics into stories, normalize, migrate); `taskmap-agent` shards STORIES.md into `docs/TASKS.md` (a
       dependency-ordered map of bite-sized tasks, reindexed) for tight-context runs; `grade-agent` grades each story's implementation into a running
       report card (`grades/<id>_GRADE.md`) and emits tagged suggestions; `hygiene-agent` applies the
       `[mechanical]` ones (standards/lint + project-file & dependency integrity). `/build` order: per TASK
@@ -40,10 +40,10 @@ mode system, and one-command model switching. No Anthropic account; offline afte
 - [x] R7: **Layered docs + stack-agnostic scaffold + late architecture.** `/scaffold <general|experience>`
       (`new-project.ps1`) lays down CLAUDE.md + .mcp.json + `docs/` AND creates the design doc - `DESIGN.md`
       (general) or `TEDD.md` (experience) - as `Status: DRAFT` (NO stack chosen). The design is split by
-      lifecycle: **DESIGN.md/TEDD.md** (contract: requirements, epics, stack - owned by `/forge`, the only
-      lockable doc), **STORIES.md** (story backlog - `/scribe`), **TASKS.md** (task map - `/blueprint`).
-      `/forge` decides the stack LATE (crib from `templates/<stack>`: dotnet/avalonia/python/embedded/unity/
-      generic). `/forge` and `/proto` flip DESIGN `Status:` DRAFT<->LOCKED on confirmation; STORIES/TASKS stay
+      lifecycle: **DESIGN.md/TEDD.md** (contract: requirements, epics, stack - owned by `/design`, the only
+      lockable doc), **STORIES.md** (story backlog - `/stories`), **TASKS.md** (task map - `/taskmap`).
+      `/design` decides the stack LATE (crib from `templates/<stack>`: dotnet/avalonia/python/embedded/unity/
+      generic). `/design` and `/proto` flip DESIGN `Status:` DRAFT<->LOCKED on confirmation; STORIES/TASKS stay
       editable while LOCKED; `/spec` and `/build` gate on DESIGN LOCKED.
 - [x] R8: One-command installer (`install.ps1` / `install.cmd`) that detects its own location, builds the model
       `-cc` variants + the C# server, installs commands/agents/`settings.json` with paths auto-fixed
@@ -62,10 +62,10 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       user fallbacks; graceful skip if git absent). `/build` and `/spec` COMMIT after every unit that
       passes qa (each passing unit = a restore point). A mangled file is RESTORED from git (librarian
       RECOVER triage -> `git checkout`), never hand-reconstructed. `/build` gates on the grade card
-      existing on disk and runs a librarian AUDIT at end of scope.
+      existing on disk and runs an /audit pass at end of scope.
 - [x] R14: Status dashboard: `/scaffold` creates `docs/STATUS.md` (indexed) - done / next ready / dated
       blockers / notes for the next session. DERIVED working memory: the librarian-agent is its ONLY
-      writer and REGENERATES it from TASKS/STORIES/grades (sources win on conflict) - on `/librarian
+      writer and REGENERATES it from TASKS/STORIES/grades (sources win on conflict) - on `/audit
       status`, at every AUDIT, and when `/build` stops on a blocker. Sessions read it first to orient.
       ONE status file: ad-hoc root STATUS/BUILD_SUMMARY/NOTES files are prohibited (CLAUDE.md + /build)
       and flagged by the librarian audit.
@@ -124,10 +124,10 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       (c) `transcribe_audio` - Whisper via a `uv`-run `transcribe.py` helper (a subprocess utility, NOT an
       MCP server - the one-C#-server rule holds).
 - [x] R16: Contract layer (the anti-improvisation altitude between epics and stories): `architect-agent`
-      (via `/forge` step 4, retrofit `/forge contracts`) hunts UNDERSPECIFIED contracts ("two devs would
+      (via `/design` step 4, retrofit `/design contracts`) hunts UNDERSPECIFIED contracts ("two devs would
       implement it differently"), forces human-approved decisions, and pins each - Decision / Format /
-      Invariants / WORKED EXAMPLE - into DESIGN's `## Contracts`. Gates: /forge won't offer LOCK with
-      unpinned load-bearing contracts; planner-agent refuses to shard tasks needing an unpinned contract;
+      Invariants / WORKED EXAMPLE - into DESIGN's `## Contracts`. Gates: /design won't offer LOCK with
+      unpinned load-bearing contracts; taskmap-agent refuses to shard tasks needing an unpinned contract;
       dev-agent STOPs instead of inventing formats/semantics; qa-agent turns each contract's worked example
       into the first unit test; grade-agent treats contract divergence as [dev]-critical; librarian audits
       contract coverage. Run this one step on the strongest model (Next/cloud); build offline after.
@@ -147,7 +147,7 @@ mode system, and one-command model switching. No Anthropic account; offline afte
 - Behavior: R5/R6. The design doc's `Status:` header gates which modes may edit (DRAFT) vs implement (LOCKED).
 
 ### Templates / stack profiles (templates\)
-- Behavior: R7. `new-project.ps1` scaffolds the generic, stack-agnostic base; `/forge` applies a stack
+- Behavior: R7. `new-project.ps1` scaffolds the generic, stack-agnostic base; `/design` applies a stack
   **profile** late. `_common\` holds the shared `.mcp.json` + the `DESIGN.md`/`TEDD.md` design-doc templates.
 
 ## Acceptance / validation gate (how we know it works)
@@ -169,8 +169,8 @@ commands/agents/server; one C# MCP server only.
 <!-- Implemented: uninstall.ps1 + uninstall.cmd. AC3 verified (parses + ASCII); AC1/AC2/AC4 are behavioral - confirm on first run. -->>
 - **Goal:** A teardown that reverses what install.ps1 did, with an optional `-Full` for models/env.
 - **Context (what install.ps1 does - reverse exactly this):**
-  - Copies `global\commands\*.md` -> `%USERPROFILE%\.claude\commands\` (scaffold, forge, blueprint, proto, spec, build, assets, tidy, scribe, diagram, librarian).
-  - Copies `global\agents\*.md`  -> `%USERPROFILE%\.claude\agents\` (requirements-agent, architect-agent, planner-agent, dev-agent, grade-agent, qa-agent, doc-researcher, hygiene-agent, scribe-agent, librarian-agent).
+  - Copies `global\commands\*.md` -> `%USERPROFILE%\.claude\commands\` (scaffold, design, taskmap, proto, spec, build, assets, tidy, stories, diagram, audit, grade).
+  - Copies `global\agents\*.md`  -> `%USERPROFILE%\.claude\agents\` (requirements-agent, architect-agent, taskmap-agent, dev-agent, grade-agent, qa-agent, doc-researcher, hygiene-agent, scribe-agent, librarian-agent).
   - Writes `%USERPROFILE%\.claude\settings.json`, backing up any prior to `settings.json.bak`.
   - Tuning sets User env vars: `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_KEEP_ALIVE`.
   - Builds Ollama variants: `devstral-cc`, `gemma4-cc`, `qwen3-14b-cc`, `qwen3-coder-next-cc`.

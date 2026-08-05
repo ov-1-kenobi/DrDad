@@ -1,5 +1,5 @@
 # Stack profile: .NET / C#
-<!-- A FRAGMENT, not a CLAUDE.md. /forge copies these sections into the project's CLAUDE.md during the
+<!-- A FRAGMENT, not a CLAUDE.md. /design copies these sections into the project's CLAUDE.md during the
      architecture step: Stack, Placeholder convention, Build / test, Human-in-loop, Project-file hygiene.
      Everything else (Modes, Design docs, Secrets, Proven commands, Working agreement) is kit-owned and
      comes from templates/generic/CLAUDE.md - never duplicate it here, it only goes stale. -->

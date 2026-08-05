@@ -162,4 +162,4 @@ Write-Host ""
 Write-Host "Done. Next:" -ForegroundColor Green
 Write-Host "  1. Review CLAUDE.md (your Stack/Build/test sections were preserved; kit sections refreshed)."
 Write-Host "  2. Reindex: run index_datasheets in a session (or reindex.cmd $proj\docs)."
-Write-Host "  3. /librarian status  - populate the new docs\STATUS.md dashboard."
+Write-Host "  3. /audit status  - populate the new docs\STATUS.md dashboard."

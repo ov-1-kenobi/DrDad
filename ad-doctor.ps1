@@ -50,7 +50,7 @@ if (Get-Exe "code") { Say "OK" "VS Code CLI" "on PATH" }
 else { Say "WARN" "VS Code 'code'" "not on PATH" "install VS Code with 'Add to PATH' (extension install needs it)" }
 
 if (Get-Exe "git") { Say "OK" "git" (Get-Ver "git") }
-else { Say "FAIL" "git" "not found" "winget install Git.Git   (checkpoints + /librarian recover need it)" }
+else { Say "FAIL" "git" "not found" "winget install Git.Git   (checkpoints + /audit recover need it)" }
 
 if (Get-Exe "uv") { Say "OK" "uv (optional)" (Get-Ver "uv") }
 else { Say "WARN" "uv (optional)" "not found" "winget install astral-sh.uv   (only for voice.cmd + transcribe_audio)" }
@@ -211,7 +211,7 @@ if ($ProjectDir) {
         if ($cm -match [regex]::Escape($sec)) { Say "OK" "CLAUDE.md has" $sec }
         else { Say "WARN" "CLAUDE.md missing" $sec "upgrade-project.cmd `"$p`"" }
       }
-      if ($cm -match '<set in|<decided in') { Say "WARN" "CLAUDE.md" "Stack/Build/test still placeholders" "finish /forge's architecture step" }
+      if ($cm -match '<set in|<decided in') { Say "WARN" "CLAUDE.md" "Stack/Build/test still placeholders" "finish /design's architecture step" }
     } else { Say "FAIL" "CLAUDE.md" "missing" "new-project.cmd <general|experience>" }
 
     $mcp = Join-Path $p ".mcp.json"

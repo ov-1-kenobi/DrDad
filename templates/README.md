@@ -4,15 +4,15 @@ AD does NOT lock a platform at scaffold time. The flow is requirements-first; th
 
 1. **Scaffold (stack-agnostic):** `new-project.cmd [dir]` (or `/scaffold`) lays down a **generic** `CLAUDE.md`
    + `.mcp.json` (wired to this project's `docs/`) + an empty `docs/`. **No platform is chosen here.**
-2. **`/forge`** asks: general project (`docs/DESIGN.md`) or experience (`docs/TEDD.md`), then captures
+2. **`/design`** asks: general project (`docs/DESIGN.md`) or experience (`docs/TEDD.md`), then captures
    requirements as **stack-agnostic stories**.
-3. **Architecture, decided LATE:** once the stories are implementable, `/forge` proposes solution
+3. **Architecture, decided LATE:** once the stories are implementable, `/design` proposes solution
    architectures that FIT the stories, you choose one, and it fills `CLAUDE.md`'s build/test/conventions from
    the matching **stack profile** below + records the choice in the design doc.
 4. `Status: LOCKED` -> `/spec` or `/build`.
 
-## Stack profiles (applied by /forge's architecture step - NOT chosen at scaffold)
-Each `<stack>/CLAUDE.md` is a profile `/forge` cribs the build/test/run + placeholder + human-in-loop from,
+## Stack profiles (applied by /design's architecture step - NOT chosen at scaffold)
+Each `<stack>/CLAUDE.md` is a profile `/design` cribs the build/test/run + placeholder + human-in-loop from,
 once you've chosen a stack:
 
 | Profile | For | Build / Test |
@@ -29,13 +29,13 @@ once you've chosen a stack:
 ## Scaffold a project
 - **Terminal (recommended):** `new-project.cmd` (current folder) or `new-project.cmd C:\src\MyApp`.
 - **In Claude Code:** `/scaffold`.
-Either way you get a generic, stack-agnostic AD project. Then run `/forge` to pick the design doc and
+Either way you get a generic, stack-agnostic AD project. Then run `/design` to pick the design doc and
 capture stories - the stack is decided later.
 
 ## By hand
 Copy `_common\.mcp.json` + `templates\generic\CLAUDE.md` into your project, make a `docs\` folder, and edit
-`.mcp.json`'s `LOCALTOOLS_DOCS_DIR` to that `docs\`. Then `/forge`.
+`.mcp.json`'s `LOCALTOOLS_DOCS_DIR` to that `docs\`. Then `/design`.
 
 ## Adding a new stack profile later
-Write a new `<stack>\CLAUDE.md` with the build/test/placeholder/human-in-loop slots filled. `/forge` can
+Write a new `<stack>\CLAUDE.md` with the build/test/placeholder/human-in-loop slots filled. `/design` can
 then crib from it when that stack is chosen. No new commands or agents needed.

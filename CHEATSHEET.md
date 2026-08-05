@@ -4,7 +4,7 @@
 ## Models
 
 **Keep-it-straight map (alias -> model -> use):**
-- **`plan`    -> Gemma 4 26B** - deep planning / `/forge` / architecture chat (generalist).
+- **`plan`    -> Gemma 4 26B** - deep planning / `/design` / architecture chat (generalist).
 - **`dev`     -> Devstral 24B** - GPU-resident, FAST; daily iteration, `/proto`, quick `/spec`, no CJK.
 - **`fast`    -> 14B (Qwen)** - snappy light edits.
 - **`quality` -> Next (Qwen 80B)** - most capable; **default for `/build`** and hard `/spec`. Slower (RAM-offload).
@@ -18,7 +18,7 @@ Switch with the scripts below, then **start a NEW Claude Code session** (this bu
 |------------------------|------------------------------------|----------------------------------|--------------------|
 | `qwen3-coder-next-cc`  | 80B-A3B Next (offloads to RAM)     | **DEFAULT for /build** + hard /spec; most capable | `use-quality.cmd`  |
 | `devstral-cc`          | Devstral 24B, fits GPU (EU/Apache) | **fast** iteration, /proto, quick /spec, no CJK | `use-model.cmd dev` |
-| `gemma4-cc`            | Gemma 4 ~26B, fits GPU (Google)    | **deep planning** - /forge, architecture chat | `use-model.cmd plan` |
+| `gemma4-cc`            | Gemma 4 ~26B, fits GPU (Google)    | **deep planning** - /design, architecture chat | `use-model.cmd plan` |
 | `qwen3-14b-cc`         | dense 14B, fully on GPU, fastest   | quick light edits                | `use-fast.cmd`     |
 | any tag you built      | e.g. a custom `-cc`                | as needed                        | `use-model.cmd <name>` |
 
@@ -27,13 +27,13 @@ Not chat models (don't switch to these - used automatically): `nomic-embed-text`
 
 Rule of thumb: **Next (`quality`) for `/build` & hard `/spec`** - most capable, best tools, worth the
 offload when you fire-and-forget. **Devstral (`dev`)** for fast GPU-resident iteration. **Gemma 4 (`plan`)**
-for `/forge` design. **14B (`fast`)** for snappy light edits.
+for `/design` design. **14B (`fast`)** for snappy light edits.
 
 ## Switching
 ```
 use-quality.cmd          -> qwen3-coder-next-cc   (DEFAULT for /build + hard /spec: most capable)
 use-model.cmd dev        -> devstral-cc          (fast iteration coding, /proto, quick /spec)
-use-model.cmd plan       -> gemma4-cc            (deep planning / /forge / architecture chat)
+use-model.cmd plan       -> gemma4-cc            (deep planning / /design / architecture chat)
 use-fast.cmd             -> qwen3-14b-cc          (fast / light edits)
 use-model.cmd <name>     -> any Ollama tag
 ```
@@ -44,32 +44,32 @@ model-load time; `OLLAMA_KEEP_ALIVE=30m` keeps it warm after.
 | Command            | Does                                                        | Model           | When                          |
 |--------------------|-------------------------------------------------------------|-----------------|-------------------------------|
 | `/scaffold <kind>` | **Stack-agnostic** AD init: CLAUDE.md/.mcp.json/docs + the design doc as **DRAFT**. `kind` = general (`DESIGN.md`) or experience (`TEDD.md`); no stack chosen. `new-project.cmd <kind>` is the same. | either | starting a project |
-| `/forge [topic]`   | **Design-first**: requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step) + stack (LATE); NO stories/code; offers to LOCK | **plan**; **quality**/cloud for contracts | plan before building |
-| `/scribe [arg]`    | Manage **STORIES.md**: expand epics into stories, normalize/dedupe, `migrate` old in-doc stories out | **oss**/quality | build the story backlog |
-| `/blueprint [story]` | Shard **STORIES.md** -> dependency-ordered bite-sized **task map** (`docs/TASKS.md`), reindex | **quality** (Next) | after /scribe, before /build or /spec |
+| `/design [topic]`   | **Design-first**: requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step) + stack (LATE); NO stories/code; offers to LOCK | **plan**; **quality**/cloud for contracts | plan before building |
+| `/stories [arg]`    | Manage **STORIES.md**: expand epics into stories, normalize/dedupe, `migrate` old in-doc stories out | **oss**/quality | build the story backlog |
+| `/taskmap [story]` | Shard **STORIES.md** -> dependency-ordered bite-sized **task map** (`docs/TASKS.md`), reindex | **quality** (Next) | after /stories, before /build or /spec |
 | `/proto [idea]`    | Build-as-you-go greybox + document decisions                | **dev**         | firing from the hip           |
 | `/spec [item]`     | Implement the **LOCKED** design (works a task/story)        | **dev**         | spec is ready, build it       |
 | `/build [scope]`   | Per task: **dev -> qa -> `close-unit.ps1`**. Per story: **grade -> hygiene**. Scripted close-out (tick/roll-up/reindex/commit/verify) | **coder**/**quality** | hands-off build+test |
 | `/assets [scope]`  | (Unity) regenerate the art/asset list from the TEDD         | either          | refresh Unity asset list      |
 | `/tidy [scope]`    | hygiene-agent: lint/format + project-file & dependency integrity, re-build | **dev** | tidy/verify after changes |
 | `/diagram [focus]` | Mermaid architecture view of DESIGN.md -> `docs/ARCHITECTURE.md` (offline, diagram-as-code) | either | visualize the architecture |
-| `/librarian [recover <file>]` | Cross-doc audit (schema/traceability/DONE-rollups/grade cards), findings routed to owner agents; `recover` = git triage for a mangled file | **oss**/dev | after /build scope; messy sessions |
+| `/audit [recover <file>]` | Cross-doc audit (schema/traceability/DONE-rollups/grade cards), findings routed to owner agents; `recover` = git triage for a mangled file | **oss**/dev | after /build scope; messy sessions |
 
-Scaffold is stack-agnostic. The STACK is chosen later in `/forge` (architecture step), cribbed from a
+Scaffold is stack-agnostic. The STACK is chosen later in `/design` (architecture step), cribbed from a
 profile fragment `templates/<stack>/PROFILE.md` (dotnet | avalonia | python | embedded | unity).
 (`templates/generic/CLAUDE.md` is the always-installed base, not a stack profile.)
 
 ## The pipeline
 ```
 /scaffold <general|experience>   (stack-agnostic: CLAUDE.md + .mcp.json + docs/ + DESIGN as DRAFT)
-  ->  /forge     (DESIGN: requirements + epics + stack LATE -> fills CLAUDE.md; offers to LOCK)
-  ->  /scribe    (expand epics into stories -> STORIES.md)
-  ->  /blueprint (optional: shard STORIES.md into TASKS.md - bite-sized tasks + deps, indexed)
+  ->  /design     (DESIGN: requirements + epics + stack LATE -> fills CLAUDE.md; offers to LOCK)
+  ->  /stories    (expand epics into stories -> STORIES.md)
+  ->  /taskmap (optional: shard STORIES.md into TASKS.md - bite-sized tasks + deps, indexed)
   ->  lock DESIGN, then /spec  OR  /build   (implement; works the next ready task if TASKS.md exists)
   ->  you verify (run it; report back)
-(/proto is the lightweight alt to /forge+/scribe: co-design DESIGN + jot stories as you go.)
+(/proto is the lightweight alt to /design+/stories: co-design DESIGN + jot stories as you go.)
 ```
-Model per phase: **plan** (Gemma) for /forge; **quality** (Next) for /blueprint, /build and hard /spec; **dev** (Devstral) for fast /proto and iteration.
+Model per phase: **plan** (Gemma) for /design; **quality** (Next) for /taskmap, /build and hard /spec; **dev** (Devstral) for fast /proto and iteration.
 
 `/build` cost discipline: **per TASK only dev + qa run**, then `close-unit.ps1` does the bookkeeping
 deterministically. **grade + hygiene run per STORY** (grade card = `grades/<story id>_GRADE.md`), which cut
@@ -78,14 +78,14 @@ per-unit agent spawns from 5-8 to 2. To pin the grader to its own model, add `mo
 
 ## Design-doc status header (gates the modes)
 `/scaffold` creates DESIGN (`docs/DESIGN.md` or `docs/TEDD.md`) as `Status: DRAFT`. **Only DESIGN carries
-Status**; `STORIES.md` (`/scribe`) and `TASKS.md` (`/blueprint`) are working docs, editable even while LOCKED.
+Status**; `STORIES.md` (`/stories`) and `TASKS.md` (`/taskmap`) are working docs, editable even while LOCKED.
 `docs/RECIPES.md` (created by `/scaffold`) is the proven-commands log: agents search it for shell syntax
 that worked on this machine and append new successes (then reindex).
 `docs/STATUS.md` (created by `/scaffold`) is the dashboard - done/next/blockers; librarian-owned + derived.
-Read it first when resuming; refresh with `/librarian status`.
-- `Status: DRAFT`  -> `/forge` and `/proto` may edit it; `/spec` will offer to lock first.
+Read it first when resuming; refresh with `/audit status`.
+- `Status: DRAFT`  -> `/design` and `/proto` may edit it; `/spec` will offer to lock first.
 - `Status: LOCKED` -> `/spec` and `/build` implement it; the doc is read-only.
-- **Flipping it:** `/forge` and `/proto` set LOCKED (when ready) or unlock to DRAFT (to edit) **on your
+- **Flipping it:** `/design` and `/proto` set LOCKED (when ready) or unlock to DRAFT (to edit) **on your
   confirmation** - they edit the header for you. You don't have to hand-edit it.
 
 ## MCP tools (the `local-tools` server = document search, NOT build/test)
@@ -124,5 +124,5 @@ never via `local-tools`. If the model claims otherwise, it's confused - point it
 ## Quick decision guide
 - /build, hard /spec (hands-off, capability)       -> **quality** Next (`use-quality.cmd`)
 - Fast coding iteration / /proto                   -> **dev** Devstral (`use-model.cmd dev`)
-- Deep design / /forge / architecture chat         -> **plan** Gemma 4 (`use-model.cmd plan`)
+- Deep design / /design / architecture chat         -> **plan** Gemma 4 (`use-model.cmd plan`)
 - Snappy light edits                               -> **fast** 14B (`use-fast.cmd`)

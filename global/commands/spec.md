@@ -10,7 +10,7 @@ you would do instead of doing it. (The WAIT at the end is only for my confirmati
 
 Read `CLAUDE.md` first for THIS project's: design-doc path (default `docs/DESIGN.md`), build
 command, test command, placeholder/stub convention, and human-verification steps. If the Stack / Build /
-test are still placeholders (architecture not decided in `/forge`), STOP and tell me to finish `/forge`'s
+test are still placeholders (architecture not decided in `/design`), STOP and tell me to finish `/design`'s
 architecture step first.
 
 Rules:
@@ -23,7 +23,7 @@ Rules:
 
 Target: **$ARGUMENTS**  (empty = the next ready task, or unbuilt story if no task map)
 
-Units come from TASKS.md / STORIES.md. If `docs/TASKS.md` exists (from `/blueprint`), target the next
+Units come from TASKS.md / STORIES.md. If `docs/TASKS.md` exists (from `/taskmap`), target the next
 UNCHECKED task in `## Build order` whose dependencies are all `[x]` (a smaller, self-contained unit);
 otherwise the next unbuilt story in `docs/STORIES.md`.
 
@@ -41,4 +41,4 @@ otherwise the next unbuilt story in `docs/STORIES.md`.
    powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\close-unit.ps1" -Id <unit id> -Title "<short title>"
    ```
    Non-zero exit = not closed; fix what it reports. Then WAIT for my confirmation before the next item.
-   (If a file got mangled: restore via `/librarian recover <file>` - never hand-reconstruct it.)
+   (If a file got mangled: restore via `/audit recover <file>` - never hand-reconstruct it.)

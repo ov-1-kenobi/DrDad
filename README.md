@@ -1,7 +1,7 @@
 # AD - AI Design-Doc-Driven Development
 
 **Version 0.9.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
-until a full `/forge -> /blueprint -> /build` run is verified end to end on real hardware.
+until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `ad-doctor.cmd`.
 
 *Pronounced **"uh-DEEee!"** - local, offline Claude Code on your own GPU. Start with **AD**;
@@ -9,7 +9,7 @@ graduate to **BMAADD** (BMAD-on-AD) when you need the full agile pipeline.*
 
 Run the real Claude Code agentic loop **inside VS Code**, driven by your local models via
 Ollama. No Anthropic account, no API key, no internet after first setup. The loop is
-**design-doc-driven**: `/forge` writes the spec into self-contained stories -> lock it ->
+**design-doc-driven**: `/design` writes the spec into self-contained stories -> lock it ->
 `/spec` / `/build` implement it, fully on your RTX 5080.
 
 ## Architecture (deliberately minimal)
@@ -34,7 +34,7 @@ Ollama. No Anthropic account, no API key, no internet after first setup. The loo
    the global commands/agents and `settings.json` (**paths auto-fixed** to wherever the folder is),
    and tunes Ollama. It checks prerequisites first and warns about anything missing.
 3. **Restart Ollama** (quit from the system tray, reopen) so the tuning + `qwen3-coder-next-cc` are live.
-4. Scaffold a project (stack-agnostic): `new-project.cmd` (or `/scaffold`) -> open in VS Code -> `/forge`
+4. Scaffold a project (stack-agnostic): `new-project.cmd` (or `/scaffold`) -> open in VS Code -> `/design`
    (picks `docs/DESIGN.md` or `docs/TEDD.md`, captures stories; stack decided late) -> lock -> `/spec` `/build`.
 
 Unplug the internet after step 2 - everything from here is local. `install.ps1` is safe to re-run.
@@ -44,10 +44,10 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 - This folder is the kit's **permanent home** - put it somewhere stable (e.g. `C:\src\AD-kit`).
   It holds the built `local-tools.exe`, the `templates/`, and `apikey.cmd`.
 - Run `install.ps1` **once**. It installs the commands/agents/`settings.json` into `%USERPROFILE%\.claude\`
-  (global) and points them at this folder. After that, `/scaffold` `/forge` `/spec` `/proto` `/build` `/assets`
+  (global) and points them at this folder. After that, `/scaffold` `/design` `/spec` `/proto` `/build` `/assets`
   work in **every** project - no per-project install.
 - **Per project:** run `new-project.cmd` (or `/scaffold`) - **stack-agnostic** AD init. The design doc
-  (DESIGN.md vs TEDD.md) and the stack are decided in `/forge`, not at scaffold. (Use this, not `/init`.)
+  (DESIGN.md vs TEDD.md) and the stack are decided in `/design`, not at scaffold. (Use this, not `/init`.)
 - **Don't move or delete this folder** - the global config and every project's `.mcp.json` reference
   it by absolute path. If you must move it, re-run `install.ps1` from the new location.
 - **Re-run `install.ps1` only when** you move the folder, or change the global commands/agents/settings
@@ -84,7 +84,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `local-tools/` | **The C# MCP server** - RAG + ingest_url + web_search. Open it in Visual Studio to tweak. See its own README. |
 | `SUBAGENTS.md` | How subagents work + how they're invoked (a key context-window mitigation). |
 | `global/` | Source for the global slash commands + agents (installed by `install.ps1`). |
-| `templates/` | The generic scaffold base + **stack profiles** (`dotnet`, `avalonia`, `python`, `embedded`, `unity`) that `/forge` applies late, + `_common` (shared `.mcp.json`, `DESIGN.md`/`TEDD.md`). See `templates/README.md`. |
+| `templates/` | The generic scaffold base + **stack profiles** (`dotnet`, `avalonia`, `python`, `embedded`, `unity`) that `/design` applies late, + `_common` (shared `.mcp.json`, `DESIGN.md`/`TEDD.md`). See `templates/README.md`. |
 
 ## How it works (one line)
 
@@ -176,7 +176,7 @@ else stays normal.
 - None of the 11 commands match a Claude Code built-in - important because a colliding custom command is
   **silently shadowed** (it simply never loads).
 - No agent name matches a built-in agent type (`Explore`, `Plan`, `general-purpose`, ...). Ours all carry an
-  `-agent` suffix; `planner-agent` is deliberately distinct from the built-in `Plan`.
+  `-agent` suffix; `taskmap-agent` is deliberately distinct from the built-in `Plan`.
 - MCP tools are namespaced by the protocol (`mcp__local-tools__*`), so they cannot collide.
 - **BMAD** namespaces its commands under `/bmad-*`, so BMAD and AD-kit can be installed side by side.
 
@@ -245,17 +245,17 @@ PDFs you drop in + pages you ingest all end up in one unified, searchable index.
 
 `/scaffold <general|experience>` lays down the project and creates the design doc (`docs/DESIGN.md` for
 general software, `docs/TEDD.md` for an experience) as `Status: DRAFT`. Then grow and implement it:
-- `/forge` - **design-first**: shape DESIGN (requirements, epics, stack LATE), no stories, no code.
-- `/scribe` - manage the story backlog in `docs/STORIES.md` (expand epics into stories, normalize, migrate).
-- `/blueprint` - shard `STORIES.md` into `docs/TASKS.md`: bite-sized tasks + dependencies, reindexed - so `/spec`/`/build` pull one tight task at a time.
+- `/design` - **design-first**: shape DESIGN (requirements, epics, stack LATE), no stories, no code.
+- `/stories` - manage the story backlog in `docs/STORIES.md` (expand epics into stories, normalize, migrate).
+- `/taskmap` - shard `STORIES.md` into `docs/TASKS.md`: bite-sized tasks + dependencies, reindexed - so `/spec`/`/build` pull one tight task at a time.
 - `/spec` - implement the LOCKED design faithfully (works a task/story); gaps become questions.
 - `/build` - orchestrate requirements -> dev -> grade -> hygiene -> qa; gated on DESIGN LOCKED.
-- `/proto` - the lightweight alt to /forge+/scribe: co-design DESIGN + jot stories as you go (DRAFT).
+- `/proto` - the lightweight alt to /design+/stories: co-design DESIGN + jot stories as you go (DRAFT).
 
 The design is split by lifecycle: **DESIGN.md/TEDD.md** (contract - requirements/epics/stack, the only lockable doc) | **STORIES.md** (backlog) | **TASKS.md** (task map).
-Lock/unlock: `/forge` and `/proto` flip DESIGN `Status:` DRAFT <-> LOCKED **on your confirmation**. STORIES/TASKS stay editable even while DESIGN is LOCKED; never `/spec` a DRAFT DESIGN.
-Pipeline: `/scaffold` (DRAFT DESIGN) -> `/forge` -> `/scribe` -> (optional) `/blueprint` -> lock DESIGN -> `/spec` or `/build`.
-Tip: `/forge` on `use-model.cmd plan` (Gemma 4); `/scribe` on `oss`; `use-quality.cmd` (Next) for `/blueprint`, hands-off `/build`, hard `/spec`; `use-model.cmd dev` (Devstral) for fast `/proto` and iteration.
+Lock/unlock: `/design` and `/proto` flip DESIGN `Status:` DRAFT <-> LOCKED **on your confirmation**. STORIES/TASKS stay editable even while DESIGN is LOCKED; never `/spec` a DRAFT DESIGN.
+Pipeline: `/scaffold` (DRAFT DESIGN) -> `/design` -> `/stories` -> (optional) `/taskmap` -> lock DESIGN -> `/spec` or `/build`.
+Tip: `/design` on `use-model.cmd plan` (Gemma 4); `/stories` on `oss`; `use-quality.cmd` (Next) for `/taskmap`, hands-off `/build`, hard `/spec`; `use-model.cmd dev` (Devstral) for fast `/proto` and iteration.
 
 The commands read the project type from `CLAUDE.md`, so the same loop works for Unity, .NET,
 Python, embedded, or anything. It self-loops on auto-testable work; manual/hardware/visual
@@ -269,10 +269,10 @@ map). To move an existing project over - the design doc no longer has to hold th
 a local model loop when editing it:
 
 1. **Reinstall** so you have the new commands/agents/templates: `install.cmd`.
-2. **Lift the stories out:** `use-model.cmd oss` (new session), then `/scribe migrate` - it moves each story
+2. **Lift the stories out:** `use-model.cmd oss` (new session), then `/stories migrate` - it moves each story
    from `DESIGN.md`/`TEDD.md` into `docs/STORIES.md` (tagging it to an epic) one at a time, and removes it
    from the design doc. What remains in DESIGN is the contract: goal, requirements, epics, architecture.
-3. **(Optional) build the task map:** `/blueprint` shards `STORIES.md` into `docs/TASKS.md`.
+3. **(Optional) build the task map:** `/taskmap` shards `STORIES.md` into `docs/TASKS.md`.
 4. **Refresh CLAUDE.md + missing pieces deterministically:** run `upgrade-project.cmd <projectDir>` - it
    adds `docs/STATUS.md` + `docs/RECIPES.md` if missing, git-inits with a baseline commit if needed, and
    refreshes CLAUDE.md's kit-owned sections (Modes/flow, Design docs, Proven recipes, Web/grounding,
@@ -280,12 +280,12 @@ a local model loop when editing it:
    after every kit update - a stale CLAUDE.md is why local models improvise (root STATUS files, missed
    conventions).
 
-Nothing is lost: `/scribe migrate` only relocates stories, and `STORIES.md`/`TASKS.md` are created fresh.
+Nothing is lost: `/stories migrate` only relocates stories, and `STORIES.md`/`TASKS.md` are created fresh.
 
 ## Optional: more-proactive subagent delegation (A/B test)
 
 **Baseline (as-is - test this first).** The `requirements-agent` / `dev-agent` / `qa-agent` team is
-driven by `/build`, which explicitly orchestrates them. In `/forge` and `/spec` the main session only
+driven by `/build`, which explicitly orchestrates them. In `/design` and `/spec` the main session only
 pulls in `doc-researcher` for lookups, and only when it decides to. On a local model, spontaneous
 delegation is limited, so **`/build` is the reliable trigger** - run the kit this way to set a baseline.
 
@@ -314,7 +314,7 @@ on its own (even outside `/build`). It's a one-phrase change to each agent's `de
 Four roles (full table in `CHEATSHEET.md`):
 - **`quality` -> `qwen3-coder-next-cc`** - 80B-A3B Next, most capable. **Default for `/build` & hard `/spec`** (slower, RAM-offloaded - worth it when you fire-and-forget).
 - **`dev` -> `devstral-cc`** - Devstral 24B, fits the GPU. Fast iteration coding, `/proto`, quick `/spec`; no CJK.
-- **`plan` -> `gemma4-cc`** - Gemma 4, generalist for deep design / `/forge` / architecture chat.
+- **`plan` -> `gemma4-cc`** - Gemma 4, generalist for deep design / `/design` / architecture chat.
 - **`fast` -> `qwen3-14b-cc`** - dense 14B, quickest, for light edits.
 
 Switch the whole session, then start a new Claude Code session. Any of these:
@@ -393,7 +393,7 @@ right alongside the kit. This kit already mirrors its pattern in miniature; BMAD
 - **POCs / quick work:** the kit's `/proto` `/spec` `/build` - lighter, less ceremony.
 - **Larger structured projects:** BMAD's full PRD -> architecture -> stories pipeline.
 - Same machine, same offline stack. BMAD installs under its own agent/command names; if any name
-  collides with the kit's (`/scaffold` `/forge` `/spec` `/proto` `/build` `/assets`), the last one installed
+  collides with the kit's (`/scaffold` `/design` `/spec` `/proto` `/build` `/assets`), the last one installed
   wins - rename one side if that happens.
 
 ## If it's slow / out of memory (16 GB VRAM)

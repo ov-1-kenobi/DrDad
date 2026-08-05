@@ -10,7 +10,7 @@ Read `CLAUDE.md` for the design-doc path (DESIGN.md or TEDD.md). Source of truth
 
 Focus: **$ARGUMENTS**  (empty = the whole architecture)
 
-1. If the Solution architecture is still `<TBD>`, STOP and tell me to finish `/forge`'s architecture step.
+1. If the Solution architecture is still `<TBD>`, STOP and tell me to finish `/design`'s architecture step.
 2. Write/refresh **`docs/ARCHITECTURE.md`**: a short intro line, then ONE fenced ```mermaid block
    (`flowchart TD` or `C4`-style flowchart) showing the components, their relationships, and external
    dependencies from the design. Group by epic where it helps. Keep it readable - aim for <= ~20 nodes;
@@ -21,7 +21,7 @@ Focus: **$ARGUMENTS**  (empty = the whole architecture)
 5. Tell me to preview it (VS Code renders mermaid in markdown preview; or any online/offline mermaid viewer).
 
 Re-run after the architecture changes - it regenerates from the design doc. This is a VIEW of DESIGN.md,
-not a source: design changes go through `/forge`, never by editing the diagram.
+not a source: design changes go through `/design`, never by editing the diagram.
 
 Tip: to seed a design FROM a picture (whiteboard photo / screenshot), use the `describe_image` tool first -
-it reads the image with a local vision model and returns text you can `/forge` from.
+it reads the image with a local vision model and returns text you can `/design` from.

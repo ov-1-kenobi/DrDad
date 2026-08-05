@@ -1,8 +1,8 @@
 # Stories - <project>
-<!-- The story backlog. Managed by /scribe (create from the DESIGN epics, normalize, dedupe). This
+<!-- The story backlog. Managed by /stories (create from the DESIGN epics, normalize, dedupe). This
      IMPLEMENTS DESIGN.md (the contract) - it does NOT redefine requirements; anything that needs a new
-     requirement goes back to /forge. Stories stay editable even while DESIGN is LOCKED. Each story traces
-     to an epic by tag. /blueprint shards these into TASKS.md. Keep each story self-contained. -->
+     requirement goes back to /design. Stories stay editable even while DESIGN is LOCKED. Each story traces
+     to an epic by tag. /taskmap shards these into TASKS.md. Keep each story self-contained. -->
 
 ### Story S1: <title>   (Epic E1)   <!-- Status: TODO | DONE -->
 - **Goal:** <one line>

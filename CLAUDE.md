@@ -15,7 +15,7 @@ This folder IS the **AD** kit (local, offline Claude Code). Editing it here main
 
 ## Modes
 - Use `/spec` or `/build` to implement/maintain against `docs/DESIGN.md` (it's LOCKED).
-- Use `/forge` or `/proto` only after flipping `docs/DESIGN.md` to DRAFT to change the design itself.
+- Use `/design` or `/proto` only after flipping `docs/DESIGN.md` to DRAFT to change the design itself.
 - Use `dev` (Devstral) for edits; `quality` (Next) for a genuinely hard change.
 
 ## Build

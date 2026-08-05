@@ -6,8 +6,8 @@ Manage the story backlog in **STORIES.md** with the **scribe-agent** - safely, O
 rewriting the whole file (a full rewrite is what makes a local model loop and blow the output limit).
 Spawn it via the **Task tool** (subagent_type: "scribe-agent") - it is an AGENT, not a skill.
 
-STORIES.md IMPLEMENTS the DESIGN contract; it does NOT redefine requirements (that is `/forge`). Anything
-needing a new requirement -> back to `/forge`. STORIES.md stays editable even while DESIGN is `LOCKED`.
+STORIES.md IMPLEMENTS the DESIGN contract; it does NOT redefine requirements (that is `/design`). Anything
+needing a new requirement -> back to `/design`. STORIES.md stays editable even while DESIGN is `LOCKED`.
 
 Read `CLAUDE.md` for the doc paths. If `docs/STORIES.md` does not exist, the scribe-agent creates it from
 `templates/_common/docs/STORIES.md` first.
@@ -22,5 +22,5 @@ Pick the mode from **$ARGUMENTS**:
 - **a story id** (e.g. `S3`) or **"go"** -> scribe-agent FIX: normalize/create that story via small Edit
   calls, reindex, return a <=3-line summary. Then next / WAIT per my instruction.
 
-Never paste the whole file into chat. STORIES only - design decisions belong in `/forge`, task breakdown in
-`/blueprint`.
+Never paste the whole file into chat. STORIES only - design decisions belong in `/design`, task breakdown in
+`/taskmap`.
