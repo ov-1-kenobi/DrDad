@@ -31,6 +31,7 @@ Cosmetic but load-bearing: the pipeline now reads as what it does, with no gloss
   permission allow list covers); the wrappers are for running them by hand.
 - Three drift tests: the install echo must match the real command list, no retired name may still ship,
   and every `.ps1` must have a `.cmd`.
+
 ## 0.9.7 - 2026-07-30
 
 Closes the verification gap end to end: a story can no longer be closed unless the code builds, real tests
@@ -52,6 +53,7 @@ ran, and a real grade card exists.
 - **`docs/COMMANDS.md` -> `docs/RECIPES.md`** (section: "Proven recipes"). "COMMANDS" collided
   conceptually with the kit's slash commands, so "check COMMANDS.md" was misreadable. `upgrade-project`
   migrates the old file and preserves its accumulated entries.
+
 ## 0.9.6 - 2026-07-30
 
 A consistency audit of every command/agent file. Finding: instruction VOLUME is not the problem (~2% of a
@@ -69,6 +71,7 @@ A consistency audit of every command/agent file. Finding: instruction VOLUME is 
   card, a stub under 800 bytes, or no `## Grade history` FAILS. At task level it only warns (the card is
   written after roll-up, per /build's order). `/build` step 7 and `/grade` both pass `-RequireGrade`, so a
   story can no longer be closed ungraded - grading was the step that kept getting skipped.
+
 ## 0.9.5 - 2026-07-30
 
 The mediamotor_iiif build results exposed the worst failure yet: **5 stories marked DONE, 6 tasks ticked and
