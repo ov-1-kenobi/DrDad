@@ -1,5 +1,5 @@
-# AD Cheatsheet - AI Design-Doc-Driven Development (RTX 5080 + Ollama)
-> AD - pronounced **"uh-DEEee!"**
+# DAD Cheatsheet - Design Document Aligned Development (RTX 5080 + Ollama)
+> The design document is the contract; every mode aligns to it.
 
 ## Models
 
@@ -43,7 +43,7 @@ model-load time; `OLLAMA_KEEP_ALIVE=30m` keeps it warm after.
 ## Modes / commands
 | Command            | Does                                                        | Model           | When                          |
 |--------------------|-------------------------------------------------------------|-----------------|-------------------------------|
-| `/scaffold <kind>` | **Stack-agnostic** AD init: CLAUDE.md/.mcp.json/docs + the design doc as **DRAFT**. `kind` = general (`DESIGN.md`) or experience (`TEDD.md`); no stack chosen. `new-project.cmd <kind>` is the same. | either | starting a project |
+| `/scaffold <kind>` | **Stack-agnostic** DAD init: CLAUDE.md/.mcp.json/docs + the design doc as **DRAFT**. `kind` = general (`DESIGN.md`) or experience (`TEDD.md`); no stack chosen. `new-project.cmd <kind>` is the same. | either | starting a project |
 | `/design [topic]`   | **Design-first**: requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step) + stack (LATE); NO stories/code; offers to LOCK | **oss**; **quality**/cloud for contracts | plan before building |
 | `/stories [arg]`    | Manage **STORIES.md**: expand epics into stories, normalize/dedupe, `migrate` old in-doc stories out | **oss**/quality | build the story backlog |
 | `/taskmap [story]` | Shard **STORIES.md** -> dependency-ordered bite-sized **task map** (`docs/TASKS.md`), reindex | **quality** (Next) | after /stories, before /build or /spec |
@@ -113,10 +113,10 @@ never via `local-tools`. If the model claims otherwise, it's confused - point it
 | `reindex.cmd <docsDir>`                        | rebuild a project's index from CLI / a scheduled task   |
 | `voice.cmd` (run from the project folder)      | push-to-talk voice loop: whisper STT -> `claude -p` -> TTS (needs uv) |
 | `upgrade-project.cmd [dir]`                    | retrofit an existing project to the current kit (docs, git, CLAUDE.md refresh) |
-| `ad-doctor.cmd [-ProjectDir x]`                | **readiness check**: prereqs, Ollama+models, server, install, project wiring |
+| `dad-doctor.cmd [-ProjectDir x]`                | **readiness check**: prereqs, Ollama+models, server, install, project wiring |
 | `sync-models.cmd [-Report\|-All\|-Only a]`     | reconcile Ollama with `models.json` (pull bases, build the `-cc` variants) |
 | `test-kit.cmd`                                 | run the kit's own test suite - the validation gate after any kit change |
-| `ad-guard.cmd -Check` / `-Ack`             | stop guard: would a turn be blocked for unverified code? / accept it anyway |
+| `dad-guard.cmd -Check` / `-Ack`             | stop guard: would a turn be blocked for unverified code? / accept it anyway |
 | `scan-secrets.cmd [-Path x \| -Staged]`        | scan for credentials (also installed as each project's pre-commit hook) |
 | `LOCALTOOLS_AUTO_REINDEX=1` (in proj .mcp.json)| auto-refresh the index when docs change                 |
 | `/mcp` (inside Claude Code)                    | check `local-tools` is connected + its tools            |

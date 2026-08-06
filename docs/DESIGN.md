@@ -1,4 +1,4 @@
-# Technical Design Document - AD (AI Design-Doc-Driven Development)
+# Technical Design Document - DAD (Design Document Aligned Development)
 
 Status: LOCKED
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
@@ -80,10 +80,10 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       `sync-models.ps1` GENERATES each Modelfile and builds the variants (`-Report` / `-All` / `-Only`),
       replacing six hand-written `.Modelfile` files and six copy-pasted install blocks; `use-model.ps1`,
       `install.ps1` and `uninstall.ps1 -Full` all read the manifest, so adding a model is one JSON entry.
-      `ad-doctor.ps1` is a read-only readiness check (prereqs, GPU, Ollama server + every declared model,
+      `dad-doctor.ps1` is a read-only readiness check (prereqs, GPU, Ollama server + every declared model,
       tuning env vars, the built server's live MCP tool list, the global install's settings/commands/agents,
       and with `-ProjectDir` a project's CLAUDE.md sections / .mcp.json wiring / index / git / hook) that
-      prints the fix command for every non-OK line and exits non-zero only on FAILs. Named `ad-doctor`
+      prints the fix command for every non-OK line and exits non-zero only on FAILs. Named `dad-doctor`
       rather than `/doctor` because Claude Code already owns that command.
 - [x] R19: **The kit tests itself.** `test-kit.ps1` (+ `.cmd`, + `.github/workflows/kit-ci.yml` on
       windows-latest) is THE validation gate, replacing the hand-run checklist in CLAUDE.md. Runs with no
@@ -95,7 +95,7 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       Convention: fix a bug here -> add a `Test-Case` for it.
 - [x] R20: **Secret hygiene.** `scan-secrets.ps1` (patterns for AWS/GitHub/Slack/Google/Anthropic/OpenAI
       keys, Azure storage + client secrets, PEM keys, JWTs, and password/token literals, with
-      placeholder suppression and an `AD-ALLOW-SECRET` escape) reports **file:line + pattern + a SHA
+      placeholder suppression and an `DAD-ALLOW-SECRET` escape) reports **file:line + pattern + a SHA
       fingerprint and NEVER the value**. `install-hooks.ps1` wires it as each project's `pre-commit` hook
       (scaffold + upgrade do this automatically), because keeping a credential out of git history is the
       control that matters. `.gitignore` covers `.env*`, `*.pem/pfx/key`, `secrets/`,
@@ -104,23 +104,23 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       `.index/chunks.json` - requires referencing secrets BY NAME, points at platform-native auth (AWS SSO
       profiles/IAM roles, `az login` + DefaultAzureCredential/Managed Identity, Credential Manager/DPAPI),
       and tells the agent to STOP and report rather than echo anything that looks real.
-- [x] R22: **A gate the model cannot skip** (`ad-guard.ps1`, wired by `install.ps1` as a Claude Code
+- [x] R22: **A gate the model cannot skip** (`dad-guard.ps1`, wired by `install.ps1` as a Claude Code
       **Stop hook** in `settings.json`). Measured failure: a 7,115-line `/build` made 106 file edits and
       ZERO shell calls - no build, no test, no `close-unit`, no commit - then reasoned in prose about
       whether its own tests would pass, and left 47 dirty files. Every gate up to R21 was MODEL-INVOKED,
       and a gate the model chooses to invoke is prose with a filename. The harness runs a Stop hook at end
       of turn regardless of what the model decided, so the check lives there: uncommitted files with CODE
-      extensions (docs/, grades/, .claude/, bin/obj excluded) and no `.claude/.ad-verified` stamp newer
+      extensions (docs/, grades/, .claude/, bin/obj excluded) and no `.claude/.dad-verified` stamp newer
       than the newest edit -> the stop is BLOCKED with the three ways out (run `close-unit`, run the real
-      build/test, or `ad-guard.cmd -Ack`). `close-unit.ps1` writes the stamp on a clean close, so a
+      build/test, or `dad-guard.cmd -Ack`). `close-unit.ps1` writes the stamp on a clean close, so a
       properly closed unit clears it automatically. Deliberately a NAG WITH TEETH, not a wall: the harness
       sets `stop_hook_active` on the retry and the guard allows that pass, so it can never deadlock a
       session - what it guarantees is that the failure is LOUD instead of discovered in a transcript days
-      later. FAILS OPEN on anything unexpected (not an AD project, no git, docs-only edits, its own
+      later. FAILS OPEN on anything unexpected (not a DAD project, no git, docs-only edits, its own
       errors); a guard that blocks on its own bugs is worse than the problem. Supporting gates from the
       same run: `/build` STOPS on a DRAFT design instead of silently degrading to PROTO (R7 always said it
       gates on LOCKED) and proves the shell works by running `doc-stats.ps1` before its first edit;
-      `ad-doctor` checks the hook is wired, that `dotnet`/`git` are permitted, and flags a project whose
+      `dad-doctor` checks the hook is wired, that `dotnet`/`git` are permitted, and flags a project whose
       `.claude/settings.local.json` has accreted one-off `Bash(...)` approvals (the fingerprint of a
       session that spent its time answering permission prompts and then stopped using the shell);
       `grade-agent` has a ~25-call search budget and may not repeat a query, after one invocation burned

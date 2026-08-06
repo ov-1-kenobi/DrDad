@@ -15,7 +15,8 @@
 #
 # False positive? Put any of these in a comment on that line - the industry-standard markers are honored
 # so you do not have to learn a kit-specific one:
-#   pragma: allowlist secret   (detect-secrets)   gitleaks:allow   trufflehog:ignore   nosec   AD-ALLOW-SECRET
+#   pragma: allowlist secret   (detect-secrets)   gitleaks:allow   trufflehog:ignore   nosec
+#   DAD-ALLOW-SECRET   (and the pre-rename AD-ALLOW-SECRET, still honored)   DAD-RENAME-OK
 
 param(
   [string]$Path = ".",
@@ -89,7 +90,10 @@ foreach ($f in $files) {
     $lineNo++
     if ($line.Length -gt 4000) { continue }
     # Honor the standard allowlist markers as well as ours, so existing repos keep working.
-    if ($line -match '(?i)(AD-ALLOW-SECRET|pragma:\s*allowlist\s+secret|gitleaks:\s*allow|trufflehog:\s*ignore|\bnosec\b)') { continue }
+    # The pre-rename spelling sits in USER source files, so dropping it would   DAD-RENAME-OK
+    # silently stop suppressing lines someone already reviewed and cleared. Both are honored, forever.
+    # DAD-RENAME-OK - (?:D)? is what keeps the pre-rename marker working.
+    if ($line -match '(?i)((?:D)?AD-ALLOW-SECRET|pragma:\s*allowlist\s+secret|gitleaks:\s*allow|trufflehog:\s*ignore|\bnosec\b)') { continue }
     foreach ($name in $patterns.Keys) {
       $m = [regex]::Match($line, $patterns[$name])
       if (-not $m.Success) { continue }
@@ -125,6 +129,6 @@ Write-Host ""
 Write-Host "The value itself is deliberately NOT printed (only a fingerprint)." -ForegroundColor Cyan
 Write-Host "If any of these is a REAL credential: treat it as exposed - ROTATE it, then remove it from the" -ForegroundColor Cyan
 Write-Host "file (and from git history if it was ever committed). Report exposure per your org's process." -ForegroundColor Cyan
-Write-Host "Use env vars / a gitignored .env and reference secrets BY NAME. False positive? add AD-ALLOW-SECRET" -ForegroundColor Cyan
+Write-Host "Use env vars / a gitignored .env and reference secrets BY NAME. False positive? add DAD-ALLOW-SECRET" -ForegroundColor Cyan
 Write-Host "in a comment on that line." -ForegroundColor Cyan
 exit 1

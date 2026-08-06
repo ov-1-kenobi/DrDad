@@ -1,6 +1,6 @@
 # Templates & stack profiles
 
-AD does NOT lock a platform at scaffold time. The flow is requirements-first; the stack emerges late.
+DAD does NOT lock a platform at scaffold time. The flow is requirements-first; the stack emerges late.
 
 1. **Scaffold (stack-agnostic):** `new-project.cmd [dir]` (or `/scaffold`) lays down a **generic** `CLAUDE.md`
    + `.mcp.json` (wired to this project's `docs/`) + an empty `docs/`. **No platform is chosen here.**
@@ -29,7 +29,7 @@ once you've chosen a stack:
 ## Scaffold a project
 - **Terminal (recommended):** `new-project.cmd` (current folder) or `new-project.cmd C:\src\MyApp`.
 - **In Claude Code:** `/scaffold`.
-Either way you get a generic, stack-agnostic AD project. Then run `/design` to pick the design doc and
+Either way you get a generic, stack-agnostic DAD project. Then run `/design` to pick the design doc and
 capture stories - the stack is decided later.
 
 ## By hand

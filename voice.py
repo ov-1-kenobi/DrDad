@@ -15,7 +15,7 @@
 # `--continue` keeps one conversation going. Run it FROM YOUR PROJECT FOLDER so CLAUDE.md/.mcp.json load:
 #
 #   cd C:\src\MyProject
-#   uv run C:\path\to\AD-kit\voice.py        (or just: voice.cmd from the kit folder on PATH)
+#   uv run C:\path\to\DAD-kit\voice.py        (or just: voice.cmd from the kit folder on PATH)
 #
 # uv reads the dependency block above and builds the env automatically (internet needed on FIRST run for
 # deps + the whisper model download; offline after). Install uv:  winget install astral-sh.uv

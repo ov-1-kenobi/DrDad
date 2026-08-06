@@ -1,4 +1,4 @@
-# ad-guard.ps1 - the Stop hook. The first gate in this kit the MODEL CANNOT SKIP.
+# dad-guard.ps1 - the Stop hook. The first gate in this kit the MODEL CANNOT SKIP.
 #
 # Why this exists: close-unit.ps1 verifies build + tests + grade beautifully - IF something calls it.
 # In a real run (mediamotor_iiif, 2026-08-05) a 7,115-line /build made 106 file edits and ZERO shell
@@ -15,10 +15,10 @@
 #
 # Modes:
 #   (stdin JSON)          hook mode - what settings.json wires up
-#   ad-guard.ps1 -Check   human/test mode: print the verdict, exit 1 if it would block
-#   ad-guard.ps1 -Ack     "I know, this is deliberate" - stamps .claude\.ad-verified, allows the stop
+#   dad-guard.ps1 -Check   human/test mode: print the verdict, exit 1 if it would block
+#   dad-guard.ps1 -Ack     "I know, this is deliberate" - stamps .claude\.dad-verified, allows the stop
 #
-# Fails OPEN by design. Not an AD project, no git, no code changes, git missing, anything unexpected
+# Fails OPEN by design. Not a DAD project, no git, no code changes, git missing, anything unexpected
 # -> allow. A guard that blocks on its own bugs would be worse than the problem it solves.
 
 param(
@@ -27,15 +27,19 @@ param(
   [string]$ProjectDir = ""
 )
 
-$STAMP = ".claude\.ad-verified"
+$STAMP = ".claude\.dad-verified"
+# Projects scaffolded before the AD -> DAD rename carry the old marker names (DAD-RENAME-OK).
+# Accept them: a project should not fall outside the guard just because it predates a rename.
+$LEGACY_STAMP  = ".claude\.ad-verified"
+$LEGACY_MARKER = ".ad-kit-version"
 
 function Allow($why) {
-  if ($Check) { Write-Host "ad-guard: ALLOW - $why" -ForegroundColor Green }
+  if ($Check) { Write-Host "dad-guard: ALLOW - $why" -ForegroundColor Green }
   exit 0
 }
 
 function Block($reason) {
-  if ($Check) { Write-Host "ad-guard: BLOCK - $reason" -ForegroundColor Red; exit 1 }
+  if ($Check) { Write-Host "dad-guard: BLOCK - $reason" -ForegroundColor Red; exit 1 }
   # Emit both shapes on purpose: some builds read the JSON decision, some read exit code 2 + stderr.
   # Whichever this build honors, the message lands; if it honors neither we fail open, which is the
   # documented behavior anyway.
@@ -68,16 +72,17 @@ if ($Ack) {
   $dir = Join-Path $proj ".claude"
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
   [System.IO.File]::WriteAllText((Join-Path $proj $STAMP),
-    "verified-by: ad-guard -Ack`r`n", (New-Object System.Text.UTF8Encoding($false)))
-  Write-Host "ad-guard: acknowledged - the next stop is allowed." -ForegroundColor Yellow
+    "verified-by: dad-guard -Ack`r`n", (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host "dad-guard: acknowledged - the next stop is allowed." -ForegroundColor Yellow
   exit 0
 }
 
-# --- is this even an AD project? ------------------------------------------------------------------
-$isAd = (Test-Path (Join-Path $proj ".ad-kit-version")) -or
+# --- is this even a DAD project? ------------------------------------------------------------------
+$isAd = (Test-Path (Join-Path $proj ".dad-kit-version")) -or
+        (Test-Path (Join-Path $proj $LEGACY_MARKER)) -or
         (Test-Path (Join-Path $proj "docs\DESIGN.md")) -or
         (Test-Path (Join-Path $proj "docs\TEDD.md"))
-if (-not $isAd) { Allow "not an AD project" }
+if (-not $isAd) { Allow "not a DAD project" }
 if (-not (Test-Path (Join-Path $proj ".git"))) { Allow "no git repo - nothing to compare against" }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Allow "git not on PATH" }
 
@@ -112,6 +117,10 @@ if ($changed.Count -eq 0) { Allow "no uncommitted code changes" }
 # --- has anything verified them since? ------------------------------------------------------------
 # close-unit.ps1 stamps this file when a unit closes clean (build + tests + commit all verified).
 $stampPath = Join-Path $proj $STAMP
+if (-not (Test-Path $stampPath)) {
+  $legacy = Join-Path $proj $LEGACY_STAMP
+  if (Test-Path $legacy) { $stampPath = $legacy }
+}
 $newestEdit = ($changed | ForEach-Object {
     $f = Join-Path $proj $_
     if (Test-Path -LiteralPath $f) { (Get-Item -LiteralPath $f).LastWriteTimeUtc } else { [DateTime]::UtcNow }
@@ -123,7 +132,7 @@ if (Test-Path $stampPath) {
 $show = ($changed | Select-Object -First 6) -join ", "
 $more = if ($changed.Count -gt 6) { " (+$($changed.Count - 6) more)" } else { "" }
 Block @"
-AD-kit stop guard: $($changed.Count) code file(s) are changed and UNVERIFIED - $show$more
+DAD-kit stop guard: $($changed.Count) code file(s) are changed and UNVERIFIED - $show$more
 
 Nothing has built or tested this. Do not end the turn here; this is exactly how a run produces
 thousands of lines of edits that were never compiled. Do ONE of these now:
@@ -133,7 +142,7 @@ thousands of lines of edits that were never compiled. Do ONE of these now:
   2. If you are mid-unit and just need to see where you stand, RUN THE BUILD AND TESTS from
      CLAUDE.md's "## Build / test" block and report the real output - not a prediction of it.
   3. If this edit is genuinely not meant to be verified (spike, scratch, docs-adjacent):
-       ad-guard.cmd -Ack
+       dad-guard.cmd -Ack
 
 Reasoning about whether the tests would pass is not running them.
 "@

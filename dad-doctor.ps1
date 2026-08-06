@@ -1,10 +1,10 @@
-# ad-doctor.ps1 - readiness check for the AD-kit stack. Read-only: it DIAGNOSES and points at the fixer,
+# dad-doctor.ps1 - readiness check for the DAD-kit stack. Read-only: it DIAGNOSES and points at the fixer,
 # it never changes anything (same split as the librarian: inspect + route).
 #
-# Named ad-doctor, not /doctor, because Claude Code already owns the /doctor command.
+# Named dad-doctor, not /doctor, because Claude Code already owns the /doctor command.
 #
-#   ad-doctor.ps1                       check prerequisites + the kit + the global install
-#   ad-doctor.ps1 -ProjectDir C:\src\App   also check that project's wiring
+#   dad-doctor.ps1                       check prerequisites + the kit + the global install
+#   dad-doctor.ps1 -ProjectDir C:\src\App   also check that project's wiring
 #
 # Exit code: 0 = no FAILs (warnings are fine), 1 = at least one FAIL.
 
@@ -30,7 +30,7 @@ function Get-Ver([string]$n, [string]$arg = "--version") {
 
 $kitVersion = if (Test-Path (Join-Path $kit "VERSION")) { (Get-Content (Join-Path $kit "VERSION") -Raw).Trim() } else { "unknown" }
 Write-Host ""
-Write-Host "== AD-kit doctor ==" -ForegroundColor Cyan
+Write-Host "== DAD-kit doctor ==" -ForegroundColor Cyan
 Write-Host "kit: $kit  (version $kitVersion)"
 
 # ---------------------------------------------------------------- prerequisites
@@ -210,10 +210,10 @@ if (-not (Test-Path $settings)) {
     # The stop guard. Without it, every gate in the kit is one the model can decline to invoke.
     $stopCmd = ""
     try { $stopCmd = ($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) -join " " } catch { }
-    if ($stopCmd -match 'ad-guard') {
-      if ($stopCmd -match 'AD-kit\\ad-guard') {
+    if ($stopCmd -match 'dad-guard') {
+      if ($stopCmd -match 'DAD-kit\\dad-guard') {
         Say "WARN" "stop guard" "wired, but still points at the dev placeholder path" "re-run install.cmd from the kit's real location"
-      } else { Say "OK" "stop guard" "ad-guard.ps1 wired as a Stop hook" }
+      } else { Say "OK" "stop guard" "dad-guard.ps1 wired as a Stop hook" }
     } else {
       Say "FAIL" "stop guard" "no Stop hook - nothing stops a turn ending on unverified code" `
           "re-run install.cmd, then RESTART Claude Code (hooks load at startup)"
@@ -232,7 +232,11 @@ if ($ProjectDir) {
   else {
     $p = (Resolve-Path $ProjectDir).Path
     Write-Host "  $p"
-    $stamp = Join-Path $p ".ad-kit-version"
+    $stamp = Join-Path $p ".dad-kit-version"
+    if (-not (Test-Path $stamp)) {
+      $legacyStamp = Join-Path $p ".ad-kit-version"      # pre-rename projects
+      if (Test-Path $legacyStamp) { $stamp = $legacyStamp }
+    }
     if (Test-Path $stamp) {
       $pv = (Get-Content $stamp -Raw).Trim()
       if ($pv -eq $kitVersion) { Say "OK" "kit version" "$pv (matches the kit)" }
@@ -294,14 +298,14 @@ if ($ProjectDir) {
       } catch { Say "WARN" "project allow list" "settings.local.json is not valid JSON" "fix or delete $localSettings" }
     }
 
-    $stamp = Join-Path $p ".claude\.ad-verified"
-    $guard = Join-Path $kit "ad-guard.ps1"
+    $stamp = Join-Path $p ".claude\.dad-verified"
+    $guard = Join-Path $kit "dad-guard.ps1"
     if (Test-Path $guard) {
       & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
       if ($LASTEXITCODE -eq 0) { Say "OK" "stop guard state" "no unverified code changes" }
       else {
         Say "WARN" "stop guard state" "uncommitted code that nothing has built or tested" `
-            "close-unit.cmd -Id <id> -Title `"...`" in that project, or ad-guard.cmd -Ack to accept it"
+            "close-unit.cmd -Id <id> -Title `"...`" in that project, or dad-guard.cmd -Ack to accept it"
       }
     }
   }

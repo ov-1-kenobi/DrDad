@@ -1,5 +1,5 @@
 @echo off
-REM new-project.cmd <general|experience> [projectDir] - deterministic, STACK-AGNOSTIC AD-kit scaffolder.
+REM new-project.cmd <general|experience> [projectDir] - deterministic, STACK-AGNOSTIC DAD-kit scaffolder.
 REM Lays down a generic CLAUDE.md + .mcp.json + docs/ + the design doc (DRAFT). The STACK is chosen later
 REM in /design. KIND picks the design doc: general -> docs\DESIGN.md, experience -> docs\TEDD.md.
 REM   new-project.cmd general                 (general software, into the current folder)

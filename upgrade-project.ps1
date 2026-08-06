@@ -1,4 +1,4 @@
-# upgrade-project.ps1 - retrofit an EXISTING AD project to the current kit (deterministic, no model).
+# upgrade-project.ps1 - retrofit an EXISTING DAD project to the current kit (deterministic, no model).
 # The kit evolves; projects scaffolded earlier keep an old CLAUDE.md and miss new docs - and local models
 # then improvise (root STATUS.md files, missed conventions). This closes that gap:
 #   - docs\STATUS.md + docs\RECIPES.md created from templates if missing
@@ -16,13 +16,25 @@ $templates = Join-Path $kit "templates"
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 
 if (-not (Test-Path (Join-Path $proj "CLAUDE.md"))) {
-  Write-Host "No CLAUDE.md in $proj - not an AD project (run new-project.ps1 to scaffold)." -ForegroundColor Yellow
+  Write-Host "No CLAUDE.md in $proj - not a DAD project (run new-project.ps1 to scaffold)." -ForegroundColor Yellow
   exit 1
 }
 $kitVer = if (Test-Path (Join-Path $kit "VERSION")) { (Get-Content (Join-Path $kit "VERSION") -Raw).Trim() } else { "unknown" }
-$stampFile = Join-Path $proj ".ad-kit-version"
+$stampFile = Join-Path $proj ".dad-kit-version"
+# Pre-0.11.0 the kit had a different name and the marker files were named for it (DAD-RENAME-OK).
+# Migrate rather than orphan:
+# an unmigrated project reads as "never scaffolded by this kit" to dad-doctor and the stop guard.
+$legacyStamp = Join-Path $proj ".ad-kit-version"
+if ((Test-Path $legacyStamp) -and -not (Test-Path $stampFile)) {
+  Move-Item $legacyStamp $stampFile -Force
+  Write-Host "  migrated .ad-kit-version -> .dad-kit-version (pre-rename marker)" -ForegroundColor Yellow
+}
+$legacyVerified = Join-Path $proj ".claude\.ad-verified"
+if ((Test-Path $legacyVerified) -and -not (Test-Path (Join-Path $proj ".claude\.dad-verified"))) {
+  Move-Item $legacyVerified (Join-Path $proj ".claude\.dad-verified") -Force
+}
 $was = if (Test-Path $stampFile) { (Get-Content $stampFile -Raw).Trim() } else { "pre-0.9.0 (unstamped)" }
-Write-Host "Upgrading AD project at $proj" -ForegroundColor Cyan
+Write-Host "Upgrading DAD project at $proj" -ForegroundColor Cyan
 Write-Host "  project was built with kit $was -> upgrading to $kitVer" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force (Join-Path $proj "docs") | Out-Null
 
@@ -86,7 +98,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
       git init -q
       git config core.autocrlf false   # see new-project.ps1: predictable endings, no CRLF notices
       git add -A
-      git -c user.name="AD-kit" -c user.email="ad-kit@local" commit -q -m "AD upgrade: baseline commit"
+      git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m "DAD upgrade: baseline commit"
       Write-Host "  git: initialized + baseline commit" -ForegroundColor Green
     } catch { Write-Host "  git init/commit failed - continuing" -ForegroundColor Yellow } finally { Pop-Location }
   }

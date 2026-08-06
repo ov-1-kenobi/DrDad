@@ -261,7 +261,7 @@ if (-not $NoCommit) {
       $staged = (git diff --cached --name-only | Out-String).Trim()
       if (-not $staged) { $notes.Add("nothing to commit (working tree already clean)") ; $committed = $true }
       else {
-        git -c user.name="AD-kit" -c user.email="ad-kit@local" commit -q -m $msg | Out-Null
+        git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m $msg | Out-Null
         if ($LASTEXITCODE -ne 0) { $problems.Add("git commit exited $LASTEXITCODE") }
         # --- 5) VERIFY the commit actually landed and mentions this unit ---
         $last = (git log --oneline -1 | Out-String).Trim()
@@ -279,15 +279,15 @@ if ($closedTask -and -not (Select-String -Path $tasksFile -Pattern "^###\s*\[x\]
 }
 
 # --- stamp for the stop guard -----------------------------------------------------------------
-# ad-guard.ps1 blocks a turn from ending on uncommitted, unverified code. A clean close IS the
+# dad-guard.ps1 blocks a turn from ending on uncommitted, unverified code. A clean close IS the
 # verification, so record it. Only on success - a failed close must stay blocked.
 if ($problems.Count -eq 0) {
   try {
     $dotClaude = Join-Path $proj ".claude"
     if (-not (Test-Path $dotClaude)) { New-Item -ItemType Directory -Path $dotClaude -Force | Out-Null }
-    [System.IO.File]::WriteAllText((Join-Path $dotClaude ".ad-verified"),
+    [System.IO.File]::WriteAllText((Join-Path $dotClaude ".dad-verified"),
       "verified-by: close-unit $Id`r`n", (New-Object System.Text.UTF8Encoding($false)))
-  } catch { $warns.Add("could not write the .ad-verified stamp: $($_.Exception.Message)") }
+  } catch { $warns.Add("could not write the .dad-verified stamp: $($_.Exception.Message)") }
 }
 
 Write-Host "== close-unit $Id ==" -ForegroundColor Cyan

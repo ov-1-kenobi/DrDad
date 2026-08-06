@@ -1,11 +1,11 @@
-# AD - AI Design-Doc-Driven Development
+# DAD - Design Document Aligned Development
 
-**Version 0.10.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.11.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
-Check your install any time with `ad-doctor.cmd`.
+Check your install any time with `dad-doctor.cmd`.
 
-*Pronounced **"uh-DEEee!"** - local, offline Claude Code on your own GPU. Start with **AD**;
-graduate to **BMAADD** (BMAD-on-AD) when you need the full agile pipeline.*
+*Local, offline Claude Code on your own GPU. The design document is the contract and every
+mode aligns to it. Start with **DAD**; add **BMAD on top** when you need the full agile pipeline.*
 
 Run the real Claude Code agentic loop **inside VS Code**, driven by your local models via
 Ollama. No Anthropic account, no API key, no internet after first setup. The loop is
@@ -41,12 +41,12 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 
 ## Install once, use everywhere (folder lifecycle)
 
-- This folder is the kit's **permanent home** - put it somewhere stable (e.g. `C:\src\AD-kit`).
+- This folder is the kit's **permanent home** - put it somewhere stable (e.g. `C:\src\DAD-kit`).
   It holds the built `local-tools.exe`, the `templates/`, and `apikey.cmd`.
 - Run `install.ps1` **once**. It installs the commands/agents/`settings.json` into `%USERPROFILE%\.claude\`
   (global) and points them at this folder. After that, `/scaffold` `/design` `/spec` `/proto` `/build` `/assets`
   work in **every** project - no per-project install.
-- **Per project:** run `new-project.cmd` (or `/scaffold`) - **stack-agnostic** AD init. The design doc
+- **Per project:** run `new-project.cmd` (or `/scaffold`) - **stack-agnostic** DAD init. The design doc
   (DESIGN.md vs TEDD.md) and the stack are decided in `/design`, not at scaffold. (Use this, not `/init`.)
 - **Don't move or delete this folder** - the global config and every project's `.mcp.json` reference
   it by absolute path. If you must move it, re-run `install.ps1` from the new location.
@@ -60,7 +60,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `settings.json` | **The core config.** The `env` block redirects Claude Code to Ollama, picks models, forces offline mode. The extension reads it automatically. |
 | `models.json` | **Single source of truth for models**: alias, `-cc` variant name, upstream tag, role, approx VRAM, which get auto-pulled, which is default, and the `num_ctx` every variant needs (Ollama defaults to ~4K and breaks the agent loop). Add a model = one JSON entry. |
 | `sync-models.ps1` / `.cmd` | Reconciles Ollama with `models.json`: pulls bases, **generates** each `-cc` Modelfile, builds the variants, prints a table (`-Report` to look without changing, `-All` to pull the big optional ones, `-Only <alias>`). |
-| `ad-doctor.ps1` / `.cmd` | **Readiness check** (`brew doctor` style): prerequisites, Ollama + every declared model, the built server + its MCP tool list, the global install, and - with `-ProjectDir` - a project's wiring/index/git/hook. Read-only; prints the fix commands. |
+| `dad-doctor.ps1` / `.cmd` | **Readiness check** (`brew doctor` style): prerequisites, Ollama + every declared model, the built server + its MCP tool list, the global install, and - with `-ProjectDir` - a project's wiring/index/git/hook. Read-only; prints the fix commands. |
 | `use-model.ps1` | One-command model switch: `dev` `coder` `oss` `fast` `quality` `gemma`. Restart Claude Code after. |
 | `use-fast.cmd` / `use-quality.cmd` | Double-click switches to the fast / quality model. |
 | `use-model.cmd` | Batch wrapper: `use-model.cmd fast \| quality \| <model-name>`. |
@@ -69,7 +69,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `test-kit.ps1` / `.cmd` | **The kit's own test suite** - run after ANY change to the kit; it *is* the validation gate. No Ollama/GPU/network needed. Also runs in CI (`.github/workflows/kit-ci.yml`). |
 | `scan-secrets.ps1` / `.cmd` | **Credential scanner.** Blocks secrets from reaching git or the plaintext RAG index. Never prints the matched value - only file:line, pattern name, and a fingerprint. |
 | `install-hooks.ps1` | Installs the project's `pre-commit` hook (runs `scan-secrets -Staged`). Called by scaffold + upgrade; re-runnable. |
-| `ad-guard.ps1` / `.cmd` | **The stop guard** - a Claude Code `Stop` hook (wired by `install.ps1`) that refuses to let a turn end with uncommitted code nothing has built or tested. The only gate here the model cannot decline to invoke. `-Check` to test it, `-Ack` to override. |
+| `dad-guard.ps1` / `.cmd` | **The stop guard** - a Claude Code `Stop` hook (wired by `install.ps1`) that refuses to let a turn end with uncommitted code nothing has built or tested. The only gate here the model cannot decline to invoke. `-Check` to test it, `-Ack` to override. |
 | `close-unit.ps1` | **Deterministic unit close-out** used by `/build` and `/spec`: ticks the task in TASKS.md, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits, and verifies. Non-zero exit = not closed. Mechanical bookkeeping is scripted because models skip prose checklists. |
 | `voice.py` / `voice.cmd` | **Push-to-talk voice loop** (optional): mic -> faster-whisper (GPU STT) -> headless `claude -p --continue` -> Windows TTS. Run from your project folder; needs `uv` (winget install astral-sh.uv). First run downloads deps + the whisper model; offline after. |
 | `transcribe.py` | Speech-to-text helper used by the `transcribe_audio` MCP tool (also standalone: `uv run transcribe.py <audio>`). Needs `uv`. |
@@ -138,15 +138,15 @@ WSL2 only pays off if your work is Linux-centric *and* your project files live i
 
 - `VERSION` is the single source of truth; `CHANGELOG.md`'s top entry must match it (the test suite
   enforces this). Semver: breaking layout/command changes bump minor while below 1.0.
-- **Projects are stamped.** `/scaffold` and `upgrade-project` write `.ad-kit-version` into the project, so
-  `ad-doctor.cmd -ProjectDir <path>` tells you when a project has fallen behind the kit - the exact
+- **Projects are stamped.** `/scaffold` and `upgrade-project` write `.dad-kit-version` into the project, so
+  `dad-doctor.cmd -ProjectDir <path>` tells you when a project has fallen behind the kit - the exact
   condition that makes local models improvise against stale conventions.
 - **Cutting a release:**
   ```
   test-kit.cmd                                  # must be 0 failed
   # bump VERSION + add a CHANGELOG entry, then:
   git add -A && git commit -m "release: v<x.y.z>"
-  git tag -a v<x.y.z> -m "AD-kit v<x.y.z>"
+  git tag -a v<x.y.z> -m "DAD-kit v<x.y.z>"
   git remote add origin <your repo url>         # first time only
   git push -u origin main --tags                # CI runs test-kit.ps1 on windows-latest
   ```
@@ -167,10 +167,10 @@ this before you install it on a machine you use for other work:
 | Per project: `CLAUDE.md`, `.mcp.json`, `docs/`, `.gitignore`, `.git/hooks/pre-commit` | that project | delete / `git` |
 
 **The one to think about:** because `ANTHROPIC_BASE_URL` is set globally, *every* Claude Code session on
-that machine goes to local Ollama - including projects that have nothing to do with AD. That is the point
+that machine goes to local Ollama - including projects that have nothing to do with DAD. That is the point
 on a dedicated offline box, but if you also want to use cloud Claude there, scope it instead: move the
-`env` block into a **project-level** `.claude/settings.json` inside your AD projects and remove it from the
-global file. Claude Code reads project settings over global ones, so AD projects go local while everything
+`env` block into a **project-level** `.claude/settings.json` inside your DAD projects and remove it from the
+global file. Claude Code reads project settings over global ones, so DAD projects go local while everything
 else stays normal.
 
 **No name collisions** (the test suite enforces this):
@@ -179,17 +179,17 @@ else stays normal.
 - No agent name matches a built-in agent type (`Explore`, `Plan`, `general-purpose`, ...). Ours all carry an
   `-agent` suffix; `taskmap-agent` is deliberately distinct from the built-in `Plan`.
 - MCP tools are namespaced by the protocol (`mcp__local-tools__*`), so they cannot collide.
-- **BMAD** namespaces its commands under `/bmad-*`, so BMAD and AD-kit can be installed side by side.
+- **BMAD** namespaces its commands under `/bmad-*`, so BMAD and DAD-kit can be installed side by side.
 
 **Intentional divergences**, so they don't surprise anyone:
 - The kit tells agents to use `local-tools`' `web_search` / `ingest_url` instead of built-in
   `WebSearch`/`WebFetch` - the built-ins require Anthropic and don't work against Ollama.
 - Model variants use a `-cc` suffix (`devstral-cc`); upstream tags use `:` (`devstral`), so they never clash.
 - Secret allowlisting accepts the standard markers (`pragma: allowlist secret`, `gitleaks:allow`,
-  `trufflehog:ignore`, `nosec`) as well as `AD-ALLOW-SECRET`.
+  `trufflehog:ignore`, `nosec`) as well as `DAD-ALLOW-SECRET`.
 - `install-hooks.ps1` refuses to touch a project that already uses **husky**, **pre-commit**, or
   **lefthook**, and prints the one line to add to that tool's own config instead.
-- The doc layout (`DESIGN`/`STORIES`/`TASKS`/`STATUS`/`COMMANDS` + `grades/`) is AD's own convention, not an
+- The doc layout (`DESIGN`/`STORIES`/`TASKS`/`STATUS`/`COMMANDS` + `grades/`) is DAD's own convention, not an
   industry standard - each project's `CLAUDE.md` explains it, which is what makes a project self-describing
   to a developer (or model) who has never seen the kit.
 
@@ -199,7 +199,7 @@ The C# server is **built once** (shared exe). Each project gets its **own** docu
 and its own index, simply by giving the project its own `.mcp.json`:
 
 ```
-<shared>  AD-kit\local-tools\bin\Release\net8.0\local-tools.exe   <- built once
+<shared>  DAD-kit\local-tools\bin\Release\net8.0\local-tools.exe   <- built once
 
 MyUnityGame\
   .mcp.json          <- from templates\, LOCALTOOLS_DOCS_DIR -> MyUnityGame\docs
@@ -344,7 +344,7 @@ Any Ollama model works. To add one:
 **The short way (recommended):** add one entry to `models.json` (alias, name `<x>-cc`, `from`, role,
 `approxVramGb`), then run `sync-models.cmd`. It pulls the base if needed, generates the Modelfile with the
 right `num_ctx`, builds the variant, and the alias immediately works with `use-model.cmd <alias>`.
-Nothing else to edit - install, uninstall, `use-model` and `ad-doctor` all read the manifest.
+Nothing else to edit - install, uninstall, `use-model` and `dad-doctor` all read the manifest.
 
 **The manual way (what sync does for you):**
 2. **Bump its context** (Ollama defaults `num_ctx` too low for the agent loop) - make a `-cc` Modelfile:

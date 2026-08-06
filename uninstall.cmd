@@ -4,7 +4,7 @@ REM   uninstall.cmd          (remove commands/agents + restore settings.json)
 REM   uninstall.cmd -Full    (also: ollama -cc model variants + OLLAMA_* env vars)
 setlocal
 echo ============================================================
-echo  AD-kit - uninstall
+echo  DAD-kit - uninstall
 echo ============================================================
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1" %*

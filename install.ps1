@@ -5,7 +5,7 @@
 
 $ErrorActionPreference = "Stop"
 $root   = $PSScriptRoot
-$old    = 'C:\Projects\Claude\MCP\AD-kit'            # dev-path placeholder baked into the markdown command files
+$old    = 'C:\Projects\Claude\MCP\DAD-kit'            # dev-path placeholder baked into the markdown command files
 $claude = Join-Path $env:USERPROFILE ".claude"
 
 function Have($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }
@@ -26,7 +26,7 @@ $haveNomic = $models -match "nomic-embed-text"
 if (-not $haveDotnet){ Write-Host "  [stop] .NET 8+ SDK required to build the server. Install it, then re-run." -ForegroundColor Yellow }
 
 $kitVersion = if (Test-Path (Join-Path $root "VERSION")) { (Get-Content (Join-Path $root "VERSION") -Raw).Trim() } else { "unknown" }
-Write-Host "`n== AD-kit $kitVersion ==" -ForegroundColor Green
+Write-Host "`n== DAD-kit $kitVersion ==" -ForegroundColor Green
 
 Write-Host "`n== 1) Models: reconcile Ollama with models.json ==" -ForegroundColor Cyan
 # One manifest drives everything (aliases, -cc variants, support models). Add a model = one JSON entry.
@@ -104,7 +104,7 @@ Write-NoBom $dst ($s | ConvertTo-Json -Depth 10)
 Write-Host "  wrote $dst"
 $hookCmd = ""
 try { $hookCmd = ($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) -join " " } catch { }
-if ($hookCmd -match 'ad-guard') { Write-Host "  Stop hook: ad-guard.ps1 (blocks a turn ending on unverified code)" -ForegroundColor Green }
+if ($hookCmd -match 'dad-guard') { Write-Host "  Stop hook: dad-guard.ps1 (blocks a turn ending on unverified code)" -ForegroundColor Green }
 else { Write-Host "  WARNING: no Stop hook in settings.json - the close-out gates are model-optional again" -ForegroundColor Yellow }
 
 Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
@@ -113,6 +113,6 @@ Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
 Write-Host "`n== DONE ==" -ForegroundColor Green
 Write-Host "DEFAULT model = devstral-cc (Devstral). Switch with use-model.cmd: dev / coder / oss / fast / quality." -ForegroundColor Green
 Write-Host "Next: 1) RESTART Ollama (quit from tray, reopen) so tuning + the new models are live." -ForegroundColor Green
-Write-Host "      2) RESTART Claude Code - hooks (the ad-guard stop guard) load at startup." -ForegroundColor Green
+Write-Host "      2) RESTART Claude Code - hooks (the dad-guard stop guard) load at startup." -ForegroundColor Green
 Write-Host "      3) Open a project folder in VS Code, run /scaffold then index_datasheets." -ForegroundColor Green
 Write-Host "      Optional pulls, then re-run: 'ollama pull gemma4' (optional dense generalist), 'ollama pull qwen3-coder-next:q4_K_M' (escalation)." -ForegroundColor Cyan

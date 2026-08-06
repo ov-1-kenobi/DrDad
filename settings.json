@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\AD-kit\\ad-guard.ps1\"",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-guard.ps1\"",
             "timeout": 20
           }
         ]

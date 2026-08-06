@@ -1,5 +1,5 @@
-# new-project.ps1 - deterministic, STACK-AGNOSTIC AD-kit scaffolder (no local-model involved).
-# Lays down the AD structure: a generic CLAUDE.md + .mcp.json (wired) + docs/ + the design doc as DRAFT.
+# new-project.ps1 - deterministic, STACK-AGNOSTIC DAD-kit scaffolder (no local-model involved).
+# Lays down the DAD structure: a generic CLAUDE.md + .mcp.json (wired) + docs/ + the design doc as DRAFT.
 # The KIND (general vs experience) picks WHICH design doc is created; the STACK is still decided LATE
 # in /design once the stories are implementable.
 #
@@ -33,7 +33,7 @@ $docName = $kinds[$Kind]
 
 if (-not (Test-Path $ProjectDir)) { New-Item -ItemType Directory -Force $ProjectDir | Out-Null }
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
-Write-Host "Scaffolding a stack-agnostic AD project ($Kind) at $proj" -ForegroundColor Cyan
+Write-Host "Scaffolding a stack-agnostic DAD project ($Kind) at $proj" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force (Join-Path $proj "docs") | Out-Null
 
 # Generic, stack-agnostic CLAUDE.md (build/test/stack get filled during /design's architecture step).
@@ -46,12 +46,12 @@ $cmText = (Get-Content $cm -Raw -Encoding UTF8).Replace("__DESIGN_DOC__", "``doc
 # The design doc itself, created as Status: DRAFT from the matching template.
 Copy-Item (Join-Path $templates "_common\docs\$docName") (Join-Path $proj "docs\$docName") -Force
 
-# Provenance: record which kit version scaffolded this project, so ad-doctor can tell you when the project
+# Provenance: record which kit version scaffolded this project, so dad-doctor can tell you when the project
 # has fallen behind the kit (a stale project CLAUDE.md is what makes local models improvise).
 $verFile = Join-Path $kit "VERSION"
 if (Test-Path $verFile) {
   $kitVer = (Get-Content $verFile -Raw).Trim()
-  [System.IO.File]::WriteAllText((Join-Path $proj ".ad-kit-version"), "$kitVer`r`n", (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText((Join-Path $proj ".dad-kit-version"), "$kitVer`r`n", (New-Object System.Text.UTF8Encoding($false)))
 }
 
 # Proven-commands log (indexed; agents look up working shell syntax here and append new successes).
@@ -87,7 +87,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
       git config core.autocrlf false
       git add -A
       # -c fallbacks so the commit works even if git user.name/email is not configured on this box.
-      git -c user.name="AD-kit" -c user.email="ad-kit@local" commit -q -m "AD scaffold: initial commit"
+      git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m "DAD scaffold: initial commit"
       Write-Host "  git: initialized + initial commit (each /build unit will be a checkpoint)" -ForegroundColor Green
     } catch {
       Write-Host "  git: init/commit failed ($($_.Exception.Message)) - continuing without checkpoints" -ForegroundColor Yellow

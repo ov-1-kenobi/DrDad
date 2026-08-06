@@ -1,7 +1,40 @@
 # Changelog
 
-All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
+All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.11.0 - 2026-08-06
+
+**AD is now DAD - Design Document Aligned Development.** The old expansion ("AI Design-Doc-Driven
+Development") was a mouthful that had to be explained every time, and the pronunciation gag was forced.
+The new one says what the kit actually does: the design document is the contract, and every mode aligns
+to it. No behavior changed in this release - only the name, and the compatibility needed to make the
+rename safe for projects that already exist.
+
+### Changed
+- **Everything reads DAD**: prose, the dev-path placeholder (`...\AD-kit` -> `...\DAD-kit`), the package
+  name (`DAD-kit-v<x>.zip`), the git identity close-unit commits under, and the scaffold commit message.
+- **Scripts renamed**: `ad-doctor.ps1`/`.cmd` -> `dad-doctor.ps1`/`.cmd`, `ad-guard.ps1`/`.cmd` ->
+  `dad-guard.ps1`/`.cmd`. The Stop hook in `settings.json` points at the new path; `install.ps1` rewrites
+  it, so **re-running install is what moves an existing machine over**.
+- **Marker files renamed**: `.ad-kit-version` -> `.dad-kit-version`, `.claude/.ad-verified` ->
+  `.claude/.dad-verified`.
+- **BMAADD is retired.** "BMAD on DAD" says the same thing without a second portmanteau to explain.
+
+### Compatibility (projects scaffolded before the rename keep working)
+- `dad-guard` recognizes `.ad-kit-version` as a project marker and honors a `.ad-verified` stamp. An
+  unmigrated project must not fall silently OUTSIDE the guard - that is the failure the guard exists for.
+- `dad-doctor` reads either version stamp.
+- `upgrade-project` migrates both marker files in place (and re-stamps to the current kit version).
+- **`scan-secrets` honors the pre-rename `AD-ALLOW-SECRET` marker, permanently.** That marker lives in
+  YOUR source files; dropping it would silently stop suppressing lines someone already reviewed and
+  cleared, and the scanner would start reporting them again as findings.
+
+### Tests
+66 cases (was 64). Two new: the old brand is gone from kit text - while `ad-hoc` survives untouched, which
+a case-insensitive sweep would have mangled into `DAD-hoc` - and the legacy-compat constants are asserted
+PRESENT so a future tidy-up cannot quietly delete them; plus `upgrade-project` migrating a pre-rename
+project's markers, with the guard still recognizing that project beforehand. Lines that legitimately name
+the old brand opt out with a `DAD-RENAME-OK` marker rather than the check guessing at intent.
 ## 0.10.0 - 2026-08-06
 
 The first gate in this kit the model cannot skip.
@@ -14,16 +47,16 @@ transcript was read. The lesson from 0.9.x was "mechanical gates beat prose". Th
 grade perfectly - if something calls it. Nothing did.
 
 ### Added
-- **`ad-guard.ps1` / `.cmd` - the stop guard, wired by `install.ps1` as a Claude Code `Stop` hook.**
+- **`dad-guard.ps1` / `.cmd` - the stop guard, wired by `install.ps1` as a Claude Code `Stop` hook.**
   The harness runs it at end of turn whatever the model decided, so it is the first gate that does not
   depend on the model's cooperation. Blocks the stop when uncommitted **code** files exist with no
-  `.claude/.ad-verified` stamp newer than the newest edit, and names the three ways out: run
-  `close-unit`, run the real build/test, or `ad-guard.cmd -Ack`. `close-unit.ps1` writes that stamp on a
+  `.claude/.dad-verified` stamp newer than the newest edit, and names the three ways out: run
+  `close-unit`, run the real build/test, or `dad-guard.cmd -Ack`. `close-unit.ps1` writes that stamp on a
   clean close, so a properly closed unit clears the guard by itself.
   - **A nag with teeth, not a wall.** The harness sets `stop_hook_active` on the retry pass and the guard
     allows it, so a broken model can still stop after being told and you can never be deadlocked. What it
     guarantees is that the failure is LOUD.
-  - **Fails open** on everything unexpected: not an AD project, no git, docs-only edits, git missing, its
+  - **Fails open** on everything unexpected: not a DAD project, no git, docs-only edits, git missing, its
     own errors. A guard that blocks on its own bugs would be worse than the problem it solves.
   - Docs, grades, `.claude/` and `bin`/`obj` are excluded - blocking on a `STATUS.md` edit would train
     everyone to ignore it.
@@ -38,7 +71,7 @@ grade perfectly - if something calls it. Nothing did.
   a great deal of it before anyone notices.
 - **`grade-agent` has a search budget** (~25 calls) and may not repeat a query. One invocation burned
   1015+ identical `Search(pattern: "src/.../**/*")` calls before it was killed by hand.
-- **`ad-doctor`** checks the Stop hook is wired and un-placeholdered, checks `dotnet`/`git` are permitted
+- **`dad-doctor`** checks the Stop hook is wired and un-placeholdered, checks `dotnet`/`git` are permitted
   alongside `powershell`, reports whether a project currently has unverified code, and flags a project
   whose `.claude/settings.local.json` has accreted one-off `Bash(...)` approvals - the fingerprint of a
   session that spent its time answering permission prompts and then stopped using the shell. The failing
@@ -56,7 +89,7 @@ grade perfectly - if something calls it. Nothing did.
 ### Tests
 64 cases (was 60), new `-- stop guard --` section: the guard blocks unverified code and clears after
 `close-unit`; a fresh edit re-arms it; `-Ack` releases it; docs-only edits never block; it fails open on
-non-AD/no-git/missing directories; and it allows its own retry pass, which is the difference between a
+non-DAD/no-git/missing directories; and it allows its own retry pass, which is the difference between a
 guard and a deadlock.
 ## 0.9.9 - 2026-08-05
 
@@ -71,13 +104,13 @@ The fit math stops lying. `approxVramGb` was always weights-only, so three model
 - **VRAM fit accounts for the KV cache.** `models.json` gained `assumeVramGb` (16) and `kvCacheGbAt64k`
   (3, at `OLLAMA_KV_CACHE_TYPE=q8_0`); a per-model `kvGb` overrides it if you measure a real one.
   `sync-models.ps1 -Report` replaced the `Fits16` column with `Weights` / `PlusKV` / `Fit`, and
-  `ad-doctor` computes the same figure. Three states, not two:
+  `dad-doctor` computes the same figure. Three states, not two:
   | state | rule | means |
   |---|---|---|
   | `fits GPU` | weights+kv+1.5 <= budget | GPU-resident, full speed |
   | `BORDERLINE` | weights+kv <= budget+1 | usually runs; expect partial offload, variable speed |
   | `offloads` | above that | spills to RAM by design (fine for MoE, slow for dense) |
-  `ad-doctor` now emits a **WARN** on BORDERLINE with the fix (lower `numCtx` to 32768) instead of
+  `dad-doctor` now emits a **WARN** on BORDERLINE with the fix (lower `numCtx` to 32768) instead of
   silently claiming a fit. Under this math `dev` and `oss` are BORDERLINE at 64K, not comfortable.
 
 ### Fixed
@@ -312,7 +345,7 @@ First versioned release. Feature-complete and self-tested; held below 1.0 until 
 ### Operations (R21)
 - **`models.json`** is the single source of truth for models; `sync-models.ps1` generates the `-cc`
   Modelfiles and builds the variants. Adding a model is one JSON entry.
-- **`ad-doctor.ps1`**: read-only readiness check for prerequisites, Ollama + declared models, the server's
+- **`dad-doctor.ps1`**: read-only readiness check for prerequisites, Ollama + declared models, the server's
   live MCP tool list, the global install, and a project's wiring.
 - **`upgrade-project.ps1`**: retrofits an existing project to the current kit, refreshing kit-owned
   CLAUDE.md sections while preserving your Stack/Build/test.

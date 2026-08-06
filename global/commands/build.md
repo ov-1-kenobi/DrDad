@@ -18,7 +18,7 @@ continue "in PROTO mode" - a real run did that, then made 106 blind edits agains
 
 **Gate 3 - PROVE THE SHELL WORKS before writing a single line.** Run:
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\doc-stats.ps1"
+powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1"
 ```
 Use its numbers (done counts, next task) instead of counting by hand. If this command does not run - blocked,
 denied, no such file - **STOP and tell me the shell is unavailable.** Do not proceed with edits. Everything
@@ -47,7 +47,7 @@ its dependencies satisfied, STOP and report the blocked tasks.
    and summarize). PASS -> continue.
 4. **Close it out by RUNNING the script** - do not perform these steps by hand:
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\close-unit.ps1" -Id <unit id> -Title "<short title>"
+   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\close-unit.ps1" -Id <unit id> -Title "<short title>"
    ```
    It ticks the task, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits,
    and verifies. **Non-zero exit means the unit is NOT closed** - fix what it reports before the next unit.
@@ -64,7 +64,7 @@ its dependencies satisfied, STOP and report the blocked tasks.
    re-grade (max 3 rounds). Then commit the story with the grade REQUIRED - the script fails if the card is
    missing or a stub, so you cannot close a story ungraded:
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\close-unit.ps1" -Id <story id> -Title "<story> polish" -RequireGrade
+   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\close-unit.ps1" -Id <story id> -Title "<story> polish" -RequireGrade
    ```
 8. Present any manual steps + the human-verification checklist and WAIT for my confirmation.
 

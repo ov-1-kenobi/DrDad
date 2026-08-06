@@ -34,7 +34,7 @@ function Test-Case([string]$name, [scriptblock]$body) {
 # Untyped $cond on purpose: a [bool] parameter in PS 5.1 refuses strings ("accepts only Boolean values
 # and numbers"), so Assert ($someString) would fail the TEST rather than evaluate truthiness.
 function Assert($cond, [string]$msg) { if (-not $cond) { throw $msg } }
-function New-Sandbox { $p = Join-Path $env:TEMP ("adkit_t_" + [guid]::NewGuid().ToString("N").Substring(0,8)); New-Item -ItemType Directory -Force $p | Out-Null; return $p }
+function New-Sandbox { $p = Join-Path $env:TEMP ("dadkit_t_" + [guid]::NewGuid().ToString("N").Substring(0,8)); New-Item -ItemType Directory -Force $p | Out-Null; return $p }
 function Remove-Sandbox([string]$p) {
   if (-not (Test-Path $p)) { return }
   Get-ChildItem $p -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object { try { $_.Attributes = 'Normal' } catch {} }
@@ -48,7 +48,7 @@ function Get-KitFiles([string[]]$include) {
   }
 }
 
-Write-Host "== AD-kit test suite ==" -ForegroundColor Cyan
+Write-Host "== DAD-kit test suite ==" -ForegroundColor Cyan
 
 # ---------------------------------------------------------------- static hygiene
 Write-Host "-- static --" -ForegroundColor Cyan
@@ -100,8 +100,8 @@ Test-Case "scaffold stamps the project with the kit version" {
   try {
     $p = Join-Path $sb "v"
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $p | Out-Null
-    $stamp = Join-Path $p ".ad-kit-version"
-    Assert (Test-Path $stamp) ".ad-kit-version not written"
+    $stamp = Join-Path $p ".dad-kit-version"
+    Assert (Test-Path $stamp) ".dad-kit-version not written"
     Assert ((Get-Content $stamp -Raw).Trim() -eq (Get-Content (Join-Path $kit "VERSION") -Raw).Trim()) "stamp does not match VERSION"
   } finally { Remove-Sandbox $sb }
 }
@@ -159,7 +159,7 @@ Test-Case "dev-path placeholder preserved in ALL configs (move-safety)" {
     $p = Join-Path $kit $rel
     if (-not (Test-Path $p)) { continue }
     $s = Get-Content $p -Raw
-    Assert ($s -match 'AD-kit') "$rel lost the AD-kit placeholder"
+    Assert ($s -match 'DAD-kit') "$rel lost the DAD-kit placeholder"
     Assert ($s -notmatch 'claude-local') "$rel has this machine's path baked in"
   }
 }
@@ -170,7 +170,7 @@ Test-Case "package-kit produces a clean, installable copy" {
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "package-kit.ps1") -OutDir $sb -Folder | Out-Null
     Assert ($LASTEXITCODE -eq 0) "package-kit exited $LASTEXITCODE"
     $v = (Get-Content (Join-Path $kit "VERSION") -Raw).Trim()
-    $out = Join-Path $sb "AD-kit-v$v"
+    $out = Join-Path $sb "DAD-kit-v$v"
     Assert (Test-Path $out) "package folder not created"
     foreach ($f in @("VERSION","install.cmd","models.json","test-kit.ps1","local-tools\Tools.cs")) {
       Assert (Test-Path (Join-Path $out $f)) "package missing $f"
@@ -178,7 +178,7 @@ Test-Case "package-kit produces a clean, installable copy" {
     foreach ($junk in @("local-tools\bin","local-tools\obj","_tempReference","docs\.index",".git")) {
       Assert (-not (Test-Path (Join-Path $out $junk))) "package should not contain $junk"
     }
-    Assert ((Get-Content (Join-Path $out ".mcp.json") -Raw) -match 'AD-kit') "packaged .mcp.json lost the placeholder"
+    Assert ((Get-Content (Join-Path $out ".mcp.json") -Raw) -match 'DAD-kit') "packaged .mcp.json lost the placeholder"
   } finally { Remove-Sandbox $sb }
 }
 
@@ -271,7 +271,7 @@ Test-Case "install rewrites the dev-path placeholder in BOTH commands and agents
   $lines = Get-Content (Join-Path $kit "install.ps1")
   foreach ($dir in @('commands', 'agents')) {
     $hasPlaceholder = @(Get-ChildItem (Join-Path $kit "global\$dir") -Filter *.md |
-                        Where-Object { (Get-Content $_.FullName -Raw) -match 'AD-kit' }).Count -gt 0
+                        Where-Object { (Get-Content $_.FullName -Raw) -match 'DAD-kit' }).Count -gt 0
     if (-not $hasPlaceholder) { continue }
     # find the line that enumerates that folder, then look a few lines ahead for the placeholder rewrite
     $idx = -1
@@ -422,8 +422,8 @@ Test-Case "sync-models -Report runs without changing anything" {
   Assert ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 }
 
-Test-Case "ad-doctor runs and reports (exit code reflects failures only)" {
-  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "ad-doctor.ps1") | Out-Null
+Test-Case "dad-doctor runs and reports (exit code reflects failures only)" {
+  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") | Out-Null
   Assert (($LASTEXITCODE -eq 0) -or ($LASTEXITCODE -eq 1)) "unexpected exit $LASTEXITCODE"
 }
 
@@ -486,13 +486,13 @@ Test-Case "install-hooks does not hijack husky/pre-commit projects" {
   } finally { Remove-Sandbox $sb }
 }
 
-Test-Case "scan-secrets ignores placeholders and honors AD-ALLOW-SECRET" {
+Test-Case "scan-secrets ignores placeholders and honors DAD-ALLOW-SECRET" {
   $sb = New-Sandbox
   try {
     Set-Content "$sb\a.md"   'password: <your-password-here>' -Encoding UTF8
     Set-Content "$sb\b.md"   'api_key = ${MY_API_KEY}' -Encoding UTF8
     Set-Content "$sb\c.yml"  'token: $env:SOME_TOKEN' -Encoding UTF8
-    Set-Content "$sb\d.txt"  ("gh" + "p_" + ('b' * 36) + '   # AD-ALLOW-SECRET') -Encoding UTF8
+    Set-Content "$sb\d.txt"  ("gh" + "p_" + ('b' * 36) + '   # DAD-ALLOW-SECRET') -Encoding UTF8
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "scan-secrets.ps1") -Path $sb -Quiet | Out-Null
     Assert ($LASTEXITCODE -eq 0) "scanner false-positived on placeholders (exit $LASTEXITCODE)"
   } finally { Remove-Sandbox $sb }
@@ -516,15 +516,15 @@ Test-Case "the kit itself is clean of credentials" {
 # ---------------------------------------------------------------- scaffold / upgrade / close-unit
 Write-Host "-- stop guard --" -ForegroundColor Cyan
 
-Test-Case "settings.json wires ad-guard as a Stop hook, at a rewritable path" {
+Test-Case "settings.json wires dad-guard as a Stop hook, at a rewritable path" {
   $s = Get-Content (Join-Path $kit "settings.json") -Raw | ConvertFrom-Json
   $cmds = @($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command })
   Assert ($cmds.Count -ge 1) "no Stop hook in settings.json"
-  Assert (($cmds -join " ") -match 'ad-guard\.ps1') "the Stop hook does not run ad-guard.ps1"
+  Assert (($cmds -join " ") -match 'dad-guard\.ps1') "the Stop hook does not run dad-guard.ps1"
   # It must carry the placeholder, and install must reach it through the PARSED object. JSON escapes
   # backslashes, so a raw-text replace of C:\Projects\... finds nothing on disk - a bug I shipped and
   # caught here. This asserts the shape install.ps1 depends on.
-  $devPath = 'C:\Projects\Claude\MCP\AD-kit'
+  $devPath = 'C:\Projects\Claude\MCP\DAD-kit'
   Assert ((($cmds -join " ") -match [regex]::Escape($devPath))) "hook command does not use the dev-path placeholder"
   $rewritten = @($cmds | ForEach-Object { $_.Replace($devPath, "D:\elsewhere") })
   Assert (($rewritten -join " ") -notmatch [regex]::Escape($devPath)) "placeholder is not rewritable via the parsed object"
@@ -534,7 +534,7 @@ Test-Case "settings.json wires ad-guard as a Stop hook, at a rewritable path" {
   Assert ($unin -match "Remove\('Stop'\)") "uninstall.ps1 leaves a Stop hook pointing at a deleted script"
 }
 
-Test-Case "ad-guard BLOCKS unverified code and clears after close-unit" {
+Test-Case "dad-guard BLOCKS unverified code and clears after close-unit" {
   # The run002 failure: 7,115 lines, 106 edits, zero shell calls, 47 dirty files at exit, and nobody
   # knew until the transcript was read. This is the one gate the model does not get to skip.
   if (-not $haveGit) { return }
@@ -554,7 +554,7 @@ Test-Case "ad-guard BLOCKS unverified code and clears after close-unit" {
     git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
     $ErrorActionPreference = $prev; Pop-Location
 
-    $guard = Join-Path $kit "ad-guard.ps1"
+    $guard = Join-Path $kit "dad-guard.ps1"
     # clean tree -> allow
     & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
     Assert ($LASTEXITCODE -eq 0) "blocked with a clean tree"
@@ -573,7 +573,7 @@ Test-Case "ad-guard BLOCKS unverified code and clears after close-unit" {
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") `
       -Id T1.1 -Title "thing" -ProjectDir $p -NoReindex | Out-Null
     Assert ($LASTEXITCODE -eq 0) "close-unit failed in the fixture"
-    Assert (Test-Path "$p\.claude\.ad-verified") "close-unit did not write the .ad-verified stamp"
+    Assert (Test-Path "$p\.claude\.dad-verified") "close-unit did not write the .dad-verified stamp"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
     Assert ($LASTEXITCODE -eq 0) "still blocking after a clean close-unit"
 
@@ -590,20 +590,78 @@ Test-Case "ad-guard BLOCKS unverified code and clears after close-unit" {
   } finally { Remove-Sandbox $sb }
 }
 
-Test-Case "ad-guard fails OPEN and cannot loop" {
+Test-Case "the old brand is gone, and pre-rename projects still work" {
+  # Half-finished renames are how a kit ends up with two vocabularies. Assert the old brand is gone from
+  # kit text - while leaving 'ad-hoc' alone, which a case-insensitive sweep would happily mangle.
+  # CHANGELOG.md is a historical record - the entry announcing the rename has to be able to name the
+  # old brand, and so do the entries written before it. Everything else must read DAD.
+  $files = Get-KitFiles @("*.ps1","*.cmd","*.md","*.json","*.py","*.yml") |
+    Where-Object { $_.Name -ne "CHANGELOG.md" }
+  # Lines that legitimately NAME the old brand - the legacy marker constants, and prose explaining the
+  # rename - opt out with a DAD-RENAME-OK marker. An explicit opt-out beats guessing at intent, and the
+  # legacy constants' PRESENCE is asserted below so a future tidy-up cannot quietly delete them.
+  $brandPattern = '\bAD\b(?!-ALLOW-SECRET)|BMAADD|\bAD-kit|\bad-doctor\b|\bad-guard\b'   # DAD-RENAME-OK
+  $brand = @($files | Select-String -Pattern $brandPattern -CaseSensitive |
+    Where-Object { $_.Line -notmatch 'DAD-RENAME-OK' })
+  # DAD-RENAME-OK
+  Assert ($brand.Count -eq 0) "old branding survives in: $(($brand | Select-Object -First 3 | ForEach-Object { "$($_.Filename):$($_.LineNumber)" }) -join ', ')"
+  Assert (($files | Select-String -Pattern 'ad-hoc' -CaseSensitive).Count -ge 1) "the sweep ate 'ad-hoc'"
+  # Built by concatenation so this line does not match itself - same idiom as the secret fixtures.
+  $mangled = 'DAD' + '-hoc|D' + 'DAD'
+  Assert (($files | Select-String -Pattern $mangled -CaseSensitive).Count -eq 0) "the sweep mangled a word into the brand"
+  $guardSrc = Get-Content (Join-Path $kit "dad-guard.ps1") -Raw
+  Assert ($guardSrc -match '\.ad-verified' -and $guardSrc -match '\.ad-kit-version') "dad-guard dropped pre-rename project support"
+  Assert ((Get-Content (Join-Path $kit "scan-secrets.ps1") -Raw) -match 'AD-ALLOW-SECRET') "scan-secrets dropped the pre-rename allowlist marker"
+
+  # The pre-rename allowlist marker lives in USER source files. Dropping it would silently un-suppress
+  # lines someone already reviewed - the scanner must honor both spellings forever.
+  $sb = New-Sandbox
+  try {
+    Set-Content "$sb\legacy.txt" ("AKIA" + ("Q" * 16) + "   # AD-ALLOW-SECRET") -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "scan-secrets.ps1") -Path $sb | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the pre-rename AD-ALLOW-SECRET marker stopped suppressing"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "upgrade-project migrates a pre-rename project's markers" {   # DAD-RENAME-OK
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    New-Item -ItemType Directory -Force "$p\.claude" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "0.9.7" | Set-Content "$p\.ad-kit-version" -Encoding UTF8
+    "verified-by: old" | Set-Content "$p\.claude\.ad-verified" -Encoding UTF8
+
+    # Before the upgrade the guard must still SEE it as a DAD project - an unmigrated project silently
+    # falling outside the guard is exactly the failure the guard exists to prevent.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-guard.ps1") -Check -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "guard errored on a pre-rename project"
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") $p 2>$null | Out-Null
+    Assert (Test-Path "$p\.dad-kit-version") ".ad-kit-version was not migrated"
+    Assert (-not (Test-Path "$p\.ad-kit-version")) "the old .ad-kit-version was left behind"
+    # upgrade RE-STAMPS to the current kit version - that is its job. The migration is proven by the
+    # old file being gone and the new one carrying a real version, not by preserving the old number.
+    $kitVer = (Get-Content (Join-Path $kit "VERSION") -Raw).Trim()
+    Assert ((Get-Content "$p\.dad-kit-version" -Raw).Trim() -eq $kitVer) "the migrated stamp does not hold the current kit version"
+    Assert (Test-Path "$p\.claude\.dad-verified") ".ad-verified was not migrated"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-guard fails OPEN and cannot loop" {
   # A guard that blocks on its own bugs is worse than the problem. And a Stop hook that blocks its own
   # retry deadlocks the session - the harness sets stop_hook_active on that pass and we must let it go.
   $sb = New-Sandbox
   try {
-    $guard = Join-Path $kit "ad-guard.ps1"
+    $guard = Join-Path $kit "dad-guard.ps1"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $sb | Out-Null
-    Assert ($LASTEXITCODE -eq 0) "blocked a folder that is not an AD project"
+    Assert ($LASTEXITCODE -eq 0) "blocked a folder that is not a DAD project"
 
     New-Item -ItemType Directory -Force "$sb\docs" | Out-Null
     "# Design" | Set-Content "$sb\docs\DESIGN.md" -Encoding UTF8
     "x" | Set-Content "$sb\stray.cs" -Encoding UTF8
     & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $sb | Out-Null
-    Assert ($LASTEXITCODE -eq 0) "blocked an AD project with no git repo"
+    Assert ($LASTEXITCODE -eq 0) "blocked a DAD project with no git repo"
 
     & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir "$sb\does-not-exist" | Out-Null
     Assert ($LASTEXITCODE -eq 0) "blocked on a nonexistent directory"
@@ -649,7 +707,7 @@ Test-Case "scaffold general: docs + wiring + git + hook" {
     Assert ($cm -match '## Secrets') "CLAUDE.md missing Secrets section"
     $j = Get-Content (Join-Path $p ".mcp.json") -Raw | ConvertFrom-Json
     Assert ($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -like "*docs") "docs dir not wired"
-    Assert ($j.mcpServers.'local-tools'.command -notmatch 'AD-kit') "exe path not rewritten to this kit"
+    Assert ($j.mcpServers.'local-tools'.command -notmatch 'DAD-kit') "exe path not rewritten to this kit"
     $gi = Get-Content (Join-Path $p ".gitignore") -Raw
     Assert ($gi -match '\.env') ".gitignore missing .env"
     if ($haveGit) {
@@ -660,7 +718,7 @@ Test-Case "scaffold general: docs + wiring + git + hook" {
       $st = (git status --porcelain | Out-String).Trim(); $log = (git log --oneline | Out-String)
       $ErrorActionPreference = $prev; Pop-Location
       Assert (-not $st) "working tree not clean after scaffold: $st"
-      Assert ($log -match 'AD scaffold') "no initial commit"
+      Assert ($log -match 'DAD scaffold') "no initial commit"
     }
   } finally { Remove-Sandbox $sb }
 }

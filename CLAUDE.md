@@ -1,7 +1,7 @@
-# Project: AD - AI Design-Doc-Driven Development (kit maintenance)
+# Project: DAD - Design Document Aligned Development (kit maintenance)
 
-This folder IS the **AD** kit (local, offline Claude Code). Editing it here maintains the kit itself.
-(AD = the lightweight local runtime + design-doc loop; **BMAADD** = BMAD running on top of AD.)
+This folder IS the **DAD** kit (local, offline Claude Code). Editing it here maintains the kit itself.
+(DAD = the lightweight local runtime + design-doc loop; **BMAD on DAD** = BMAD running on top of it.)
 
 ## Stack
 - C# / .NET 8 (`RollForward=LatestMajor`, so it builds on .NET 8+ SDK and runs on .NET 8+ runtime)
@@ -39,13 +39,13 @@ Add a `Test-Case` for any bug you fix here - that is how this gate stays useful.
 - **Keep ALL kit text ASCII** (`.ps1`, `.cmd`, `.md`, `.json`): no em-dashes (use `-`), arrows (use `->`),
   or smart quotes. PS 5.1 misparses non-ASCII in scripts, and command/agent descriptions get mangled when
   `install` copies them and when shown in a cp437/cp1252 console. Use `->`, `-`, `<->`, straight quotes.
-- **Preserve the dev-path placeholder** `C:\Projects\Claude\MCP\AD-kit` in config files - `install.ps1`
+- **Preserve the dev-path placeholder** `C:\Projects\Claude\MCP\DAD-kit` in config files - `install.ps1`
   rewrites it to the real install location. Do NOT replace it with a hard-coded absolute path.
 - **JSON config = no BOM** (Node/Claude Code reads it). Scripts that write JSON use UTF-8 without BOM.
 - **Models live in `models.json`** - one entry per model (alias / `-cc` name / base tag / role / VRAM).
   `sync-models.ps1` GENERATES the Modelfiles (`FROM <model>` + `PARAMETER num_ctx`) because Ollama's
   default context is too small for the agent loop. Never hand-write a `.Modelfile`, and never hard-code a
-  model list in a script - `use-model`, `install`, `uninstall` and `ad-doctor` all read the manifest.
+  model list in a script - `use-model`, `install`, `uninstall` and `dad-doctor` all read the manifest.
 - **Global commands/agents** live in `global\`; `install.ps1` copies them to `%USERPROFILE%\.claude\`.
   After editing them or the C# server, **re-run `install.cmd`**.
 - **One C# server only** - do not add Node/Python MCP servers; native Claude Code + `local-tools` is the design.

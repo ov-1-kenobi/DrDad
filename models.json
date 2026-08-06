@@ -3,7 +3,7 @@
     "SINGLE SOURCE OF TRUTH for models. sync-models.ps1 generates each -cc variant from this (Ollama's",
     "default context is far too small for the agent loop, so every model needs num_ctx raised);",
     "use-model.ps1 reads the aliases; install.ps1 calls sync; uninstall.ps1 -Full removes these names;",
-    "ad-doctor.ps1 reports what is present. To add a model: append one entry here. That is the whole job.",
+    "dad-doctor.ps1 reports what is present. To add a model: append one entry here. That is the whole job.",
     "approxVramGb is the Q4-ish footprint - on 16 GB, <=15 runs on the GPU and bigger offloads to RAM.",
     "autoPull: pulled automatically by sync/install. Others are built only if you already pulled the base."
   ],

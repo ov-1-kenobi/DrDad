@@ -51,7 +51,7 @@ if ((Test-Path $hookPath) -and -not $Force) {
 $scanner = $scannerPath
 $hook = @"
 #!/bin/sh
-# AD-kit pre-commit: block credentials from entering history. Bypass (rarely): git commit --no-verify
+# DAD-kit pre-commit: block credentials from entering history. Bypass (rarely): git commit --no-verify
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$scanner" -Staged -Quiet
 status=`$?
 if [ `$status -ne 0 ]; then

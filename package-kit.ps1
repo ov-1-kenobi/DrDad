@@ -3,8 +3,8 @@
 # dev-path PLACEHOLDER is intact (install.ps1 rewrites it on the target, so a baked-in absolute path
 # would break the move); and refuses to ship if scan-secrets finds anything.
 #
-#   package-kit.ps1                       -> ..\AD-kit-v<version>.zip
-#   package-kit.ps1 -OutDir D:\transfer   -> D:\transfer\AD-kit-v<version>.zip
+#   package-kit.ps1                       -> ..\DAD-kit-v<version>.zip
+#   package-kit.ps1 -OutDir D:\transfer   -> D:\transfer\DAD-kit-v<version>.zip
 #   package-kit.ps1 -Folder               -> an unzipped folder instead of a .zip
 #   package-kit.ps1 -IncludeGit           -> keep .git (history + tags travel; two repos can then diverge)
 #
@@ -21,7 +21,7 @@ $version = if (Test-Path (Join-Path $kit "VERSION")) { (Get-Content (Join-Path $
 if (-not $OutDir) { $OutDir = Split-Path $kit -Parent }
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
-$name = "AD-kit-v$version"
+$name = "DAD-kit-v$version"
 
 # --- refuse to package a tree with credentials in it ---
 & (Join-Path $kit "scan-secrets.ps1") -Path $kit -Quiet
@@ -34,7 +34,7 @@ $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("adkit-pkg-" + [guid]::New
 $dest = Join-Path $stage $name
 New-Item -ItemType Directory -Force $dest | Out-Null
 
-Write-Host "Packaging AD-kit $version" -ForegroundColor Cyan
+Write-Host "Packaging DAD-kit $version" -ForegroundColor Cyan
 $copied = 0
 Get-ChildItem $kit -Recurse -File -Force | ForEach-Object {
   $rel = $_.FullName.Substring($kit.Length).TrimStart([char]92)
@@ -54,7 +54,7 @@ foreach ($rel in @(".mcp.json", "templates\_common\.mcp.json", "templates\unity\
   $p = Join-Path $dest $rel
   if (-not (Test-Path $p)) { $bad += "$rel missing"; continue }
   $t = Get-Content $p -Raw
-  if ($t -notmatch 'AD-kit') { $bad += "$rel lost the dev-path placeholder" }
+  if ($t -notmatch 'DAD-kit') { $bad += "$rel lost the dev-path placeholder" }
 }
 foreach ($rel in @("VERSION", "install.cmd", "install.ps1", "models.json", "test-kit.ps1")) {
   if (-not (Test-Path (Join-Path $dest $rel))) { $bad += "$rel missing" }
