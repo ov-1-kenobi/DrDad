@@ -7,12 +7,25 @@ Spawn agents with the **Task tool**, subagent_type = the agent's exact name (e.g
 NOT skills. Never enter plan mode - this loop IS the plan.
 
 Read `CLAUDE.md` for doc paths, build command, test command, placeholder convention, human-verification.
-**Mechanical gate - actually grep, do not eyeball:** if `CLAUDE.md` still contains `<decided in`, `<set in`,
+**Gate 1 - actually grep, do not eyeball:** if `CLAUDE.md` still contains `<decided in`, `<set in`,
 `<how to stub` or `# Project: <name>`, STOP and tell me to finish `/design`'s architecture step. Without a
 real build/test command the dev and qa agents cannot verify anything and will invent their own reporting
 files. This has happened - do not proceed past it.
-Read the design doc's `Status:` - `LOCKED` -> SPEC mode, `DRAFT` -> PROTO mode - and pass the mode to every
-subagent. Read `docs/STATUS.md` if present to orient. The docs are indexed: have subagents
+**Gate 2 - DESIGN must be LOCKED.** Read the design doc's `Status:`. If it is **`DRAFT`, STOP** and tell me
+to either lock it (`/design`, it will offer) or use `/proto` if I actually want greybox work. Do NOT quietly
+continue "in PROTO mode" - a real run did that, then made 106 blind edits against an unfinished contract.
+`/build` is the LOCKED-design loop; that is what R7 says and this command obeys it.
+
+**Gate 3 - PROVE THE SHELL WORKS before writing a single line.** Run:
+```
+powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\AD-kit\doc-stats.ps1"
+```
+Use its numbers (done counts, next task) instead of counting by hand. If this command does not run - blocked,
+denied, no such file - **STOP and tell me the shell is unavailable.** Do not proceed with edits. Everything
+below this line depends on running the build, the tests and `close-unit`; a `/build` that cannot reach a
+shell can only produce unverified code, and it will produce a great deal of it before anyone notices.
+
+Read `docs/STATUS.md` if present to orient. The docs are indexed: have subagents
 `search_datasheets` rather than re-read whole files. ONE status file (`docs/STATUS.md`, librarian-written):
 never create ad-hoc STATUS / BUILD_SUMMARY / NOTES files.
 
@@ -25,8 +38,7 @@ its dependencies satisfied, STOP and report the blocked tasks.
 ## Per TASK
 1. **Read the next ready task from `docs/TASKS.md` yourself.** It is already small and self-contained (the
    planner sharded it) - do NOT spawn requirements-agent for it and do NOT re-decompose it.
-   *(No task map, or PROTO mode: spawn **requirements-agent** to select + flesh the next story instead. In
-   PROTO, relay its options to me and WAIT for my choice.)*
+   *(No task map: spawn **requirements-agent** to select + flesh the next story from `docs/STORIES.md`.)*
 2. **dev-agent** -> implement per CLAUDE.md conventions; collect its summary + any manual steps.
    - If it reports a file got MANGLED: spawn **librarian-agent** in RECOVER mode, restore on my OK, retry
      with a smaller edit. Never let it hand-reconstruct a broken file.

@@ -2,6 +2,62 @@
 
 All notable changes to AD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.10.0 - 2026-08-06
+
+The first gate in this kit the model cannot skip.
+
+A graded run (mediamotor_iiif, run002) produced **7,115 lines, 106 file edits, and ZERO shell calls**.
+No build, no test, no `close-unit`, no commit - it wrote code, wrote tests for the code, then reasoned
+in prose about whether those tests would pass, and ended with 47 dirty files. Nobody knew until the
+transcript was read. The lesson from 0.9.x was "mechanical gates beat prose". This is the sequel:
+**a gate the model has to choose to invoke is still prose.** `close-unit.ps1` verifies build, tests and
+grade perfectly - if something calls it. Nothing did.
+
+### Added
+- **`ad-guard.ps1` / `.cmd` - the stop guard, wired by `install.ps1` as a Claude Code `Stop` hook.**
+  The harness runs it at end of turn whatever the model decided, so it is the first gate that does not
+  depend on the model's cooperation. Blocks the stop when uncommitted **code** files exist with no
+  `.claude/.ad-verified` stamp newer than the newest edit, and names the three ways out: run
+  `close-unit`, run the real build/test, or `ad-guard.cmd -Ack`. `close-unit.ps1` writes that stamp on a
+  clean close, so a properly closed unit clears the guard by itself.
+  - **A nag with teeth, not a wall.** The harness sets `stop_hook_active` on the retry pass and the guard
+    allows it, so a broken model can still stop after being told and you can never be deadlocked. What it
+    guarantees is that the failure is LOUD.
+  - **Fails open** on everything unexpected: not an AD project, no git, docs-only edits, git missing, its
+    own errors. A guard that blocks on its own bugs would be worse than the problem it solves.
+  - Docs, grades, `.claude/` and `bin`/`obj` are excluded - blocking on a `STATUS.md` edit would train
+    everyone to ignore it.
+- New requirement **R22** in `docs/DESIGN.md`.
+
+### Changed
+- **`/build` STOPS on a DRAFT design** instead of silently continuing "in PROTO mode" - which is what the
+  failing run did before making 106 blind edits against an unfinished contract. R7 always said `/build`
+  gates on LOCKED; the command now obeys it. Use `/proto` for greybox work.
+- **`/build` proves the shell works before its first edit** by running `doc-stats.ps1` (Gate 3), and stops
+  if it cannot. A `/build` that cannot reach a shell can only produce unverified code, and it will produce
+  a great deal of it before anyone notices.
+- **`grade-agent` has a search budget** (~25 calls) and may not repeat a query. One invocation burned
+  1015+ identical `Search(pattern: "src/.../**/*")` calls before it was killed by hand.
+- **`ad-doctor`** checks the Stop hook is wired and un-placeholdered, checks `dotnet`/`git` are permitted
+  alongside `powershell`, reports whether a project currently has unverified code, and flags a project
+  whose `.claude/settings.local.json` has accreted one-off `Bash(...)` approvals - the fingerprint of a
+  session that spent its time answering permission prompts and then stopped using the shell. The failing
+  run's project had ten, including `Bash(xargs cat)` and `Bash(</)`, and no `dotnet` or `git`.
+- **`uninstall.ps1`** strips the Stop hook when there is no `.bak` to restore, so it cannot be left
+  pointing at a deleted script and firing on every turn.
+
+### Fixed
+- `install.ps1` did not rewrite the dev-path placeholder in `settings.json` - which the new hook command
+  lives in. It now does, **via the parsed object**: JSON escapes backslashes, so the on-disk form is
+  `C:\\Projects\\...` and a raw-text replace of `C:\Projects\...` silently matches nothing. (The same trap
+  install.ps1's own comment warns about for `.mcp.json`. I shipped it anyway; the test caught it.)
+- Stale `use-model.cmd dev / plan / ...` line in the installer's closing output.
+
+### Tests
+64 cases (was 60), new `-- stop guard --` section: the guard blocks unverified code and clears after
+`close-unit`; a fresh edit re-arms it; `-Ack` releases it; docs-only edits never block; it fails open on
+non-AD/no-git/missing directories; and it allows its own retry pass, which is the difference between a
+guard and a deadlock.
 ## 0.9.9 - 2026-08-05
 
 The fit math stops lying. `approxVramGb` was always weights-only, so three models advertised as

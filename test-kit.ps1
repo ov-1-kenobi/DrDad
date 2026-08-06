@@ -514,6 +514,117 @@ Test-Case "the kit itself is clean of credentials" {
 }
 
 # ---------------------------------------------------------------- scaffold / upgrade / close-unit
+Write-Host "-- stop guard --" -ForegroundColor Cyan
+
+Test-Case "settings.json wires ad-guard as a Stop hook, at a rewritable path" {
+  $s = Get-Content (Join-Path $kit "settings.json") -Raw | ConvertFrom-Json
+  $cmds = @($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command })
+  Assert ($cmds.Count -ge 1) "no Stop hook in settings.json"
+  Assert (($cmds -join " ") -match 'ad-guard\.ps1') "the Stop hook does not run ad-guard.ps1"
+  # It must carry the placeholder, and install must reach it through the PARSED object. JSON escapes
+  # backslashes, so a raw-text replace of C:\Projects\... finds nothing on disk - a bug I shipped and
+  # caught here. This asserts the shape install.ps1 depends on.
+  $devPath = 'C:\Projects\Claude\MCP\AD-kit'
+  Assert ((($cmds -join " ") -match [regex]::Escape($devPath))) "hook command does not use the dev-path placeholder"
+  $rewritten = @($cmds | ForEach-Object { $_.Replace($devPath, "D:\elsewhere") })
+  Assert (($rewritten -join " ") -notmatch [regex]::Escape($devPath)) "placeholder is not rewritable via the parsed object"
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  Assert ($inst -match '\$h\.command\s*=\s*\$h\.command\.Replace') "install.ps1 does not rewrite the hook command"
+  $unin = Get-Content (Join-Path $kit "uninstall.ps1") -Raw
+  Assert ($unin -match "Remove\('Stop'\)") "uninstall.ps1 leaves a Stop hook pointing at a deleted script"
+}
+
+Test-Case "ad-guard BLOCKS unverified code and clears after close-unit" {
+  # The run002 failure: 7,115 lines, 106 edits, zero shell calls, 47 dirty files at exit, and nobody
+  # knew until the transcript was read. This is the one gate the model does not get to skip.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    New-Item -ItemType Directory -Force "$p\src" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Task map`n`n## Tasks`n`n### [ ] T1.1 - thing   (Story S1)`n- **Goal:** x" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``exit 0``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $guard = Join-Path $kit "ad-guard.ps1"
+    # clean tree -> allow
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "blocked with a clean tree"
+
+    # a docs edit alone must NOT block - docs churn is the agents' job
+    "# Design`n`nStatus: LOCKED`n`nmore" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "a docs-only change blocked the stop"
+
+    # uncommitted CODE -> block
+    "public class Thing { }" | Set-Content "$p\src\Thing.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "unverified code did NOT block the stop"
+
+    # closing the unit verifies + commits, so the guard must clear
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") `
+      -Id T1.1 -Title "thing" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "close-unit failed in the fixture"
+    Assert (Test-Path "$p\.claude\.ad-verified") "close-unit did not write the .ad-verified stamp"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "still blocking after a clean close-unit"
+
+    # a NEW edit after the stamp must block again (the stamp is not a permanent pass)
+    Start-Sleep -Milliseconds 1100
+    "public class Other { }" | Set-Content "$p\src\Other.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "the stamp permanently disarmed the guard"
+
+    # -Ack is the deliberate escape hatch
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Ack -ProjectDir $p | Out-Null
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-Ack did not clear the guard"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "ad-guard fails OPEN and cannot loop" {
+  # A guard that blocks on its own bugs is worse than the problem. And a Stop hook that blocks its own
+  # retry deadlocks the session - the harness sets stop_hook_active on that pass and we must let it go.
+  $sb = New-Sandbox
+  try {
+    $guard = Join-Path $kit "ad-guard.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $sb | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "blocked a folder that is not an AD project"
+
+    New-Item -ItemType Directory -Force "$sb\docs" | Out-Null
+    "# Design" | Set-Content "$sb\docs\DESIGN.md" -Encoding UTF8
+    "x" | Set-Content "$sb\stray.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $sb | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "blocked an AD project with no git repo"
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir "$sb\does-not-exist" | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "blocked on a nonexistent directory"
+
+    # hook mode, retry pass: must exit 0 no matter what the tree looks like
+    $json = '{"stop_hook_active":true,"cwd":"' + $sb.Replace('\','\\') + '"}'
+    $json | & powershell -NoProfile -ExecutionPolicy Bypass -File $guard | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the guard blocks its own retry - this would deadlock the session"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "/build gates on a LOCKED design and proves the shell first" {
+  $b = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+  Assert ($b -match 'DESIGN must be LOCKED') "/build no longer gates on LOCKED"
+  Assert ($b -match 'doc-stats\.ps1') "/build does not run a shell preflight"
+  # It must not silently degrade to proto - R7 says /build gates on LOCKED.
+  Assert ($b -notmatch "``DRAFT``\s*->\s*PROTO mode") "/build still falls through to PROTO mode on a DRAFT design"
+  $g = Get-Content (Join-Path $kit "global\agents\grade-agent.md") -Raw
+  Assert ($g -match 'SEARCH BUDGET') "grade-agent has no search budget - one invocation burned 1015+ calls"
+}
+
 Write-Host "-- scripts --" -ForegroundColor Cyan
 $haveGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
 

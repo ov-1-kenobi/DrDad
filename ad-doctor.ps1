@@ -195,8 +195,29 @@ if (-not (Test-Path $settings)) {
       Say "FAIL" "close-out NOT permitted" "/build cannot run close-unit.ps1 - bookkeeping will be skipped" `
           "re-run install.cmd (adds Bash(powershell:*)), then RESTART Claude Code"
     }
+    # Same failure, wider blast radius: a run that cannot reach the shell at all cannot build or test,
+    # and will happily write code for hours anyway.
+    $needTools = @('dotnet','git')
+    $missingTools = @($needTools | Where-Object { $allowed -notcontains $_ })
+    if ($missingTools.Count -eq 0) { Say "OK" "toolchain permitted" "dotnet + git allowed" }
+    else {
+      Say "WARN" "toolchain NOT permitted" "missing Bash($($missingTools -join ':*, '):*)" `
+          "re-run install.cmd; without these the model gets prompted on every build/test and stops trying"
+    }
     if ($s.permissions.defaultMode -eq 'acceptEdits') { Say "OK" "permission mode" "acceptEdits" }
     else { Say "WARN" "permission mode" "$($s.permissions.defaultMode) - agents may stall on prompts" "set permissions.defaultMode to acceptEdits" }
+
+    # The stop guard. Without it, every gate in the kit is one the model can decline to invoke.
+    $stopCmd = ""
+    try { $stopCmd = ($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) -join " " } catch { }
+    if ($stopCmd -match 'ad-guard') {
+      if ($stopCmd -match 'AD-kit\\ad-guard') {
+        Say "WARN" "stop guard" "wired, but still points at the dev placeholder path" "re-run install.cmd from the kit's real location"
+      } else { Say "OK" "stop guard" "ad-guard.ps1 wired as a Stop hook" }
+    } else {
+      Say "FAIL" "stop guard" "no Stop hook - nothing stops a turn ending on unverified code" `
+          "re-run install.cmd, then RESTART Claude Code (hooks load at startup)"
+    }
   } catch { Say "FAIL" "settings.json" "invalid JSON" "re-run install.cmd" }
 }
 $iCmd = (Get-ChildItem (Join-Path $claudeDir "commands") -Filter *.md -ErrorAction SilentlyContinue).Count
@@ -253,6 +274,36 @@ if ($ProjectDir) {
       if (Test-Path (Join-Path $p ".git\hooks\pre-commit")) { Say "OK" "pre-commit hook" "secret scan installed" }
       else { Say "WARN" "pre-commit hook" "missing" "install-hooks.ps1 -ProjectDir `"$p`"" }
     } else { Say "FAIL" "git repo" "none - a mangled file cannot be recovered" "upgrade-project.cmd `"$p`"" }
+
+    # A project's own allow list ACCRETES. Every "yes, just this once" writes a literal one-off entry
+    # here, and a list full of them is the fingerprint of a session that spent its time answering
+    # permission prompts. One real project collected ten - Bash(xargs cat), Bash(</) - and then made
+    # 106 file edits without ever running a build.
+    $localSettings = Join-Path $p ".claude\settings.local.json"
+    if (Test-Path $localSettings) {
+      try {
+        $ls = Get-Content $localSettings -Raw | ConvertFrom-Json
+        $bashRules = @($ls.permissions.allow | Where-Object { $_ -like 'Bash(*' })
+        # A rule is "durable" if it grants a whole executable (Bash(dotnet:*)); anything else is a
+        # frozen snapshot of one command line and will never match again.
+        $oneOff = @($bashRules | Where-Object { $_ -notmatch '^Bash\([A-Za-z0-9_.\-]+:\*\)$' })
+        if ($oneOff.Count -ge 3) {
+          Say "WARN" "project allow list" "$($oneOff.Count) one-off Bash approvals accreted" `
+              "delete permissions.allow in $localSettings - the kit's global list already covers dotnet/git/powershell"
+        } elseif ($bashRules.Count) { Say "OK" "project allow list" "$($bashRules.Count) Bash rule(s), no clutter" }
+      } catch { Say "WARN" "project allow list" "settings.local.json is not valid JSON" "fix or delete $localSettings" }
+    }
+
+    $stamp = Join-Path $p ".claude\.ad-verified"
+    $guard = Join-Path $kit "ad-guard.ps1"
+    if (Test-Path $guard) {
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p | Out-Null
+      if ($LASTEXITCODE -eq 0) { Say "OK" "stop guard state" "no unverified code changes" }
+      else {
+        Say "WARN" "stop guard state" "uncommitted code that nothing has built or tested" `
+            "close-unit.cmd -Id <id> -Title `"...`" in that project, or ad-guard.cmd -Ack to accept it"
+      }
+    }
   }
 }
 

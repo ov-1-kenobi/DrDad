@@ -19,6 +19,12 @@ reading many diffs, exhausting your context, and returning with NOTHING WRITTEN 
 **WRITE THE FILE BEFORE YOU REPORT.** Your reply is not the deliverable; `grades/<id>_GRADE.md` on disk is.
 Re-read it after writing to confirm it landed.
 
+**SEARCH BUDGET: about 25 tool calls, and NEVER repeat a query you have already run.** If a search returns
+the same result twice, or returns nothing twice, you have what there is - stop searching and grade what you
+found, noting the gap in the card. One invocation of this agent burned 1015+ tool calls re-issuing a single
+identical `Search(pattern: "src/.../**/*")` until it was killed by hand. Repeating a query cannot produce a
+new answer. If you genuinely cannot find the implementation, write a card that says so and return.
+
 To pin this agent to a specific model, add a `model:` line to the frontmatter above (e.g.
 `model: qwen3-coder-next-cc`); omit it to inherit the session model. On 16 GB VRAM, pinning a model that
 differs from the session model makes Ollama reload it each grade step - usually not worth it.

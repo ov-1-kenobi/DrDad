@@ -104,7 +104,27 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       `.index/chunks.json` - requires referencing secrets BY NAME, points at platform-native auth (AWS SSO
       profiles/IAM roles, `az login` + DefaultAzureCredential/Managed Identity, Credential Manager/DPAPI),
       and tells the agent to STOP and report rather than echo anything that looks real.
-- [x] R18: **Loop cost discipline** (measured: 5-8 subagent spawns and 20-40+ min per task made the gates
+- [x] R22: **A gate the model cannot skip** (`ad-guard.ps1`, wired by `install.ps1` as a Claude Code
+      **Stop hook** in `settings.json`). Measured failure: a 7,115-line `/build` made 106 file edits and
+      ZERO shell calls - no build, no test, no `close-unit`, no commit - then reasoned in prose about
+      whether its own tests would pass, and left 47 dirty files. Every gate up to R21 was MODEL-INVOKED,
+      and a gate the model chooses to invoke is prose with a filename. The harness runs a Stop hook at end
+      of turn regardless of what the model decided, so the check lives there: uncommitted files with CODE
+      extensions (docs/, grades/, .claude/, bin/obj excluded) and no `.claude/.ad-verified` stamp newer
+      than the newest edit -> the stop is BLOCKED with the three ways out (run `close-unit`, run the real
+      build/test, or `ad-guard.cmd -Ack`). `close-unit.ps1` writes the stamp on a clean close, so a
+      properly closed unit clears it automatically. Deliberately a NAG WITH TEETH, not a wall: the harness
+      sets `stop_hook_active` on the retry and the guard allows that pass, so it can never deadlock a
+      session - what it guarantees is that the failure is LOUD instead of discovered in a transcript days
+      later. FAILS OPEN on anything unexpected (not an AD project, no git, docs-only edits, its own
+      errors); a guard that blocks on its own bugs is worse than the problem. Supporting gates from the
+      same run: `/build` STOPS on a DRAFT design instead of silently degrading to PROTO (R7 always said it
+      gates on LOCKED) and proves the shell works by running `doc-stats.ps1` before its first edit;
+      `ad-doctor` checks the hook is wired, that `dotnet`/`git` are permitted, and flags a project whose
+      `.claude/settings.local.json` has accreted one-off `Bash(...)` approvals (the fingerprint of a
+      session that spent its time answering permission prompts and then stopped using the shell);
+      `grade-agent` has a ~25-call search budget and may not repeat a query, after one invocation burned
+      1015+ identical searches.- [x] R18: **Loop cost discipline** (measured: 5-8 subagent spawns and 20-40+ min per task made the gates
       get skipped). Three cuts: (a) mechanical close-out is a SCRIPT - `close-unit.ps1` ticks the task, rolls
       the parent story up only when ALL its tasks are `[x]`, reindexes, commits, and VERIFIES, exiting
       non-zero if any step did not happen (deterministic beats a prose checklist); (b) when `docs/TASKS.md`

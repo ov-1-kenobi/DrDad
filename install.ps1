@@ -90,16 +90,29 @@ Write-Host "`n== 7) Install settings.json (Ollama redirect + offline flags) ==" 
 $dst = Join-Path $claude "settings.json"
 if (Test-Path $dst) { Copy-Item $dst "$dst.bak" -Force; Write-Host "  existing settings.json -> settings.json.bak (MERGE if you had custom settings)" -ForegroundColor Yellow }
 $s = Get-Content (Join-Path $root "settings.json") -Raw | ConvertFrom-Json
+# settings.json carries the dev-path placeholder too, in the Stop hook's command line. Rewrite it on the
+# PARSED object, not the raw text: JSON escapes backslashes, so the on-disk form is C:\\Projects\\... and
+# a text replace of C:\Projects\... silently matches nothing (same trap as the .mcp.json paths above).
+try {
+  foreach ($entry in $s.hooks.Stop) {
+    foreach ($h in $entry.hooks) { if ($h.command) { $h.command = $h.command.Replace($old, $root) } }
+  }
+} catch { }
 # (apiKeyHelper intentionally NOT set: ANTHROPIC_AUTH_TOKEN alone skips login; setting both
 #  triggers Claude Code's "auth may not work as expected" warning every session.)
 Write-NoBom $dst ($s | ConvertTo-Json -Depth 10)
 Write-Host "  wrote $dst"
+$hookCmd = ""
+try { $hookCmd = ($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) -join " " } catch { }
+if ($hookCmd -match 'ad-guard') { Write-Host "  Stop hook: ad-guard.ps1 (blocks a turn ending on unverified code)" -ForegroundColor Green }
+else { Write-Host "  WARNING: no Stop hook in settings.json - the close-out gates are model-optional again" -ForegroundColor Yellow }
 
 Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
 & (Join-Path $root "ollama-tuning.ps1")
 
 Write-Host "`n== DONE ==" -ForegroundColor Green
-Write-Host "DEFAULT model = devstral-cc (Devstral). Switch with use-model.cmd: dev / plan / fast / quality." -ForegroundColor Green
+Write-Host "DEFAULT model = devstral-cc (Devstral). Switch with use-model.cmd: dev / coder / oss / fast / quality." -ForegroundColor Green
 Write-Host "Next: 1) RESTART Ollama (quit from tray, reopen) so tuning + the new models are live." -ForegroundColor Green
-Write-Host "      2) Open a project folder in VS Code, run /scaffold then index_datasheets." -ForegroundColor Green
-Write-Host "      Optional pulls, then re-run: 'ollama pull gemma4' (deep planning), 'ollama pull qwen3-coder-next:q4_K_M' (escalation)." -ForegroundColor Cyan
+Write-Host "      2) RESTART Claude Code - hooks (the ad-guard stop guard) load at startup." -ForegroundColor Green
+Write-Host "      3) Open a project folder in VS Code, run /scaffold then index_datasheets." -ForegroundColor Green
+Write-Host "      Optional pulls, then re-run: 'ollama pull gemma4' (optional dense generalist), 'ollama pull qwen3-coder-next:q4_K_M' (escalation)." -ForegroundColor Cyan

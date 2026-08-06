@@ -37,6 +37,21 @@ if (Test-Path $bak) {
 } else {
   Write-Host "  no settings.json.bak found - leaving settings.json as-is." -ForegroundColor Yellow
   Write-Host "  (It redirects Claude Code to local Ollama; delete/edit it by hand to get defaults back.)" -ForegroundColor Yellow
+  # But DO drop the Stop hook. Uninstalling removes ad-guard.ps1's folder from the picture; a hook left
+  # pointing at a deleted script would fire on every single turn and fail.
+  if (Test-Path $settings) {
+    try {
+      $s = Get-Content $settings -Raw | ConvertFrom-Json
+      $stop = @()
+      try { $stop = @($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) } catch { }
+      if (($stop -join " ") -match 'ad-guard') {
+        $s.hooks.PSObject.Properties.Remove('Stop')
+        if (-not $s.hooks.PSObject.Properties.Name) { $s.PSObject.Properties.Remove('hooks') }
+        [System.IO.File]::WriteAllText($settings, ($s | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "  removed the ad-guard Stop hook (it would fail once this folder is gone)" -ForegroundColor Yellow
+      }
+    } catch { Write-Host "  could not edit settings.json - remove the 'hooks' block by hand" -ForegroundColor Yellow }
+  }
 }
 
 if ($Full) {

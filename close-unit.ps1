@@ -278,6 +278,18 @@ if ($closedTask -and -not (Select-String -Path $tasksFile -Pattern "^###\s*\[x\]
   $problems.Add("VERIFY FAILED: $Id is still not [x] in TASKS.md")
 }
 
+# --- stamp for the stop guard -----------------------------------------------------------------
+# ad-guard.ps1 blocks a turn from ending on uncommitted, unverified code. A clean close IS the
+# verification, so record it. Only on success - a failed close must stay blocked.
+if ($problems.Count -eq 0) {
+  try {
+    $dotClaude = Join-Path $proj ".claude"
+    if (-not (Test-Path $dotClaude)) { New-Item -ItemType Directory -Path $dotClaude -Force | Out-Null }
+    [System.IO.File]::WriteAllText((Join-Path $dotClaude ".ad-verified"),
+      "verified-by: close-unit $Id`r`n", (New-Object System.Text.UTF8Encoding($false)))
+  } catch { $warns.Add("could not write the .ad-verified stamp: $($_.Exception.Message)") }
+}
+
 Write-Host "== close-unit $Id ==" -ForegroundColor Cyan
 foreach ($n in $notes) { Write-Host "  ok   $n" -ForegroundColor Green }
 foreach ($w in $warns) { Write-Host "  WARN $w" -ForegroundColor Yellow }

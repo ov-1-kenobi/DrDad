@@ -116,6 +116,7 @@ never via `local-tools`. If the model claims otherwise, it's confused - point it
 | `ad-doctor.cmd [-ProjectDir x]`                | **readiness check**: prereqs, Ollama+models, server, install, project wiring |
 | `sync-models.cmd [-Report\|-All\|-Only a]`     | reconcile Ollama with `models.json` (pull bases, build the `-cc` variants) |
 | `test-kit.cmd`                                 | run the kit's own test suite - the validation gate after any kit change |
+| `ad-guard.cmd -Check` / `-Ack`             | stop guard: would a turn be blocked for unverified code? / accept it anyway |
 | `scan-secrets.cmd [-Path x \| -Staged]`        | scan for credentials (also installed as each project's pre-commit hook) |
 | `LOCALTOOLS_AUTO_REINDEX=1` (in proj .mcp.json)| auto-refresh the index when docs change                 |
 | `/mcp` (inside Claude Code)                    | check `local-tools` is connected + its tools            |
