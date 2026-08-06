@@ -102,8 +102,11 @@ if (-not (Test-Path $manifest)) {
     $budget = if ($vramGb) { $vramGb } elseif ($mf.assumeVramGb) { $mf.assumeVramGb } else { 16 }
     foreach ($m in $mf.models) {
       $have = $installedModels -match [regex]::Escape($m.name)
-      $kvGb = if (($m.PSObject.Properties.Name -contains 'kvGb') -and $m.kvGb) { $m.kvGb }
-              elseif ($mf.kvCacheGbAt64k) { $mf.kvCacheGbAt64k } else { 0 }
+      # Plain statements - see sync-models.ps1: a multi-line `$x = if ...` with elseif on the next
+      # line parses fine and fails at RUNTIME.
+      $kvGb = 0
+      if ($mf.kvCacheGbAt64k) { $kvGb = $mf.kvCacheGbAt64k }
+      if (($m.PSObject.Properties.Name -contains 'kvGb') -and $m.kvGb) { $kvGb = $m.kvGb }
       $effGb = $m.approxVramGb + $kvGb
       $detail = "$($m.name) (~$($m.approxVramGb) GB + ~$kvGb KV = $effGb GB vs $budget GB)"
       if (-not $have) {

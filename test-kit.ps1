@@ -61,6 +61,31 @@ Test-Case "all .ps1 parse" {
   }
 }
 
+Test-Case "no multi-line if-EXPRESSION assignments (they parse, then fail at runtime)" {
+  # `$x = if (c) { a }` <newline> `elseif (d) { b }` is VALID SYNTAX - PowerShell ends the assignment at
+  # the closing brace and reads the next line as a command - so it sails past "all .ps1 parse" and dies
+  # only when that line executes. It shipped in 0.9.9's fit math and broke install.cmd on the target
+  # machine; the -Report test missed it because this box has no ollama, so the code never ran.
+  $bad = @()
+  foreach ($f in (Get-KitFiles @("*.ps1"))) {
+    $lines = Get-Content $f.FullName
+    for ($i = 0; $i -lt $lines.Count - 1; $i++) {
+      # an assignment whose value is an if-block that CLOSES on this line...
+      if ($lines[$i] -notmatch '=\s*if\s*\(') { continue }
+      if ($lines[$i] -notmatch '\}\s*$') { continue }
+      # ...followed by a line STARTING with elseif/else = a command invocation, not a branch
+      if ($lines[$i+1] -match '^\s*(elseif|else)\b') { $bad += "$($f.Name):$($i+2)" }
+    }
+    # Sibling trap, and the one that actually broke install.cmd: `$((if(...){...}else{...}))`. The
+    # subexpression $( ) accepts statements, but the extra inner parens make it an EXPRESSION context
+    # where `if` is read as a command name -> "The term 'if' is not recognized". Also parses clean.
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+      if ($lines[$i] -match '[^$]\(\s*if\s*\(' -and $lines[$i] -notmatch '^\s*#') { $bad += "$($f.Name):$($i+1)" }
+    }
+  }
+  Assert ($bad.Count -eq 0) "if used where PowerShell expects an expression, at: $($bad -join ', ')"
+}
+
 Test-Case "config JSON parses" {
   foreach ($rel in @("settings.json", ".mcp.json", "templates\_common\.mcp.json", "templates\unity\.mcp.json")) {
     $p = Join-Path $kit $rel
@@ -420,6 +445,53 @@ Test-Case "sync-models -Report runs without changing anything" {
   if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) { return }   # optional in CI
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "sync-models.ps1") -Report | Out-Null
   Assert ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
+}
+
+Test-Case "sync-models -Report runs END TO END against a fake ollama" {
+  # -Report exits at line 1 on a box with no ollama, so the entire report - including the BORDERLINE
+  # warning that carried a fatal inline `if` - was never executed by any test. It shipped broken and
+  # died on the target machine during install. Stub ollama so the whole script actually runs.
+  $sb = New-Sandbox
+  try {
+    $bin = Join-Path $sb "bin"; New-Item -ItemType Directory -Force $bin | Out-Null
+    $mf = Get-Content $mfPath -Raw | ConvertFrom-Json
+    # Report every declared variant as present so every row renders and every branch is reached.
+    $names = @($mf.models.name) + @($mf.embedModel, $mf.visionModel, $mf.smallFastModel) | Where-Object { $_ }
+    Set-Content (Join-Path $bin "ollama.cmd") "@echo off`r`necho $($names -join ' ')" -Encoding ASCII
+
+    $script = Join-Path $kit "sync-models.ps1"
+    $cmd = "`$env:PATH = '$bin;' + `$env:PATH; & '$script' -Report; exit `$LASTEXITCODE"
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String
+    $code = $LASTEXITCODE
+
+    Assert ($out -notmatch 'is not recognized') "sync-models hit a runtime command error:`n$out"
+    Assert ($out -notmatch 'CommandNotFound')   "sync-models hit CommandNotFound:`n$out"
+    Assert ($code -eq 0) "sync-models -Report exited $code`n$out"
+    Assert ($out -match 'BORDERLINE') "the BORDERLINE branch never rendered - it is still untested`n$out"
+    Assert ($out -match 'Weights' -and $out -match 'PlusKV') "the fit table did not render`n$out"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "the VRAM fit math runs and classifies correctly (no ollama needed)" {
+  # The fit block lives inside sync-models' and dad-doctor's ollama sections, so on a box without
+  # ollama nothing exercised it. Run the same rules here against the real manifest.
+  $mf = Get-Content $mfPath -Raw | ConvertFrom-Json
+  $budget = $mf.assumeVramGb
+  $seen = @{}
+  foreach ($m in $mf.models) {
+    $kvGb = 0
+    if ($mf.kvCacheGbAt64k) { $kvGb = $mf.kvCacheGbAt64k }
+    if (($m.PSObject.Properties.Name -contains 'kvGb') -and $m.kvGb) { $kvGb = $m.kvGb }
+    $effGb = $m.approxVramGb + $kvGb
+    $fit = "offloads"
+    if ($effGb -le ($budget + 1)) { $fit = "BORDERLINE" }
+    if (($effGb + 1.5) -le $budget) { $fit = "fits GPU" }
+    Assert ($effGb -gt 0) "$($m.alias): effective VRAM computed as $effGb"
+    $seen[$fit] = $true
+  }
+  # A manifest where everything lands in one bucket means the thresholds are not doing any work.
+  Assert ($seen.Keys.Count -ge 2) "every model classified the same way - check assumeVramGb/kvCacheGbAt64k"
+  Assert ($seen.ContainsKey("BORDERLINE")) "nothing is BORDERLINE - the warning path is untested"
 }
 
 Test-Case "dad-doctor runs and reports (exit code reflects failures only)" {

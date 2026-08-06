@@ -36,6 +36,12 @@ $targets = $mf.models
 if ($Only) { $targets = $mf.models | Where-Object { $_.alias -eq $Only -or $_.name -eq $Only }
              if (-not $targets) { throw "no model in models.json matches '$Only'" } }
 
+# The VRAM budget does not vary per model - resolve it ONCE, here, so the report below can print it
+# without an inline if. `$((if(...){...}else{...}))` looks harmless but the inner parens make it an
+# EXPRESSION context, where `if` is read as a command name: "The term 'if' is not recognized".
+$vramBudget = 16
+if ($mf.assumeVramGb) { $vramBudget = $mf.assumeVramGb }
+
 $rows = New-Object System.Collections.Generic.List[object]
 foreach ($m in $targets) {
   $numCtx = if ($m.PSObject.Properties.Name -contains 'numCtx' -and $m.numCtx) { $m.numCtx } else { $mf.numCtx }
@@ -67,13 +73,16 @@ foreach ($m in $targets) {
 
   # Fit = WEIGHTS + KV CACHE vs the VRAM budget. Weights alone is misleading: at 64K the cache adds
   # a few GB, which is what pushes several "14 GB" models over a 16 GB card.
-  $vramBudget = if ($mf.assumeVramGb) { $mf.assumeVramGb } else { 16 }
-  $kvGb = if (($m.PSObject.Properties.Name -contains 'kvGb') -and $m.kvGb) { $m.kvGb }
-          elseif ($mf.kvCacheGbAt64k) { $mf.kvCacheGbAt64k } else { 0 }
+  # Plain statements, NOT a multi-line `$x = if ... <newline> elseif ...`: PowerShell ends the
+  # assignment at the closing brace, so the elseif on the next line is parsed as a COMMAND and blows up
+  # at runtime with "the term 'elseif' is not recognized". It parses clean, which is why it shipped.
+  $kvGb = 0
+  if ($mf.kvCacheGbAt64k) { $kvGb = $mf.kvCacheGbAt64k }
+  if (($m.PSObject.Properties.Name -contains 'kvGb') -and $m.kvGb) { $kvGb = $m.kvGb }   # per-model wins
   $effGb = $m.approxVramGb + $kvGb
-  $fit = if (($effGb + 1.5) -le $vramBudget) { "fits GPU" }
-         elseif ($effGb -le ($vramBudget + 1)) { "BORDERLINE" }
-         else { "offloads" }
+  $fit = "offloads"                                                   # widest case first,
+  if ($effGb -le ($vramBudget + 1)) { $fit = "BORDERLINE" }           # then narrower,
+  if (($effGb + 1.5) -le $vramBudget) { $fit = "fits GPU" }           # narrowest wins
 
   $rows.Add([pscustomobject]@{
     Alias   = $m.alias
@@ -90,7 +99,7 @@ foreach ($m in $targets) {
 Write-Host ""
 $rows | Format-Table -AutoSize
 if ($rows | Where-Object { $_.Fit -eq "BORDERLINE" }) {
-  Write-Host "BORDERLINE = weights + KV cache land within ~1 GB of your $((if($mf.assumeVramGb){$mf.assumeVramGb}else{16})) GB card." -ForegroundColor Yellow
+  Write-Host "BORDERLINE = weights + KV cache land within ~1 GB of your $vramBudget GB card." -ForegroundColor Yellow
   Write-Host "             It usually runs, but expect partial offload - your results may vary. Lower numCtx in" -ForegroundColor Yellow
   Write-Host "             models.json (32768) to pull it back onto the GPU." -ForegroundColor Yellow
 }

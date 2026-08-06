@@ -2,6 +2,34 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.11.1 - 2026-08-06
+
+Hotfix: `install.cmd` died at the model step with "The term 'if' is not recognized". Reported from a
+real install on the target machine.
+
+### Fixed
+- **`sync-models.ps1` used `if` where PowerShell expects an expression.** The BORDERLINE warning built
+  its message with `$((if($mf.assumeVramGb){...}else{16}))`. A `$( )` subexpression accepts statements,
+  but the extra INNER parens make it an expression context, where `if` is read as a command name. The
+  budget is now resolved once, before the loop. Shipped in 0.9.9 with the KV-cache work.
+- Same family, two more sites (`sync-models.ps1`, `dad-doctor.ps1`): `$x = if (c) { a }` with `elseif`
+  on the NEXT line. PowerShell ends the assignment at the closing brace and reads the next line as a
+  command -> "the term 'elseif' is not recognized". Rewritten as plain statements.
+
+### Why the suite missed it
+Both shapes are **valid syntax** - `[Parser]::ParseFile` reports zero errors - so "all .ps1 parse" was
+never going to catch them. They fail only when the line executes. And the line never executed here:
+`sync-models -Report` exits immediately on a machine with no ollama, so the existing test passed without
+running one line of the report. A test that passes for the wrong reason.
+
+### Tests
+69 cases (was 66). Three new:
+- **`sync-models -Report` run END TO END against a stub `ollama.cmd`** on PATH, asserting exit 0, no
+  "is not recognized" anywhere in the output, the fit table rendering, and **the BORDERLINE branch
+  actually firing** - the branch that carried the bug.
+- A static check for both shapes of `if`-in-expression-position across every `.ps1`.
+- The fit classification exercised directly against `models.json`, asserting the thresholds separate
+  models into more than one bucket and that something lands on BORDERLINE.
 ## 0.11.0 - 2026-08-06
 
 **AD is now DAD - Design Document Aligned Development.** The old expansion ("AI Design-Doc-Driven
