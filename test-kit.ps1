@@ -494,6 +494,37 @@ Test-Case "the VRAM fit math runs and classifies correctly (no ollama needed)" {
   Assert ($seen.ContainsKey("BORDERLINE")) "nothing is BORDERLINE - the warning path is untested"
 }
 
+Test-Case "the stop-guard path check does not flag a healthy install" {
+  # A kit installed at D:\...\DAD-kit\ is CORRECT, but its path contains the substring the check used
+  # to look for, so a clean install reported "still points at the dev placeholder". Verify the rule
+  # against all three cases. dad-doctor reads the real %USERPROFILE% settings, so exercise the rule
+  # here rather than mutating the developer's own install.
+  $rule = {
+    param($stopCmd, $kitDir)
+    $expected = Join-Path $kitDir "dad-guard.ps1"
+    $placeholder = 'C:\Projects\Claude\MCP\DAD-kit\dad-guard.ps1'
+    if ($stopCmd -like "*$expected*") { "OK" }
+    elseif ($stopCmd -like "*$placeholder*") { "PLACEHOLDER" }
+    else { "ELSEWHERE" }
+  }
+  # A REAL directory, named DAD-kit - the shape that broke. (Join-Path throws on a drive that does not
+  # exist, so a made-up D:\ path would leave $expected null and -like "**" would match anything.)
+  $sb = New-Sandbox
+  try {
+    $installed = Join-Path $sb "DAD-kit"; New-Item -ItemType Directory -Force $installed | Out-Null
+    Assert ((& $rule "powershell -File `"$installed\dad-guard.ps1`"" $installed) -eq "OK") `
+      "a correctly installed kit whose folder is named DAD-kit was flagged"
+    Assert ((& $rule 'powershell -File "C:\Projects\Claude\MCP\DAD-kit\dad-guard.ps1"' $installed) -eq "PLACEHOLDER") `
+      "an un-rewritten placeholder path was not detected"
+    Assert ((& $rule "powershell -File `"$sb\other\dad-guard.ps1`"" $installed) -eq "ELSEWHERE") `
+      "a hook pointing at a different kit copy was not detected"
+  } finally { Remove-Sandbox $sb }
+  # and the shipped script must use the resolved path, not the old substring
+  $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
+  Assert ($doc -match 'expectedGuard') "dad-doctor is not comparing against the resolved kit path"
+  Assert ($doc -notmatch "'DAD-kit\\\\dad-guard'") "dad-doctor still uses the substring match that flagged healthy installs"
+}
+
 Test-Case "dad-doctor runs and reports (exit code reflects failures only)" {
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") | Out-Null
   Assert (($LASTEXITCODE -eq 0) -or ($LASTEXITCODE -eq 1)) "unexpected exit $LASTEXITCODE"

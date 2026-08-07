@@ -214,9 +214,19 @@ if (-not (Test-Path $settings)) {
     $stopCmd = ""
     try { $stopCmd = ($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) -join " " } catch { }
     if ($stopCmd -match 'dad-guard') {
-      if ($stopCmd -match 'DAD-kit\\dad-guard') {
-        Say "WARN" "stop guard" "wired, but still points at the dev placeholder path" "re-run install.cmd from the kit's real location"
-      } else { Say "OK" "stop guard" "dad-guard.ps1 wired as a Stop hook" }
+      # Compare against THIS kit's real path, the way the .mcp.json check does. Matching on the
+      # substring 'DAD-kit\dad-guard' was wrong: a correctly installed kit whose folder is simply
+      # NAMED DAD-kit contains that substring too, so a healthy install got reported as broken.
+      $expectedGuard = Join-Path $kit "dad-guard.ps1"
+      $devPlaceholder = 'C:\Projects\Claude\MCP\DAD-kit\dad-guard.ps1'
+      if ($stopCmd -like "*$expectedGuard*") {
+        Say "OK" "stop guard" "dad-guard.ps1 wired as a Stop hook"
+      } elseif ($stopCmd -like "*$devPlaceholder*") {
+        Say "WARN" "stop guard" "still points at the dev placeholder path" "re-run install.cmd from the kit's real location"
+      } else {
+        Say "WARN" "stop guard" "points at another copy of the kit, not $expectedGuard" `
+            "re-run install.cmd from the folder you actually want to use"
+      }
     } else {
       Say "FAIL" "stop guard" "no Stop hook - nothing stops a turn ending on unverified code" `
           "re-run install.cmd, then RESTART Claude Code (hooks load at startup)"

@@ -2,6 +2,23 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.11.2 - 2026-08-06
+
+Hotfix: `dad-doctor` reported a WARN on a perfectly good install.
+
+### Fixed
+- **The stop-guard path check flagged healthy installs.** It looked for the substring
+  `DAD-kit\dad-guard` to detect an un-rewritten dev placeholder - but a kit correctly installed to
+  `D:\projects\Claude\MCP\DAD-kit\` contains that substring too, because the folder is simply NAMED
+  DAD-kit. It now compares against this kit's resolved path, the way the `.mcp.json` check already did,
+  and distinguishes three cases: wired here (OK), still on the placeholder (WARN), or pointing at a
+  different copy of the kit (WARN, naming the expected path).
+
+### Tests
+70 cases (was 69). The rule is exercised against all three cases using a REAL directory named
+`DAD-kit` - a made-up `D:\...` path would not do, because `Join-Path` THROWS on a drive that does not
+exist, leaving the comparison null and `-like "**"` matching everything. That is how the first version
+of this test passed the healthy case for the wrong reason.
 ## 0.11.1 - 2026-08-06
 
 Hotfix: `install.cmd` died at the model step with "The term 'if' is not recognized". Reported from a
