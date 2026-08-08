@@ -2,6 +2,29 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.12.1 - 2026-08-08
+
+Two defects a `dad-doctor -ProjectDir` run surfaced. The first is the more serious: it means every
+existing project has been silently pointing at a kit folder that may no longer exist.
+
+### Fixed
+- **Nothing repointed a PROJECT's `.mcp.json` when the kit moved.** `install.ps1` rewrites only the
+  `.mcp.json` files inside the kit folder; `upgrade-project` never touched one at all. So moving or
+  renaming the kit left every existing project launching `local-tools.exe` from the old path - and it
+  fails SILENTLY, because a dead MCP server just looks like "no `search_datasheets` today". A real
+  project was still pointing into the pre-rename kit folder. `upgrade-project` now repoints it (via
+  parse/serialize, no BOM), keeping the project's own `LOCALTOOLS_DOCS_DIR` - only the binary moves.
+- **`dad-doctor` sent you in a circle.** Its fix hint for a stale `.mcp.json` was "re-run install.cmd",
+  which cannot fix a project file. It now names `upgrade-project.cmd`, and says why.
+- **`dad-doctor` still handed out a bare `close-unit.cmd`** - the same unresolvable-command defect fixed
+  in the guard one release ago, living on in a second file. It now prints the full `powershell -File`
+  form with `-ProjectDir`.
+
+### Tests
+75 cases (was 73). `upgrade-project` repointing a stale exe path while preserving the docs dir and
+writing no BOM; and an assertion that `dad-doctor`'s hints name commands that can actually fix the thing
+they are attached to - a fix hint that does not fix is worse than none, because it costs a round trip
+before you stop believing it.
 ## 0.12.0 - 2026-08-07
 
 Everything here comes from one graded run (mediamotor_iiif, run003) - the first in which the stop guard

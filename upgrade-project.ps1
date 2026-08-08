@@ -49,6 +49,28 @@ if ((Test-Path $oldRecipes) -and -not (Test-Path $newRecipes)) {
   Write-Host "  migrated docs\COMMANDS.md -> docs\RECIPES.md (entries preserved)" -ForegroundColor Green
 }
 
+# --- 0b) Repoint .mcp.json at THIS kit ---------------------------------------------------------
+# install.ps1 only rewrites the .mcp.json files inside the kit folder; nothing rewrote a PROJECT's.
+# So moving or renaming the kit left every existing project launching local-tools.exe from a path that
+# may no longer exist - silently, because a dead MCP server just means no search_datasheets. Observed
+# after the rename: a project still pointed at the old kit folder while the kit had moved. DAD-RENAME-OK
+# Parse/serialize, never string-replace: JSON doubles backslashes.
+$mcpPath = Join-Path $proj ".mcp.json"
+if (Test-Path $mcpPath) {
+  try {
+    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    $j = Get-Content $mcpPath -Raw | ConvertFrom-Json
+    $cur = $j.mcpServers.'local-tools'.command
+    if ($cur -ne $exe) {
+      $j.mcpServers.'local-tools'.command = $exe
+      # The corpus stays the PROJECT's own docs - only the server binary moves.
+      [System.IO.File]::WriteAllText($mcpPath, ($j | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+      Write-Host "  .mcp.json repointed at this kit's local-tools.exe" -ForegroundColor Green
+      Write-Host "    was: $cur" -ForegroundColor DarkGray
+    }
+  } catch { Write-Host "  could not repoint .mcp.json: $($_.Exception.Message)" -ForegroundColor Yellow }
+}
+
 # --- 1) Missing docs from templates (never overwrite existing) ---
 foreach ($doc in @("STATUS.md","RECIPES.md")) {
   $dst = Join-Path $proj "docs\$doc"

@@ -726,6 +726,41 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "upgrade-project repoints a project's .mcp.json at THIS kit" {
+  # Nothing used to do this. install.ps1 rewrites only the .mcp.json files inside the KIT folder, so
+  # moving or renaming the kit left every existing project launching local-tools.exe from a path that
+  # might not exist - silently, because a dead MCP server just looks like "no search_datasheets".
+  # Observed for real: a project still pointed at the pre-rename kit folder. DAD-RENAME-OK
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    $stale = 'D:\somewhere\OLD-kit\local-tools\bin\Release\net8.0\local-tools.exe'
+    $mcp = @{ mcpServers = @{ 'local-tools' = @{
+      command = $stale; args = @(); env = @{ LOCALTOOLS_DOCS_DIR = "$p\docs" } } } } | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText("$p\.mcp.json", $mcp, (New-Object System.Text.UTF8Encoding($false)))
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") $p 2>$null | Out-Null
+    $j = Get-Content "$p\.mcp.json" -Raw | ConvertFrom-Json
+    Assert ($j.mcpServers.'local-tools'.command -ne $stale) ".mcp.json still points at the old kit"
+    Assert ($j.mcpServers.'local-tools'.command -like "$kit*") "exe path was not repointed at this kit: $($j.mcpServers.'local-tools'.command)"
+    # the corpus is the PROJECT's - only the binary moves
+    Assert ($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -like "$p*") "the project's docs dir was clobbered"
+    # no BOM: Node reads this file
+    $bytes = [System.IO.File]::ReadAllBytes("$p\.mcp.json")
+    Assert (-not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB)) ".mcp.json was written with a BOM"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-doctor's fix hints name commands that actually fix the thing" {
+  $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
+  # install.cmd does NOT touch a project's .mcp.json - suggesting it sent you in a circle.
+  Assert ($doc -notmatch '\.mcp\.json.*re-run install\.cmd') "the .mcp.json hint still points at install.cmd, which cannot fix it"
+  Assert ($doc -match 'upgrade-project\.cmd.*\.mcp\.json|\.mcp\.json.*upgrade-project\.cmd') "the .mcp.json hint does not name upgrade-project"
+  # and the same bare-command defect the guard had must not live on here
+  Assert ($doc -notmatch 'close-unit\.cmd -Id <id>') "dad-doctor still hands out bare close-unit.cmd (not on PATH)"
+}
+
 Test-Case "upgrade-project migrates a pre-rename project's markers" {   # DAD-RENAME-OK
   $sb = New-Sandbox
   try {

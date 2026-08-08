@@ -273,7 +273,7 @@ if ($ProjectDir) {
         $j = Get-Content $mcp -Raw | ConvertFrom-Json
         $cmd = $j.mcpServers.'local-tools'.command
         if ($cmd -eq $exe) { Say "OK" ".mcp.json" "points at this kit's exe" }
-        else { Say "WARN" ".mcp.json" "exe path is '$cmd'" "re-run install.cmd (it rewrites paths)" }
+        else { Say "WARN" ".mcp.json" "exe path is '$cmd' - not this kit" "upgrade-project.cmd `"$p`"   (install.cmd only fixes the kit's OWN .mcp.json, never a project's)" }
         $dd = $j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
         if ($dd -and (Test-Path $dd)) { Say "OK" "docs dir" $dd } else { Say "WARN" "docs dir" "'$dd' not found" }
         if ($dd -and (Test-Path (Join-Path $dd ".index\chunks.json"))) { Say "OK" "RAG index" "built" }
@@ -318,7 +318,7 @@ if ($ProjectDir) {
       if ($LASTEXITCODE -eq 0) { Say "OK" "stop guard state" "no unverified code changes" }
       else {
         Say "WARN" "stop guard state" "uncommitted code that nothing has built or tested" `
-            "close-unit.cmd -Id <id> -Title `"...`" in that project, or dad-guard.cmd -Ack to accept it"
+            "powershell -File `"$kit\close-unit.ps1`" -Id <id> -Title `"...`" -ProjectDir `"$p`"   (or dad-guard.ps1 -Ack)"
       }
     }
   }
