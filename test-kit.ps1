@@ -726,6 +726,48 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "a stale pre-commit hook is REPAIRED, not reported healthy" {
+  # The worst failure yet, because it fails CLOSED: a hook naming a scanner in a moved/renamed kit
+  # aborts every commit in the project. install-hooks saw the string "scan-secrets.ps1" and returned
+  # "already installed" without checking the path resolved - so upgrade-project never fixed it, and
+  # dad-doctor reported [OK]. Three things agreed the project was fine while no commit could be made.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force $p | Out-Null
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # a hook from a kit that no longer lives there
+    $hookPath = Join-Path $p ".git\hooks\pre-commit"
+    New-Item -ItemType Directory -Force (Split-Path $hookPath) | Out-Null
+    $stale = "#!/bin/sh`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"D:\gone\OLD-kit\scan-secrets.ps1`" -Staged -Quiet`n"
+    [System.IO.File]::WriteAllText($hookPath, $stale, (New-Object System.Text.UTF8Encoding($false)))
+
+    # NO -Force: repair must happen on the ordinary path, because that is what upgrade-project calls
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install-hooks.ps1") -ProjectDir $p | Out-Null
+    $now = Get-Content $hookPath -Raw
+    Assert ($now -notmatch 'OLD-kit') "the stale hook was left pointing at a missing scanner"
+    Assert ($now -match [regex]::Escape((Join-Path $kit "scan-secrets.ps1"))) "the hook was not repointed at this kit"
+
+    # a HEALTHY hook must be left alone (no needless rewrites)
+    $before = Get-Content $hookPath -Raw
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install-hooks.ps1") -ProjectDir $p | Out-Null
+    Assert ((Get-Content $hookPath -Raw) -eq $before) "a healthy hook was rewritten"
+
+    # and a FOREIGN hook is still never hijacked
+    [System.IO.File]::WriteAllText($hookPath, "#!/bin/sh`necho mine`n", (New-Object System.Text.UTF8Encoding($false)))
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install-hooks.ps1") -ProjectDir $p | Out-Null
+    Assert ((Get-Content $hookPath -Raw) -match 'echo mine') "a foreign pre-commit hook was overwritten"
+
+    # dad-doctor must call a broken hook a FAILURE, not an OK
+    $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
+    Assert ($doc -match 'points at a MISSING scanner') "dad-doctor still reports any pre-commit file as healthy"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "upgrade-project repoints a project's .mcp.json at THIS kit" {
   # Nothing used to do this. install.ps1 rewrites only the .mcp.json files inside the KIT folder, so
   # moving or renaming the kit left every existing project launching local-tools.exe from a path that

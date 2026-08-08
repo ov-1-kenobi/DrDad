@@ -39,12 +39,24 @@ if ($foreign.Count -gt 0) {
 if ((Test-Path $hookPath) -and -not $Force) {
   $existing = Get-Content $hookPath -Raw
   if ($existing -match 'scan-secrets\.ps1') {
-    Write-Host "  hooks: pre-commit already installed" -ForegroundColor Green
+    # It is ours - but does the scanner it names still EXIST? A hook left pointing at a moved or renamed
+    # kit fails CLOSED: every commit in the project aborts with "secret scan failed", and this branch
+    # reported that as "already installed". upgrade-project calls us, so nothing ever repaired it.
+    $refPath = $null
+    $m = [regex]::Match($existing, '-File\s+"([^"]*scan-secrets\.ps1)"')
+    if ($m.Success) { $refPath = $m.Groups[1].Value }
+    if ($refPath -and (Test-Path -LiteralPath $refPath)) {
+      Write-Host "  hooks: pre-commit already installed" -ForegroundColor Green
+      return
+    }
+    Write-Host "  hooks: pre-commit pointed at a missing scanner - repointing at this kit" -ForegroundColor Yellow
+    if ($refPath) { Write-Host "         was: $refPath" -ForegroundColor DarkGray }
+    # fall through and rewrite
+  } else {
+    Write-Host "  hooks: a different pre-commit hook exists - leaving it alone (re-run with -Force to replace)" -ForegroundColor Yellow
+    Write-Host "         to keep both, add to your hook: powershell -File `"$scannerPath`" -Staged" -ForegroundColor Yellow
     return
   }
-  Write-Host "  hooks: a different pre-commit hook exists - leaving it alone (re-run with -Force to replace)" -ForegroundColor Yellow
-  Write-Host "         to keep both, add to your hook: powershell -File `"$scannerPath`" -Staged" -ForegroundColor Yellow
-  return
 }
 
 # git for Windows runs hooks with sh, so this is a POSIX script that shells out to PowerShell.

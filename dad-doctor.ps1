@@ -288,7 +288,19 @@ if ($ProjectDir) {
     }
     if (Test-Path (Join-Path $p ".git")) {
       Say "OK" "git repo" "present (checkpoints + recover available)"
-      if (Test-Path (Join-Path $p ".git\hooks\pre-commit")) { Say "OK" "pre-commit hook" "secret scan installed" }
+      $hp = Join-Path $p ".git\hooks\pre-commit"
+      if (Test-Path $hp) {
+        # Presence is not health. A hook naming a scanner that no longer exists fails CLOSED - every
+        # commit in the project aborts - and this used to report it as OK.
+        $hookTxt = Get-Content $hp -Raw
+        $ref = [regex]::Match($hookTxt, '-File\s+"([^"]*scan-secrets\.ps1)"')
+        if (-not $ref.Success) { Say "OK" "pre-commit hook" "present (not this kit's secret scan)" }
+        elseif (Test-Path -LiteralPath $ref.Groups[1].Value) { Say "OK" "pre-commit hook" "secret scan installed" }
+        else {
+          Say "FAIL" "pre-commit hook" "points at a MISSING scanner - every commit here is blocked" `
+              "powershell -File `"$kit\install-hooks.ps1`" -ProjectDir `"$p`" -Force"
+        }
+      }
       else { Say "WARN" "pre-commit hook" "missing" "install-hooks.ps1 -ProjectDir `"$p`"" }
     } else { Say "FAIL" "git repo" "none - a mangled file cannot be recovered" "upgrade-project.cmd `"$p`"" }
 

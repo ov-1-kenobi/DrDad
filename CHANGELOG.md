@@ -2,6 +2,31 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.12.2 - 2026-08-08
+
+The third and worst instance of one bug: something in a project points at the kit by absolute path, the
+kit moves, and nothing repairs it. This one FAILS CLOSED - it blocked every commit in the project.
+
+### Fixed
+- **A stale `pre-commit` hook was reported healthy instead of repaired.** `install-hooks.ps1` saw the
+  string `scan-secrets.ps1` in the existing hook and returned "already installed" WITHOUT checking that
+  the path still resolved. So a hook naming a moved or renamed kit aborted every commit with
+  "pre-commit: secret scan failed" - while `upgrade-project` (which calls install-hooks) left it alone
+  and `dad-doctor` printed `[OK] pre-commit hook`. Three things agreed the project was fine while no
+  commit could be made. It now parses the scanner path out of the hook, and rewrites it when it does not
+  exist - on the ordinary path, no `-Force` needed, because `upgrade-project` is what has to fix it.
+  A healthy hook is still left byte-identical, and a foreign hook is still never hijacked.
+- **`dad-doctor` now validates the hook rather than its presence** - a missing scanner is a FAIL with the
+  repair command, not an OK.
+
+### Note
+Three releases have now fixed the same shape of defect: `.mcp.json` (0.12.1), the guard's printed
+commands (0.12.0), and the pre-commit hook (here). Anything in a PROJECT that names the kit by absolute
+path needs an owner that re-resolves it, and `upgrade-project` is that owner.
+
+### Tests
+76 cases (was 75): a hook pointing at a vanished kit is repaired without `-Force`, a healthy hook is not
+rewritten, a foreign hook is still untouched, and `dad-doctor` calls a broken hook a failure.
 ## 0.12.1 - 2026-08-08
 
 Two defects a `dad-doctor -ProjectDir` run surfaced. The first is the more serious: it means every
