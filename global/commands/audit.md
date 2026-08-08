@@ -2,6 +2,15 @@
 description: Audit cross-document consistency (DESIGN/STORIES/TASKS/grades/index) via the librarian-agent, then route each finding to its owner agent on your OK. Also triages git recovery for a mangled file.
 argument-hint: [empty = full audit | status = refresh docs/STATUS.md | recover <file> = git triage]
 ---
+**FIRST, before spawning anything, generate the real counts:**
+```
+powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -UpdateStatus
+```
+That writes the `## Snapshot` block of `docs/STATUS.md` deterministically and prints the numbers. Use
+them verbatim from here on. A real audit once reported "STATUS.md refreshed with current progress
+metrics" without ever running this - the dashboard said 1/1 stories on a project with 14. The librarian
+owns the PROSE sections of STATUS; it does not compute counts and must not overwrite the Snapshot block.
+
 Run the **librarian-agent** to keep the document set honest. Spawn it via the **Task tool**
 (subagent_type: "librarian-agent") - it is an AGENT, not a skill; calling the Skill tool with an agent
 name fails with "Unknown skill".

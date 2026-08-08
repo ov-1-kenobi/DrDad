@@ -2,6 +2,48 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.12.0 - 2026-08-07
+
+Everything here comes from one graded run (mediamotor_iiif, run003) - the first in which the stop guard
+met a live local model. **It worked.** The guard blocked on turn one, and the model's next action was
+`dotnet build` followed by `dotnet test`. Against the previous run on the same project:
+
+| | run002 | run003 |
+|---|---|---|
+| shell calls | 0 | 163 |
+| `dotnet build` / `dotnet test` | 0 / 0 | 25 / 92 |
+| blind `Update` edits | 106 | 55 |
+| build result | 21 errors | 0 errors, 0 warnings |
+| tests actually run | 0 | 157 pass, 16 fail |
+
+Then it failed to land any of that work, for reasons this release fixes.
+
+### Fixed
+- **The guard named a command that could not be run.** Its message said `close-unit.cmd -Id ...`, but the
+  kit folder is not on PATH on a target machine. The run was blocked, went looking for the script,
+  could not find it, and ended with 36 verified-but-uncommitted files. It now emits the full
+  `powershell -File "<kit>\close-unit.ps1" ...` form, resolved from `$PSScriptRoot` - always correct,
+  even if `install` was never re-run. A gate that demands an action has to name it exactly.
+- **The guard was blind to new source FOLDERS.** `git status --porcelain` collapses an untracked
+  directory to a single `?? src/` entry, which has no file extension and so slipped through the
+  code-file filter. A session that created a new source tree registered as "no uncommitted code
+  changes". Now uses `-uall`.
+- **The guard blamed the session for inherited dirt.** It fired on turn one over 35 files left by the
+  PREVIOUS session, with "this is exactly how a run produces thousands of unverified edits" - an
+  accusation about work it had not done. It now compares file mtimes against the session start (taken
+  from the transcript the harness passes on stdin), blocks only on what THIS session changed, and
+  reports the rest as context. A guard that opens by crying wolf is one everybody learns to scroll past.
+- **The librarian reported counts it never computed.** The audit said "STATUS.md has been refreshed with
+  current progress metrics" without once running `doc-stats`. Telling an agent to run a script is not a
+  gate. `doc-stats.ps1 -UpdateStatus` now GENERATES the `## Snapshot` block of `docs/STATUS.md`
+  (idempotently, preserving the librarian's prose sections), and `/audit` runs it BEFORE spawning the
+  librarian. The model no longer owns any number it could estimate instead.
+
+### Tests
+73 cases (was 70). Four new, each reproducing a defect above from the shape that caused it: code hidden
+inside an untracked directory; a hook payload whose transcript post-dates the dirty files; the emitted
+command text containing a resolvable path; and `-UpdateStatus` producing correct counts, keeping the
+prose, and not stacking a second Snapshot on every audit.
 ## 0.11.2 - 2026-08-06
 
 Hotfix: `dad-doctor` reported a WARN on a perfectly good install.

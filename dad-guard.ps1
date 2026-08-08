@@ -51,8 +51,9 @@ function Block($reason) {
 
 # --- locate the project ---------------------------------------------------------------------------
 $proj = $ProjectDir
+$sessionStart = $null
 if (-not $Check -and -not $Ack) {
-  # Hook mode: the harness pipes {session_id, cwd, stop_hook_active, ...} on stdin.
+  # Hook mode: the harness pipes {session_id, cwd, transcript_path, stop_hook_active, ...} on stdin.
   $raw = ""
   try { $raw = [Console]::In.ReadToEnd() } catch { }
   if ($raw) {
@@ -61,6 +62,13 @@ if (-not $Check -and -not $Ack) {
       # The retry pass. Allow it, or the model can never finish. One nag per stop is the whole design.
       if ($hook.stop_hook_active) { exit 0 }
       if ($hook.cwd) { $proj = $hook.cwd }
+      # When this session began. Used to separate what THIS run changed from what it walked into.
+      # On a project that was already dirty, blaming the session for inherited mess made the guard
+      # fire on turn one with "this is exactly how a run produces thousands of unverified edits" -
+      # an accusation about work it had not done, which is how a guard becomes background noise.
+      if ($hook.transcript_path -and (Test-Path -LiteralPath $hook.transcript_path)) {
+        $sessionStart = (Get-Item -LiteralPath $hook.transcript_path).CreationTimeUtc
+      }
     } catch { }
   }
 }
@@ -94,7 +102,10 @@ $ErrorActionPreference = "Continue"
 $porcelain = @()
 try {
   Push-Location $proj
-  $porcelain = @(git status --porcelain)
+  # -uall, NOT the default: git COLLAPSES an untracked directory to a single "?? src/" entry, which has
+  # no file extension and so slipped straight through the code-file filter. A session that created a new
+  # source folder was invisible to this guard - the exact case it exists to catch.
+  $porcelain = @(git status --porcelain -uall)
   if ($LASTEXITCODE -ne 0) { $porcelain = @() }
 } catch { $porcelain = @() } finally { Pop-Location; $ErrorActionPreference = $prevEap }
 
@@ -129,20 +140,43 @@ if (Test-Path $stampPath) {
   if ((Get-Item $stampPath).LastWriteTimeUtc -ge $newestEdit) { Allow "verified since the last code edit" }
 }
 
-$show = ($changed | Select-Object -First 6) -join ", "
-$more = if ($changed.Count -gt 6) { " (+$($changed.Count - 6) more)" } else { "" }
-Block @"
-DAD-kit stop guard: $($changed.Count) code file(s) are changed and UNVERIFIED - $show$more
+# --- whose mess is it? ----------------------------------------------------------------------------
+# Only block on what THIS session touched. Inherited dirt is reported as context, never as the charge.
+$mine = $changed
+$inherited = @()
+if ($sessionStart) {
+  $mine = @(); $inherited = @()
+  foreach ($c in $changed) {
+    $f = Join-Path $proj $c
+    $mtime = if (Test-Path -LiteralPath $f) { (Get-Item -LiteralPath $f).LastWriteTimeUtc } else { [DateTime]::UtcNow }
+    if ($mtime -ge $sessionStart) { $mine += $c } else { $inherited += $c }
+  }
+  if ($mine.Count -eq 0) {
+    Allow "this session changed no code ($($inherited.Count) file(s) were already dirty on arrival)"
+  }
+}
 
-Nothing has built or tested this. Do not end the turn here; this is exactly how a run produces
-thousands of lines of edits that were never compiled. Do ONE of these now:
+# Commands the model can actually RUN. The first version printed bare `close-unit.cmd`, which is not on
+# PATH on a target machine: a real run was blocked, went looking for the script, could not find it, and
+# ended with 36 verified-but-uncommitted files. A gate that demands an action must name it exactly.
+$kitDir = $PSScriptRoot
+$closeCmd = "powershell -ExecutionPolicy Bypass -File `"$kitDir\close-unit.ps1`" -Id <task id> -Title `"<short title>`""
+$ackCmd   = "powershell -ExecutionPolicy Bypass -File `"$kitDir\dad-guard.ps1`" -Ack"
+
+$show = ($mine | Select-Object -First 6) -join ", "
+$more = if ($mine.Count -gt 6) { " (+$($mine.Count - 6) more)" } else { "" }
+$context = if ($inherited.Count) { "`n($($inherited.Count) other file(s) were already uncommitted when this session started - not yours to answer for, but they still need closing eventually.)`n" } else { "" }
+Block @"
+DAD-kit stop guard: this session changed $($mine.Count) code file(s) and nothing has verified them - $show$more
+$context
+Do not end the turn here. Do ONE of these now:
 
   1. Close the unit properly (builds, runs tests, commits, verifies):
-       close-unit.cmd -Id <task id> -Title "<short title>"
+       $closeCmd
   2. If you are mid-unit and just need to see where you stand, RUN THE BUILD AND TESTS from
      CLAUDE.md's "## Build / test" block and report the real output - not a prediction of it.
   3. If this edit is genuinely not meant to be verified (spike, scratch, docs-adjacent):
-       dad-guard.cmd -Ack
+       $ackCmd
 
 Reasoning about whether the tests would pass is not running them.
 "@

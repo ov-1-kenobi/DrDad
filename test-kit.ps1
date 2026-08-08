@@ -751,6 +751,109 @@ Test-Case "upgrade-project migrates a pre-rename project's markers" {   # DAD-RE
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "the guard names commands that can actually be RUN" {
+  # Observed: the guard blocked, the model went looking for `close-unit.cmd`, could not find it (the kit
+  # folder is not on PATH on a target machine), and the session ended with 36 verified-but-uncommitted
+  # files. A gate that demands an action has to name it exactly, with a resolvable path.
+  $g = Get-Content (Join-Path $kit "dad-guard.ps1") -Raw
+  Assert ($g -match '\$kitDir\s*=\s*\$PSScriptRoot') "the guard does not resolve its own kit folder"
+  Assert ($g -match '\$closeCmd' -and $g -match 'close-unit\.ps1') "the guard does not name close-unit.ps1 by path"
+  # the bare form must be gone from the message it emits
+  Assert ($g -notmatch '(?m)^\s+close-unit\.cmd -Id') "the guard still prints bare close-unit.cmd (not on PATH)"
+  Assert ($g -notmatch '(?m)^\s+dad-guard\.cmd -Ack') "the guard still prints bare dad-guard.cmd (not on PATH)"
+
+  # prove the emitted text really contains a runnable path
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    New-Item -ItemType Directory -Force "$p\src" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    # An UNTRACKED directory: git reports it as "?? src/" unless you pass -uall, and that bare directory
+    # name has no code extension. This is the shape that slipped through - a whole new source folder.
+    "public class X { }" | Set-Content "$p\src\X.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-guard.ps1") -Check -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "guard missed code inside an untracked directory (needs git status -uall)"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "the guard blames only THIS session, not inherited dirt" {
+  # It fired on turn one of a real run over 35 files left by the PREVIOUS session, with "this is exactly
+  # how a run produces thousands of unverified edits" - an accusation about work it had not done. A guard
+  # that opens by crying wolf is one everybody learns to scroll past.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    New-Item -ItemType Directory -Force "$p\src" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # dirt from a PREVIOUS session
+    "public class Old { }" | Set-Content "$p\src\Old.cs" -Encoding UTF8
+    Start-Sleep -Milliseconds 1100
+    # a transcript created AFTER that edit == this session started later
+    $tr = Join-Path $sb "transcript.jsonl"; "{}" | Set-Content $tr -Encoding UTF8
+
+    $hook = @{ cwd = $p; transcript_path = $tr; stop_hook_active = $false } | ConvertTo-Json -Compress
+    $hook | & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-guard.ps1") | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the guard blocked a session for dirt it inherited"
+
+    # now THIS session touches code -> it must block, and say so
+    Start-Sleep -Milliseconds 1100
+    "public class New { }" | Set-Content "$p\src\New.cs" -Encoding UTF8
+    $out = ($hook | & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-guard.ps1") 2>&1) | Out-String
+    Assert ($LASTEXITCODE -eq 2) "the guard did not block on code THIS session changed"
+    Assert ($out -match 'New\.cs') "the block did not name the file this session changed"
+    Assert ($out -match 'already uncommitted when this session started') "inherited files were not reported as context"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "doc-stats -UpdateStatus writes the Snapshot; the model never counts" {
+  # A real audit claimed "STATUS.md refreshed with current progress metrics" having never run doc-stats.
+  # Prose telling an agent to run a script is not a gate. The counts are generated now.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: DONE -->`n`n### Story S2: Two   <!-- Status: TODO -->" |
+      Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Task map`n`n## Tasks`n`n### [x] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T2.1 - b   (Story S2)`n- **Goal:** y" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    Copy-Item (Join-Path $kit "templates\_common\docs\STATUS.md") "$p\docs\STATUS.md"
+    "- <YYYY-MM-DD> stale hand-written blocker" | Add-Content "$p\docs\STATUS.md"
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -UpdateStatus | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-UpdateStatus exited $LASTEXITCODE"
+    $s = Get-Content "$p\docs\STATUS.md" -Raw
+    Assert ($s -match 'Stories: 1/2') "Snapshot has the wrong story count:`n$s"
+    Assert ($s -match 'Tasks: 1/2')   "Snapshot has the wrong task count:`n$s"
+    Assert ($s -match 'NEXT: T2\.1')  "Snapshot does not name the next ready task:`n$s"
+    Assert ($s -match 'do not hand-edit') "Snapshot is not marked as generated"
+    # the librarian's own sections must survive
+    Assert ($s -match 'Issues & blockers') "-UpdateStatus destroyed the prose sections"
+    Assert ($s -match 'stale hand-written blocker') "-UpdateStatus discarded librarian-owned content"
+    # and it must be idempotent - not stack a second Snapshot on every audit
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -UpdateStatus | Out-Null
+    $s2 = Get-Content "$p\docs\STATUS.md" -Raw
+    Assert (([regex]::Matches($s2, '## Snapshot')).Count -eq 1) "a second run stacked another Snapshot block"
+
+    # /audit and the librarian must both point at the generating flag
+    Assert ((Get-Content (Join-Path $kit "global\commands\audit.md") -Raw) -match 'doc-stats\.ps1" -UpdateStatus') `
+      "/audit does not generate the counts before spawning the librarian"
+    Assert ((Get-Content (Join-Path $kit "global\agents\librarian-agent.md") -Raw) -match '-UpdateStatus') `
+      "librarian-agent still computes its own counts"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-guard fails OPEN and cannot loop" {
   # A guard that blocks on its own bugs is worse than the problem. And a Stop hook that blocks its own
   # retry deadlocks the session - the harness sets stop_hook_active on that pass and we must let it go.
