@@ -72,13 +72,14 @@ if (Test-Path $mcpPath) {
 }
 
 # --- 1) Missing docs from templates (never overwrite existing) ---
-foreach ($doc in @("STATUS.md","RECIPES.md")) {
+foreach ($doc in @("STATUS.md","RECIPES.md","SOURCES.md")) {
   $dst = Join-Path $proj "docs\$doc"
   if (-not (Test-Path $dst)) {
     Copy-Item (Join-Path $templates "_common\docs\$doc") $dst
     Write-Host "  added docs\$doc" -ForegroundColor Green
   }
 }
+New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 
 # --- 2) Git safety net (same as scaffold) ---
 if (Get-Command git -ErrorAction SilentlyContinue) {

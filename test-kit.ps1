@@ -726,6 +726,105 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "the corpus spans MULTIPLE roots (and does not double-count)" {
+  # A research corpus can be large or shared between projects, so LOCALTOOLS_DOCS_DIR takes a ';'-separated
+  # list. The first root stays primary - it owns .index\ - and one index covers them all.
+  if ($SkipBuild) { return }
+  $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+  if (-not (Test-Path $exe)) { return }
+  $sb = New-Sandbox
+  try {
+    $a = Join-Path $sb "projdocs"; $b = Join-Path $sb "shared"
+    New-Item -ItemType Directory -Force $a, $b, (Join-Path $a "sources") | Out-Null
+    "# design" | Set-Content "$a\DESIGN.md" -Encoding UTF8
+    "# captured" | Set-Content "$a\sources\S001-thing.md" -Encoding UTF8
+    "# elsewhere" | Set-Content "$b\finding.md" -Encoding UTF8
+
+    $two = (& $exe --corpus "$a;$b" | Out-String)
+    Assert ($two -match '2 root\(s\), 3 indexable file\(s\)') "two roots did not yield 3 files:`n$two"
+    Assert ($two -match 'S001-thing\.md') "docs\sources\ content was not indexed"
+    # tail, not full path: $env:TEMP resolves to an 8.3 short name in some shells and a long one in others
+    Assert ($two -match 'projdocs\\\.index\\chunks\.json') "the index did not stay on the PRIMARY root:`n$two"
+
+    # a root nested inside another must not be walked twice
+    $nested = (& $exe --corpus "$sb;$a;$b" | Out-String)
+    Assert ($nested -match '1 root\(s\), 3 indexable file\(s\)') "nested roots double-counted:`n$nested"
+
+    # a missing root degrades the corpus, it does not break the server
+    $missing = (& $exe --corpus "$a;Q:\not\here;$b" | Out-String)
+    Assert ($missing -match 'MISSING - skipped') "a missing root was not reported"
+    Assert ($missing -match '3 indexable file\(s\)') "a missing root cost us the real files:`n$missing"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "source-stats gates citation integrity" {
+  # Research has no compiler. It DOES have something checkable: whether the design doc's claims trace to
+  # sources that exist and were actually assessed. Verifies traceability, not truth.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs\sources" | Out-Null
+    $script = Join-Path $kit "source-stats.ps1"
+
+    # a project with no ledger is not a research project - must pass, not nag
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "it failed a project that has no SOURCES.md"
+
+    $ledger = "# Sources`n`n| id | tier | fetched | title | url |`n|---|---|---|---|---|`n"
+    # S001: real, tiered, cited.  S002: in the ledger but its file is MISSING.
+    ($ledger + "| S001 | primary | 2026-08-01 | A standard | https://example.invalid/a |`n" +
+               "| S002 | primary | 2026-08-01 | Lost one | https://example.invalid/b |`n") |
+      Set-Content "$p\docs\SOURCES.md" -Encoding UTF8
+    "captured" | Set-Content "$p\docs\sources\S001-a-standard.md" -Encoding UTF8
+    # cites S001 (fine) and S003 (nothing behind it)
+    "# Design`n`nStatus: DRAFT`n`nThe thing is 14% [S001] and also [S003]." | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "it passed a doc citing a source that does not exist"
+    Assert ($out -match '\[S003\].*NO row') "an unbacked citation was not reported:`n$out"
+    Assert ($out -match 'S002 is in the ledger but') "a ledger row with no file was not reported:`n$out"
+
+    # fix both -> passes
+    "captured" | Set-Content "$p\docs\sources\S002-lost-one.md" -Encoding UTF8
+    "# Design`n`nStatus: DRAFT`n`nThe thing is 14% [S001]. Also [S002]." | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "it still failed after both problems were fixed"
+
+    # untiered sources are a WARN, never a silent pass - the human has to assess them
+    ($ledger + "| S001 | unknown | 2026-08-01 | A standard | https://example.invalid/a |`n") |
+      Set-Content "$p\docs\SOURCES.md" -Encoding UTF8
+    "# Design`n`nStatus: DRAFT`n`n14% [S001]." | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $out2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "an untiered source should warn, not fail"
+    Assert ($out2 -match 'no tier yet') "an untiered source was not flagged:`n$out2"
+    # and a hoarded source (captured, never cited) gets reported
+    "captured" | Set-Content "$p\docs\sources\S009-never-used.md" -Encoding UTF8
+    $out3 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $p 2>&1 | Out-String)
+    Assert ($out3 -match 'S009.*no ledger row') "an unrecorded source file was not reported:`n$out3"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "/research is wired, online, and owns only the corpus" {
+  $r = Get-Content (Join-Path $kit "global\commands\research.md") -Raw
+  Assert ($r -match 'research-agent') "/research does not spawn its agent"
+  Assert ($r -match 'Task tool') "/research does not name the Task tool"
+  Assert ($r -match 'source-stats\.ps1') "/research has no gate"
+  Assert ($r -match 'ONLINE') "/research does not flag that it is the online mode"
+  $a = Get-Content (Join-Path $kit "global\agents\research-agent.md") -Raw
+  Assert ($a -match 'web_search' -and $a -match 'ingest_url') "research-agent lacks the web tools"
+  # the human tiers sources - that judgement is the one thing no model should make here
+  Assert ($a -match 'unknown.*Always|Always.*unknown') "research-agent is not forced to leave tier unknown"
+  Assert ($a -match 'Never write to the design doc') "research-agent is not held to one-writer-per-doc"
+  Assert ($a -match 'credentials or personal data') "research-agent has no rule about capturing secrets/PII"
+  # doc-researcher must stay OFFLINE - two agents, two jobs
+  $d = Get-Content (Join-Path $kit "global\agents\doc-researcher.md") -Raw
+  Assert ($d -notmatch 'web_search') "doc-researcher gained web access - it is the offline corpus reader"
+  # scaffold lays the corpus down so /research has somewhere to write
+  Assert ((Get-Content (Join-Path $kit "new-project.ps1") -Raw) -match 'SOURCES\.md') "scaffold does not create SOURCES.md"
+  Assert ((Get-Content (Join-Path $kit "new-project.ps1") -Raw) -match 'docs\\sources') "scaffold does not create docs\sources\"
+  # and /design points back at it rather than inventing evidence
+  Assert ((Get-Content (Join-Path $kit "global\commands\design.md") -Raw) -match '/research') "/design never mentions /research"
+}
+
 Test-Case "close-unit REFUSES to bank new work under an already-closed id" {
   # A real run produced a commit titled "T8.1: Implement ObjectStore" whose diff was VariantProcessor.cs
   # (T7.1's work), because close-unit does `git add -A` and banks whatever is dirty under whatever id it

@@ -34,11 +34,34 @@ public static class Rag
 
     // Corpus location. Set LOCALTOOLS_DOCS_DIR in .mcp.json so you drop files in the SOURCE
     // folder, not the build output. Falls back to a datasheets/ folder next to the exe.
-    static readonly string DocsDir =
-        Environment.GetEnvironmentVariable("LOCALTOOLS_DOCS_DIR")
-        ?? Path.Combine(AppContext.BaseDirectory, "datasheets");
-    static readonly string IndexDir = Path.Combine(DocsDir, ".index");  // self-contained per project
-    static readonly string WebDir = Path.Combine(DocsDir, "web");
+    //
+    // MULTIPLE ROOTS: separate them with ';' - LOCALTOOLS_DOCS_DIR="C:\proj\docs;D:\shared\reference".
+    // The FIRST root is primary: it owns .index\ and is where ingest_url writes. One index spans them
+    // all, so a research corpus on another drive (or shared between projects) is searchable without
+    // copying it. Roots that do not exist are skipped rather than fatal - a missing shared drive should
+    // degrade the corpus, not break the server.
+    static readonly string[] DocsRoots = BuildRoots();
+    static string DocsDir => DocsRoots[0];                              // primary root
+    static readonly string IndexDir = Path.Combine(BuildRoots()[0], ".index");  // self-contained per project
+    static readonly string WebDir = Path.Combine(BuildRoots()[0], "web");
+
+    static string[] BuildRoots()
+    {
+        var raw = Environment.GetEnvironmentVariable("LOCALTOOLS_DOCS_DIR");
+        if (string.IsNullOrWhiteSpace(raw)) return new[] { Path.Combine(AppContext.BaseDirectory, "datasheets") };
+        var seen = new List<string>();
+        foreach (var part in raw.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string full;
+            try { full = Path.GetFullPath(part); } catch { continue; }
+            // Skip a root nested inside one we already have - it would index every file twice.
+            if (seen.Any(s => full.StartsWith(s.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                                              StringComparison.OrdinalIgnoreCase))) continue;
+            if (!seen.Any(s => s.Equals(full, StringComparison.OrdinalIgnoreCase))) seen.Add(full);
+        }
+        if (seen.Count == 0) seen.Add(Path.GetFullPath(raw.Split(';')[0]));   // keep the primary even if absent
+        return seen.ToArray();
+    }
     static string IndexFile => Path.Combine(IndexDir, "chunks.json");
     static string SigFile   => Path.Combine(IndexDir, "manifest.sig");  // corpus signature, for staleness
 
@@ -213,13 +236,44 @@ public static class Rag
         return Exts.Contains(e) || ImgExts.Contains(e) || AudExts.Contains(e);
     }
 
-    static List<string> CorpusFiles() =>
-        Directory.Exists(DocsDir)
-            ? Directory.EnumerateFiles(DocsDir, "*", SearchOption.AllDirectories)
-                .Where(f => IsCorpusExt(f)
-                            && !f.StartsWith(IndexDir, StringComparison.OrdinalIgnoreCase))  // never index our own index
-                .ToList()
-            : new List<string>();
+    /// <summary>What would be indexed, grouped by root. No embeddings needed - a pure enumeration probe,
+    /// so multi-root configuration can be checked (and tested) without Ollama running.</summary>
+    public static string DescribeCorpus()
+    {
+        var files = CorpusFiles();
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"{DocsRoots.Length} root(s), {files.Count} indexable file(s):");
+        foreach (var root in DocsRoots)
+        {
+            var mine = files.Where(f => f.StartsWith(root, StringComparison.OrdinalIgnoreCase)).ToList();
+            var state = Directory.Exists(root) ? "" : "  [MISSING - skipped]";
+            sb.AppendLine($"  {root}{state}  -> {mine.Count} file(s)");
+            foreach (var f in mine.Take(20)) sb.AppendLine("      " + Path.GetRelativePath(root, f));
+            if (mine.Count > 20) sb.AppendLine($"      ... +{mine.Count - 20} more");
+        }
+        sb.Append($"index: {IndexFile}");
+        return sb.ToString();
+    }
+
+    // Walks EVERY configured root. A root that has gone missing (unmounted drive, moved reference
+    // folder) contributes nothing instead of throwing - the rest of the corpus stays searchable.
+    static List<string> CorpusFiles()
+    {
+        var outp = new List<string>();
+        foreach (var root in DocsRoots)
+        {
+            if (!Directory.Exists(root)) continue;
+            try
+            {
+                outp.AddRange(Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                    .Where(f => IsCorpusExt(f)
+                                && !f.StartsWith(IndexDir, StringComparison.OrdinalIgnoreCase)));  // never index our own index
+            }
+            catch (Exception e) when (e is UnauthorizedAccessException or IOException) { }
+        }
+        // Two roots can surface the same file via different paths (a junction, a symlink); index it once.
+        return outp.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
     // ---------- derived-text cache (captions / transcripts) ----------
     // Producing text from an image or audio file is expensive, and /build reindexes often. Cache the
@@ -282,7 +336,7 @@ public static class Rag
         Directory.CreateDirectory(IndexDir);
         var files = CorpusFiles();
         if (files.Count == 0)
-            return $"No documents in {DocsDir}. Drop .pdf/.txt/.md files there and re-run.";
+            return $"No documents in {string.Join(" ; ", DocsRoots)}. Drop .pdf/.txt/.md files there and re-run.";
 
         var chunks = new List<Chunk>();
         int captioned = 0, transcribed = 0;
@@ -369,7 +423,9 @@ public static class Rag
     public static string ListDocs()
     {
         var files = CorpusFiles().Select(Path.GetFileName).OrderBy(x => x).ToList();
-        return files.Count > 0 ? string.Join("\n", files) : $"(empty) Drop files in {DocsDir}";
+        return files.Count > 0
+            ? (DocsRoots.Length > 1 ? $"roots: {string.Join(" ; ", DocsRoots)}\n" : "") + string.Join("\n", files)
+            : $"(empty) Drop files in {string.Join(" ; ", DocsRoots)}";
     }
 
     // ---------- web (online only) ----------

@@ -14,6 +14,18 @@ if (args.Length > 0 && args[0] == "--reindex")
     return;
 }
 
+// One-off CLI corpus listing, does NOT start the MCP server:
+//   local-tools.exe --corpus            what WOULD be indexed, per root
+// Needs no Ollama, so it is how you debug LOCALTOOLS_DOCS_DIR (including multi-root ";" lists) and how
+// the test suite verifies enumeration without embeddings.
+if (args.Length > 0 && args[0] == "--corpus")
+{
+    if (args.Length > 1) Environment.SetEnvironmentVariable("LOCALTOOLS_DOCS_DIR", args[1]);
+    try { Console.WriteLine(Rag.DescribeCorpus()); }
+    catch (Exception e) { Console.Error.WriteLine("corpus listing failed: " + e.Message); Environment.Exit(1); }
+    return;
+}
+
 // One-off CLI API-surface generation, does NOT start the MCP server:
 //   local-tools.exe --api-surface "C:\path\to\project" ["C:\out\API-SURFACE.md"]
 // Reflects over the project's built assemblies and its NuGet dependencies, writing exact public

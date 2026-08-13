@@ -14,6 +14,10 @@ Topic: **$ARGUMENTS**
 (If I point you at a whiteboard photo / screenshot, run the `describe_image` tool on it first - a local
 vision model transcribes it to text - and use that as design input.)
 
+0. **If the topic needs evidence you do not have, STOP and tell me to run `/research` first.** It is the
+   only online mode; it builds `docs/sources/` with provenance and leaves `[Snnn]`-citable findings for you
+   to design from. Cite them here rather than restating them. If `docs/SOURCES.md` has anything under
+   `## Open questions` that this design depends on, say so before proceeding.
 1. **Open the design doc** - `/scaffold` created it as `Status: DRAFT` (path in CLAUDE.md; `DESIGN.md` for a
    general project, `TEDD.md` for an experience). Use it.
    - If it is `LOCKED`, OFFER to unlock to `DRAFT` and, on my OK, flip the header + reindex before editing.

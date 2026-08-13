@@ -53,7 +53,28 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       errors from guessed Magick.NET calls. `/scaffold` stays stack-agnostic (it is deterministic and
       model-free); `/design` step 2 picks the stack, fills CLAUDE.md from the profile fragment, and ingests
       the library docs BEFORE requirements, epics and contracts are written.
-- [x] R8: One-command installer (`install.ps1` / `install.cmd`) that detects its own location, builds the model
+- [x] R23: **RESEARCH mode - build the evidence corpus first, with provenance** (`/research` +
+      `research-agent`, ONLINE; everything downstream stays offline). Research runs BEFORE `/design`: a
+      deliverable is deliberately NOT required yet, because the contracts layer is deliverable-agnostic -
+      pin the DATA contracts from what you found and whatever gets built on top (site, report, form) comes
+      later. The problem this has to solve is not finding things, it is PROVENANCE: a corpus without it is
+      the same failure as code without a build, where six weeks later the design doc says "the market grew
+      14%" and nobody can tell a statistics office from a content farm. So: captured sources live in
+      `docs/sources/` named `S<nnn>-<slug>`, every one gets a row in `docs/SOURCES.md` (id, tier, fetched,
+      title, url) plus a line saying which question it answers, and design-doc claims cite `[Snnn]`.
+      **`source-stats.ps1` is the gate** - FAILs on a citation with no ledger row or a row whose file is
+      missing; WARNs on untiered, uncited, unrecorded or stale sources. It verifies TRACEABILITY, NOT
+      TRUTH: a perfectly-cited wrong number is still wrong. **Tiering is the human's call** (primary /
+      secondary / unknown) - `research-agent` must always write `unknown`, because source quality is the
+      one judgement nothing downstream can recover from if a model gets it wrong. One writer per doc holds:
+      research-agent owns `docs/sources/` + `SOURCES.md` and never touches the design doc; `doc-researcher`
+      stays OFFLINE and reads the corpus rather than building it. Sources are committed and indexed as
+      PLAINTEXT, so capturing credentials or personal data is prohibited. The corpus supports **MULTIPLE
+      ROOTS** - `LOCALTOOLS_DOCS_DIR` takes a `;`-separated list, the first root owns `.index\`, nested
+      roots collapse so nothing is indexed twice, and a missing root degrades the corpus instead of
+      breaking the server (`local-tools --corpus` shows what would be indexed, per root, with no Ollama
+      needed). Unsettled questions stay under `## Open questions` in SOURCES.md - "we could not establish
+      X" is a finding; guessing X is a defect.- [x] R8: One-command installer (`install.ps1` / `install.cmd`) that detects its own location, builds the model
       `-cc` variants + the C# server, installs commands/agents/`settings.json` with paths auto-fixed
       (JSON parse/serialize, idempotent, move-safe), and tunes Ollama.
 - [x] R9: Model switching (`use-model.ps1`/`.cmd`, `use-fast`/`use-quality.cmd`) editing `ANTHROPIC_MODEL`; aliases

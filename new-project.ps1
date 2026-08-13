@@ -58,6 +58,10 @@ if (Test-Path $verFile) {
 Copy-Item (Join-Path $templates "_common\docs\RECIPES.md") (Join-Path $proj "docs\RECIPES.md") -Force
 # Status dashboard (indexed; librarian-agent is its only writer - done/next/blockers at a glance).
 Copy-Item (Join-Path $templates "_common\docs\STATUS.md") (Join-Path $proj "docs\STATUS.md") -Force
+# The research corpus: captured sources live here, their provenance in SOURCES.md. Both exist from the
+# start so /research has somewhere to put things and source-stats has something to check.
+Copy-Item (Join-Path $templates "_common\docs\SOURCES.md") (Join-Path $proj "docs\SOURCES.md") -Force
+New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 
 # Shared MCP config (RAG over this project's docs).
 Copy-Item (Join-Path $templates "_common\.mcp.json") (Join-Path $proj ".mcp.json") -Force
@@ -99,7 +103,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   Write-Host "  git not found - skipping the safety net (install git so /build can checkpoint + recover)" -ForegroundColor Yellow
 }
 
-Write-Host "  created: CLAUDE.md (generic), .mcp.json (docs -> $proj\docs), docs\$docName (Status: DRAFT), docs\RECIPES.md, docs\STATUS.md" -ForegroundColor Green
+Write-Host "  created: CLAUDE.md (generic), .mcp.json (docs -> $proj\docs), docs\$docName (Status: DRAFT), docs\RECIPES.md, docs\STATUS.md, docs\SOURCES.md + docs\sources\" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Green
 Write-Host "  1. Open $proj in VS Code (Claude Code); approve the local-tools server."

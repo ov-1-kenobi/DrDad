@@ -44,6 +44,7 @@ model-load time; `OLLAMA_KEEP_ALIVE=30m` keeps it warm after.
 | Command            | Does                                                        | Model           | When                          |
 |--------------------|-------------------------------------------------------------|-----------------|-------------------------------|
 | `/scaffold <kind>` | **Stack-agnostic** DAD init: CLAUDE.md/.mcp.json/docs + the design doc as **DRAFT**. `kind` = general (`DESIGN.md`) or experience (`TEDD.md`); no stack chosen. `new-project.cmd <kind>` is the same. | either | starting a project |
+| `/research [topic]` | **ONLINE**: decompose into questions -> web_search -> ingest_url -> `docs/sources/` + `SOURCES.md` ledger (YOU tier each source); gate = `source-stats.cmd` | **oss**/quality | before /design, when the design needs evidence |
 | `/design [topic]`   | **Design-first**: stack FIRST, then requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step); NO stories/code; offers to LOCK | **oss**; **quality**/cloud for contracts | plan before building |
 | `/stories [arg]`    | Manage **STORIES.md**: expand epics into stories, normalize/dedupe, `migrate` old in-doc stories out | **oss**/quality | build the story backlog |
 | `/taskmap [story]` | Shard **STORIES.md** -> dependency-ordered bite-sized **task map** (`docs/TASKS.md`), reindex | **quality** (Next) | after /stories, before /build or /spec |
@@ -62,6 +63,7 @@ profile fragment `templates/<stack>/PROFILE.md` (dotnet | avalonia | python | em
 ## The pipeline
 ```
 /scaffold <general|experience>   (stack-agnostic: CLAUDE.md + .mcp.json + docs/ + DESIGN as DRAFT)
+  ->  /research   (OPTIONAL, the only ONLINE mode: build docs/sources/ + SOURCES.md with provenance)
   ->  /design     (DESIGN: stack FIRST -> fills CLAUDE.md, then requirements + epics + contracts; offers to LOCK)
   ->  /stories    (expand epics into stories -> STORIES.md)
   ->  /taskmap (optional: shard STORIES.md into TASKS.md - bite-sized tasks + deps, indexed)
@@ -115,6 +117,8 @@ never via `local-tools`. If the model claims otherwise, it's confused - point it
 | `upgrade-project.cmd [dir]`                    | retrofit an existing project to the current kit (docs, git, CLAUDE.md refresh) |
 | `dad-doctor.cmd [-ProjectDir x]`                | **readiness check**: prereqs, Ollama+models, server, install, project wiring |
 | `sync-models.cmd [-Report\|-All\|-Only a]`     | reconcile Ollama with `models.json` (pull bases, build the `-cc` variants) |
+| `source-stats.cmd [-ProjectDir x]`             | citation-integrity gate: do the design doc's [Snnn] cites resolve to real, tiered sources? |
+| `api-surface.cmd [-Lookup <Type>]`             | regenerate/query docs\API-SURFACE.md - exact signatures from the built assemblies |
 | `test-kit.cmd`                                 | run the kit's own test suite - the validation gate after any kit change |
 | `dad-guard.cmd -Check` / `-Ack`             | stop guard: would a turn be blocked for unverified code? / accept it anyway |
 | `scan-secrets.cmd [-Path x \| -Staged]`        | scan for credentials (also installed as each project's pre-commit hook) |

@@ -2,6 +2,48 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.14.0 - 2026-08-13
+
+Research first, then design. A new ONLINE mode that builds the project's evidence corpus with provenance,
+and a corpus that can now span several folders.
+
+### Added - `/research` (R23)
+- **`/research [topic]` + `research-agent`** - the only ONLINE mode; everything after it works offline from
+  what you captured. Decompose the topic into questions, `web_search` each, `ingest_url` what is worth
+  keeping, record provenance, synthesise into the design doc with `[Snnn]` citations.
+- **A deliverable is deliberately NOT required yet.** The contracts layer is deliverable-agnostic, so you
+  pin the DATA contracts from what you found and decide later whether it becomes a site, a report or a
+  form. That is the point of researching before designing.
+- **`docs/SOURCES.md`** - the provenance ledger (id, tier, fetched, title, url, and which question each
+  source answers), plus `docs/sources/` for the captured material, both created by `/scaffold` and
+  `upgrade-project`.
+- **`source-stats.ps1` / `.cmd` is the gate.** Research has no compiler, but this is checkable: a citation
+  with no ledger row FAILS (the claim rests on nothing), as does a row whose file has vanished. Untiered,
+  uncited, unrecorded and stale sources WARN. It verifies **traceability, not truth** - a perfectly-cited
+  wrong number is still wrong, and no script fixes that.
+- **Tiering is the human's job.** `research-agent` must always write `unknown`; primary/secondary is the one
+  judgement nothing downstream can recover from if a model gets it wrong.
+- One writer per doc holds: `research-agent` owns `docs/sources/` + `SOURCES.md` and never touches the
+  design doc. **`doc-researcher` stays OFFLINE** - it reads the corpus, this one builds it. Two jobs.
+- Captured pages are committed and indexed as PLAINTEXT, so capturing credentials or personal data is
+  prohibited outright - the agent reports the URL instead.
+
+### Added - a multi-root corpus
+`LOCALTOOLS_DOCS_DIR` accepts a `;`-separated list, so a large or shared research corpus can live on
+another drive and still sit under one index. The first root is primary (it owns `.index\`). A root nested
+inside another collapses rather than indexing everything twice, and a missing root degrades the corpus
+instead of breaking the server. `local-tools --corpus` prints what would be indexed, per root, needing no
+Ollama - which is also how the suite tests this without embeddings.
+
+### Tests
+84 cases (was 81). Multi-root enumeration including nesting and a missing drive; the citation gate failing
+an unbacked `[S003]` and a ledger row with no file, then passing once both are fixed, and warning on
+untiered and unrecorded sources; and `/research` being wired with its gate while `doc-researcher` stays
+offline.
+
+### Fixed
+- `[datetime]::TryParse($s, [ref]$null)` cannot bind in PowerShell 5.1 ("cannot find an overload ...
+  argument count 2"). `-as [datetime]` is the idiomatic form and reads better.
 ## 0.13.0 - 2026-08-13
 
 Three changes, one theme: stop making the model rediscover things that are already knowable.
