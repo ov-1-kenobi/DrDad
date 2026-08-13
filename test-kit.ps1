@@ -726,6 +726,53 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "a claimed-missing contract is settled by grep, not by the model" {
+  # A run halted on "the contracts C6 and C7 are not present in DESIGN.md - a critical gap preventing
+  # implementation". Both were pinned, at lines 299 and 334, and it had also invented the CONTENTS of C5
+  # (quoting an "Azure Storage Adapters" section that existed nowhere in the project). It then did nothing
+  # for the rest of the session. Whether a heading exists is a grep; it must never be a judgement call.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    @(
+      "# Design", "", "Status: LOCKED", "",
+      "## Contracts", "",
+      "### C1: Rendition identity", "- **Decision:** x", "",
+      "### C6: Materialization policy", "- **Decision:** y", "",
+      "### C10-b: Signing", "- **Decision:** z", ""
+    ) | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $ds = Join-Path $kit "doc-stats.ps1"
+
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Contract C6 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "a contract that EXISTS was reported missing"
+    Assert ($out -match 'C6 EXISTS') "it did not say the contract exists"
+    Assert ($out -match 'Materialization policy') "it did not quote the real heading"
+    Assert ($out -match 'line 10') "it did not give the line number:`n$out"
+
+    # a genuinely absent one must fail, and list what IS there so the gap is obvious
+    $miss = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Contract C7 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "an absent contract did not fail"
+    Assert ($miss -match 'C7 is NOT in DESIGN\.md') "it did not name the missing contract"
+    Assert ($miss -match 'C1' -and $miss -match 'C6') "it did not list the contracts that DO exist"
+
+    # suffixed ids (C10-b) are real in practice and must resolve
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Contract "C10-b" | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "a suffixed contract id (C10-b) did not resolve"
+
+    # and the whole list on demand
+    $all = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Contract "*" 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "listing all contracts failed"
+    Assert ($all -match '3 contract\(s\)') "wrong contract count:`n$all"
+
+    # the loop has to USE it rather than trust the claim
+    $b = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+    Assert ($b -match '-Contract <Cn>') "/build does not verify a needs-contract claim"
+    Assert ($b -match 'Exit 0 means the contract EXISTS') "/build does not say what a passing check means"
+    $d = Get-Content (Join-Path $kit "global\agents\dev-agent.md") -Raw
+    Assert ($d -match 'cannot LOCATE contract') "dev-agent may still assert a contract is absent"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "the corpus spans MULTIPLE roots (and does not double-count)" {
   # A research corpus can be large or shared between projects, so LOCALTOOLS_DOCS_DIR takes a ';'-separated
   # list. The first root stays primary - it owns .index\ - and one index covers them all.

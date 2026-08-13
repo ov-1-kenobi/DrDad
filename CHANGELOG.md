@@ -2,6 +2,35 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.14.1 - 2026-08-13
+
+A run halted on a blocker it made up. This closes that hole.
+
+### The failure
+`/build 8.3` stopped with *"the contracts C6 and C7 are not present in the DESIGN.md file. This is a
+critical gap preventing implementation of Story S8."* Both were pinned - `### C6: Materialization policy`
+at line 299, `### C7: Eligibility evaluation` at line 334. It had also QUOTED a `## C5: Azure Storage
+Adapters` section with five bullets; the real C5 is "Addressing and metadata keys", and the string "Azure
+Storage Adapters" existed nowhere in the project until that run printed it. Nothing was implemented, and
+the session ended on the fabricated gap. Contributing: it ran on `qwen3-14b-cc` (the `fast` alias - the
+weakest wired model, where `/build` asks for `coder`/`quality`), and it never called `search_datasheets`
+once - "searched for 1 pattern" was a grep.
+
+### Added
+- **`doc-stats.ps1 -Contract <Cn>`** - exit 0 with the heading and line number if that contract exists,
+  exit 1 with the list of contracts that DO exist if it does not. `-Contract *` lists them all. Suffixed
+  ids (`C10-b`) resolve. Whether a heading exists is a grep; it must never be a judgement call.
+- **`/build` must run that check before relaying a "needs contract" claim.** Exit 0 means the claim is
+  wrong: dev-agent goes back with the location instead of the loop stopping. Only a non-zero exit is a real
+  gap, and only then does it stop - pinning a contract still belongs to `/design`.
+- **`dev-agent` may no longer assert absence.** If it cannot find a contract it expects, it must return
+  "cannot LOCATE contract <Cn>", because "I could not find it" and "it does not exist" are different
+  claims - and the orchestrator now checks which one is true.
+
+### Tests
+85 cases (was 84): a contract that exists reported with its real heading and line, a genuinely absent one
+failing while listing what is present, a suffixed id resolving, the full listing, and both `/build` and
+`dev-agent` being held to the check.
 ## 0.14.0 - 2026-08-13
 
 Research first, then design. A new ONLINE mode that builds the project's evidence corpus with provenance,

@@ -1,6 +1,6 @@
 # DAD - Design Document Aligned Development
 
-**Version 0.14.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.14.1** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 

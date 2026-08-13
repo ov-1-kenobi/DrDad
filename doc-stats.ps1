@@ -5,15 +5,43 @@
 #   doc-stats.ps1 [-ProjectDir .]        human-readable
 #   doc-stats.ps1 -Json                  machine-readable (same numbers)
 #   doc-stats.ps1 -UpdateStatus          WRITE the Snapshot line into docs/STATUS.md, deterministically
+#   doc-stats.ps1 -Contract C6           does contract C6 exist? exit 0 + its heading and line, or exit 1
+#   doc-stats.ps1 -Contract *            list every contract in the design doc
 #
 # Counts: story headings + DONE markers in STORIES.md, task blocks + [x] in TASKS.md, DESIGN Status,
 # the next ready task (first unchecked whose deps are all [x]), and which DONE units lack a real grade card.
 
-param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus)
+param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus, [string]$Contract = "")
 $ErrorActionPreference = "Stop"
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 
 $docs = Join-Path $proj "docs"
+# --- contract existence: settle it with a script, never on the model's word ------------------------
+# A real run halted claiming "the contracts C6 and C7 are not present in DESIGN.md - a critical gap
+# preventing implementation". Both were there, at lines 299 and 334. It had also invented the CONTENTS of
+# C5 (quoting an "Azure Storage Adapters" section that exists nowhere in the project). A fabricated blocker
+# costs a whole session, and whether a heading exists is exactly the kind of question a grep settles.
+if ($Contract) {
+  $dp = $null
+  foreach ($n in @("DESIGN.md","TEDD.md")) { $c = Join-Path $docs $n; if (Test-Path $c) { $dp = $c; break } }
+  if (-not $dp) { Write-Host "no design doc in $docs" -ForegroundColor Yellow; exit 1 }
+  $all = Select-String -Path $dp -Pattern '^#{2,4}\s*(C[0-9]+[A-Za-z0-9-]*)\s*:\s*(.*)$'
+  if ($Contract -eq "*" -or $Contract -eq "all") {
+    if (-not $all) { Write-Host "no '## C<n>: ...' contracts in $(Split-Path $dp -Leaf)" -ForegroundColor Yellow; exit 1 }
+    Write-Host "$($all.Count) contract(s) in $(Split-Path $dp -Leaf):" -ForegroundColor Cyan
+    foreach ($m in $all) { Write-Host ("  {0,-8} {1}  (line {2})" -f $m.Matches[0].Groups[1].Value, $m.Matches[0].Groups[2].Value.Trim(), $m.LineNumber) }
+    exit 0
+  }
+  $hit = $all | Where-Object { $_.Matches[0].Groups[1].Value -eq $Contract } | Select-Object -First 1
+  if ($hit) {
+    Write-Host "$Contract EXISTS: $($hit.Matches[0].Groups[2].Value.Trim())  ($(Split-Path $dp -Leaf) line $($hit.LineNumber))" -ForegroundColor Green
+    Write-Host "  -> it is pinned. Do NOT report it missing; search_datasheets for it and implement it." -ForegroundColor Green
+    exit 0
+  }
+  Write-Host "$Contract is NOT in $(Split-Path $dp -Leaf). Contracts present:" -ForegroundColor Yellow
+  foreach ($m in $all) { Write-Host "  $($m.Matches[0].Groups[1].Value)" -ForegroundColor Yellow -NoNewline; Write-Host "" }
+  exit 1
+}
 $mcp = Join-Path $proj ".mcp.json"
 if (Test-Path $mcp) {
   try {

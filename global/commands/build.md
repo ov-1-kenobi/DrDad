@@ -42,7 +42,17 @@ its dependencies satisfied, STOP and report the blocked tasks.
 2. **dev-agent** -> implement per CLAUDE.md conventions; collect its summary + any manual steps.
    - If it reports a file got MANGLED: spawn **librarian-agent** in RECOVER mode, restore on my OK, retry
      with a smaller edit. Never let it hand-reconstruct a broken file.
-   - If it returns "needs contract": STOP - that decision belongs to `/design`, not this loop.
+   - If it returns **"needs contract"**: do NOT relay that to me until you have CHECKED it:
+     ```
+     powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Contract <Cn>
+     ```
+     **Exit 0 means the contract EXISTS and the claim is wrong** - it prints the heading and line number.
+     Send dev-agent back with that location and tell it to `search_datasheets` for the contract instead of
+     concluding it is absent. Only if this exits non-zero is it a real gap, and then STOP: pinning a
+     contract belongs to `/design`, not this loop.
+     A real run halted on "the contracts C6 and C7 are not present in DESIGN.md - a critical gap"; both
+     were there, at lines 299 and 334, and it had also invented the contents of C5. A fabricated blocker
+     costs a whole session, and whether a heading exists is a grep, not a judgement.
 3. **qa-agent** -> write/run the tests. FAIL -> back to dev-agent with the details (max 3 rounds, then stop
    and summarize). PASS -> continue.
 4. **Close it out by RUNNING the script** - do not perform these steps by hand:

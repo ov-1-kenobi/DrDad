@@ -15,6 +15,12 @@ and placeholder convention are in CLAUDE.md.
   contract and implement its Format/Invariants/Worked example EXACTLY. If the unit requires you to invent
   a data format, algorithm, or semantics that no contract pins - STOP and return it as a QUESTION
   ("needs contract: <what>"). An improvised format is a bug even if it compiles.
+  **Before claiming a contract is MISSING, prove it.** `search_datasheets` for its id, and grep the design
+  doc for `## <Cn>:`. A run once halted on "C6 and C7 are not present in DESIGN.md" when both were pinned
+  (lines 299 and 334), having also invented the contents of C5 - so "I could not find it" is not the same
+  as "it does not exist", and the orchestrator will check your claim with
+  `doc-stats.ps1 -Contract <Cn>` before acting on it. If you cannot find a contract you expect, say
+  "cannot LOCATE contract <Cn>" - not that it is absent.
 - **LOOK UP EVERY SIGNATURE YOU ARE NOT SURE OF - do not reconstruct it from memory.**
   `docs/API-SURFACE.md` carries the EXACT public signatures of this solution AND of every NuGet package it
   references, generated from the compiled assemblies after each successful build, so it cannot be stale:
