@@ -98,7 +98,20 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       status`, at every AUDIT, and when `/build` stops on a blocker. Sessions read it first to orient.
       ONE status file: ad-hoc root STATUS/BUILD_SUMMARY/NOTES files are prohibited (CLAUDE.md + /build)
       and flagged by the librarian audit.
-- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
+- [x] R24: **State findings are COMPUTED, not observed.** R14 made `docs/STATUS.md` derived; this extends
+      the same rule to the audit itself. An `/audit` on a healthy project reported "DESIGN.md Status: LOCKED
+      header missing" (line 5), "STORIES.md missing `<!-- Status -->` markers for S2-S6" (all 14 had them)
+      and "TASKS.md has 0 tasks with `[x]`" (10 were ticked) - immediately after running `doc-stats`, which
+      had printed the real numbers. Approving those "fixes" would have rewritten a correct header and
+      re-ticked ticked tasks. So `doc-stats.ps1 -Findings` now GENERATES that whole category - design status,
+      story Status markers and their vocabulary, roll-up disagreement in both directions, missing/stub grade
+      cards, done units with no commit naming them, orphan test projects - and prints a `STATE FACTS` line
+      the orchestrator passes to the librarian as ground truth it may not contradict. The librarian-agent is
+      explicitly forbidden to author state findings; its remit is what no script can settle - scope
+      contamination, traceability judgement, corpus health. Paired with `-Contract <Cn>`, which refutes a
+      claimed-missing contract by grep (the same run called C2PA signing absent when it is `C10-b`). The
+      general rule, now applied three times: **never accept an assertion a script can settle** - not for
+      counts (R14), not for a contract, not for document state.- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
       kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
       refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)
       by header-prefix splice while preserving user sections (Stack/Build/test/Placeholder/Human-in-loop).

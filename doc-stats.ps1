@@ -7,11 +7,12 @@
 #   doc-stats.ps1 -UpdateStatus          WRITE the Snapshot line into docs/STATUS.md, deterministically
 #   doc-stats.ps1 -Contract C6           does contract C6 exist? exit 0 + its heading and line, or exit 1
 #   doc-stats.ps1 -Contract *            list every contract in the design doc
+#   doc-stats.ps1 -Findings              the STATE findings, computed - the librarian must not author these
 #
 # Counts: story headings + DONE markers in STORIES.md, task blocks + [x] in TASKS.md, DESIGN Status,
 # the next ready task (first unchecked whose deps are all [x]), and which DONE units lack a real grade card.
 
-param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus, [string]$Contract = "")
+param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus, [string]$Contract = "", [switch]$Findings)
 $ErrorActionPreference = "Stop"
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 
@@ -137,6 +138,75 @@ $result = [ordered]@{
   orphanTests   = $orphanTests
 }
 
+if ($Findings) {
+  # The STATE half of an audit, computed rather than observed. An /audit on a healthy project reported
+  # "DESIGN.md Status: LOCKED header missing" (it is on line 5), "STORIES.md missing <!-- Status --> markers
+  # for S2-S6" (all 14 stories have them), and "TASKS.md has 0 tasks with [x]" (10 are ticked) - having just
+  # run this script, which printed the real numbers. Saying yes to those "fixes" would have rewritten a
+  # correct header, re-marked marked stories, and re-ticked ticked tasks.
+  #
+  # So the librarian no longer gets to author this category. These findings are generated; its remit is what
+  # a script cannot do - scope contamination, traceability judgement, orphan files.
+  $f = New-Object System.Collections.Generic.List[string]
+
+  if ($designStatus -eq "(no design doc)") { $f.Add("[design] no design doc in docs\ - run /scaffold or /design") }
+  elseif ($designStatus -notin @("DRAFT","LOCKED")) { $f.Add("[design] $designName Status: is '$designStatus' - must be DRAFT or LOCKED") }
+
+  # story headings carrying an id but no Status marker at all
+  if (Test-Path $storiesFile) {
+    foreach ($line in Get-Content $storiesFile -Encoding UTF8) {
+      if ($line -match '^#{1,6}\s' -and $line -match '\b(S\d+[A-Za-z0-9._-]*)\b') {
+        $sid = $Matches[1]
+        if ($line -notmatch '<!--\s*Status:') { $f.Add("[scribe] story $sid has no <!-- Status: ... --> marker on its heading") }
+        elseif ($line -notmatch '<!--\s*Status:\s*(TODO|DOING|DONE|BLOCKED)\s*-->') {
+          $bad = [regex]::Match($line, '<!--\s*Status:\s*([^-]*)-->').Groups[1].Value.Trim()
+          $f.Add("[scribe] story $sid Status marker is '$bad' - use TODO / DOING / DONE / BLOCKED")
+        }
+      }
+    }
+  }
+
+  # roll-up disagreement, both directions
+  foreach ($sid in ($tasks | Where-Object { $_.Story } | ForEach-Object { $_.Story } | Select-Object -Unique)) {
+    $mine = @($tasks | Where-Object { $_.Story -eq $sid })
+    $open = @($mine | Where-Object { -not $_.Done })
+    $isDone = $storiesDone -contains $sid
+    if ($isDone -and $open.Count -gt 0) {
+      $f.Add("[taskmap] story $sid is DONE but $($open.Count) of its task(s) are still [ ]: $(($open.Id) -join ', ')")
+    }
+    if (-not $isDone -and $open.Count -eq 0 -and $mine.Count -gt 0) {
+      $f.Add("[scribe] story $sid has all $($mine.Count) task(s) [x] but is not marked DONE")
+    }
+  }
+
+  foreach ($m in $missing) { $f.Add("[grade] $m") }
+  foreach ($o in $orphanTests) { $f.Add("[dev] test project not in the solution (dotnet test silently skips it): $o") }
+
+  # a done unit with no commit mentioning it - a missed checkpoint
+  if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try {
+      Push-Location $proj
+      $log = (git log --oneline | Out-String)
+      foreach ($u in (@($storiesDone) + @($tasksDone | ForEach-Object { $_.Id }) | Select-Object -Unique)) {
+        if ($log -notmatch [regex]::Escape($u)) { $f.Add("[dev] $u is done but no commit mentions it - missed checkpoint") }
+      }
+    } catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }
+  }
+
+  Write-Host "== STATE FACTS (computed - do NOT contradict these) ==" -ForegroundColor Cyan
+  Write-Host ("  design {0}: Status {1} | stories {2}/{3} DONE | tasks {4}/{5} [x] | next {6}" -f `
+    $designName, $designStatus, $storiesDone.Count, $storyIds.Count, $tasksDone.Count, $tasks.Count,
+    $(if ($next) { $next.Id } else { "none" }))
+  Write-Host ""
+  Write-Host "== STATE FINDINGS (generated; the librarian must not author this category) ==" -ForegroundColor Cyan
+  if ($f.Count -eq 0) { Write-Host "  none - document state is consistent." -ForegroundColor Green }
+  else { foreach ($x in $f) { Write-Host "  $x" -ForegroundColor Yellow } }
+  Write-Host ""
+  Write-Host "Librarian's remit is what this CANNOT compute: scope contamination, traceability judgement," -ForegroundColor DarkGray
+  Write-Host "stray/ad-hoc files, mangled markup. Anything above is already handled." -ForegroundColor DarkGray
+  exit 0
+}
 if ($Json) { $result | ConvertTo-Json -Depth 5; exit 0 }
 if ($UpdateStatus) {
   # Take the counting away from the model entirely. Telling the librarian to run this script was not

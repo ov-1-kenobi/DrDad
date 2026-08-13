@@ -2,7 +2,30 @@
 description: Audit cross-document consistency (DESIGN/STORIES/TASKS/grades/index) via the librarian-agent, then route each finding to its owner agent on your OK. Also triages git recovery for a mangled file.
 argument-hint: [empty = full audit | status = refresh docs/STATUS.md | recover <file> = git triage]
 ---
-**FIRST, before spawning anything, generate the real counts:**
+**FIRST, before spawning anything, GENERATE the state half of the audit:**
+```
+powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Findings
+```
+Those `STATE FINDINGS` are yours to route directly - they are computed, so they are true. The `STATE FACTS`
+line is ground truth: **paste it verbatim into the librarian's prompt and tell it those facts may not be
+contradicted.**
+
+An audit on a healthy project once reported "DESIGN.md Status: LOCKED header missing" (line 5),
+"STORIES.md missing `<!-- Status -->` markers for S2-S6" (all 14 had them) and "TASKS.md has 0 tasks with
+[x]" (10 were ticked) - immediately after running this script, which had printed the real numbers. Saying
+yes to those "fixes" would have rewritten a correct header and re-ticked ticked tasks. So this category is
+no longer the librarian's to author. **Reject any `[design]`/`[scribe]`/`[taskmap]`/`[grade]` finding it
+returns that contradicts the STATE FACTS**, and tell it so rather than acting on it.
+
+**A claimed-missing CONTRACT must be checked, never believed:**
+```
+powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Contract <Cn>
+```
+Exit 0 means it exists, with its line number - the finding is wrong. (Same run claimed C2PA signing was
+"not in the design contracts"; it is `C10-b`.) Use `-Contract *` to list them all before accepting any
+"capability not in the design" claim.
+
+**THEN update the dashboard:**
 ```
 powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -UpdateStatus
 ```

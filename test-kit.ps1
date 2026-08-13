@@ -726,6 +726,61 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "state findings are GENERATED, not authored by the librarian" {
+  # An /audit on a healthy project reported "DESIGN.md Status: LOCKED header missing" (line 5), "S2-S6
+  # missing <!-- Status --> markers" (all 14 had them) and "TASKS.md has 0 tasks with [x]" (10 ticked) -
+  # immediately after running doc-stats, which had printed the real numbers. Acting on those would have
+  # rewritten a correct header and re-ticked ticked tasks. So this whole category is computed now.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\grades" | Out-Null
+    "# Design`n`nStatus: LOCKED`n`n## Contracts`n`n### C1: Thing`n- **Decision:** x" |
+      Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    # S1 fully ticked but not DONE; S2 DONE and consistent; S3 marker uses a word that is not in the set
+    @("# Stories","",
+      "### Story S1: One   (Epic E1) <!-- Status: TODO -->","",
+      "### Story S2: Two   (Epic E1) <!-- Status: DONE -->","",
+      "### Story S3: Three (Epic E1) <!-- Status: COMPLETE -->","",
+      "### Story S4: Four  (Epic E1)","") | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    @("# Task map","","## Tasks","",
+      "### [x] T1.1 - a   (Story S1)","- **Goal:** x","",
+      "### [x] T2.1 - b   (Story S2)","- **Goal:** y","",
+      "### [ ] T3.1 - c   (Story S3)","- **Goal:** z","") | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    # S2 is DONE and has a real card; T1.1/T2.1 do not
+    ("x" * 900 + "`n## Grade history`n| when | grade |`n") | Set-Content "$p\grades\S2_GRADE.md" -Encoding UTF8
+
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") `
+              -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "-Findings exited $LASTEXITCODE"
+
+    # the FACTS line must carry the real numbers, so the librarian cannot invent different ones
+    Assert ($out -match 'Status LOCKED') "STATE FACTS did not report the real design status"
+    Assert ($out -match 'tasks 2/3') "STATE FACTS did not report the real task counts:`n$out"
+
+    # and it must NOT manufacture the findings that run fabricated
+    Assert ($out -notmatch 'Status: LOCKED header missing') "it invented a missing Status header"
+    Assert ($out -notmatch '0 tasks') "it claimed zero ticked tasks"
+    Assert ($out -notmatch 'story S2 has no <!-- Status') "it flagged a story whose marker is present"
+
+    # real problems, found deterministically
+    Assert ($out -match 'story S4 has no <!-- Status') "a genuinely unmarked story was missed"
+    Assert ($out -match "S3 Status marker is 'COMPLETE'") "a non-vocabulary marker was missed"
+    Assert ($out -match 'story S1 has all 1 task\(s\) \[x\] but is not marked DONE') "a roll-up gap was missed"
+    Assert ($out -match '\[grade\] T1\.1') "a done unit with no grade card was missed"
+    Assert ($out -notmatch '\[grade\] S2') "it demanded a card that exists"
+
+    # the loop and the agent must both be held to it
+    $a = Get-Content (Join-Path $kit "global\commands\audit.md") -Raw
+    Assert ($a -match '-Findings') "/audit does not generate the state findings"
+    Assert ($a -match 'may not be\s*\r?\n?contradicted|not be contradicted') "/audit does not pass the facts as ground truth"
+    Assert ($a -match '-Contract <Cn>') "/audit does not verify a claimed-missing contract"
+    $l = Get-Content (Join-Path $kit "global\agents\librarian-agent.md") -Raw
+    Assert ($l -match 'STATE FACTS') "librarian is not given ground truth"
+    Assert ($l -match 'GENERATED, DO NOT REPORT') "librarian may still author state findings"
+    Assert ($l -match 'cannot LOCATE') "librarian may still assert absence"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "a claimed-missing contract is settled by grep, not by the model" {
   # A run halted on "the contracts C6 and C7 are not present in DESIGN.md - a critical gap preventing
   # implementation". Both were pinned, at lines 299 and 334, and it had also invented the CONTENTS of C5

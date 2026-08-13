@@ -2,6 +2,46 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.15.0 - 2026-08-13
+
+`/audit` was unsafe to say yes to. This makes the state half of an audit computed instead of observed.
+
+### The failure
+An `/audit` on a **healthy** project returned seven findings; five were fabricated:
+
+| claimed | reality |
+|---|---|
+| "DESIGN.md Status: LOCKED header missing" | it is on line 5 |
+| "STORIES.md missing `<!-- Status -->` markers for S2-S6" | all 14 stories carry them |
+| "TASKS.md has 0 tasks with `[x]`" | 10 are ticked |
+| same again, retagged `[dev]` | duplicate of a falsehood |
+| "C2PA signing not in the design contracts" | it is contract `C10-b` |
+
+It ran on `qwen3-coder-30b` - not a small model - and the transcript shows **one shell command**: the
+`doc-stats` call 0.13.0 added, which had just printed the true numbers. Approving those fixes would have
+rewritten a correct header, re-marked marked stories, and re-ticked ticked tasks. 0.13.0 made the dashboard
+honest and left the findings free-form; that was half a fix.
+
+### Added (R24)
+- **`doc-stats.ps1 -Findings`** generates the state findings: design status, missing Status markers and
+  off-vocabulary ones, roll-up disagreement in BOTH directions (a DONE story with open tasks, and an
+  all-ticked story not marked DONE), missing/stub grade cards, done units no commit names, orphan test
+  projects. It also prints a **`STATE FACTS`** line.
+- **`/audit` runs it first**, routes those findings directly, passes STATE FACTS into the librarian as
+  ground truth, and **rejects any `[design]`/`[scribe]`/`[taskmap]`/`[grade]` finding that contradicts
+  them**. A claimed-missing contract goes through `-Contract <Cn>` before anyone acts on it.
+- **`librarian-agent` may no longer author state findings at all.** Its remit is what a script cannot
+  settle: scope contamination, traceability judgement, corpus health. It may not assert absence - if it
+  cannot find something it says "cannot LOCATE", and the orchestrator checks which is true.
+
+On the project that produced the bad audit, `-Findings` reports real problems the model never saw -
+including story S7 marked `COMPLETE` instead of `DONE`, which is why its stories read 5/14 while its task
+is ticked.
+
+### Tests
+86 cases (was 85). A fixture with a correct header, present markers and ticked tasks must produce NONE of
+the fabricated findings, while still catching a genuinely unmarked story, an off-vocabulary marker, a
+roll-up gap and a missing card - and not demanding a card that exists.
 ## 0.14.1 - 2026-08-13
 
 A run halted on a blocker it made up. This closes that hole.

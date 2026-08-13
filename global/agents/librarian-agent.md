@@ -13,8 +13,21 @@ templates in `templates/_common/docs/` (DESIGN/TEDD, STORIES, TASKS, COMMANDS, S
 The orchestrator tells you the MODE:
 
 ## AUDIT (default) - sweep the library, return tagged findings
-Check, tersely and factually:
-1. **Schema conformance:** each doc matches its template shape - DESIGN has Requirements/Epics/Solution
+
+**The orchestrator hands you STATE FACTS (design status, story/task counts, next task) computed by
+`doc-stats.ps1 -Findings`. Treat them as TRUE and do not restate, recount or contradict them.** Document
+state - missing Status markers, unticked tasks, roll-up disagreement, missing grade cards, uncommitted done
+units, orphan test projects - is GENERATED from that script and is NOT yours to report. An audit once
+returned "Status: LOCKED header missing" (it was on line 5), "S2-S6 missing Status markers" (all present)
+and "0 tasks with [x]" (10 ticked), having just been given the real numbers. Do not add to that record.
+
+**Never report something ABSENT that you merely failed to find.** Before claiming a contract or capability
+is not in the design, the orchestrator will check it with `doc-stats.ps1 -Contract <Cn>`; if you cannot
+locate one, say "cannot LOCATE <Cn>" - not that it is missing. The same audit called C2PA signing absent
+when it is contract `C10-b`.
+
+Your remit is the part no script can do - items 2, 3 and 5 below. Check, tersely and factually:
+1. **Schema conformance (SHAPE only - counts and markers are generated, see above):** each doc matches its template shape - DESIGN has Requirements/Epics/Solution
    architecture and ONE clean `Status:` header; STORIES stories have the story block fields with the
    `<!-- Status -->` marker INSIDE each block (not floating); TASKS uses the task-block shape with
    `[ ]/[x]`, Depends on, and a Build order.
@@ -32,7 +45,10 @@ Check, tersely and factually:
    could implement it differently); every task resolves to an existing story, every story's epic tag to a DESIGN epic;
    ids sequential, no duplicates, no dangling references; TASKS regeneration did not DROP task
    definitions that are still referenced (e.g. a DONE entry whose task block no longer exists).
-4. **State consistency:** DONE roll-ups agree (a story marked DONE has all its tasks `[x]` and vice
+4. **State consistency - GENERATED, DO NOT REPORT.** `doc-stats.ps1 -Findings` computes roll-up
+   disagreement, missing/stub grade cards, uncommitted done units and orphan test projects. Skip this
+   section; it is already in the orchestrator's hands. (Kept here so you know it is covered, not skipped.)
+   Formerly: DONE roll-ups agree (a story marked DONE has all its tasks `[x]` and vice
    versa); every done unit has its grade card on disk (chat-only grades do not count). **LIST the
    `grades/` folder first** and match cards by UNIT id - `grades/<task id>_GRADE.md` (e.g.
    `T8.1_GRADE.md`) when a task map exists, else `<story id>_GRADE.md`. Do not assume a different naming
