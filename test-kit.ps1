@@ -726,6 +726,125 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "close-unit REFUSES to bank new work under an already-closed id" {
+  # A real run produced a commit titled "T8.1: Implement ObjectStore" whose diff was VariantProcessor.cs
+  # (T7.1's work), because close-unit does `git add -A` and banks whatever is dirty under whatever id it
+  # is given. Then `t8.1` matched the already-ticked `T8.1`, took the idempotent path, and committed
+  # T8.2's MetadataStore under a no-op close - leaving T8.2 open with its code already in history.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    New-Item -ItemType Directory -Force "$p\src" | Out-Null
+    "# Task map`n`n## Tasks`n`n### [x] T8.1 - done thing   (Story S8)`n- **Goal:** x`n`n### [ ] T8.2 - other thing   (Story S8)`n- **Goal:** y" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S8: Eight   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # T8.2's work, offered up under the closed id T8.1
+    "public class Other { }" | Set-Content "$p\src\Other.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") `
+      -Id T8.1 -Title "wrong unit" -ProjectDir $p -NoReindex 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "it banked new code under an already-closed id"
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $log = (git log --oneline | Out-String)
+    $ErrorActionPreference = $prev; Pop-Location
+    Assert ($log -notmatch 'wrong unit') "it committed anyway"
+
+    # lower-case id must not sneak past either - matching is case-insensitive
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") `
+      -Id t8.1 -Title "wrong unit lower" -ProjectDir $p -NoReindex 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "a lower-cased id got past the already-closed check"
+
+    # closing it under the id that OWNS the work must still work
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") `
+      -Id T8.2 -Title "other thing" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the correct id was refused too"
+    Assert (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T8\.2' -Quiet) "T8.2 was not ticked"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "the stack is decided EARLY, and the record says so" {
+  # Reversed 2026-08-13: 'late architecture' only deferred the blockers - no Build command means /build
+  # Gate 1 refuses, close-unit verifies nothing, and library docs cannot be ingested before the libraries
+  # are known (which is how 16 guessed Magick.NET calls shipped).
+  $d = Get-Content (Join-Path $kit "global\commands\design.md") -Raw
+  $steps = [regex]::Matches($d, '(?m)^(\d+)\. \*\*([^*]+)\*\*')
+  Assert ($steps.Count -ge 5) "design.md no longer has numbered steps"
+  $archStep = ($steps | Where-Object { $_.Groups[2].Value -match 'architecture' } | Select-Object -First 1)
+  $reqStep  = ($steps | Where-Object { $_.Groups[2].Value -match 'requirements' } | Select-Object -First 1)
+  Assert ($archStep -and $reqStep) "could not find the architecture and requirements steps"
+  Assert ([int]$archStep.Groups[1].Value -lt [int]$reqStep.Groups[1].Value) `
+    "architecture is step $($archStep.Groups[1].Value) but requirements is $($reqStep.Groups[1].Value) - stack must come FIRST"
+  Assert ($d -notmatch 'decide LATE') "design.md still says the stack is decided late"
+  $des = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
+  Assert ($des -match 'EARLY architecture') "R7 still records late architecture"
+  Assert ($des -notmatch 'late architecture') "R7 still contains the old 'late architecture' wording"
+}
+
+Test-Case "the API surface generator produces real signatures" {
+  # The registry is only worth having if it carries EXACT signatures including generics - that is the whole
+  # difference between it and grepping source. Generate it for the kit's OWN server and check the shape.
+  if ($SkipBuild) { return }
+  $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+  if (-not (Test-Path $exe)) { return }
+  $sb = New-Sandbox
+  try {
+    $out = Join-Path $sb "API-SURFACE.md"
+    & $exe --api-surface $kit $out | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "--api-surface exited $LASTEXITCODE"
+    Assert (Test-Path $out) "no file written"
+    $s = Get-Content $out -Raw
+    Assert ($s -match '# API surface \(generated') "missing the generated header"
+    Assert ($s -match '(?m)^### local-tools') "the kit's own assembly is missing"
+    # its own public API must be there, with a real signature
+    Assert ($s -match 'ApiSurface') "the ApiSurface type is missing from its own surface"
+    Assert ($s -match 'Generate\(string projectDir') "signatures carry no parameter types"
+    # generics must survive - the thing that cost 4h25m was generic type parameters
+    Assert ($s -match '<') "no generic signatures at all - suspicious"
+    Assert ($s -notmatch '(?m)^### System\.') "framework assemblies leaked in (index would be swamped)"
+    # lookup mode must find a member and name its owner
+    $hit = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "api-surface.ps1") `
+             -ProjectDir $sb -Lookup "Generate" 2>&1 | Out-String
+    # -ProjectDir $sb has no docs\ - point it at the file we just made instead
+    New-Item -ItemType Directory -Force (Join-Path $sb "docs") | Out-Null
+    Copy-Item $out (Join-Path $sb "docs\API-SURFACE.md") -Force
+    $hit = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "api-surface.ps1") `
+             -ProjectDir $sb -Lookup "Generate" 2>&1 | Out-String
+    Assert ($LASTEXITCODE -eq 0) "lookup found nothing for a member that exists"
+    Assert ($hit -match 'Generate') "lookup output does not contain the member"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "a build failure hands over the real signatures" {
+  # runA made ZERO search_datasheets calls, so a registry the model must REMEMBER to consult is worth
+  # nothing. The compiler already names what it could not resolve; close-unit looks those up and prints
+  # them in the failure, so the answer arrives without anyone choosing to ask for it.
+  $cu = Get-Content (Join-Path $kit "close-unit.ps1") -Raw
+  Assert ($cu -match 'function Show-Signatures') "close-unit has no signature lookup"
+  Assert ($cu -match 'Show-Signatures \$r\.Output') "Show-Signatures is never called on a build failure"
+  Assert ($cu -match 'CS\(\?:1501') "it does not key off the compiler's unresolved-symbol errors"
+  Assert ($cu -match 'api-surface\.ps1') "close-unit does not regenerate the surface after a good build"
+  # and the agent that writes the code has to be told it exists
+  $dev = Get-Content (Join-Path $kit "global\agents\dev-agent.md") -Raw
+  Assert ($dev -match 'API-SURFACE\.md') "dev-agent is not told about the API surface"
+  Assert ($dev -match 'api-surface\.ps1') "dev-agent has no command to look a signature up"
+}
+
+Test-Case "scaffold and upgrade ignore .claude/ (agent worktrees are not source)" {
+  # One project showed 313 changed paths, 247 of them agent worktrees under .claude/.
+  foreach ($f in @("new-project.ps1","upgrade-project.ps1")) {
+    $s = Get-Content (Join-Path $kit $f) -Raw
+    Assert ($s -match '\.claude/') "$f does not add .claude/ to .gitignore"
+  }
+}
+
 Test-Case "a stale pre-commit hook is REPAIRED, not reported healthy" {
   # The worst failure yet, because it fails CLOSED: a hook naming a scanner in a moved/renamed kit
   # aborts every commit in the project. install-hooks saw the string "scan-secrets.ps1" and returned

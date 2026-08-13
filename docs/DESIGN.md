@@ -37,14 +37,22 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       report card (`grades/<id>_GRADE.md`) and emits tagged suggestions; `hygiene-agent` applies the
       `[mechanical]` ones (standards/lint + project-file & dependency integrity). `/build` order: per TASK
       dev -> qa -> `close-unit.ps1`; per STORY grade -> hygiene (see R18).
-- [x] R7: **Layered docs + stack-agnostic scaffold + late architecture.** `/scaffold <general|experience>`
+- [x] R7: **Layered docs + stack-agnostic scaffold + EARLY architecture.** `/scaffold <general|experience>`
       (`new-project.ps1`) lays down CLAUDE.md + .mcp.json + `docs/` AND creates the design doc - `DESIGN.md`
       (general) or `TEDD.md` (experience) - as `Status: DRAFT` (NO stack chosen). The design is split by
       lifecycle: **DESIGN.md/TEDD.md** (contract: requirements, epics, stack - owned by `/design`, the only
       lockable doc), **STORIES.md** (story backlog - `/stories`), **TASKS.md** (task map - `/taskmap`).
-      `/design` decides the stack LATE (crib from `templates/<stack>`: dotnet/avalonia/python/embedded/unity/
+      `/design` decides the stack FIRST (crib from `templates/<stack>`: dotnet/avalonia/python/embedded/unity/
       generic). `/design` and `/proto` flip DESIGN `Status:` DRAFT<->LOCKED on confirmation; STORIES/TASKS stay
       editable while LOCKED; `/spec` and `/build` gate on DESIGN LOCKED.
+      **Architecture is decided FIRST, not late** (reversed 2026-08-13). The original rule deferred the
+      stack to keep options open; three graded runs showed it only deferred the blockers. CLAUDE.md has no
+      Build/test command until a stack exists, so `/build` Gate 1 refuses and `close-unit` can verify
+      nothing; the contracts are stack-flavoured anyway (they name real library types); and library API
+      docs cannot be ingested before the libraries are known - which is how one project shipped 16 compile
+      errors from guessed Magick.NET calls. `/scaffold` stays stack-agnostic (it is deterministic and
+      model-free); `/design` step 2 picks the stack, fills CLAUDE.md from the profile fragment, and ingests
+      the library docs BEFORE requirements, epics and contracts are written.
 - [x] R8: One-command installer (`install.ps1` / `install.cmd`) that detects its own location, builds the model
       `-cc` variants + the C# server, installs commands/agents/`settings.json` with paths auto-fixed
       (JSON parse/serialize, idempotent, move-safe), and tunes Ollama.

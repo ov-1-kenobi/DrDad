@@ -74,7 +74,8 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     $gi = Join-Path $proj ".gitignore"
     if (-not (Test-Path $gi)) {
       # Includes the secret-bearing files that must never be committed.
-      $ignore = (@("bin/","obj/","docs/.index/",".tmp/","__pycache__/","node_modules/","*.user",
+      # .claude/ holds agent worktrees - one project showed 247 of them as "changed" code.
+    $ignore = (@("bin/","obj/","docs/.index/",".tmp/","__pycache__/","node_modules/","*.user",".claude/",
                    ".env",".env.*","!.env.example","*.pem","*.pfx","*.key","secrets/",
                    "appsettings.*.local.json") -join "`r`n") + "`r`n"
       [System.IO.File]::WriteAllText($gi, $ignore, (New-Object System.Text.UTF8Encoding($false)))

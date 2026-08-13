@@ -44,7 +44,7 @@ model-load time; `OLLAMA_KEEP_ALIVE=30m` keeps it warm after.
 | Command            | Does                                                        | Model           | When                          |
 |--------------------|-------------------------------------------------------------|-----------------|-------------------------------|
 | `/scaffold <kind>` | **Stack-agnostic** DAD init: CLAUDE.md/.mcp.json/docs + the design doc as **DRAFT**. `kind` = general (`DESIGN.md`) or experience (`TEDD.md`); no stack chosen. `new-project.cmd <kind>` is the same. | either | starting a project |
-| `/design [topic]`   | **Design-first**: requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step) + stack (LATE); NO stories/code; offers to LOCK | **oss**; **quality**/cloud for contracts | plan before building |
+| `/design [topic]`   | **Design-first**: stack FIRST, then requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step); NO stories/code; offers to LOCK | **oss**; **quality**/cloud for contracts | plan before building |
 | `/stories [arg]`    | Manage **STORIES.md**: expand epics into stories, normalize/dedupe, `migrate` old in-doc stories out | **oss**/quality | build the story backlog |
 | `/taskmap [story]` | Shard **STORIES.md** -> dependency-ordered bite-sized **task map** (`docs/TASKS.md`), reindex | **quality** (Next) | after /stories, before /build or /spec |
 | `/proto [idea]`    | Build-as-you-go greybox + document decisions                | **dev**         | firing from the hip           |
@@ -55,14 +55,14 @@ model-load time; `OLLAMA_KEEP_ALIVE=30m` keeps it warm after.
 | `/diagram [focus]` | Mermaid architecture view of DESIGN.md -> `docs/ARCHITECTURE.md` (offline, diagram-as-code) | either | visualize the architecture |
 | `/audit [recover <file>]` | Cross-doc audit (schema/traceability/DONE-rollups/grade cards), findings routed to owner agents; `recover` = git triage for a mangled file | **oss**/dev | after /build scope; messy sessions |
 
-Scaffold is stack-agnostic. The STACK is chosen later in `/design` (architecture step), cribbed from a
+Scaffold is stack-agnostic. The STACK is chosen in `/design` step 2 - EARLY - cribbed from a
 profile fragment `templates/<stack>/PROFILE.md` (dotnet | avalonia | python | embedded | unity).
 (`templates/generic/CLAUDE.md` is the always-installed base, not a stack profile.)
 
 ## The pipeline
 ```
 /scaffold <general|experience>   (stack-agnostic: CLAUDE.md + .mcp.json + docs/ + DESIGN as DRAFT)
-  ->  /design     (DESIGN: requirements + epics + stack LATE -> fills CLAUDE.md; offers to LOCK)
+  ->  /design     (DESIGN: stack FIRST -> fills CLAUDE.md, then requirements + epics + contracts; offers to LOCK)
   ->  /stories    (expand epics into stories -> STORIES.md)
   ->  /taskmap (optional: shard STORIES.md into TASKS.md - bite-sized tasks + deps, indexed)
   ->  lock DESIGN, then /spec  OR  /build   (implement; works the next ready task if TASKS.md exists)

@@ -54,6 +54,45 @@ function Show-Tail([string]$text) {
   }
 }
 
+# When the build fails on a SIGNATURE error, hand over the real signature instead of leaving the model to
+# go find it. This is the whole point of docs\API-SURFACE.md being mechanical rather than advisory: runA
+# made ZERO search_datasheets calls, so a registry the model has to remember to consult is worth nothing.
+# The compiler already names the type and member it could not resolve - we just look them up.
+function Show-Signatures([string]$buildOutput) {
+  $api = Join-Path $proj "docs\API-SURFACE.md"
+  if (-not (Test-Path $api)) { return }
+  # CS1501 no overload takes N args | CS1061/CS0117 no such member | CS7036 missing required parameter
+  # | CS1503 argument type | CS0246 type not found. All of them quote the identifier in 'single quotes'.
+  $names = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($m in [regex]::Matches($buildOutput, "error CS(?:1501|1061|0117|7036|1503|0246|1729|0029)[^\r\n]*")) {
+    foreach ($q in [regex]::Matches($m.Value, "'([A-Za-z_][A-Za-z0-9_.<>]{2,})'")) {
+      $n = $q.Groups[1].Value
+      if ($n -match '\.') { $n = ($n -split '\.')[-1] }          # 'Foo.Bar(...)' -> Bar
+      $n = ($n -split '[<(]')[0]
+      if ($n.Length -ge 3) { [void]$names.Add($n) }
+    }
+  }
+  if ($names.Count -eq 0) { return }
+  $script = Join-Path $kit "api-surface.ps1"
+  if (-not (Test-Path $script)) { return }
+  Write-Host ""
+  Write-Host "[close-unit] REAL SIGNATURES for what the compiler could not resolve (docs\API-SURFACE.md):" -ForegroundColor Cyan
+  $shown = 0
+  foreach ($n in ($names | Select-Object -First 6)) {
+    $hit = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $proj -Lookup $n 2>$null
+    if ($LASTEXITCODE -eq 0 -and $hit) {
+      Write-Host "  --- $n ---" -ForegroundColor Cyan
+      $hit | Select-Object -First 12 | ForEach-Object { Write-Host "  $_" }
+      $shown++
+    }
+  }
+  if ($shown -eq 0) {
+    Write-Host "  (nothing matched - the identifier may be yours and not yet built, or misspelled)" -ForegroundColor DarkGray
+  } else {
+    Write-Host "  Use these EXACTLY. Do not guess an overload - this list came out of the compiled assembly." -ForegroundColor Cyan
+  }
+}
+
 # How many tests actually ran? -1 = could not tell. A story must never close on 0 or unknown: mediamotor
 # had six test projects missing from the .sln, so 'dotnet test' printed "Build succeeded" and ran NOTHING.
 function Get-TestCount([string]$out) {
@@ -145,10 +184,20 @@ if (-not $SkipVerify) {
     if ($r.Code -ne 0) {
       Write-Host "[close-unit] BUILD FAILED (exit $($r.Code)) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
       Show-Tail $r.Output
+      Show-Signatures $r.Output
       Write-Host "             Fix the build, then re-run. (-SkipVerify overrides, but then 'done' means nothing.)" -ForegroundColor Red
       exit 1
     }
     $notes.Add("build verified ($cmd)")
+    # The build just succeeded, so the assemblies are current: refresh the API surface while it is true.
+    # Generated from the DLLs, so it cannot drift, and it lands in docs\ where the index already looks.
+    try {
+      $apiScript = Join-Path $kit "api-surface.ps1"
+      if (Test-Path $apiScript) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $apiScript -ProjectDir $proj -Quiet | Out-Null
+        if (Test-Path (Join-Path $proj "docs\API-SURFACE.md")) { $notes.Add("API surface regenerated (docs\API-SURFACE.md)") }
+      }
+    } catch { $warns.Add("could not refresh docs\API-SURFACE.md: $($_.Exception.Message)") }
   }
 
   # A STORY may only close on tests that actually RAN. Tasks skip this (too slow per task, and a partial
@@ -181,6 +230,50 @@ if (-not $SkipVerify) {
       }
       $notes.Add("tests verified ($count test(s) ran)")
     }
+  }
+}
+
+# --- 0c) is this id ALREADY closed while new code is waiting? -----------------------------------
+# The mismatch this catches, from a real run: a commit titled "T8.1: Implement ObjectStore" actually
+# contained VariantProcessor.cs (T7.1's work), because close-unit does `git add -A` and banks whatever
+# is dirty under whatever id you pass. Then `t8.1` (lower case) matched the already-ticked T8.1, took
+# the idempotent path, and committed T8.2's MetadataStore under a no-op close - leaving T8.2 open with
+# its implementation already in history. An id that is already [x] plus pending code is the signature
+# of work being filed under the wrong unit, and it is cheap to detect.
+$alreadyClosed = $false
+if (Test-Path $tasksFile) {
+  $alreadyClosed = [bool](Select-String -Path $tasksFile -Pattern "^###\s*\[x\]\s*$esc\b" -Quiet)
+  # Report the CANONICAL id: matching is case-insensitive, so `t8.1` silently ticks `T8.1`.
+  $canon = Select-String -Path $tasksFile -Pattern "^###\s*\[[ x]\]\s*($esc)\b" | Select-Object -First 1
+  if ($canon -and $canon.Matches[0].Groups[1].Value -cne $Id) {
+    $warns.Add("id '$Id' matched '$($canon.Matches[0].Groups[1].Value)' (case differs) - using the id as written in TASKS.md")
+  }
+}
+if ($alreadyClosed -and -not $NoCommit -and (Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
+  $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  $pending = @()
+  try {
+    Push-Location $proj
+    foreach ($line in @(git status --porcelain -uall)) {
+      if ($line.Length -lt 4) { continue }
+      $f = $line.Substring(3).Trim().Trim('"')
+      if ($f -match '\s->\s') { $f = ($f -split '\s->\s')[-1].Trim().Trim('"') }
+      $n = $f.Replace('/', '\')
+      if ($n -like "docs\*" -or $n -like ".claude\*" -or $n -like "grades\*") { continue }
+      if ($n -like "*\bin\*" -or $n -like "*\obj\*" -or $n -like "bin\*" -or $n -like "obj\*") { continue }
+      if (@(".cs",".fs",".vb",".py",".ts",".tsx",".js",".jsx",".go",".rs",".java",".kt",".c",".h",
+            ".cpp",".hpp",".cc",".rb",".php",".swift",".sql",".csproj",".fsproj",".sln") -notcontains
+          [System.IO.Path]::GetExtension($n)) { continue }
+      $pending += $n
+    }
+  } catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }
+  if ($pending.Count -gt 0) {
+    Write-Host "[close-unit] '$Id' is ALREADY closed, but $($pending.Count) code file(s) are uncommitted:" -ForegroundColor Red
+    foreach ($f in ($pending | Select-Object -First 8)) { Write-Host "               $f" -ForegroundColor Red }
+    Write-Host "             Committing them under '$Id' would file this work against the wrong unit - the" -ForegroundColor Red
+    Write-Host "             commit message would describe something the diff does not contain. Close them" -ForegroundColor Red
+    Write-Host "             under the id that OWNS them (check docs\TASKS.md), or -NoCommit to skip banking." -ForegroundColor Red
+    exit 1
   }
 }
 

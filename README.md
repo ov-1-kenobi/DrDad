@@ -1,6 +1,6 @@
 # DAD - Design Document Aligned Development
 
-**Version 0.12.2** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.13.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 
@@ -35,7 +35,7 @@ Ollama. No Anthropic account, no API key, no internet after first setup. The loo
    and tunes Ollama. It checks prerequisites first and warns about anything missing.
 3. **Restart Ollama** (quit from the system tray, reopen) so the tuning + `qwen3-coder-next-cc` are live.
 4. Scaffold a project (stack-agnostic): `new-project.cmd` (or `/scaffold`) -> open in VS Code -> `/design`
-   (picks `docs/DESIGN.md` or `docs/TEDD.md`, captures stories; stack decided late) -> lock -> `/spec` `/build`.
+   (picks `docs/DESIGN.md` or `docs/TEDD.md`; stack decided FIRST, then requirements/epics/contracts) -> lock -> `/spec` `/build`.
 
 Unplug the internet after step 2 - everything from here is local. `install.ps1` is safe to re-run.
 
@@ -47,7 +47,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
   (global) and points them at this folder. After that, `/scaffold` `/design` `/spec` `/proto` `/build` `/assets`
   work in **every** project - no per-project install.
 - **Per project:** run `new-project.cmd` (or `/scaffold`) - **stack-agnostic** DAD init. The design doc
-  (DESIGN.md vs TEDD.md) and the stack are decided in `/design`, not at scaffold. (Use this, not `/init`.)
+  (DESIGN.md vs TEDD.md) and the stack are decided in `/design` - the stack FIRST. (Use this, not `/init`.)
 - **Don't move or delete this folder** - the global config and every project's `.mcp.json` reference
   it by absolute path. If you must move it, re-run `install.ps1` from the new location.
 - **Re-run `install.ps1` only when** you move the folder, or change the global commands/agents/settings
@@ -70,6 +70,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `scan-secrets.ps1` / `.cmd` | **Credential scanner.** Blocks secrets from reaching git or the plaintext RAG index. Never prints the matched value - only file:line, pattern name, and a fingerprint. |
 | `install-hooks.ps1` | Installs the project's `pre-commit` hook (runs `scan-secrets -Staged`). Called by scaffold + upgrade; re-runnable. |
 | `dad-guard.ps1` / `.cmd` | **The stop guard** - a Claude Code `Stop` hook (wired by `install.ps1`) that refuses to let a turn end with uncommitted code nothing has built or tested. The only gate here the model cannot decline to invoke. `-Check` to test it, `-Ack` to override. |
+| `api-surface.ps1` / `.cmd` | **The signature registry.** Reflects over the project's built assemblies AND its NuGet packages, writing exact public signatures to `docs/API-SURFACE.md` - regenerated after every successful build, so it cannot drift. `-Lookup <Type>` answers one question. A build failure prints the relevant signatures automatically. |
 | `close-unit.ps1` | **Deterministic unit close-out** used by `/build` and `/spec`: ticks the task in TASKS.md, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits, and verifies. Non-zero exit = not closed. Mechanical bookkeeping is scripted because models skip prose checklists. |
 | `voice.py` / `voice.cmd` | **Push-to-talk voice loop** (optional): mic -> faster-whisper (GPU STT) -> headless `claude -p --continue` -> Windows TTS. Run from your project folder; needs `uv` (winget install astral-sh.uv). First run downloads deps + the whisper model; offline after. |
 | `transcribe.py` | Speech-to-text helper used by the `transcribe_audio` MCP tool (also standalone: `uv run transcribe.py <audio>`). Needs `uv`. |

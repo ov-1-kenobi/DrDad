@@ -19,19 +19,12 @@ vision model transcribes it to text - and use that as design input.)
    - If it is `LOCKED`, OFFER to unlock to `DRAFT` and, on my OK, flip the header + reindex before editing.
    - If it is missing (older project), ASK general vs experience, create it `Status: DRAFT` from
      `templates/_common/docs/`, then reindex.
-2. **Capture requirements** under `## Requirements` (numbered, testable, stack-agnostic - WHAT, not HOW). For
-   open questions, propose 2-3 options with tradeoffs, recommend one, WAIT for my choice. Reindex after edits.
-3. **Group into epics** under `## Epics` - lightweight, coarse feature groups (`E1`, `E2`, ...). Keep it light:
-   a small project may have one epic or none. These are what `/stories` expands into stories.
-4. **Contracts - pin the load-bearing decisions (the step that keeps local dev models from improvising):**
-   spawn the **architect-agent** via the **Task tool** (subagent_type: "architect-agent" - an AGENT, not a
-   skill). It hunts UNDERSPECIFIED contracts (data formats, core-function semantics like "what exactly does
-   apply/replay/merge do", invariants), proposes options, and - after MY choice per contract - pins each
-   into the doc's `## Contracts` section WITH a worked example. Relay its options to me and WAIT for my
-   picks. (Best run on `quality`/Next or a frontier model - it is rare and one-shot; you can also run JUST
-   this step online, then build fully offline.)
-   - Retrofit mode: `/design contracts` runs ONLY this step on an existing design (unlock first if LOCKED).
-5. **Solution architecture - decide LATE, once requirements + epics look stable:**
+2. **Solution architecture - decide the STACK NOW, before anything downstream depends on it:**
+   The stack used to be chosen last, on the theory that late commitment keeps options open. In practice it
+   blocked everything: CLAUDE.md has no Build/test command until a stack exists, so `/build` Gate 1 refuses
+   to start and `close-unit` can verify nothing; the contracts below are stack-flavoured anyway (they name
+   real library types); and the library docs cannot be ingested until you know the libraries - which is how
+   a project shipped 16 compile errors from guessed API calls. Decide it here.
    - Propose 2-3 architectures/stacks that FIT (let requirements lead - do NOT default to a favorite). Give
      tradeoffs, recommend one, WAIT for my choice.
    - Record the chosen stack + rationale in the doc's "Solution architecture" section.
@@ -53,6 +46,19 @@ vision model transcribes it to text - and use that as design input.)
      placeholders means dev-agent and qa-agent have **no build or test command**, so they improvise their
      own test reporting (that is where stray TEST_RESULTS.md / TEST_SUMMARY.md files come from) and `/build`
      cannot verify anything. Replace the project name too.
+3. **Capture requirements** under `## Requirements` (numbered, testable - WHAT, not HOW; the stack is now
+   known, so name real types where it sharpens a requirement). For open questions, propose 2-3 options with
+   tradeoffs, recommend one, WAIT for my choice. Reindex after edits.
+4. **Group into epics** under `## Epics` - lightweight, coarse feature groups (`E1`, `E2`, ...). Keep it light:
+   a small project may have one epic or none. These are what `/stories` expands into stories.
+5. **Contracts - pin the load-bearing decisions (the step that keeps local dev models from improvising):**
+   spawn the **architect-agent** via the **Task tool** (subagent_type: "architect-agent" - an AGENT, not a
+   skill). It hunts UNDERSPECIFIED contracts (data formats, core-function semantics like "what exactly does
+   apply/replay/merge do", invariants), proposes options, and - after MY choice per contract - pins each
+   into the doc's `## Contracts` section WITH a worked example. Relay its options to me and WAIT for my
+   picks. (Best run on `quality`/Next or a frontier model - it is rare and one-shot; you can also run JUST
+   this step online, then build fully offline.)
+   - Retrofit mode: `/design contracts` runs ONLY this step on an existing design (unlock first if LOCKED).
 6. When requirements + epics + CONTRACTS + architecture are set, OFFER to set `Status: LOCKED` and, on my
    OK, flip the header + reindex. Do NOT offer to lock while a load-bearing contract is unpinned (the
    architect-agent reports lock-readiness). Then tell me: run `/stories` to break the epics into stories

@@ -23,6 +23,8 @@
          Microsoft.ML.OnnxRuntime.Gpu if you want CUDA) + SkiaSharp (MIT) for image decode/resize. -->
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
     <PackageReference Include="SkiaSharp" Version="2.88.8" />
+    <!-- MetadataLoadContext: read assembly signatures without loading or locking them (the api-surface CLI mode). -->
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
   </ItemGroup>
 
 </Project>

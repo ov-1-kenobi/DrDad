@@ -15,8 +15,16 @@ and placeholder convention are in CLAUDE.md.
   contract and implement its Format/Invariants/Worked example EXACTLY. If the unit requires you to invent
   a data format, algorithm, or semantics that no contract pins - STOP and return it as a QUESTION
   ("needs contract: <what>"). An improvised format is a bug even if it compiles.
-- Implement in the project's language/stack. Follow the placeholder/stub convention from CLAUDE.md
-  (interface mocks, dependency stubs, mocked HAL/bus, greybox primitives) with `// TODO` markers.
+- **LOOK UP EVERY SIGNATURE YOU ARE NOT SURE OF - do not reconstruct it from memory.**
+  `docs/API-SURFACE.md` carries the EXACT public signatures of this solution AND of every NuGet package it
+  references, generated from the compiled assemblies after each successful build, so it cannot be stale:
+  ```
+  powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\api-surface.ps1" -Lookup <TypeOrMember>
+  ```
+  or `search_datasheets "<type> signature"` - it is in the index like every other doc. Guessing overloads
+  is how one project shipped 16 compile errors from invented Magick.NET calls, and how a single task spent
+  4h25m rediscovering Azure Table generics that were sitting in the DLL the whole time.
+- Implement in the project's language/stack. Follow the placeholder/stub convention from CLAUDE.md  (interface mocks, dependency stubs, mocked HAL/bus, greybox primitives) with `// TODO` markers.
 - Prefer several SMALL Edits over one big replacement. If an edit leaves a file mangled (methods spliced,
   will not compile) STOP - do NOT hand-reconstruct it from memory; report it so the orchestrator restores
   the last good version from git, then retry smaller.

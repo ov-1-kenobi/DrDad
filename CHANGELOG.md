@@ -2,6 +2,62 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.13.0 - 2026-08-13
+
+Three changes, one theme: stop making the model rediscover things that are already knowable.
+
+runA first, because it is why these were worth doing. The stop guard fired six times and the model
+complied every time; the working tree ended **clean for the first time in that project's history**;
+tasks went 6/16 -> 9/16 with real `close-unit` commits. The remaining waste was elsewhere - one task took
+**4h 25m** and its own summary read *"fixed all Azure Table Storage API calls to use proper generic type
+parameters"*. That is signature archaeology against a DLL that had the answers.
+
+### Fixed
+- **`close-unit` REFUSES to bank new work under an already-closed id.** It does `git add -A`, so it banks
+  whatever is dirty under whatever id you pass - which produced a commit titled "T8.1: Implement
+  ObjectStore" whose diff was `VariantProcessor.cs` (T7.1's work). Then `t8.1` matched the already-ticked
+  `T8.1`, took the idempotent path, and committed T8.2's `MetadataStore` under a no-op close, leaving T8.2
+  open with its implementation already in history. An id that is already `[x]` plus pending code is the
+  signature of work being filed against the wrong unit, and now stops the close. Case differences are
+  reported rather than silently accepted.
+- **`/scaffold` and `upgrade-project` now gitignore `.claude/`.** One project reported 313 changed paths;
+  247 were agent worktrees. Every project the kit has ever made carried this.
+
+### Changed - the stack is decided FIRST (reverses R7)
+"Late architecture" was meant to keep options open. Three graded runs showed it only deferred the
+blockers: `CLAUDE.md` has no Build/test command until a stack exists, so `/build` Gate 1 refuses and
+`close-unit` can verify nothing; the contracts are stack-flavoured anyway (they name real library types);
+and the library API docs cannot be ingested before the libraries are known - which is exactly how one
+project shipped 16 compile errors from guessed Magick.NET calls. `/design` step 2 now picks the stack,
+fills CLAUDE.md from the profile fragment, and ingests the library docs BEFORE requirements, epics and
+contracts. `/scaffold` stays stack-agnostic (it is deterministic and model-free). R7 rewritten; the old
+wording is gone from the record, and a test asserts the step order.
+
+### Added - the API surface registry
+- **`api-surface.ps1` / `.cmd`** and a `--api-surface` mode in `local-tools.exe`: reflection over the
+  project's built assemblies AND its direct NuGet packages, emitting exact public signatures to
+  `docs/API-SURFACE.md`. Reflection over metadata, not source parsing - the metadata IS the truth, and it
+  covers packages whose source you do not have. It lands in `docs/`, so the EXISTING index carries it: no
+  new MCP tool, no new server, `search_datasheets` already finds it.
+- **`close-unit` regenerates it after every successful build**, so it cannot drift from the code.
+- **A build failure hands the signatures over.** runA made ZERO `search_datasheets` calls, so a registry
+  the model has to REMEMBER to consult is worth nothing. The compiler already names what it could not
+  resolve (CS1501/1061/0117/7036/1503/0246); `close-unit` looks those identifiers up and prints the real
+  signatures inside the failure. The answer arrives without anyone choosing to ask for it - the same
+  lesson as the stop guard, applied to knowledge instead of bookkeeping.
+- `dev-agent` is told to look up any signature it is unsure of, with the command to do it.
+
+Scoping, learned the hard way: walking every DLL under `bin/` gave 131 assemblies and 3,928 types
+(1.2 MB) of transitive dependencies nobody calls. Emission is limited to direct `PackageReference`s and
+the solution's own non-test assemblies. **Resolution is not filtered** - `TableClient`'s methods return
+`Response<T>` from `Azure.Core`, and dropping that from the resolver made every one of those signatures
+unresolvable, so the type emitted one constructor and no methods at all.
+
+### Tests
+81 cases (was 76). New: close-unit refusing a wrong-id close (and still allowing the right one); the
+design step order with architecture before requirements; the generator producing parameterised, generic
+signatures for the kit's own server without leaking framework assemblies; lookup mode resolving a member
+to its owning type; the build-failure signature handover being wired; and `.claude/` being ignored.
 ## 0.12.2 - 2026-08-08
 
 The third and worst instance of one bug: something in a project points at the kit by absolute path, the

@@ -84,14 +84,16 @@ foreach ($doc in @("STATUS.md","RECIPES.md")) {
 if (Get-Command git -ErrorAction SilentlyContinue) {
   $gi = Join-Path $proj ".gitignore"
   $secretIgnores = @(".env",".env.*","!.env.example","*.pem","*.pfx","*.key","secrets/","appsettings.*.local.json")
+  # .claude/ holds agent worktrees - one project showed 247 of them as "changed". Never source.
+  $noiseIgnores  = @(".claude/")
   if (-not (Test-Path $gi)) {
-    $ignore = ((@("bin/","obj/","docs/.index/",".tmp/","__pycache__/","node_modules/","*.user") + $secretIgnores) -join "`r`n") + "`r`n"
+    $ignore = ((@("bin/","obj/","docs/.index/",".tmp/","__pycache__/","node_modules/","*.user",".claude/") + $secretIgnores) -join "`r`n") + "`r`n"
     [System.IO.File]::WriteAllText($gi, $ignore, (New-Object System.Text.UTF8Encoding($false)))
     Write-Host "  added .gitignore" -ForegroundColor Green
   } else {
     # Append only the secret-bearing entries that are missing (never rewrite the user's file).
     $cur = Get-Content $gi -Encoding UTF8
-    $missing = $secretIgnores | Where-Object { $cur -notcontains $_ }
+    $missing = ($secretIgnores + $noiseIgnores) | Where-Object { $cur -notcontains $_ }
     if ($missing) {
       Add-Content $gi (($missing -join "`r`n"))
       Write-Host "  .gitignore: added $($missing.Count) secret-file pattern(s)" -ForegroundColor Green
