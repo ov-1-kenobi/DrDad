@@ -2,6 +2,60 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.16.0 - 2026-08-13
+
+Three additions: UI work that can actually be gated, brownfield adoption, and a loop that notices when the
+system is drifting.
+
+### Added - `ui-agent` + a web stack profile (R25)
+Lite web / mobile-web is the case I previously said DAD was bad at, because "correct" is visual and there
+is no exit code for taste. That is still true - so `ui-agent` is accountable only for the parts that DO
+have one: the build with type errors fatal, tests that drive the thing like a user (**"renders without
+crashing" passes on a blank page**), an axe/pa11y run treated exactly like a failing unit test, and the
+360px viewport. Visual judgement goes back to you, once, with a specific thing to open and expect; the
+agent may never call a visual surface "done" on its own authority. Loading/empty/error states are
+acceptance, not polish. `/build` routes a unit with a visible surface here instead of `dev-agent`.
+
+### Added - `/document` + `survey-agent` for brownfield (R26)
+The kit assumed greenfield; most work is not. `/document` reverse-engineers an existing codebase into a
+DRAFT design doc plus a backlog of what REMAINS - not stories describing finished functionality, which
+would make every completion metric meaningless.
+
+**Describe, never invent.** Every claim cites `file:line`; anything read from a name rather than logic is
+marked `(inferred)`; "cannot determine X" is a finding, not a gap to fill plausibly. A brownfield doc that
+describes an idealised version of the code is worse than none, because every agent downstream then
+implements against the fiction. Contracts come from `docs/API-SURFACE.md` - real signatures out of the
+compiled assemblies - which is why this works here at all. `survey-agent` is READ-ONLY, works one area per
+invocation, and counts tests rather than assuming coverage from a csproj.
+
+### Added - `/retro` + `grade-trends.ps1` (R27)
+Grade cards were per-unit islands: each said how ONE story went, and nothing ever asked what kept going
+wrong ACROSS units - so the same defect got found, written down, and found again three stories later.
+
+`grade-trends.ps1` computes the half a script can: grade direction, units that needed rework, stub cards,
+and recurring themes (a theme in 40%+ of cards is a convention problem, not bad luck). `/retro` proposes
+**at most three** changes, each naming what it would have prevented, routed to `CLAUDE.md` (a convention),
+`RECIPES.md` (a proven command), `/design` (a missing contract), or - when no prose will stop a recurring
+defect - escalated as a request for a GATE in the kit. You approve. A retro that rewrites the conventions
+wholesale just makes CLAUDE.md an unread wall, and an unread convention is worse than none.
+
+On a real project it immediately reported `contract adherence` in 11/11 cards and `tests / coverage` in
+11/11 - which is a convention gap, not eleven unlucky stories.
+
+### Fixed while building it
+- **The grade parser scanned prose for a capital letter.** `\bA\b` matches the word "A", so a card reading
+  "A worked example was missing" scored as an A - and it reported the WRONG direction on real data. Grades
+  are now read from where a card states them (`**Current grade: X**` / the history table) and verified
+  against a fixture whose prose is full of stray capitals.
+- **The trend was measured in filename order**, so `S2..S6` counted as "early" and `T2.1..T6.1` as "late"
+  even though the tasks were graded first. Now ordered by the dates in each card's history.
+- **`$` in a .NET multiline regex matches before `\n`**, so on a CRLF file the row anchor never matched and
+  every card counted one grading round. Anchor dropped.
+
+### Tests
+89 cases (was 86). Three new: the grade parser resisting prose capitals and ordering chronologically;
+`ui-agent` and the web profile carrying real gates and no pinned versions; `/document` and `survey-agent`
+being read-only, citation-bound and unable to assert absence.
 ## 0.15.0 - 2026-08-13
 
 `/audit` was unsafe to say yes to. This makes the state half of an audit computed instead of observed.

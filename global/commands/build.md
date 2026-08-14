@@ -40,6 +40,9 @@ its dependencies satisfied, STOP and report the blocked tasks.
    planner sharded it) - do NOT spawn requirements-agent for it and do NOT re-decompose it.
    *(No task map: spawn **requirements-agent** to select + flesh the next story from `docs/STORIES.md`.)*
 2. **dev-agent** -> implement per CLAUDE.md conventions; collect its summary + any manual steps.
+   *(If the unit has a VISIBLE SURFACE - a page, screen or component - spawn **ui-agent** instead. It is
+   held to behaviour + accessibility gates and hands visual judgement back to me, because there is no exit
+   code for taste. It will WAIT for my look; relay that and stop rather than closing the unit yourself.)*
    - If it reports a file got MANGLED: spawn **librarian-agent** in RECOVER mode, restore on my OK, retry
      with a smaller edit. Never let it hand-reconstruct a broken file.
    - If it returns **"needs contract"**: do NOT relay that to me until you have CHECKED it:

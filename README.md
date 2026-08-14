@@ -1,6 +1,6 @@
 # DAD - Design Document Aligned Development
 
-**Version 0.15.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.16.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 
@@ -70,6 +70,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `scan-secrets.ps1` / `.cmd` | **Credential scanner.** Blocks secrets from reaching git or the plaintext RAG index. Never prints the matched value - only file:line, pattern name, and a fingerprint. |
 | `install-hooks.ps1` | Installs the project's `pre-commit` hook (runs `scan-secrets -Staged`). Called by scaffold + upgrade; re-runnable. |
 | `dad-guard.ps1` / `.cmd` | **The stop guard** - a Claude Code `Stop` hook (wired by `install.ps1`) that refuses to let a turn end with uncommitted code nothing has built or tested. The only gate here the model cannot decline to invoke. `-Check` to test it, `-Ack` to override. |
+| `grade-trends.ps1` / `.cmd` | **The computed half of a retrospective**: grade direction over time, units that needed rework, stub cards, and recurring themes across every grade card. `/retro` turns these into at most three proposed convention changes; you approve them. |
 | `source-stats.ps1` / `.cmd` | **Citation-integrity gate** for `/research`: do the design doc's `[Snnn]` citations resolve to sources that exist and were tiered? FAILs on a claim resting on nothing. Verifies traceability, not truth. |
 | `api-surface.ps1` / `.cmd` | **The signature registry.** Reflects over the project's built assemblies AND its NuGet packages, writing exact public signatures to `docs/API-SURFACE.md` - regenerated after every successful build, so it cannot drift. `-Lookup <Type>` answers one question. A build failure prints the relevant signatures automatically. |
 | `close-unit.ps1` | **Deterministic unit close-out** used by `/build` and `/spec`: ticks the task in TASKS.md, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits, and verifies. Non-zero exit = not closed. Mechanical bookkeeping is scripted because models skip prose checklists. |

@@ -111,7 +111,34 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       contamination, traceability judgement, corpus health. Paired with `-Contract <Cn>`, which refutes a
       claimed-missing contract by grep (the same run called C2PA signing absent when it is `C10-b`). The
       general rule, now applied three times: **never accept an assertion a script can settle** - not for
-      counts (R14), not for a contract, not for document state.- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
+      counts (R14), not for a contract, not for document state.- [x] R25: **UI units are gated on behaviour and accessibility, never on looks** (`ui-agent`,
+      `templates/web/PROFILE.md`). There is no exit code for taste, so the parts that CAN be verified are
+      the ones the agent is accountable for: the build with type errors fatal, tests that drive the thing
+      like a user ("renders without crashing" passes on a blank page), an axe/pa11y run treated exactly
+      like a failing unit test, and the 360px viewport. Visual judgement goes back to the human, once,
+      with a specific thing to open and expect - the agent may never call a visual surface "done" on its
+      own authority. Loading/empty/error states are acceptance, not polish. `/build` routes a unit with a
+      visible surface here instead of dev-agent.
+- [x] R26: **Brownfield adoption** (`/document` + `survey-agent`). The kit assumed greenfield; most work
+      is not. `/document` reverse-engineers an EXISTING codebase into a DRAFT design doc plus a backlog of
+      what REMAINS, one area per survey. The rule is DESCRIBE, NEVER INVENT: every claim cites `file:line`,
+      anything taken from a name rather than logic is marked `(inferred)`, and "cannot determine X" is a
+      finding rather than a gap to fill plausibly - a brownfield doc describing an idealised version of the
+      code is worse than none, because every agent downstream implements against the fiction. Contracts are
+      derived from `docs/API-SURFACE.md` (real signatures out of the compiled assemblies), which is why
+      this works here at all. `survey-agent` is READ-ONLY and counts tests rather than assuming coverage
+      from a csproj.
+- [x] R27: **The retro loop** (`/retro` + `grade-trends.ps1`). Grade cards were per-unit islands: each
+      said how ONE story went, and nothing asked what kept going wrong ACROSS units, so the same defect was
+      found, written down, and found again three stories later. `grade-trends.ps1` computes the half a
+      script can - grade direction (chronologically, by the dates in each card's history table, NOT by
+      filename), units that needed rework, stub cards, and recurring themes; a theme in 40%+ of cards is a
+      convention problem rather than bad luck. `/retro` then proposes at most THREE changes, each naming
+      what it would have prevented, routed to CLAUDE.md (a convention), RECIPES.md (a proven command),
+      `/design` (a missing contract) or - when no prose will stop a recurring defect - escalated as a
+      request for a GATE in the kit. The human approves. Grades are read from where a card STATES them
+      (`**Current grade: X**` / the history table), never by scanning prose for a capital letter: a first
+      version matched "A worked example" and reported the wrong direction on a real project.- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
       kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
       refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)
       by header-prefix splice while preserving user sections (Stack/Build/test/Placeholder/Human-in-loop).

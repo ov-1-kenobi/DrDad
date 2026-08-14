@@ -84,7 +84,7 @@ Get-ChildItem (Join-Path $root "global\commands") -File | ForEach-Object {
 Get-ChildItem (Join-Path $root "global\agents") -File | ForEach-Object {
   Write-NoBom (Join-Path $claude "agents\$($_.Name)") ((Get-Content $_.FullName -Raw -Encoding UTF8).Replace($old, $root))
 }
-Write-Host "  commands: /scaffold /research /design /taskmap /proto /spec /build /assets /tidy /stories /diagram /audit /grade   agents: requirements/architect/taskmap/dev/grade/scribe/hygiene/qa/doc-researcher/research/librarian"
+Write-Host "  commands: /scaffold /research /document /design /taskmap /proto /spec /build /assets /tidy /stories /diagram /audit /grade /retro   agents: requirements/architect/taskmap/dev/ui/grade/scribe/hygiene/qa/doc-researcher/research/survey/librarian"
 
 Write-Host "`n== 7) Install settings.json (Ollama redirect + offline flags) ==" -ForegroundColor Cyan
 $dst = Join-Path $claude "settings.json"

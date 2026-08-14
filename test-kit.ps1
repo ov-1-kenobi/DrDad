@@ -726,6 +726,82 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "grade-trends reads the STATED grade, not a capital letter in prose" {
+  # First version scanned for \b[A-F]\b, so "A worked example was missing" scored a D card as an A - and
+  # it flipped the reported direction on a real project. A retro built on mis-parsed grades is exactly the
+  # confident nonsense this kit exists to prevent, so the parse is pinned.
+  $sb = New-Sandbox
+  try {
+    $g = Join-Path $sb "grades"; New-Item -ItemType Directory -Force $g | Out-Null
+    @("# T1 grade","","**Current grade: D** (as of 2026-08-01, iteration 2)","",
+      "## Grade history","| Iter | Date | Grade | Delta |","|---|---|---|---|",
+      "| 1 | 2026-07-30 | F | initial |","| 2 | 2026-08-01 | D | fixed |","",
+      "## Assessment","A worked example was missing. B and C paths untested.",
+      ("x" * 900)) | Set-Content "$g\T1_GRADE.md" -Encoding UTF8
+    # graded EARLIER but sorts LATER by name - proves ordering is chronological, not alphabetical
+    @("# A9 grade","","**Current grade: F** (as of 2026-07-01, iteration 1)","",
+      "## Grade history","| Iter | Date | Grade | Delta |","|---|---|---|---|",
+      "| 1 | 2026-07-01 | F | initial |","",("x" * 900)) | Set-Content "$g\A9_GRADE.md" -Encoding UTF8
+
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "grade-trends.ps1") `
+              -ProjectDir $sb 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "grade-trends exited $LASTEXITCODE"
+    Assert ($out -match 'T1=D') "it did not read the stated grade (prose 'A worked example' must not win):`n$out"
+    Assert ($out -notmatch 'T1=A') "prose letters are still being scored as grades"
+    Assert ($out -match 'T1 x2') "it did not count the two grading rounds"
+    # chronological: A9 (July 1) must print before T1 (Aug 1) despite sorting later by name
+    Assert ($out -match 'A9=F\s+T1=D') "cards are not ordered by when they were graded:`n$out"
+
+    $j = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "grade-trends.ps1") `
+            -ProjectDir $sb -Json 2>&1 | Out-String) | ConvertFrom-Json
+    Assert ($j.cards -eq 2) "JSON card count wrong"
+    Assert (($j.needingRework -join ' ') -match 'T1 x2') "JSON did not report the rework"
+
+    # an empty project must not fail - a retro before any grading is legitimate
+    $sb2 = New-Sandbox
+    try {
+      & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "grade-trends.ps1") -ProjectDir $sb2 | Out-Null
+      Assert ($LASTEXITCODE -eq 0) "it failed a project with no grades folder"
+    } finally { Remove-Sandbox $sb2 }
+
+    $r = Get-Content (Join-Path $kit "global\commands\retro.md") -Raw
+    Assert ($r -match 'grade-trends\.ps1') "/retro does not run the trend script"
+    Assert ($r -match 'WAIT for my approval') "/retro applies changes without approval"
+    Assert ($r -match 'more than three changes') "/retro has no cap on proposals"
+    Assert ($r -match 'escalate it as a gate|change to the KIT') "/retro never escalates a defect prose cannot fix"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "UI work is gated on behaviour and accessibility, not on looks" {
+  $u = Get-Content (Join-Path $kit "global\agents\ui-agent.md") -Raw
+  Assert ($u -match 'no exit code for taste') "ui-agent does not acknowledge the missing gate"
+  Assert ($u -match '(?i)accessibilit') "ui-agent has no accessibility gate"
+  Assert ($u -match 'Renders without crashing.*not a test|not a test') "ui-agent accepts render-only tests"
+  Assert ($u -match '360px') "ui-agent does not check the narrow viewport"
+  Assert ($u -match 'Never claim a visual surface is "done"') "ui-agent may still declare visual work good"
+  $b = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+  Assert ($b -match 'ui-agent') "/build never routes a visible unit to ui-agent"
+  $p = Get-Content (Join-Path $kit "templates\web\PROFILE.md") -Raw
+  Assert ($p -match '## Build / test') "the web profile has no build/test block for close-unit to read"
+  Assert ($p -match 'pa11y|axe') "the web profile pins no a11y command"
+  Assert ($p -notmatch '(?m)^\s*-\s*(React|Vite)\s+\d+\.') "the web profile pins a version number"
+}
+
+Test-Case "brownfield /document describes, and cites, rather than inventing" {
+  $d = Get-Content (Join-Path $kit "global\commands\document.md") -Raw
+  Assert ($d -match 'api-surface\.ps1') "/document does not use the real API surface"
+  Assert ($d -match 'DESCRIBE, never invent') "/document does not forbid invention"
+  Assert ($d -match '\(inferred\)') "/document does not mark inference"
+  Assert ($d -match 'WORK REMAINING') "/document may write stories for already-done work"
+  Assert ($d -match 'Count the tests|count the tests') "/document assumes coverage from a csproj"
+  $s = Get-Content (Join-Path $kit "global\agents\survey-agent.md") -Raw
+  Assert ($s -match 'ONE AREA PER INVOCATION') "survey-agent may batch the whole solution"
+  Assert ($s -match 'cannot determine') "survey-agent has no way to report uncertainty"
+  Assert ($s -match 'Never edit anything') "survey-agent is not read-only"
+  Assert ($s -match 'cannot LOCATE') "survey-agent may assert absence"
+  Assert ($s -notmatch 'tools:.*Write') "survey-agent has write tools - it must be read-only"
+}
+
 Test-Case "state findings are GENERATED, not authored by the librarian" {
   # An /audit on a healthy project reported "DESIGN.md Status: LOCKED header missing" (line 5), "S2-S6
   # missing <!-- Status --> markers" (all 14 had them) and "TASKS.md has 0 tasks with [x]" (10 ticked) -
