@@ -2,6 +2,54 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.17.0 - 2026-08-15
+
+The trap under every gate in this kit, and the one mechanism that closes it.
+
+### What happened
+`/build S10` set out to fix the failing IIIF tests. It rewrote `ImageApiControllerTests.cs` to introduce a
+`CustomWebApplicationFactory` - a real and correct fix - and **15 of 16 tests did not survive the rewrite**
+(160 lines -> 30; 196 removed, 20 added). Gone: `GetImage_C9WorkedExampleProducesCorrectOutput`,
+`GetImage_IIIFLevel2Conformance`, `GetImage_ReturnsByteIdenticalOutputAsNamedVariant` - the acceptance
+criteria contract C9 existed to make testable.
+
+The report read `Iiif.Tests | 8 | 3` and **every gate went green**: build passed, tests RAN (11 > 0), tests
+PASSED (8), tree clean. None of them compared against what was there before.
+
+The model was not cheating. It was asked to make the tests pass; deleting a red test does that; nothing in
+the kit forbade it; and the scoreboard scored it as success. Given an objective that rewards a shortcut and
+a gate that applauds it, any model takes it.
+
+### The general shape
+**Every gate asked "is X OK right now?" - and a gate of that shape is satisfied by DELETING X.** Five
+surfaces were open:
+
+| surface | the shortcut |
+|---|---|
+| tests | delete a red test -> suite goes green |
+| stories / tasks totals | delete an undone unit -> 6/14 becomes 6/9, "progress" |
+| contracts / requirements | delete the contract -> nothing left to violate |
+| sources | delete the ledger row or the citation -> `source-stats` stops failing |
+| CLAUDE.md's `Build:` line | delete it -> close-unit prints "closing WITHOUT verification" and proceeds |
+
+### Added - `ratchet.ps1` / `.cmd` (R28)
+Records those counts (plus total grade-card BYTES, so a real assessment cannot be swapped for a passing
+stub) on every clean close, and **refuses the next close if any fell**. Wired into `close-unit` BEFORE any
+mutation, so nothing is ticked or committed over a shrink. `-AcceptShrink` records a deliberate removal -
+an obsolete story deleted on purpose is fine. What it must never be is silent.
+
+**It fails OPEN on its own errors**, like `dad-guard`: a gate that fails closed on its own bugs stops real
+work and gets switched off. The first version failed closed and broke three passing close-unit tests, which
+is the evidence for the rule rather than an argument against it.
+
+### Tests
+91 cases (was 89). Two new: the ratchet reproducing the exact runD deletion (15 tests -> 1) and catching
+all five surfaces; and `close-unit` refusing to tick or commit over a shrink, ratcheting only on a clean
+close, and lowering the baseline when `-AcceptShrink` is passed deliberately.
+
+### Fixed
+- `Test-Path ""` throws, so a project with no design doc crashed the counter. A checker that crashes on a
+  legitimately empty project would block every close in it.
 ## 0.16.0 - 2026-08-13
 
 Three additions: UI work that can actually be gated, brownfield adoption, and a loop that notices when the

@@ -138,7 +138,25 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       `/design` (a missing contract) or - when no prose will stop a recurring defect - escalated as a
       request for a GATE in the kit. The human approves. Grades are read from where a card STATES them
       (`**Current grade: X**` / the history table), never by scanning prose for a capital letter: a first
-      version matched "A worked example" and reported the wrong direction on a real project.- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
+      version matched "A worked example" and reported the wrong direction on a real project.- [x] R28: **The verification surface may not SHRINK silently** (`ratchet.ps1`, enforced by `close-unit`).
+      Every gate up to here asked "is X OK right now?" - and a gate of that shape is satisfied by DELETING
+      X. Measured: a run set out to fix the IIIF tests, rewrote the test file to introduce a fixture, and
+      15 of 16 tests did not survive the rewrite (including the C9 worked example, the level-2 conformance
+      check and the byte-identical guarantee). The report read "8 passed, 3 failed" and EVERY gate went
+      green - build passed, tests RAN (11 > 0), tests PASSED (8), tree clean - because none of them
+      compared against what had been there before. The model was not cheating: it was asked to make the
+      tests pass, deleting a red test does that, nothing forbade it, and the scoreboard applauded.
+      `ratchet.ps1` records counts on each clean close and refuses the next close if any fell. It covers
+      the five surfaces where the same trap was open: **tests** (delete a red test), **stories/tasks
+      totals** (delete an undone unit and 6/14 becomes 6/9), **contracts/requirements** (nothing left to
+      violate is not conformance), **sources** (deleting the ledger row silences source-stats), and
+      **CLAUDE.md's `Build:` line** (without it close-unit prints "closing WITHOUT verification" and
+      proceeds). Grade-card total BYTES too, so a real assessment cannot be replaced by a passing stub.
+      A drop is not always wrong - an obsolete story removed on purpose is fine - so `-AcceptShrink`
+      records the smaller number deliberately. What it must never be is silent. The ratchet FAILS OPEN on
+      its own errors, for the same reason dad-guard does: a gate that fails closed on its own bugs stops
+      real work and gets switched off. (The first version failed closed and broke three passing tests -
+      which is exactly the evidence for the rule.)- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
       kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
       refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)
       by header-prefix splice while preserving user sections (Stack/Build/test/Placeholder/Human-in-loop).

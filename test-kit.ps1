@@ -726,6 +726,90 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "the ratchet refuses a SHRINKING verification surface" {
+  # The trap every other gate left open: they ask "is X OK now?", which is satisfied by DELETING X.
+  # A run rewrote ImageApiControllerTests.cs to add a fixture; 15 of 16 tests did not survive. Every gate
+  # went green - build passed, tests RAN (11 > 0), tests PASSED (8), tree clean - because none of them
+  # compared against what was there before. Five surfaces were open; all are covered here.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"
+    New-Item -ItemType Directory -Force "$p\docs","$p\tests","$p\grades" | Out-Null
+    @("# Design","","Status: LOCKED","","- R1: one","- R2: two","","### C9: conformance","- **Decision:** x") |
+      Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    @("# Stories","","### Story S1: One <!-- Status: TODO -->","","### Story S2: Two <!-- Status: TODO -->") |
+      Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    @("# Tasks","","### [ ] T1.1 - a  (Story S1)","","### [ ] T2.1 - b  (Story S2)") |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    @("# Project: t","","## Build / test","- Build: ``exit 0``","- Test:  ``exit 0``") |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    $tests = (1..15 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$tests`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    ("x" * 900) | Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+
+    $r = Join-Path $kit "ratchet.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Update | Out-Null
+    Assert (Test-Path "$p\.claude\.dad-ratchet.json") "no baseline was written"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "an unchanged project was reported as shrinking"
+
+    # THE runD FAILURE, exactly: rewrite the test file down to one test
+    "public class T {`r`n    [Fact]`r`n    public void OnlyOne() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "deleting 14 tests was not caught"
+    Assert ($out -match 'tests: 15 -> 1') "the drop was not reported with its numbers:`n$out"
+
+    # the other four surfaces
+    @("# Design","","Status: LOCKED","","- R1: one") | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8   # C9 + R2 gone
+    @("# Stories","","### Story S1: One <!-- Status: TODO -->") | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    @("# Project: t","","## Build / test","- Test:  ``exit 0``") | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    $out2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p 2>&1 | Out-String)
+    foreach ($k in @('requirements','contracts','stories','hasBuildCommand')) {
+      Assert ($out2 -match "$k[: ].*->") "a drop in '$k' was not detected:`n$out2"
+    }
+    # deleting the Build: line is the nastiest one - it makes close-unit close WITHOUT verification
+    Assert ($out2 -match 'hasBuildCommand: 1 -> 0') "losing CLAUDE.md's Build command was not caught"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit REFUSES to close over a shrink, and only ratchets on success" {
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\tests" | Out-Null
+    "# Task map`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T1.2 - b   (Story S1)`n- **Goal:** y" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    $tests = (1..10 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$tests`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    # first close is clean -> it should RECORD the baseline
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "a" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the first clean close failed"
+    Assert (Test-Path "$p\.claude\.dad-ratchet.json") "a clean close did not record the ratchet baseline"
+
+    # now delete half the tests and try to close the next unit
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.2 -Title "b" -ProjectDir $p -NoReindex 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -ne 0) "close-unit closed a unit over deleted tests"
+    Assert ($out -match 'SHRANK') "it did not say what was wrong:`n$out"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.2' -Quiet)) "it ticked the task anyway"
+
+    # -AcceptShrink is the deliberate override, and it lowers the bar rather than silently passing
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.2 -Title "b" -ProjectDir $p -NoReindex -AcceptShrink | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-AcceptShrink did not allow a deliberate removal"
+    $base = Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json
+    Assert ($base.tests -eq 1) "the baseline was not lowered to the accepted number ($($base.tests))"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "grade-trends reads the STATED grade, not a capital letter in prose" {
   # First version scanned for \b[A-F]\b, so "A worked example was missing" scored a D card as an A - and
   # it flipped the reported direction on a real project. A retro built on mis-parsed grades is exactly the

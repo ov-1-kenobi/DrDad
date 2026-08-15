@@ -18,7 +18,8 @@ param(
   [switch]$NoCommit,
   [switch]$NoReindex,
   [switch]$SkipVerify,
-  [switch]$RequireGrade
+  [switch]$RequireGrade,
+  [switch]$AcceptShrink
 )
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
@@ -277,6 +278,35 @@ if ($alreadyClosed -and -not $NoCommit -and (Get-Command git -ErrorAction Silent
   }
 }
 
+# --- 0d) did the verification surface SHRINK? --------------------------------------------------
+# Every other gate here asks "is X OK now?", which is satisfied by DELETING X. A run rewrote a test
+# file to add a fixture, 15 of 16 tests did not survive, and every gate went green: build passed, tests
+# RAN (11 > 0), tests PASSED (8), tree clean. Deleting a red test is the shortest path to "make the
+# tests pass" and nothing forbade it. So: counts may not fall silently.
+if (-not $SkipVerify) {
+  $ratchet = Join-Path $kit "ratchet.ps1"
+  if (Test-Path $ratchet) {
+    $rOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $ratchet -ProjectDir $proj 2>&1 | Out-String
+    $rCode = $LASTEXITCODE
+    # FAIL OPEN on a broken checker. Exit 1 means "something shrank"; a CRASH (bad path, unreadable file,
+    # a bug of mine) must not block a legitimate close. A gate that fails closed on its own defects stops
+    # real work and gets switched off, which costs more than the case it was guarding. Same principle as
+    # dad-guard, and it is why the first version of this check broke three passing close-unit tests.
+    if ($rOut -match 'CategoryInfo|FullyQualifiedErrorId') {
+      $warns.Add("ratchet could not run - shrink NOT verified this close")
+      $rCode = 0
+    }
+    if ($rCode -ne 0 -and -not $AcceptShrink) {
+      Write-Host "[close-unit] VERIFICATION SURFACE SHRANK - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+      Write-Host ($rOut.TrimEnd())
+      Write-Host "             git still has what was removed. Restore it, or re-run with -AcceptShrink if" -ForegroundColor Red
+      Write-Host "             the removal was deliberate (that records the smaller number as the new baseline)." -ForegroundColor Red
+      exit 1
+    }
+    if ($rCode -ne 0 -and $AcceptShrink) { $warns.Add("shrink ACCEPTED by -AcceptShrink - baseline lowered") }
+  }
+}
+
 # --- 1) tick the unit ---
 $closedTask = $false
 $parentStory = $null
@@ -388,4 +418,10 @@ foreach ($n in $notes) { Write-Host "  ok   $n" -ForegroundColor Green }
 foreach ($w in $warns) { Write-Host "  WARN $w" -ForegroundColor Yellow }
 foreach ($p in $problems) { Write-Host "  FAIL $p" -ForegroundColor Red }
 if ($problems.Count -gt 0) { Write-Host "close-unit INCOMPLETE - fix the above before moving on." -ForegroundColor Red; exit 1 }
+# The close verified: build (and tests at a story close), bookkeeping landed, commit landed. THIS is the
+# state worth ratcheting to - never on a failed close, or a bad run would raise the bar it just failed.
+try {
+  $ratchet = Join-Path $kit "ratchet.ps1"
+  if (Test-Path $ratchet) { & powershell -NoProfile -ExecutionPolicy Bypass -File $ratchet -ProjectDir $proj -Update | Out-Null }
+} catch { }
 Write-Host "close-unit OK" -ForegroundColor Green
