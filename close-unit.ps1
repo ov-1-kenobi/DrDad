@@ -299,8 +299,10 @@ if (-not $SkipVerify) {
     if ($rCode -ne 0 -and -not $AcceptShrink) {
       Write-Host "[close-unit] VERIFICATION SURFACE SHRANK - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
       Write-Host ($rOut.TrimEnd())
-      Write-Host "             git still has what was removed. Restore it, or re-run with -AcceptShrink if" -ForegroundColor Red
-      Write-Host "             the removal was deliberate (that records the smaller number as the new baseline)." -ForegroundColor Red
+      Write-Host "             Find out WHAT vanished (and what merely moved to another file):" -ForegroundColor Red
+      Write-Host "               powershell -File `"$kit\recover-lost.ps1`" -ProjectDir `"$proj`"" -ForegroundColor Yellow
+      Write-Host "               ...add -Restore to put the vanished units back, KEEPING what the change added." -ForegroundColor Yellow
+      Write-Host "             Or re-run with -AcceptShrink if the removal was deliberate (lowers the baseline)." -ForegroundColor Red
       exit 1
     }
     if ($rCode -ne 0 -and $AcceptShrink) { $warns.Add("shrink ACCEPTED by -AcceptShrink - baseline lowered") }

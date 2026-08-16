@@ -195,7 +195,11 @@ if ($shrunk.Count -gt 0) {
     Write-Host "      git show $baseSha`:$($s.Path) > `"$($s.Path)`"" -ForegroundColor Green
   }
   Write-Host "  Then reconcile by hand - the rest of the change may be GOOD and worth keeping." -ForegroundColor Cyan
-  Write-Host "  See what else moved:  git diff $baseSha -- <path>" -ForegroundColor Cyan
+  Write-Host ""
+  Write-Host "  Better: let recover-lost work out WHICH named units vanished - and which merely MOVED:" -ForegroundColor Cyan
+  Write-Host "    recover-lost.cmd                 report" -ForegroundColor Green
+  Write-Host "    recover-lost.cmd -Restore        put the vanished ones back, KEEPING what arrived" -ForegroundColor Green
+  Write-Host "  A whole-file restore would also discard everything the change ADDED." -ForegroundColor Cyan
 } elseif ($baseSha) {
   Write-Host "Baseline commit: $baseSha" -ForegroundColor Cyan
   Write-Host "  What changed since:  git diff $baseSha" -ForegroundColor Cyan

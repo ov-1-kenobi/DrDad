@@ -48,10 +48,16 @@ its dependencies satisfied, STOP and report the blocked tasks.
    - **If `close-unit` reports the verification surface SHRANK, that is a recovery, not a retry.** A file
      that lost content is usually NOT "mangled" - it parses fine, it just has less in it, so nothing else
      will flag it. A run once rewrote a test file to add a fixture and 15 of 16 tests did not survive; the
-     suite went green and every gate passed. `ratchet` prints the file, the baseline commit and the exact
-     `git show <sha>:<path> > <path>` to restore it. Run that, then RECONCILE - the rest of the change is
-     often good and worth keeping. Never re-close with `-AcceptShrink` to get past it unless I say the
-     removal was deliberate.
+     suite went green and every gate passed. Run:
+     ```
+     powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\recover-lost.ps1"
+     ```
+     It reports which NAMED UNITS (tests, methods, functions, headings) vanished, and separately which
+     merely MOVED to another file - on the real incident 3 of 15 had moved, and restoring those would have
+     duplicated them. `-Restore` puts the vanished ones back while KEEPING whatever the change ADDED; a
+     whole-file revert throws away the good half (there it would have re-broken a fixture and two fixes
+     that were correct). Then RECONCILE and build. Never re-close with `-AcceptShrink` to get past it
+     unless I say the removal was deliberate.
    - If it returns **"needs contract"**: do NOT relay that to me until you have CHECKED it:
      ```
      powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Contract <Cn>

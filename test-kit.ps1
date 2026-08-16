@@ -726,6 +726,66 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "recover-lost finds what vanished, and knows MOVED from LOST" {
+  # The generic shape: a change removed far more than it added, the result still compiles, nothing looks
+  # broken. Recovery has to work at the level of NAMED UNITS - a whole-file revert would also discard
+  # everything the change ADDED (on the real incident: a test fixture and two correct fixes).
+  # And "sensible" means not restoring a unit that merely MOVED - on that same incident 3 of 15 had been
+  # relocated to another file, and putting them back would have duplicated them.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\tests" | Out-Null
+    $body = (1..6 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$body`r`n    [Fact]`r`n    public void Relocated() { }`r`n}" |
+      Set-Content "$p\tests\A.cs" -Encoding UTF8
+    "public class Other {`r`n}" | Set-Content "$p\tests\B.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $sha = (git rev-parse HEAD | Out-String).Trim()
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # the rewrite: A.cs keeps one old test, GAINS a new one, loses five - and Relocated moves to B.cs
+    "public class T {`r`n    [Fact]`r`n    public void Case1() { }`r`n    [Fact]`r`n    public void BrandNew() { }`r`n}" |
+      Set-Content "$p\tests\A.cs" -Encoding UTF8
+    "public class Other {`r`n    [Fact]`r`n    public void Relocated() { }`r`n}" | Set-Content "$p\tests\B.cs" -Encoding UTF8
+
+    $rl = Join-Path $kit "recover-lost.ps1"
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $rl -ProjectDir $p -Since $sha 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "loss was not detected"
+    foreach ($n in @('Case2','Case3','Case4','Case5','Case6')) {
+      Assert ($out -match $n) "genuinely lost unit $n was not reported:`n$out"
+    }
+    Assert ($out -match 'moved elsewhere') "it did not separate moved from lost"
+    Assert ($out -match 'Relocated') "the moved unit was not identified"
+    # a unit that moved must NOT be listed as GONE - restoring it would duplicate it
+    $goneBlock = [regex]::Match($out, '(?s)GONE.*?(moved elsewhere|Report only)').Value
+    Assert ($goneBlock -notmatch 'Relocated') "a MOVED unit was listed as gone - a restore would duplicate it"
+    Assert ($out -notmatch 'BrandNew') "an ADDED unit was reported as lost"
+
+    # -Restore keeps what arrived and hands back the old content to reconcile
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $rl -ProjectDir $p -Since $sha -Restore | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-Restore failed"
+    $after = Get-Content "$p\tests\A.cs" -Raw
+    Assert ($after -match 'BrandNew') "the restore destroyed what the change ADDED"
+    Assert ($after -match 'RECOVERED from') "no recovery marker was written"
+    Assert ($after -match 'Case5') "the vanished content was not returned"
+    # commented out on purpose - it is a starting point, not a merge
+    Assert ($after -match '(?s)/\*.*Case5') "recovered content was pasted live instead of commented for review"
+
+    # nothing to do on a clean tree
+    $clean = (& powershell -NoProfile -ExecutionPolicy Bypass -File $rl -ProjectDir $p -Since HEAD 2>&1 | Out-String)
+    Assert ($clean -match 'nothing named has vanished' -or $LASTEXITCODE -eq 0) "it invented a loss on a clean comparison"
+
+    # and the three places that must point at it
+    Assert ((Get-Content (Join-Path $kit "ratchet.ps1") -Raw) -match 'recover-lost') "ratchet does not point at the recovery tool"
+    Assert ((Get-Content (Join-Path $kit "close-unit.ps1") -Raw) -match 'recover-lost') "close-unit does not point at it"
+    Assert ((Get-Content (Join-Path $kit "global\commands\build.md") -Raw) -match 'recover-lost') "/build does not route to it"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "a shrink comes with a RUNNABLE recovery, not just a complaint" {
   # "Restore it (git has it)" is true and useless - the same unresolvable-advice defect the stop guard
   # shipped with in 0.12.0, repeated. Recovery needs the FILE and the COMMIT, and the count alone has

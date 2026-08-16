@@ -156,7 +156,24 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       records the smaller number deliberately. What it must never be is silent. The ratchet FAILS OPEN on
       its own errors, for the same reason dad-guard does: a gate that fails closed on its own bugs stops
       real work and gets switched off. (The first version failed closed and broke three passing tests -
-      which is exactly the evidence for the rule.)- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
+      which is exactly the evidence for the rule.)- [x] R29: **Recovery works at the level of NAMED UNITS, not whole files** (`recover-lost.ps1`). R28
+      detects a shrink; this is how you undo one. The generic shape to recognise: *a change removed far
+      more than it added, the result still compiles, and nothing looks broken.* The worked example is the
+      one that motivated both: a test file was rewritten to introduce a fixture and 12 of 16 tests
+      vanished, while the suite went green.
+      **A whole-file revert is the wrong answer** - the same change also added a working test fixture, a
+      JSON-LD `@context` fix and a .NET 10 PipeWriter fix, and `git checkout` would have re-broken all
+      three. So this diffs the NAMED UNITS (methods, tests, functions, types, markdown headings - by
+      pattern, so it is language-agnostic) between the working tree and the ratchet's baseline commit, and
+      restores only what disappeared.
+      **"And sensible" is the load-bearing half.** A unit that still exists ELSEWHERE in the tree moved or
+      was renamed - it is not lost, and restoring it would duplicate it. On the very first real case 3 of
+      the 15 apparently-deleted tests had been relocated to another file, including the C9 worked example
+      and the level-2 conformance check; a blind restore would have created duplicate `[Fact]` methods.
+      Recovered content is written back COMMENTED, under a marker, with the diff command - it is a
+      starting point for reconciliation, not a merge, because restored code routinely needs a using, a
+      fixture or a helper that also changed. Nothing is ever restored without `-Restore`: deletion is
+      sometimes correct, and a tool that silently undoes deliberate work is worse than the problem.- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
       kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
       refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)
       by header-prefix splice while preserving user sections (Stack/Build/test/Placeholder/Human-in-loop).

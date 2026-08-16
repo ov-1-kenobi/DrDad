@@ -2,6 +2,47 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.18.0 - 2026-08-16
+
+0.17.x could detect a shrink and print a `git show`. That is still the wrong recovery, and the real case
+proves it twice over.
+
+### Why a whole-file revert is wrong
+The change that deleted the tests ALSO added a working `CustomWebApplicationFactory`, a JSON-LD `@context`
+fix and a .NET 10 PipeWriter fix. `git checkout` would have discarded all three and re-broken what had just
+been fixed. Recovery has to work at the level of **named units** - restore what disappeared, keep what
+arrived.
+
+### And a correction to the record
+Running the new tool against the actual incident showed **3 of the 15 "deleted" tests had MOVED**, not
+been deleted - `GetImage_C9WorkedExampleProducesCorrectOutput` and `GetImage_IIIFLevel2Conformance` are
+live `[Fact]` methods in `ComprehensiveIiifTests.cs`. **12 were genuinely lost, not 15.** Earlier changelog
+entries and my own reports overstated it. `GetImage_ReturnsByteIdenticalOutputAsNamedVariant` is gone from
+the whole tree, so the finding stands - but a blind restore would have created three duplicate tests, which
+is exactly the failure the "and sensible" half exists to prevent.
+
+### Added - `recover-lost.ps1` / `.cmd` (R29)
+The generic shape it handles, worth learning to recognise: **a change removed far more than it added, the
+result still compiles, and nothing looks broken.**
+
+- Diffs **named units** - methods, tests, functions, types, markdown headings - between the working tree
+  and the ratchet's baseline commit. Pattern-based, so it covers C#/Java/TS/Python/Go/Rust/JS/Markdown
+  without a parser per language.
+- **Separates LOST from MOVED**: a unit that still exists anywhere else in the tree was relocated or
+  renamed, and restoring it would duplicate it. This is most of what distinguishes a real loss from a
+  refactor.
+- `-Restore` writes the old content back **commented, under a marker, with the diff command** - a starting
+  point for reconciliation, not a merge, because restored code routinely needs a using, a fixture or a
+  helper that also changed. Everything the change ADDED stays.
+- **Nothing is ever restored without `-Restore`.** Deletion is sometimes correct; a tool that silently
+  undoes deliberate work is worse than the problem.
+- `ratchet`, `close-unit` and `/build` all route to it now, instead of suggesting a raw `git show`.
+
+### Tests
+93 cases (was 92): a rewrite that loses five units, gains one and relocates another - asserting the lost
+ones are reported, the ADDED one is not, the MOVED one is excluded from the restore set, `-Restore` keeps
+the new work and returns the old commented, a clean tree reports nothing, and all three call sites point
+at the tool.
 ## 0.17.1 - 2026-08-16
 
 0.17.0 could DETECT a shrink. It could not tell you how to undo one.
