@@ -726,6 +726,54 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "a shrink comes with a RUNNABLE recovery, not just a complaint" {
+  # "Restore it (git has it)" is true and useless - the same unresolvable-advice defect the stop guard
+  # shipped with in 0.12.0, repeated. Recovery needs the FILE and the COMMIT, and the count alone has
+  # neither. The baseline now records the commit it was taken at, so the restore command can be exact.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\tests" | Out-Null
+    $tests = (1..15 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$tests`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $sha = (git rev-parse HEAD | Out-String).Trim()
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $r = Join-Path $kit "ratchet.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Update | Out-Null
+    $base = Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json
+    Assert ($base.commit -eq $sha) "the baseline did not record the commit it was taken at"
+
+    # the runD shape: the file survives and parses, it just has 14 fewer tests
+    "public class T {`r`n    [Fact]`r`n    public void OnlyOne() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "the shrink was not caught"
+    Assert ($out -match 'WHAT WAS REMOVED') "it did not offer a recovery"
+    Assert ($out -match 'tests[\\/]ApiTests\.cs') "it did not name the file that lost the tests:`n$out"
+    Assert ($out -match '\(15 -> 1 test') "it did not say how many were lost from that file"
+    # the command must be runnable as printed: real sha, real path, real redirect
+    Assert ($out -match "git show $sha[:]tests[\\/]ApiTests\.cs > ") "no runnable restore command:`n$out"
+    Assert ($out -match 'RECONCILE') "it did not warn that the rest of the change may be worth keeping"
+
+    # and running the printed command must actually put the tests back
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $restored = (git show "$sha`:tests/ApiTests.cs" | Out-String)
+    $ErrorActionPreference = $prev; Pop-Location
+    Assert (@([regex]::Matches($restored, '\[Fact\]')).Count -eq 15) "the recovery command does not return the 15 tests"
+
+    # /build must ROUTE a shrink to recovery, and know it is not the same as a mangled file
+    $b = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+    Assert ($b -match 'recovery, not a retry') "/build does not route a shrink to recovery"
+    Assert ($b -match 'NOT "mangled"') "/build does not distinguish a shrink from a mangled file"
+    Assert (([regex]::Matches($b, 'recovery, not a retry')).Count -eq 1) "the recovery guidance is duplicated in build.md"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "the ratchet refuses a SHRINKING verification surface" {
   # The trap every other gate left open: they ask "is X OK now?", which is satisfied by DELETING X.
   # A run rewrote ImageApiControllerTests.cs to add a fixture; 15 of 16 tests did not survive. Every gate

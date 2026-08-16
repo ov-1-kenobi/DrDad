@@ -45,6 +45,13 @@ its dependencies satisfied, STOP and report the blocked tasks.
    code for taste. It will WAIT for my look; relay that and stop rather than closing the unit yourself.)*
    - If it reports a file got MANGLED: spawn **librarian-agent** in RECOVER mode, restore on my OK, retry
      with a smaller edit. Never let it hand-reconstruct a broken file.
+   - **If `close-unit` reports the verification surface SHRANK, that is a recovery, not a retry.** A file
+     that lost content is usually NOT "mangled" - it parses fine, it just has less in it, so nothing else
+     will flag it. A run once rewrote a test file to add a fixture and 15 of 16 tests did not survive; the
+     suite went green and every gate passed. `ratchet` prints the file, the baseline commit and the exact
+     `git show <sha>:<path> > <path>` to restore it. Run that, then RECONCILE - the rest of the change is
+     often good and worth keeping. Never re-close with `-AcceptShrink` to get past it unless I say the
+     removal was deliberate.
    - If it returns **"needs contract"**: do NOT relay that to me until you have CHECKED it:
      ```
      powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Contract <Cn>

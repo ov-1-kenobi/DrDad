@@ -92,6 +92,41 @@ $current = [ordered]@{
   gradeBytes = [int]$gradeBytes; hasBuildCommand = $hasBuild; hasTestCommand = $hasTest
 }
 
+# Record WHICH COMMIT the baseline was taken at. Without it, "git has it" is true but useless - you would
+# have to go find the right commit yourself, which is the difference between a recoverable incident and a
+# lost afternoon. With it, the restore command below can be exact.
+$headSha = ""
+if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
+  $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try { Push-Location $proj; $headSha = (git rev-parse HEAD 2>$null | Out-String).Trim() }
+  catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }
+}
+$current["commit"] = $headSha
+
+# WHICH FILE lost the markers? The count alone ("tests 15 -> 1") is not actionable - recovery needs a path.
+# Compare each file's marker count now against the same file at the baseline commit.
+function Find-ShrunkFiles([string]$sha) {
+  $hits = @()
+  if (-not $sha -or -not (Get-Command git -ErrorAction SilentlyContinue)) { return $hits }
+  $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try {
+    Push-Location $proj
+    foreach ($rel in @(git diff --name-only $sha -- . 2>$null)) {
+      if (-not $rel) { continue }
+      $ext = [System.IO.Path]::GetExtension($rel)
+      if (@(".cs",".fs",".vb",".py",".ts",".tsx",".js",".jsx",".go",".rs",".java",".kt") -notcontains $ext) { continue }
+      $old = (git show "$sha`:$rel" 2>$null | Out-String)
+      if (-not $old) { continue }
+      $oldN = @([regex]::Matches($old, $testMarkers)).Count
+      $full = Join-Path $proj $rel
+      $newN = 0
+      if (Test-Path -LiteralPath $full) { $newN = @([regex]::Matches((Get-Content $full -Raw), $testMarkers)).Count }
+      if ($newN -lt $oldN) { $hits += [pscustomobject]@{ Path = $rel; Was = $oldN; Now = $newN } }
+    }
+  } catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }
+  return $hits
+}
+
 if ($Update) {
   $dir = Split-Path $baselineFile -Parent
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
@@ -121,6 +156,7 @@ $labels = @{
 }
 $drops = @()
 foreach ($k in $current.Keys) {
+  if ($k -eq "commit") { continue }        # provenance, not a count
   $was = if ($base.PSObject.Properties.Name -contains $k) { [int]$base.$k } else { $null }
   if ($null -eq $was) { continue }
   $now = [int]$current[$k]
@@ -131,6 +167,7 @@ if ($Json) { [pscustomobject]@{ baseline = $base; current = $current; drops = $d
 
 Write-Host "== ratchet: $proj ==" -ForegroundColor Cyan
 foreach ($k in $current.Keys) {
+  if ($k -eq "commit") { continue }
   $was = if ($base.PSObject.Properties.Name -contains $k) { [int]$base.$k } else { 0 }
   $now = [int]$current[$k]
   $mark = if ($now -lt $was) { "DROP" } elseif ($now -gt $was) { "  +" } else { "   =" }
@@ -142,7 +179,32 @@ if ($drops.Count -eq 0) { Write-Host "nothing shrank." -ForegroundColor Green; e
 Write-Host "$($drops.Count) THING(S) SHRANK:" -ForegroundColor Red
 foreach ($d in $drops) { Write-Host "  $($d.what): $($d.was) -> $($d.now)  - $($d.why)" -ForegroundColor Red }
 Write-Host ""
+
+# RECOVERY, spelled out. "Restore it (git has it)" is true and useless - the same unresolvable-advice
+# defect the stop guard shipped with in 0.12.0. Name the file, the commit, and the command.
+$baseSha = ""
+if ($base.PSObject.Properties.Name -contains 'commit') { $baseSha = [string]$base.commit }
+# @(...) is load-bearing: PowerShell unrolls a single-element return, so one shrunk file comes back as a
+# bare object whose .Count is $null - and `$null -gt 0` is false, so the recovery block silently vanished
+# in exactly the one-file case that matters most.
+$shrunk = @(Find-ShrunkFiles $baseSha)
+if ($shrunk.Count -gt 0) {
+  Write-Host "WHAT WAS REMOVED, and how to put it back:" -ForegroundColor Cyan
+  foreach ($s in $shrunk) {
+    Write-Host "  $($s.Path)  ($($s.Was) -> $($s.Now) test(s))" -ForegroundColor Cyan
+    Write-Host "      git show $baseSha`:$($s.Path) > `"$($s.Path)`"" -ForegroundColor Green
+  }
+  Write-Host "  Then reconcile by hand - the rest of the change may be GOOD and worth keeping." -ForegroundColor Cyan
+  Write-Host "  See what else moved:  git diff $baseSha -- <path>" -ForegroundColor Cyan
+} elseif ($baseSha) {
+  Write-Host "Baseline commit: $baseSha" -ForegroundColor Cyan
+  Write-Host "  What changed since:  git diff $baseSha" -ForegroundColor Cyan
+  Write-Host "  Recover a file:      git show $baseSha`:<path> > <path>" -ForegroundColor Cyan
+} else {
+  Write-Host "No baseline commit recorded (project had no git when the baseline was taken)." -ForegroundColor Yellow
+}
+Write-Host ""
 Write-Host "A drop is not always wrong - an obsolete story deleted on purpose is fine. It is never something" -ForegroundColor Yellow
-Write-Host "a run gets to do SILENTLY. Restore it (git has it), or acknowledge deliberately:" -ForegroundColor Yellow
+Write-Host "a run gets to do SILENTLY. Restore it, or acknowledge the removal deliberately:" -ForegroundColor Yellow
 Write-Host "  close-unit.ps1 ... -AcceptShrink      (records the smaller number as the new baseline)" -ForegroundColor Yellow
 exit 1

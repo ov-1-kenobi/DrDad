@@ -2,6 +2,43 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.17.1 - 2026-08-16
+
+0.17.0 could DETECT a shrink. It could not tell you how to undo one.
+
+### The gap
+The kit already has recovery machinery - `/audit recover <file>` spawns `librarian-agent` in RECOVER mode,
+which does git triage and hands back a restore command, and `/build` routes to it. But it routes there only
+when a file is reported **MANGLED**, and a file that lost 14 tests is not mangled: it parses, it compiles,
+it is simply smaller. Nothing else would ever flag it.
+
+Worse, the ratchet's own advice was **"Restore it (git has it)"** - no file, no commit, no command. That is
+the same unresolvable-advice defect the stop guard shipped with in 0.12.0, repeated by me one release after
+writing a test to prevent it.
+
+### Fixed
+- **The baseline records the commit it was taken at**, so recovery can be exact rather than "go find the
+  right commit yourself" - the difference between a recoverable incident and a lost afternoon.
+- **The ratchet names the FILE that shrank**, by comparing each changed file's test-marker count against
+  the same file at the baseline commit, and prints a command that runs as written:
+  ```
+  tests/ApiTests.cs  (15 -> 1 test(s))
+      git show <sha>:tests/ApiTests.cs > "tests/ApiTests.cs"
+  ```
+  It also says **RECONCILE afterwards** - in the real incident the rest of the change (a
+  `CustomWebApplicationFactory` for test isolation) was correct and worth keeping. Blind revert would have
+  thrown away the good half.
+- **`/build` routes a shrink to recovery**, and is told explicitly that a shrink is not a mangled file.
+
+### Tests
+92 cases (was 91): the baseline storing its commit, the file being named with its before/after count, the
+printed command being runnable and actually returning all 15 tests, the RECONCILE warning being present,
+and the guidance not being duplicated in `build.md`.
+
+### Fixed while building it
+PowerShell unrolls a single-element return, so one shrunk file came back as a bare object whose `.Count` is
+`$null` - and `$null -gt 0` is false, which silently skipped the recovery block in exactly the one-file case
+that matters most. `@(...)` at the call site.
 ## 0.17.0 - 2026-08-15
 
 The trap under every gate in this kit, and the one mechanism that closes it.
