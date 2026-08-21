@@ -403,6 +403,39 @@ if ($closedTask -and -not (Select-String -Path $tasksFile -Pattern "^###\s*\[x\]
   $problems.Add("VERIFY FAILED: $Id is still not [x] in TASKS.md")
 }
 
+# --- record the commands that ACTUALLY WORKED --------------------------------------------------
+# docs\RECIPES.md was designed as a proven-commands log that agents append to on success. After NINE runs
+# on a real project it contained 18 lines: the bare template, zero entries. Asking a model to remember to
+# write down what worked is the same class of instruction as asking it to remember to run close-unit, and
+# it failed the same way. Meanwhile runs kept emitting broken shell - one used bash syntax and a wrong
+# path (`cd D:/projects/mediamotor_iiif`, missing two segments) and lost the turn to it.
+# So the close-out writes the entry. These two commands are the ones just VERIFIED to work on this machine.
+if ($problems.Count -eq 0) {
+  try {
+    $recipes = Join-Path $docs "RECIPES.md"
+    if (Test-Path $recipes) {
+      $rt = Get-Content $recipes -Raw
+      $add = @()
+      foreach ($pair in @(@{ K='Build'; V=(Get-ClaudeCommand 'Build') }, @{ K='Test'; V=(Get-ClaudeCommand 'Test') })) {
+        if (-not $pair.V) { continue }
+        # One row per distinct command, never a duplicate on every close.
+        if ($rt -match [regex]::Escape($pair.V)) { continue }
+        $add += "| ``$($pair.V)`` | $($pair.K.ToLower()) this project | from the project root | verified by close-unit on $Id | $(Get-Date -Format 'yyyy-MM-dd') |"
+      }
+      if ($add.Count) {
+        if ($rt -notmatch '(?m)^##\s*Verified by close-unit') {
+          $rt = $rt.TrimEnd() + "`r`n`r`n## Verified by close-unit`r`n" +
+                "<!-- Appended automatically when a unit closes clean. These ran and worked ON THIS MACHINE. -->`r`n" +
+                "| Command | Does | When | Gotcha | Verified |`r`n|---|---|---|---|---|`r`n"
+        }
+        $rt = $rt.TrimEnd() + "`r`n" + ($add -join "`r`n") + "`r`n"
+        [System.IO.File]::WriteAllText($recipes, $rt, (New-Object System.Text.UTF8Encoding($false)))
+        $notes.Add("recorded $($add.Count) verified command(s) in docs\RECIPES.md")
+      }
+    }
+  } catch { $warns.Add("could not update docs\RECIPES.md: $($_.Exception.Message)") }
+}
+
 # --- stamp for the stop guard -----------------------------------------------------------------
 # dad-guard.ps1 blocks a turn from ending on uncommitted, unverified code. A clean close IS the
 # verification, so record it. Only on success - a failed close must stay blocked.

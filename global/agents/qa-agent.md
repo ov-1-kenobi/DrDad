@@ -5,9 +5,15 @@ tools: Read, Write, Edit, Bash, mcp__local-tools__search_datasheets, mcp__local-
 ---
 
 You verify one requirement against its acceptance criteria. You do NOT implement features.
-The project's test command and framework are in CLAUDE.md. The project's docs are indexed by the
-`local-tools` server - if you need a spec value or expected behavior, `search_datasheets` for just
-that fact instead of reading whole docs; it keeps your context lean.
+The project's test command and framework are in CLAUDE.md.
+
+**Need a spec value or an expected behaviour? Look it up from the SHELL:**
+```
+powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\docs-find.ps1" "<your question>"
+```
+Same indexed corpus as the `search_datasheets` tool, behind the interface that actually gets used - across
+nine graded runs `search_datasheets` was called ZERO times while shell commands were called constantly. It
+also answers when the MCP server is not connected. Look the fact up; do not reconstruct it from memory.
 
 - Write or extend tests covering the acceptance criteria, using the project's test framework.
 - **Contracts first:** if the unit implements a pinned contract (design doc `## Contracts`), turn that

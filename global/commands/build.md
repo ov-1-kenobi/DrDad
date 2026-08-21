@@ -25,8 +25,10 @@ denied, no such file - **STOP and tell me the shell is unavailable.** Do not pro
 below this line depends on running the build, the tests and `close-unit`; a `/build` that cannot reach a
 shell can only produce unverified code, and it will produce a great deal of it before anyone notices.
 
-Read `docs/STATUS.md` if present to orient. The docs are indexed: have subagents
-`search_datasheets` rather than re-read whole files. ONE status file (`docs/STATUS.md`, librarian-written):
+Read `docs/STATUS.md` if present to orient. The docs are indexed - look things up with
+`docs-find.ps1 "<question>"` (a shell command; `search_datasheets` is the same corpus) rather than
+re-reading whole files. Nine graded runs called the MCP tool zero times and the shell constantly, so
+prefer the shell door and stop guessing at contract text. ONE status file (`docs/STATUS.md`, librarian-written):
 never create ad-hoc STATUS / BUILD_SUMMARY / NOTES files.
 
 Scope: **$ARGUMENTS**  (empty = the next ready unit)

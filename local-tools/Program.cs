@@ -14,6 +14,22 @@ if (args.Length > 0 && args[0] == "--reindex")
     return;
 }
 
+// One-off CLI corpus SEARCH, does NOT start the MCP server:
+//   local-tools.exe --search "what does C9 say about tile sizes" [topK]
+// The same semantic search as the search_datasheets MCP tool, reachable from a SHELL. Across nine graded
+// runs search_datasheets was called ZERO times while the kit's own .ps1 scripts were called constantly -
+// the model reaches for the shell, so the corpus needs a shell door. It also works when the MCP server is
+// NOT connected, which is exactly when you most need to look something up and least expect to fail.
+if (args.Length > 0 && args[0] == "--search")
+{
+    if (args.Length < 2) { Console.Error.WriteLine("usage: local-tools.exe --search \"query\" [topK]"); Environment.Exit(1); return; }
+    var topK = 5;
+    if (args.Length > 2 && int.TryParse(args[2], out var k)) topK = k;
+    try { Console.WriteLine(await Rag.SearchAsync(args[1], topK)); }
+    catch (Exception e) { Console.Error.WriteLine("search failed: " + e.Message); Environment.Exit(1); }
+    return;
+}
+
 // One-off CLI corpus listing, does NOT start the MCP server:
 //   local-tools.exe --corpus            what WOULD be indexed, per root
 // Needs no Ollama, so it is how you debug LOCALTOOLS_DOCS_DIR (including multi-root ";" lists) and how

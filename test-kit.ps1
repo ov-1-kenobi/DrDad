@@ -726,6 +726,106 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "duplicate unit ids are reported (a regenerated file appended, not replaced)" {
+  # Real corruption nothing caught: STORIES.md ended up with every story TWICE (28 headings, 14 distinct
+  # ids) and TASKS.md carried a stray "RECOVERED" block. The close was clean, so the ratchet baselined the
+  # doubled counts as its floor - and the later repair then looked like a regression. An id appearing twice
+  # is never right, and it is a grep.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    @("# Stories","",
+      "### Story S1: One   (Epic E1) <!-- Status: DONE -->","",
+      "### Story S2: Two   (Epic E1) <!-- Status: TODO -->","",
+      "### Story S1: One   (Epic E1) <!-- Status: DONE -->","") | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    @("# Tasks","","## Tasks","",
+      "### [x] T1.1 - a   (Story S1)","- **Goal:** x","",
+      "### [ ] T2.1 - b   (Story S2)","- **Goal:** y","",
+      "### [x] T1.1 - a   (Story S1)","- **Goal:** x","") | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") `
+              -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "-Findings exited $LASTEXITCODE"
+    Assert ($out -match '\[scribe\] DUPLICATE story id S1 - appears 2x') "a duplicated story id was not reported:`n$out"
+    Assert ($out -match '\[taskmap\] DUPLICATE task id T1\.1 - appears 2x') "a duplicated task id was not reported:`n$out"
+    Assert ($out -match 'lines \d+, \d+') "it did not say WHERE the duplicates are"
+    Assert ($out -notmatch 'DUPLICATE story id S2') "a non-duplicated id was flagged"
+
+    # and a clean doc set must produce none of it
+    @("# Stories","","### Story S1: One   (Epic E1) <!-- Status: DONE -->","",
+      "### Story S2: Two   (Epic E1) <!-- Status: TODO -->","") | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    @("# Tasks","","## Tasks","","### [x] T1.1 - a   (Story S1)","- **Goal:** x","",
+      "### [ ] T2.1 - b   (Story S2)","- **Goal:** y","") | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    $clean = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") `
+                -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($clean -notmatch 'DUPLICATE') "it invented duplicates on a clean doc set:`n$clean"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "the corpus has a SHELL door, and it degrades instead of dying" {
+  # Nine graded runs called search_datasheets ZERO times while calling shell commands constantly - one run
+  # used doc-stats 17 times and Bash 94. Prose preferring an MCP tool has been in three agent files the
+  # whole time and never worked once. So the same corpus gets a shell entrance.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`n### C9: IIIF conformance`n- **Decision:** tile sizes are 512 by default." |
+      Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $df = Join-Path $kit "docs-find.ps1"
+    Assert (Test-Path $df) "docs-find.ps1 is missing"
+    Assert (Test-Path (Join-Path $kit "docs-find.cmd")) "docs-find has no .cmd wrapper"
+
+    # This box has no Ollama, so semantic search cannot run - the point is that it still ANSWERS.
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "tile sizes" 2>&1 | Out-String)
+    Assert ($out -match 'tile sizes|512') "it returned nothing when semantic search was unavailable:`n$out"
+    Assert ($out -match 'literal scan|semantic search unavailable') "it did not say it had fallen back"
+
+    # a query with no match must say so rather than returning noise
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "zzzznotpresentzzzz" 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "a no-match query did not exit non-zero"
+
+    # and the agents that need it must point at it
+    foreach ($a in @("global\agents\dev-agent.md","global\agents\qa-agent.md","global\commands\build.md")) {
+      Assert ((Get-Content (Join-Path $kit $a) -Raw) -match 'docs-find') "$a does not offer the shell door"
+    }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit RECORDS the commands that worked (RECIPES stops being empty)" {
+  # docs\RECIPES.md was designed as a proven-commands log agents append to on success. After nine runs on a
+  # real project it held 18 lines - the bare template, zero entries. Meanwhile runs kept emitting broken
+  # shell (one used bash syntax with a two-segment-wrong path and lost the turn). So the close-out writes it.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Task map`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T1.2 - b   (Story S1)`n- **Goal:** y" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Copy-Item (Join-Path $kit "templates\_common\docs\RECIPES.md") "$p\docs\RECIPES.md"
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "a" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the close failed"
+    $r = Get-Content "$p\docs\RECIPES.md" -Raw
+    Assert ($r -match 'Verified by close-unit') "no verified-commands section was written"
+    Assert ($r -match 'exit 0') "the command that actually ran was not recorded"
+
+    # a second close must NOT duplicate the same rows
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.2 -Title "b" -ProjectDir $p -NoReindex | Out-Null
+    $r2 = Get-Content "$p\docs\RECIPES.md" -Raw
+    Assert ((([regex]::Matches($r2, 'Verified by close-unit')).Count -eq 1)) "the section was written twice"
+    Assert ((([regex]::Matches($r2, '\| ``exit 0`` \| build')).Count -le 1)) "the same command was recorded twice"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "recover-lost finds what vanished, and knows MOVED from LOST" {
   # The generic shape: a change removed far more than it added, the result still compiles, nothing looks
   # broken. Recovery has to work at the level of NAMED UNITS - a whole-file revert would also discard

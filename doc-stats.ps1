@@ -179,6 +179,28 @@ if ($Findings) {
     }
   }
 
+  # DUPLICATE IDS - document corruption, and trivially computable. A whole-file regeneration once left
+  # STORIES.md with every story twice (28 headings, 14 distinct ids) and TASKS.md with a stray "RECOVERED"
+  # block, and NOTHING noticed: the close was clean, so the ratchet baselined the corrupted counts as its
+  # floor. The later repair then looked like a regression. An id appearing twice is never right.
+  foreach ($pair in @(
+    @{ File = $storiesFile; Pattern = '^#{1,6}\s.*?\b(S\d+[A-Za-z0-9._-]*)\b'; Owner = 'scribe';  What = 'story' },
+    @{ File = $tasksFile;   Pattern = '^###\s*\[[ x]\]\s*([A-Za-z0-9._-]+)';   Owner = 'taskmap'; What = 'task'  }
+  )) {
+    if (-not (Test-Path $pair.File)) { continue }
+    $seen = @{}
+    foreach ($m in (Select-String -Path $pair.File -Pattern $pair.Pattern)) {
+      $id = $m.Matches[0].Groups[1].Value
+      if (-not $seen.ContainsKey($id)) { $seen[$id] = @() }
+      $seen[$id] += $m.LineNumber
+    }
+    foreach ($id in ($seen.Keys | Sort-Object)) {
+      if ($seen[$id].Count -gt 1) {
+        $f.Add("[$($pair.Owner)] DUPLICATE $($pair.What) id $id - appears $($seen[$id].Count)x (lines $($seen[$id] -join ', ')). A regenerated file was appended, not replaced.")
+      }
+    }
+  }
+
   foreach ($m in $missing) { $f.Add("[grade] $m") }
   foreach ($o in $orphanTests) { $f.Add("[dev] test project not in the solution (dotnet test silently skips it): $o") }
 

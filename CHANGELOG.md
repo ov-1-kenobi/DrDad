@@ -2,6 +2,38 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.18.1 - 2026-08-21
+
+Three things runE exposed, all of them "the mechanism existed and was never used".
+
+### Added - duplicate unit ids are a computed finding
+`STORIES.md` had **every story twice** (28 headings, 14 distinct ids) and `TASKS.md` carried a stray
+"RECOVERED" block - and nothing noticed. The close was clean, so the ratchet baselined the **doubled**
+counts as its floor; runE's repair then read as a regression (`stories 28 -> 14`). `doc-stats -Findings`
+now reports `[scribe] DUPLICATE story id S1 - appears 2x (lines 12, 384)`. Verified against the real
+corrupted commit: it catches all 29 doubled ids and reports zero on the repaired docs.
+
+### Added - `docs-find.ps1` / `.cmd`: the corpus has a shell door
+`search_datasheets` has been called **zero times in nine graded runs.** In the same run, `doc-stats.ps1`
+was called 17 times and Bash 94. The prose telling agents to prefer the MCP tool has been in `dev-agent`,
+`qa-agent` and `/build` the whole time and has never worked once - so this is the same corpus behind the
+interface that demonstrably gets used. It also answers when the MCP server is NOT connected (a stale
+`.mcp.json` path, a server that failed to start) - exactly when you most need a lookup and least expect to
+fail - and falls back to a literal scan when Ollama is down. `local-tools.exe --search "<query>" [topK]`
+underneath.
+
+### Fixed - RECIPES.md stops being empty
+It was designed as a proven-commands log agents append to on success. After nine runs on a real project it
+held **18 lines: the bare template, zero entries.** Asking a model to remember to write down what worked is
+the same class of instruction as asking it to remember to run `close-unit`, and it failed the same way -
+while runs kept emitting broken shell (one used bash syntax with a two-segment-wrong path,
+`cd D:/projects/mediamotor_iiif`, and lost the turn). So `close-unit` now records the build and test
+commands it just VERIFIED, into a `## Verified by close-unit` table, once per distinct command.
+
+### Tests
+96 cases (was 93). Duplicate ids detected with their line numbers and not invented on clean docs;
+`docs-find` answering with no Ollama, exiting non-zero on no match, and offered by all three call sites;
+`close-unit` writing the verified commands and not duplicating them on the next close.
 ## 0.18.0 - 2026-08-16
 
 0.17.x could detect a shrink and print a `git show`. That is still the wrong recovery, and the real case

@@ -9,7 +9,7 @@ data, and acceptance - build from it directly. Do NOT expand scope. The project'
 and placeholder convention are in CLAUDE.md.
 
 - Build from the story's embedded **Context** and **Data / interfaces**. If something genuinely needed
-  is missing, use `search_datasheets` (the project's docs are indexed - search, don't read whole files;
+  is missing, look it up with `docs-find.cmd "<question>"` (a SHELL command - see below) or `search_datasheets`;
   it keeps context lean) to fill it (cite it) or return it as a QUESTION - never invent.
 - **Contract rule:** if the unit references a contract (e.g. "per C1"), `search_datasheets` for that
   contract and implement its Format/Invariants/Worked example EXACTLY. If the unit requires you to invent
