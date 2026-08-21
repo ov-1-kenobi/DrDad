@@ -6,8 +6,26 @@ Status: DRAFT
      editable even while this is LOCKED (they implement the design, they do not redefine it). Flip DRAFT
      <-> LOCKED with /design or /proto on your confirmation. -->
 
+Security review: REQUIRED
+<!-- REQUIRED | NOT-REQUIRED (<why>) | DONE <YYYY-MM-DD>
+     /design decides this once the STACK is known, and ASKS you. Default REQUIRED; a throwaway POC or a
+     local-only tool can be NOT-REQUIRED with a stated reason. Anything that handles auth, user data,
+     uploads, payments or is internet-facing stays REQUIRED.
+     /build REFUSES to start while this says REQUIRED - because retrofitting auth and input handling after
+     a dozen stories is how the insecure version ships. security-agent turns it into DONE by pinning
+     CURRENT (<6 months old) framework and security guidance into "## Security decisions", with cited
+     sources in SOURCES.md. -->
+
 ## Goal
 <one paragraph: what this builds and why>
+
+## Security decisions
+<!-- Written by security-agent (via /design) once the stack is known; each decision cites a source in
+     SOURCES.md with its fetch date. Recency matters here more than anywhere else - guidance older than
+     ~6 months may name a deprecated API or a library that has since had a CVE. Empty is fine ONLY when
+     the header above says NOT-REQUIRED. -->
+
+- <decision, the library/pattern chosen, and why - with [Snnn]>
 
 ## Requirements
 <!-- What the system must do + constraints. Numbered, testable where possible. Stack-agnostic (describe

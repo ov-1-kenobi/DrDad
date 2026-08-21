@@ -50,6 +50,26 @@ vision model transcribes it to text - and use that as design input.)
      placeholders means dev-agent and qa-agent have **no build or test command**, so they improvise their
      own test reporting (that is where stray TEST_RESULTS.md / TEST_SUMMARY.md files come from) and `/build`
      cannot verify anything. Replace the project name too.
+2b. **SECURITY REVIEW - ask me, once the stack is known.** The design doc carries a
+   `Security review: REQUIRED | NOT-REQUIRED (<why>) | DONE <YYYY-MM-DD>` header. Tell me which you think
+   it should be and WAIT:
+   - **REQUIRED** (the default) for anything that handles auth, user data, uploads, payments, or is
+     internet-facing. A CMS, an API, a web app.
+   - **NOT-REQUIRED (<reason>)** for a throwaway POC, a local-only tool, a library with no I/O boundary.
+     The reason goes in the header - "poc, no auth, never deployed" - so a later reader knows it was a
+     decision and not an omission.
+   If REQUIRED, spawn **security-agent** via the **Task tool** (subagent_type: "security-agent" - ONLINE).
+   It pins CURRENT (under ~6 months old) framework and security guidance for THIS stack into
+   `## Security decisions`, each line citing a dated source in `SOURCES.md`. Relay its findings; I approve;
+   then set the header to `DONE <today>`. **You do not flip that header on your own.**
+   Do this BEFORE contracts and stories: retrofitting auth and input handling after a dozen stories is how
+   the insecure version ships. `/build` refuses to start while the header says REQUIRED.
+   Then gate the citations:
+   ```
+   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\source-stats.ps1" -StaleDays 180
+   ```
+   180 days, not the default year: security guidance ages faster than anything else here.
+
 3. **Capture requirements** under `## Requirements` (numbered, testable - WHAT, not HOW; the stack is now
    known, so name real types where it sharpens a requirement). For open questions, propose 2-3 options with
    tradeoffs, recommend one, WAIT for my choice. Reindex after edits.

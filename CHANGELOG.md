@@ -2,6 +2,54 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.19.0 - 2026-08-21
+
+Two changes aimed at the two things the kit demonstrably gets wrong on real projects: it builds parts it
+never assembles, and it has no answer on security.
+
+### Changed - S1 is a WALKING skeleton (R30)
+A project reached **183 passing unit tests across 12 building projects, with a 20-line host and zero
+integration tests, having never once served a request.** Every part worked; the thing did not exist. Its S1
+was *"create solution skeleton with warnings as errors"* - build configuration - so every story after it
+added to a pile nobody had assembled.
+
+The first story must now prove the system **end to end**, however trivially: one request in, one response
+out, through the real layers, with an integration test against a real store. Every later story then extends
+something that RUNS, and `close-unit`'s test gate means INTEGRATION from the first close rather than mocks.
+Written into the STORIES template, `/stories`, `scribe-agent` and `/taskmap`.
+
+This is probably worth more than any gate in the last five releases.
+
+### Added - `security-agent` + a gated `Security review:` header (R31)
+Auth, input handling and secret management are where a green test suite tells you least - tests pass over a
+subtly unsafe implementation - and retrofitting them after a dozen stories is how the insecure version
+ships.
+
+- The design doc carries **`Security review: REQUIRED | NOT-REQUIRED (<why>) | DONE <date>`** next to
+  `Status:`. `doc-stats -Findings` computes it; **`/build` Gate 2b refuses to start while it says
+  REQUIRED.** An absent header (older project) is a WARNING, not a block.
+- `/design` decides it **once the stack is known** - which is exactly why 0.13.0 reversed R7 to choose the
+  stack first - and ASKS. REQUIRED by default; `NOT-REQUIRED (poc, no auth, never deployed)` is a legitimate
+  answer with the reason recorded, so a later reader knows it was a decision and not an omission.
+- **`security-agent` exists because recency is checkable and a model's memory is not.** It goes ONLINE for
+  guidance under ~6 months old, records each source's publication date, prefers the originating authority
+  over commentary, and searches deprecation and advisories SEPARATELY from "how do I do X" - a pattern that
+  was correct two years ago may now name a deprecated API or a library that has since had a CVE.
+- It pins one cited line per decision into `## Security decisions`, **writes no code**, and may not flip the
+  header itself - the human approves. `/design` gates the citations with `source-stats -StaleDays 180`
+  instead of the default year, because security guidance ages faster than anything else here.
+- The most valuable thing it can return is *"use the framework's built-in and do not build this yourself"*,
+  which is the common case for auth.
+
+### Tests
+98 cases (was 96). The walking-skeleton rule present in the template and all three story-writing surfaces
+with the old bare-title placeholder gone; and the security header flagged when REQUIRED, silent on DONE and
+NOT-REQUIRED, reported-but-not-blocking when absent, plus the agent held to recency, decisions-only and
+not-setting-its-own-header.
+
+### Fixed
+`doc-stats`'s new check referenced `$designFile`, a variable that only exists in `ratchet.ps1` - so it
+silently did nothing. Caught by the test, which is the only reason it is not shipping broken.
 ## 0.18.1 - 2026-08-21
 
 Three things runE exposed, all of them "the mechanism existed and was never used".

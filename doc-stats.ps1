@@ -149,6 +149,20 @@ if ($Findings) {
   # a script cannot do - scope contamination, traceability judgement, orphan files.
   $f = New-Object System.Collections.Generic.List[string]
 
+  # The security review is a header field like Status:, so its state is computable. REQUIRED means nobody
+  # has decided yet - not that the project is safe. /build Gate 2b refuses on it.
+  # $designName is the FILE NAME; doc-stats never held a full path for it (that variable lives in
+  # ratchet.ps1) - referencing it here silently skipped the whole check.
+  $designPath = if ($designName) { Join-Path $docs $designName } else { "" }
+  if ($designPath -and (Test-Path -LiteralPath $designPath)) {
+    $sr = [regex]::Match((Get-Content $designPath -Raw), '(?im)^\s*Security review:\s*(.+?)\s*$')
+    if (-not $sr.Success) {
+      $f.Add("[design] no 'Security review:' header in $designName - scaffolded before this existed; add REQUIRED or NOT-REQUIRED (<why>)")
+    } elseif ($sr.Groups[1].Value.Trim() -match '^REQUIRED') {
+      $f.Add("[design] Security review: REQUIRED and not done - /design spawns security-agent. /build will refuse to start.")
+    }
+  }
+
   if ($designStatus -eq "(no design doc)") { $f.Add("[design] no design doc in docs\ - run /scaffold or /design") }
   elseif ($designStatus -notin @("DRAFT","LOCKED")) { $f.Add("[design] $designName Status: is '$designStatus' - must be DRAFT or LOCKED") }
 

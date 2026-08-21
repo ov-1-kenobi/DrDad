@@ -726,6 +726,67 @@ Test-Case "the old brand is gone, and pre-rename projects still work" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S1 is a WALKING skeleton, and the kit says so where stories get written" {
+  # Measured failure: a project reached 183 passing unit tests across 12 building projects with a
+  # TWENTY-LINE host and zero integration tests, having never served a request. Its S1 was "create
+  # solution skeleton with warnings as errors" - build configuration. Every later story then added to a
+  # pile nobody had assembled. A walking skeleton makes close-unit's test gate mean INTEGRATION from the
+  # first close.
+  $tpl = Get-Content (Join-Path $kit "templates\_common\docs\STORIES.md") -Raw
+  Assert ($tpl -match 'WALKING SKELETON') "the STORIES template does not demand a walking skeleton"
+  Assert ($tpl -match 'end to end|END TO END') "it does not say end to end"
+  Assert ($tpl -match 'integration test') "it does not require an integration test in S1"
+  Assert ($tpl -notmatch '### Story S1: <title>') "S1's placeholder is still a bare title, not an end-to-end slice"
+  foreach ($f in @("global\commands\stories.md","global\agents\scribe-agent.md","global\commands\taskmap.md")) {
+    Assert ((Get-Content (Join-Path $kit $f) -Raw) -match 'WALKING SKELETON') "$f does not carry the rule"
+  }
+}
+
+Test-Case "the security review is a gated header, settled before stories" {
+  # Auth, input handling and secret management are where a passing test suite tells you least, and
+  # retrofitting them after a dozen stories is how the insecure version ships. So it is a header field
+  # like Status: - computable, and /build refuses while it is outstanding.
+  $tpl = Get-Content (Join-Path $kit "templates\_common\docs\DESIGN.md") -Raw
+  Assert ($tpl -match '(?m)^Security review:\s*REQUIRED') "the DESIGN template has no Security review header"
+  Assert ($tpl -match 'NOT-REQUIRED') "there is no way to record a deliberate opt-out"
+  Assert ($tpl -match '## Security decisions') "there is nowhere for the answers to land"
+
+  # computed: REQUIRED is a finding, DONE and NOT-REQUIRED are not
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $ds = Join-Path $kit "doc-stats.ps1"
+    foreach ($case in @(
+      @{ H = "Security review: REQUIRED";                 Expect = $true  },
+      @{ H = "Security review: DONE 2026-08-21";           Expect = $false },
+      @{ H = "Security review: NOT-REQUIRED (poc, no auth)"; Expect = $false }
+    )) {
+      "# Design`n`nStatus: LOCKED`n$($case.H)`n" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+      $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
+      $flagged = ($out -match 'Security review: REQUIRED and not done')
+      Assert ($flagged -eq $case.Expect) "'$($case.H)' -> flagged=$flagged, expected $($case.Expect)"
+    }
+    # an OLD project with no header must WARN, never block
+    "# Design`n`nStatus: LOCKED`n" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $old = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($old -match "no 'Security review:' header") "a pre-existing project's missing header was not reported"
+    Assert ($LASTEXITCODE -eq 0) "-Findings should never exit non-zero"
+  } finally { Remove-Sandbox $sb }
+
+  # the agent, and the two commands that must route to / gate on it
+  $a = Get-Content (Join-Path $kit "global\agents\security-agent.md") -Raw
+  Assert ($a -match 'web_search' -and $a -match 'ingest_url') "security-agent cannot reach current guidance"
+  Assert ($a -match '6 months') "security-agent has no recency requirement - the whole point is checking dates"
+  Assert ($a -match 'You do not flip the') "security-agent may set its own DONE header"
+  Assert ($a -match 'do not write code|You do not write code') "security-agent is not held to decisions-only"
+  $d = Get-Content (Join-Path $kit "global\commands\design.md") -Raw
+  Assert ($d -match 'security-agent') "/design never spawns it"
+  Assert ($d -match 'StaleDays 180') "/design does not tighten source recency for security"
+  $b = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+  Assert ($b -match 'Gate 2b') "/build has no security gate"
+  Assert ($b -match 'ABSENT') "/build would block an older project that predates the header"
+}
+
 Test-Case "duplicate unit ids are reported (a regenerated file appended, not replaced)" {
   # Real corruption nothing caught: STORIES.md ended up with every story TWICE (28 headings, 14 distinct
   # ids) and TASKS.md carried a stray "RECOVERED" block. The close was clean, so the ratchet baselined the

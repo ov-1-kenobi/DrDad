@@ -16,6 +16,13 @@ to either lock it (`/design`, it will offer) or use `/proto` if I actually want 
 continue "in PROTO mode" - a real run did that, then made 106 blind edits against an unfinished contract.
 `/build` is the LOCKED-design loop; that is what R7 says and this command obeys it.
 
+**Gate 2b - the SECURITY REVIEW must be settled.** Read the design doc's `Security review:` header.
+`REQUIRED` -> **STOP** and tell me to run `/design` (it spawns security-agent). `NOT-REQUIRED (<reason>)`
+or `DONE <date>` -> proceed. Retrofitting auth and input handling after a dozen stories is how the
+insecure version ships, and a header saying REQUIRED means nobody has decided yet - not that it is safe.
+If the header is ABSENT entirely (a project scaffolded before this existed), treat it as a WARNING, say
+so, and continue - do not block work on an older project.
+
 **Gate 3 - PROVE THE SHELL WORKS before writing a single line.** Run:
 ```
 powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1"

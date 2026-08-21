@@ -24,3 +24,16 @@ Pick the mode from **$ARGUMENTS**:
 
 Never paste the whole file into chat. STORIES only - design decisions belong in `/design`, task breakdown in
 `/taskmap`.
+
+## S1 IS A WALKING SKELETON, NOT A BUILD SKELETON
+
+The FIRST story must prove the system end to end, however trivially: one request in, one response out,
+through the real layers, with an integration test against a real store. NOT "create the solution with
+warnings as errors" - that is build configuration, and it leaves every later story adding to a pile nobody
+has assembled.
+
+Measured: a project reached 183 passing unit tests across 12 building projects, with a TWENTY-LINE host and
+zero integration tests, having never once served a request. Every part worked; the thing did not exist.
+
+A walking skeleton makes every later story an extension of something that RUNS, and it makes close-unit's
+test gate mean INTEGRATION from the very first close instead of mocks.

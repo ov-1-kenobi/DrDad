@@ -173,7 +173,32 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       Recovered content is written back COMMENTED, under a marker, with the diff command - it is a
       starting point for reconciliation, not a merge, because restored code routinely needs a using, a
       fixture or a helper that also changed. Nothing is ever restored without `-Restore`: deletion is
-      sometimes correct, and a tool that silently undoes deliberate work is worse than the problem.- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
+      sometimes correct, and a tool that silently undoes deliberate work is worse than the problem.- [x] R30: **S1 is a WALKING skeleton, not a build skeleton.** Measured: a project reached 183 passing unit
+      tests across 12 building projects with a TWENTY-LINE host and zero integration tests, having never
+      once served a request. Every part worked; the thing did not exist. Its S1 was "create solution
+      skeleton with warnings as errors" - build configuration - so every later story added to a pile nobody
+      had assembled. The first story must now prove the system END TO END, however trivially: one request
+      in, one response out, through the real layers, with an integration test against a real store. That
+      makes every later story an extension of something that RUNS, and it makes `close-unit`'s test gate
+      mean INTEGRATION from the first close instead of mocks. Written into the STORIES template, `/stories`,
+      `scribe-agent` and `/taskmap`.
+- [x] R31: **The security review is a gated header, settled before contracts and stories**
+      (`security-agent`, `Security review:` in the design doc). Auth, input handling and secret management
+      are the areas where a passing test suite tells you LEAST - tests go green over a subtly unsafe
+      implementation - and retrofitting them after a dozen stories is how the insecure version ships. So
+      the design doc carries `Security review: REQUIRED | NOT-REQUIRED (<why>) | DONE <date>` alongside
+      `Status:`, computed by `doc-stats -Findings`, and **`/build` Gate 2b refuses to start while it says
+      REQUIRED** (absent = WARN, so older projects are not blocked). `/design` decides it once the STACK is
+      known (which is why R7 was reversed to choose the stack first) and ASKS: REQUIRED by default,
+      NOT-REQUIRED with a stated reason for a POC or a local-only tool.
+      **`security-agent` exists because recency is checkable and a model's memory is not.** It goes ONLINE
+      for guidance under ~6 months old, records the publication date of every source, prefers the
+      originating authority, and searches deprecation and advisories SEPARATELY from "how do I do X" - a
+      pattern correct two years ago may now name a deprecated API or a library that has since had a CVE.
+      It pins one cited line per decision into `## Security decisions`, writes no code, and may NOT flip
+      the header itself - the human approves. `/design` gates the citations with
+      `source-stats -StaleDays 180` rather than the default year. The most valuable thing it can return is
+      "use the framework's built-in and do not build this yourself", which is the common case for auth.- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
       kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
       refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)
       by header-prefix splice while preserving user sections (Stack/Build/test/Placeholder/Human-in-loop).
