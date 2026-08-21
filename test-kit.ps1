@@ -887,6 +887,27 @@ Test-Case "close-unit RECORDS the commands that worked (RECIPES stops being empt
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "RECIPES ships pre-loaded with the traps, instead of one delete-me example" {
+  # close-unit records the commands THIS project verified, which is worth nothing on day one - and day one
+  # is exactly when a model writes `&&` into PowerShell 5.1 and loses the turn. So the template ships the
+  # traps that have actually broken a run of this kit. Every one PARSED and then misbehaved, which is why
+  # "it ran without a syntax error" is not evidence.
+  $r = Get-Content (Join-Path $kit "templates\_common\docs\RECIPES.md") -Raw
+  Assert ($r -match '(?m)^## Kit-seeded') "the template has no seeded section - a new project starts with no command cache"
+  Assert ($r -match 'do not delete') "the seeded section is not marked as keep-me, so /tidy will treat it as the example entry"
+  foreach ($t in @('git commit -F', 'UTF8Encoding\(\$false\)', "The term 'if' is not recognized",
+                   '@\(Get-Something', 'Test-Path ""', '&&')) {
+    Assert ($r -match $t) "the seeded traps do not cover: $t"
+  }
+  # Each entry must carry the SAME fields close-unit writes, or the doc is two formats and agents parse neither.
+  $seeded = ($r -split '(?m)^## Kit-seeded')[1]
+  foreach ($field in @('\*\*Command:\*\*','\*\*Does:\*\*','\*\*When:\*\*','\*\*Gotcha:\*\*','\*\*Verified:\*\*')) {
+    Assert ((([regex]::Matches($seeded, $field)).Count -ge 6)) "seeded entries are missing the $field field"
+  }
+  # A dated 'Verified:' is the whole point - an undated claim is the prose gate this kit exists to replace.
+  Assert (-not ($seeded -match 'Verified:\s*<YYYY')) "a seeded entry still has a placeholder date"
+}
+
 Test-Case "recover-lost finds what vanished, and knows MOVED from LOST" {
   # The generic shape: a change removed far more than it added, the result still compiles, nothing looks
   # broken. Recovery has to work at the level of NAMED UNITS - a whole-file revert would also discard

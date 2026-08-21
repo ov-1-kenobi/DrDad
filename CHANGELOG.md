@@ -41,8 +41,16 @@ ships.
 - The most valuable thing it can return is *"use the framework's built-in and do not build this yourself"*,
   which is the common case for auth.
 
+### Added - RECIPES ships pre-loaded
+`close-unit` records the commands a project verified, which is worth nothing on day one - and day one is
+exactly when a model writes `&&` into PowerShell 5.1 and loses the turn. The template now ships the traps
+that have actually broken a run of this kit, in the same field format `close-unit` writes: multi-line
+`git commit -m @'...'@` mangling the message (hit while committing THIS release), `Set-Content -Encoding
+UTF8` writing a BOM, `if` in expression position, single-element unrolling so `.Count` is `$null`,
+`Test-Path ""` throwing, and `&&`/`||` being a 5.1 parser error. Every one of them PARSED and then
+misbehaved, which is why "it ran without a syntax error" is not evidence.
 ### Tests
-98 cases (was 96). The walking-skeleton rule present in the template and all three story-writing surfaces
+99 cases (was 96). The walking-skeleton rule present in the template and all three story-writing surfaces
 with the old bare-title placeholder gone; and the security header flagged when REQUIRED, silent on DONE and
 NOT-REQUIRED, reported-but-not-blocking when absent, plus the agent held to recency, decisions-only and
 not-setting-its-own-header.
