@@ -62,6 +62,14 @@ vision model transcribes it to text - and use that as design input.)
    It pins CURRENT (under ~6 months old) framework and security guidance for THIS stack into
    `## Security decisions`, each line citing a dated source in `SOURCES.md`. Relay its findings; I approve;
    then set the header to `DONE <today>`. **You do not flip that header on your own.**
+   **If the agent reports it could not search** (every tool it has is an MCP tool - `web_search`,
+   `ingest_url`, `search_datasheets` - so an unconnected `local-tools` server leaves it with nothing), say
+   so plainly and STOP. Do not relay a security review it produced from memory, and do not quietly leave
+   the header REQUIRED with no route forward - `/build` refuses to start on REQUIRED, so that combination
+   is a dead end. Give me the three real options: fix the server (`/mcp` to check, `dad-doctor.cmd` to
+   diagnose), decide `NOT-REQUIRED (<reason>)` deliberately, or proceed with the framework's own docs if
+   they are already in the corpus (`docs-find.ps1 "<question>"`) - and label those decisions as
+   corpus-only, not current-as-of-today.
    Do this BEFORE contracts and stories: retrofitting auth and input handling after a dozen stories is how
    the insecure version ships. `/build` refuses to start while the header says REQUIRED.
    Then gate the citations:

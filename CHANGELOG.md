@@ -2,6 +2,68 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.19.1 - 2026-08-21
+
+A pre-flight re-check of 0.19.0 before running it on real hardware. Four misses, one of which could have
+wedged a project.
+
+### Fixed - the security gate could DEADLOCK
+0.19.0's Gate 2b had exactly one exit: run `/design`, which spawns `security-agent`. But every tool that
+agent has is an MCP tool, and `search_datasheets` was called ZERO times across nine graded runs - decent
+evidence the `local-tools` server is not always connected. Unconnected server -> the agent cannot work ->
+the header stays `REQUIRED` -> Gate 2b stops `/build`. The project is wedged by missing plumbing, and the
+gate's own advice is to run the thing that does not work.
+
+Fail-closed on infrastructure is how a gate gets switched off, so:
+- Gate 2b now states BOTH routes when it stops: run `/design`, **or** set `NOT-REQUIRED (<reason>)`
+  deliberately. The model may not take the second one itself - it states it and waits.
+- `/design` has a branch for the agent coming back unable to search: say so, do not relay a review, do not
+  leave `REQUIRED` standing with no route forward. It names `/mcp` and `dad-doctor` to diagnose.
+- `security-agent` must report "could not search" and return rather than answering from memory. A plausible
+  undated review is worse than none, because `/design` pins it and everything downstream treats it as
+  decided.
+
+### Fixed - "under 6 months old" was not actually checked
+`source-stats -StaleDays 180` measured the **fetched** date. In a fresh run everything was fetched today, so
+the flag could not catch anything on the first pass - the only pass that matters. A 2019 article pulled this
+morning read as current. R31's central claim (recency is checkable, a model's memory is not) was enforced by
+prose.
+
+`docs/SOURCES.md` gained a **`published`** column - the page's own publication or last-updated date, or the
+literal word `undated`. It is the LAST column deliberately: parsing is positional, so inserting it beside
+`fetched` would make every pre-existing ledger read its title as a date. Verified against a five-column row.
+Old publication dates WARN, never FAIL - a blocking recency gate gets switched off. `research-agent` and
+`security-agent` both fill it, and are told not to copy the fetch date into it.
+
+### Fixed - two silent-nothing bugs, and a static check for the whole class
+`upgrade-project` referenced `$docs`, a variable that only exists in `doc-stats.ps1` - the third bug of this
+exact shape in one release (0.19.0's was `$designFile`, from `ratchet.ps1`). None of them errored:
+PowerShell resolves an unknown variable to `$null`, so `Test-Path $nothing` is false and the check quietly
+passes forever. **A gate that cannot fail is indistinguishable from no gate**, which is this kit's whole
+premise, so the suite now parses every `.ps1` and reports any variable READ that the same file never
+assigns. It self-checks against a synthetic reproduction of the real bug first, because an analyser that
+finds nothing on clean code proves nothing about itself.
+
+It immediately caught a bug in its own first draft: PowerShell variable names are **case-insensitive**, so
+a type held in `$V` was being overwritten by `foreach ($v in ...)`. That is now a seeded RECIPES trap too.
+
+### Fixed - experience projects warned forever
+`TEDD.md` had no `Security review:` header, so every experience project would report a missing-header
+warning permanently. Added, with the note that an experience is often legitimately `NOT-REQUIRED` - until
+there is a leaderboard, an account, an upload, or telemetry.
+
+### Added - upgrade-project names the header
+It deliberately does NOT inject `Security review: REQUIRED` into an existing project: that would block the
+very next `/build` of work that was running fine. It now prints the one-line edit for both answers and lets
+the human choose.
+
+### Verified, not assumed
+`web_search` is a keyless DuckDuckGo HTML scrape, so no API key is needed - and the scrape still works
+today (HTTP 200, 10 `a.result__a` anchors, matching the selector `Rag.cs` queries). Worth knowing it is a
+scrape: if `web_search` ever returns nothing, that selector is the first place to look.
+
+### Tests
+102 cases (was 99).
 ## 0.19.0 - 2026-08-21
 
 Two changes aimed at the two things the kit demonstrably gets wrong on real projects: it builds parts it

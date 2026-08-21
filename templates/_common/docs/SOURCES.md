@@ -14,11 +14,18 @@
        secondary - competent reporting ON a primary source (a good explainer, a trade publication)
        unknown   - captured but not yet assessed. Claims resting only on `unknown` get flagged.
 
+     FETCHED vs PUBLISHED are different questions and both matter. `fetched` is when YOU pulled it;
+     `published` is when the SOURCE was written. A 2019 article fetched this morning looks current and is
+     not - that is the whole failure mode for framework and security guidance, where the pattern may since
+     have been deprecated or the library may since have had a CVE. Put the page's publication or
+     last-updated date in `published` (YYYY-MM-DD), or the literal word `undated` if the page truly has
+     none. source-stats warns on cited sources published beyond its -StaleDays bar.
+
      Cite a source in DESIGN.md / TEDD.md as [S001]. Every citation must resolve to a row here. -->
 
-| id | tier | fetched | title | url |
-|------|-----------|------------|--------------------------------------------|--------------------------|
-| S001 | unknown | <YYYY-MM-DD> | <what this document actually is> | <https://...> |
+| id | tier | fetched | title | url | published |
+|------|-----------|------------|--------------------------------------------|--------------------------|------------|
+| S001 | unknown | <YYYY-MM-DD> | <what this document actually is> | <https://...> | <YYYY-MM-DD> |
 
 ## Why each source was captured
 

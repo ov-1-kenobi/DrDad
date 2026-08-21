@@ -63,6 +63,14 @@
   non-existent drive letter. Guard for empty before either.
 - **Verified:** 2026-08-21, Opus
 
+- **Command:** name a type holder `$tVar`, never `$V`, when a loop in the same scope uses `$v`
+- **Does:** keeps two variables actually separate.
+- **When:** any script with short variable names, especially AST/reflection code.
+- **Gotcha:** PowerShell variable names are CASE-INSENSITIVE - `$V` and `$v` are ONE variable. A type
+  stored in `$V` is silently overwritten by `foreach ($v in ...)`, and the failure surfaces far away as
+  a bizarre cast error ("cannot convert VariableExpressionAst to type System.Type").
+- **Verified:** 2026-08-21, Opus
+
 - **Command:** `<cmd-a>; if ($?) { <cmd-b> }`
 - **Does:** runs B only when A succeeded.
 - **When:** chaining a build to a test, or a stage to the next.

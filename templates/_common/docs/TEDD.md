@@ -1,6 +1,12 @@
 # Technical Experience Design (TEDD) - <experience>
 
 Status: DRAFT
+Security review: REQUIRED
+<!-- REQUIRED | NOT-REQUIRED (<why>) | DONE <YYYY-MM-DD>. Decided in /design once the STACK is known;
+     /design spawns security-agent when REQUIRED. /build REFUSES to start while this says REQUIRED.
+     An experience is often legitimately NOT-REQUIRED - "local-only, no network, no user data" - but that
+     is a DECISION with a reason, not an omission. It becomes REQUIRED the moment there is a leaderboard,
+     an account, an upload, telemetry, or anything served over a network. -->
 <!-- For experiences: interactive / game / XR / infographic / simulation. DRAFT = /design is shaping the
      vision / requirements / architecture / epics. LOCKED = the design is the CONTRACT; /spec and /build
      implement it. Stories live in STORIES.md and tasks in TASKS.md - editable even while this is LOCKED.

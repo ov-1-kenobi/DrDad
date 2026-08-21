@@ -40,7 +40,8 @@ Topic: **$ARGUMENTS**  (empty = take the next items from `## Open questions` in 
 ## Corpus rules
 
 - Captured sources go in **`docs/sources/`**, named `S<nnn>-<slug>.md` so the file ties to the ledger row.
-- Every capture gets a row in `docs/SOURCES.md` (id, tier, fetched date, title, url) AND a line under
+- Every capture gets a row in `docs/SOURCES.md` (id, tier, fetched date, title, url, **published date**
+  - the page's own date, last column, `undated` if it has none) AND a line under
   `## Why each source was captured` saying which question it answers. A source you cannot name a use for
   should not be captured - `source-stats` reports the ones nobody cites.
 - **Prefer the originating authority** over anyone describing it: the standard itself over a blog about

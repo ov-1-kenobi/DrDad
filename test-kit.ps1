@@ -86,6 +86,83 @@ Test-Case "no multi-line if-EXPRESSION assignments (they parse, then fail at run
   Assert ($bad.Count -eq 0) "if used where PowerShell expects an expression, at: $($bad -join ', ')"
 }
 
+Test-Case "no variable is READ that this file never assigns (the silent-nothing bug)" {
+  # THREE bugs of this exact shape shipped in 0.19.0. doc-stats' new security check read $designFile, a
+  # name that lives in ratchet.ps1; upgrade-project's read $docs, a name that lives in doc-stats. Neither
+  # errored. PowerShell resolves an unknown variable to $null, so `Test-Path $nothing` is false and the
+  # whole check quietly passes forever - the worst possible failure for a gate, because it reports success.
+  # A gate that cannot fail is indistinguishable from no gate, which is the premise of this entire kit.
+  function Get-UnassignedReads([string]$File) {
+    $auto = @('_','psitem','args','input','matches','error','host','pwd','home','pid','profile','shellid',
+      'psscriptroot','pscommandpath','psboundparameters','psversiontable','psculture','psuiculture',
+      'myinvocation','executioncontext','stacktrace','lastexitcode','nestedpromptlevel','outputencoding',
+      'foreach','switch','this','true','false','null','iswindows','islinux','ismacos','iscoreclr',
+      'erroractionpreference','warningpreference','verbosepreference','debugpreference','confirmpreference',
+      'progresspreference','informationpreference','whatifpreference','enabledexperimentalfeatures',
+      'psedition','pshome','consolefilename','sender','eventargs','event','eventsubscriber')
+    $tk = $null; $er = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($File, [ref]$tk, [ref]$er)
+    if ($er) { return @() }                      # "all .ps1 parse" owns syntax errors, not this test
+    # tAssign, not $A: PowerShell variable names are CASE-INSENSITIVE, so a type holder named $V and a
+    # loop variable named $v are ONE variable. The first version of this test did exactly that and died
+    # with "cannot convert VariableExpressionAst to type System.Type" - the loop had overwritten the type.
+    $tAssign  = [System.Management.Automation.Language.AssignmentStatementAst]
+    $tParam   = [System.Management.Automation.Language.ParameterAst]
+    $tForEach = [System.Management.Automation.Language.ForEachStatementAst]
+    $tUnary   = [System.Management.Automation.Language.UnaryExpressionAst]
+    $tVar     = [System.Management.Automation.Language.VariableExpressionAst]
+    $tCmd     = [System.Management.Automation.Language.CommandAst]
+    $tStr     = [System.Management.Automation.Language.StringConstantExpressionAst]
+    $assigned = New-Object 'System.Collections.Generic.HashSet[string]'
+    $add = { param($n) $assigned.Add($n.Split(':')[-1].ToLower()) | Out-Null }
+    foreach ($a in $ast.FindAll({ $args[0] -is $tAssign }, $true)) {
+      foreach ($v in $a.Left.FindAll({ $args[0] -is $tVar }, $true)) { & $add $v.VariablePath.UserPath }
+    }
+    foreach ($p in $ast.FindAll({ $args[0] -is $tParam }, $true)) { & $add $p.Name.VariablePath.UserPath }
+    foreach ($e in $ast.FindAll({ $args[0] -is $tForEach }, $true)) { & $add $e.Variable.VariablePath.UserPath }
+    # $x++ both reads and writes; if that is the only mention it is a bug on its own terms, not this one
+    foreach ($u in $ast.FindAll({ $args[0] -is $tUnary }, $true)) {
+      foreach ($v in $u.FindAll({ $args[0] -is $tVar }, $true)) { & $add $v.VariablePath.UserPath }
+    }
+    foreach ($c in $ast.FindAll({ $args[0] -is $tCmd }, $true)) {
+      if ($c.GetCommandName() -in @('New-Variable','Set-Variable','Remove-Variable','Get-Variable')) {
+        foreach ($el in $c.CommandElements) { if ($el -is $tStr) { & $add $el.Value } }
+      }
+    }
+    $out = @()
+    foreach ($v in $ast.FindAll({ $args[0] -is $tVar }, $true)) {
+      if ($v.VariablePath.IsDriveQualified) { continue }        # $env:FOO
+      $n = $v.VariablePath.UserPath.Split(':')[-1]
+      if ($n.ToLower() -in $auto) { continue }
+      if ($assigned.Contains($n.ToLower())) { continue }
+      $out += "$([System.IO.Path]::GetFileName($File)):$($v.Extent.StartLineNumber) `$$n"
+    }
+    return $out
+  }
+
+  # SELF-CHECK FIRST. A static analyser that finds nothing on clean code proves nothing about itself, and
+  # this suite exists because gates that pass by doing nothing are the recurring failure here.
+  $sb = New-Sandbox
+  try {
+    $probe = Join-Path $sb "probe.ps1"
+    @'
+param([string]$ProjectDir = ".")
+$designName = "DESIGN.md"
+$hit = [regex]::Match((Get-Content $designFile -Raw), 'x')
+foreach ($x in 1..3) { $x }
+$i = 0; $i++
+Get-ChildItem $ProjectDir | ForEach-Object { $_.Name }
+'@ | Set-Content $probe -Encoding UTF8
+    $probeHits = @(Get-UnassignedReads $probe)
+    Assert ($probeHits.Count -eq 1) "the analyser is broken: expected exactly 1 hit on the probe, got $($probeHits.Count) ($($probeHits -join '; '))"
+    Assert ($probeHits[0] -match '\$designFile') "the analyser missed the real bug shape: $($probeHits -join '; ')"
+  } finally { Remove-Sandbox $sb }
+
+  $bad = @()
+  foreach ($f in (Get-KitFiles @("*.ps1"))) { $bad += @(Get-UnassignedReads $f.FullName) }
+  Assert ($bad.Count -eq 0) "read but never assigned in the same file (silently evaluates to `$null): $($bad -join ', ')"
+}
+
 Test-Case "config JSON parses" {
   foreach ($rel in @("settings.json", ".mcp.json", "templates\_common\.mcp.json", "templates\unity\.mcp.json")) {
     $p = Join-Path $kit $rel
@@ -1352,6 +1429,78 @@ Test-Case "source-stats gates citation integrity" {
     "captured" | Set-Content "$p\docs\sources\S009-never-used.md" -Encoding UTF8
     $out3 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $p 2>&1 | Out-String)
     Assert ($out3 -match 'S009.*no ledger row') "an unrecorded source file was not reported:`n$out3"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "the security gate cannot DEADLOCK when the MCP server is down" {
+  # The gate as shipped in 0.19.0 had one exit: run /design, which spawns security-agent. But every tool
+  # security-agent has is an MCP tool, and `search_datasheets` was called ZERO times across nine graded
+  # runs - decent evidence the server is not always connected. Unconnected server -> the agent cannot
+  # work -> the header stays REQUIRED -> Gate 2b STOPs /build. The project is wedged by missing plumbing,
+  # and the gate's own advice is to run the thing that does not work. Fail-closed on infrastructure is how
+  # a gate gets deleted, so there must always be a HUMAN route out, and it must be stated at the stop.
+  $build  = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+  $design = Get-Content (Join-Path $kit "global\commands\design.md") -Raw
+  $agent  = Get-Content (Join-Path $kit "global\agents\security-agent.md") -Raw
+
+  $gate = [regex]::Match($build, '(?s)Gate 2b.*?(?=\*\*Gate 3)').Value
+  Assert ($gate.Length -gt 200) "Gate 2b is missing from build.md"
+  Assert ($gate -match 'NOT-REQUIRED') "the STOP does not name the route that does not depend on the MCP server"
+  Assert ($gate -match '/mcp|dad-doctor') "the STOP does not say how to find out the server is the problem"
+  Assert ($gate -match 'may not|do not|not take') "nothing stops the model taking the human's escape hatch itself"
+
+  # /design must not quietly leave REQUIRED standing when the agent came back empty - that is the wedge.
+  Assert ($design -match '(?is)could\s+not\s+search|not\s+connected|unconnected') "/design has no branch for the agent being unable to search"
+  Assert ($design -match '(?s)security-agent.*?(?:from memory|not relay|Do not relay)') "/design does not refuse a security review produced from memory"
+
+  # And the agent itself must say so rather than improvising, because a plausible undated review is worse
+  # than none: /design pins it, and everything downstream treats it as decided.
+  # \s+ not a literal space: these files are hard-wrapped at ~100 chars, so any asserted phrase can land
+  # with a newline in the middle of it. This assertion failed exactly that way on "from\nmemory".
+  Assert ($agent -match '(?is)could\s+not\s+search') "security-agent has no defined behaviour when its tools do not answer"
+  Assert ($agent -match '(?is)from\s+memory') "security-agent is not forbidden from answering from memory - the exact thing it exists to replace"
+}
+
+Test-Case "recency is checked on PUBLICATION date, and old ledgers still parse" {
+  # 0.19.0 claimed security guidance was held to "under ~6 months old" and gated it with -StaleDays 180.
+  # But StaleDays measured the FETCHED date, and in a fresh run everything was fetched today - so the flag
+  # could not catch anything on the first pass, which is the only pass that matters. A 2019 article pulled
+  # this morning looked current. The claim was enforced by prose. So the ledger gained a 'published' column.
+  # It is the LAST column deliberately: parsing is positional, and inserting it beside 'fetched' would make
+  # every pre-existing ledger read its TITLE as a date. That regression is the second half of this test.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs\sources" | Out-Null
+    @'
+# Sources
+
+| id | tier | fetched | title | url | published |
+|--|--|--|--|--|--|
+| S001 | primary | 2026-08-21 | Old five-column row | https://a.example |
+| S002 | primary | 2026-08-21 | Fetched today, written years ago | https://b.example | 2019-03-04 |
+| S003 | primary | 2026-08-21 | Honestly undated page | https://c.example | undated |
+'@ | Set-Content "$p\docs\SOURCES.md" -Encoding UTF8
+    foreach ($id in @("S001","S002","S003")) { "x" | Set-Content "$p\docs\sources\$id-x.md" -Encoding UTF8 }
+    "# D`n`nStatus: DRAFT`n`nCites [S001] [S002] [S003]." | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+
+    $ss = Join-Path $kit "source-stats.ps1"
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p -StaleDays 180 2>&1 | Out-String
+    Assert ($LASTEXITCODE -eq 0) "an old publication date must WARN, never FAIL - a blocking recency gate gets switched off"
+    Assert ($out -match 'S002 was PUBLISHED') "a source published years before it was fetched went unnoticed - the whole point of the column"
+    Assert ($out -notmatch 'S003 (was PUBLISHED|has an unparsable)') "'undated' is an honest answer and must not be nagged about"
+    # BACKWARD COMPATIBILITY: the five-column row must still parse its own tier, or appending the column
+    # silently corrupted every ledger in existence.
+    Assert ($out -notmatch 'S001 has no tier') "a pre-0.19.1 five-column row lost its tier - the columns shifted"
+    Assert ($out -match 'no published date in the ledger') "the missing-date report did not mention the old row"
+    Assert ($out -notmatch 'S001.*S002.*S003') "missing dates must be reported ONCE in aggregate, not per source"
+
+    # And the agents that WRITE rows must agree with the reader on the column order, or the gate polices a
+    # format nothing produces.
+    foreach ($a in @("research-agent.md","security-agent.md")) {
+      $t = Get-Content (Join-Path $kit "global\agents\$a") -Raw
+      Assert ($t -match 'published') "$a never mentions the published column it is supposed to fill"
+      Assert ($t -match '(?i)undated') "$a is not told what to write when a page has no date, so it will guess one"
+    }
   } finally { Remove-Sandbox $sb }
 }
 

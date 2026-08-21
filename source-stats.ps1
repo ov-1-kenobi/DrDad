@@ -39,12 +39,15 @@ if (-not (Test-Path $ledgerPath)) {
 }
 
 # --- the ledger ----------------------------------------------------------------------------------
-# Table rows only: | id | tier | fetched | title | url |. The template's own placeholder row is skipped.
+# Table rows only: | id | tier | fetched | title | url | published |. The template's placeholder row is skipped.
+# 'published' is LAST on purpose. Parsing here is POSITIONAL, so inserting it next to 'fetched' - where it
+# reads better - would make every ledger written before 0.19.1 parse its TITLE as a date and its URL as the
+# title, silently. A trailing column leaves old rows parsing exactly as they did, with published = "".
 $rows = @{}
 foreach ($line in (Get-Content $ledgerPath -Encoding UTF8)) {
   if ($line -notmatch '^\s*\|\s*(S\d+)\s*\|') { continue }
   $cells = ($line.Trim() -split '\|') | ForEach-Object { $_.Trim() }
-  # cells[0] is empty (leading pipe): id, tier, fetched, title, url
+  # cells[0] is empty (leading pipe): id, tier, fetched, title, url, published
   $id = $cells[1]
   if ($rows.ContainsKey($id)) { $fails.Add("duplicate ledger id $id"); continue }
   $rows[$id] = [pscustomobject]@{
@@ -53,6 +56,7 @@ foreach ($line in (Get-Content $ledgerPath -Encoding UTF8)) {
     Fetched = if ($cells.Count -gt 3) { $cells[3] } else { "" }
     Title = if ($cells.Count -gt 4) { $cells[4] } else { "" }
     Url = if ($cells.Count -gt 5) { $cells[5] } else { "" }
+    Published = if ($cells.Count -gt 6) { $cells[6] } else { "" }
   }
 }
 # The shipped template row is a placeholder, not a real source.
@@ -106,6 +110,31 @@ foreach ($id in $rows.Keys) {
     $age = ([datetime]::Today - $d).Days
     if ($age -gt $StaleDays) { $warns.Add("$id was fetched $age days ago - re-check it still says what you cited") }
   } else { $warns.Add("$id has no parsable fetched date ('$($rows[$id].Fetched)')") }
+}
+# PUBLICATION age, which is a different question from fetch age and the one that actually matters for
+# security guidance. Everything in a fresh run was FETCHED today, so -StaleDays 180 on 'fetched' cannot
+# catch anything on the first pass - it only helps months later. A 2019 article fetched this morning is
+# the failure mode: current-looking, and it may name an API that has since been deprecated or a library
+# that has since had a CVE. Only cited sources are checked; uncited ones are already flagged as hoarded.
+$noPubDate = @()
+foreach ($id in $rows.Keys) {
+  if (-not $cited.ContainsKey($id)) { continue }
+  $pub = $rows[$id].Published
+  if (-not $pub -or $pub -match '^<') { $noPubDate += $id; continue }
+  if ($pub -match '^(n/?a|none|undated|unknown)$') { continue }   # honestly recorded as undated
+  $pd = $pub -as [datetime]
+  if ($pd) {
+    $pAge = ([datetime]::Today - $pd).Days
+    if ($pAge -gt $StaleDays) {
+      $warns.Add("$id was PUBLISHED $pAge days ago ($pub) - older than the $StaleDays-day bar; confirm it has not been superseded")
+    }
+  } else { $warns.Add("$id has an unparsable published date ('$pub') - use YYYY-MM-DD, or 'undated' if the page has none") }
+}
+# Aggregated, not one WARN per source: a ledger written before this column existed would otherwise bury
+# every real finding under a wall of identical lines.
+if ($noPubDate.Count) {
+  $shown = ($noPubDate | Sort-Object | Select-Object -First 6) -join ', '
+  $warns.Add("$($noPubDate.Count) cited source(s) have no published date in the ledger ($shown) - add the last column so recency is a fact rather than an impression")
 }
 foreach ($id in $files.Keys) {
   if (-not $rows.ContainsKey($id)) { $warns.Add("docs\sources\$($files[$id][0]) has no ledger row - arrived unrecorded") }

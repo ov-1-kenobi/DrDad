@@ -52,12 +52,24 @@ For each decision, write ONE line under `## Security decisions` in the design do
 > - Sessions: use `<library>` <version>, cookie-based, `HttpOnly`+`Secure`+`SameSite=Lax`. Hand-rolled JWT
 >   handling rejected: <reason>. [S007]
 
-- Capture every source with `ingest_url` and add its row to `docs/SOURCES.md` (id, tier `unknown`, the
-  **publication date** in the fetched column where you can find it, title, url). **You do not set the
+- Capture every source with `ingest_url` and add its row to `docs/SOURCES.md`:
+  `| id | tier | fetched | title | url | published |`. `fetched` is TODAY (when you pulled it); `published`
+  is the **last column** and is the page's own publication or last-updated date. **You do not set the
   tier** - the human does.
+- **`published` is the column that carries your whole argument.** `web_search` returns titles and URLs
+  only, no dates, so the date has to come from the page you `ingest_url`'d - a dateline, a "last updated",
+  a changelog entry, the version it documents. Fill it in `YYYY-MM-DD`, or the literal word `undated` when
+  the page genuinely has none. Do NOT copy the fetch date into it: everything is fetched today, so a
+  ledger where `published` mirrors `fetched` makes a 2019 article indistinguishable from last week's, and
+  `source-stats -StaleDays 180` has nothing to bite on. An honest `undated` is worth more than a guess.
 - **Never invent a version number, a date, or an API.** If `ingest_url` failed, the source is not captured
   and you must say so. A confident citation to something you did not read is the worst thing you can
   produce here, because everything downstream will treat it as verified.
+- **If you cannot search at all, say that first and do nothing else.** Every tool you have is an MCP tool,
+  so an unconnected `local-tools` server leaves you unable to do this job. Report "could not search - the
+  local-tools MCP server is not answering" and return. Do NOT fall back to writing a security review from
+  memory: recency you cannot check is exactly what you exist to replace, and a plausible undated review is
+  worse than an absent one because `/design` will pin it as decided.
 - When you cannot establish current guidance for something, add it to `## Open questions` in SOURCES.md
   rather than guessing. "Could not establish the current recommendation for X" is a usable result.
 - Reindex when you are done.

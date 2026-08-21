@@ -26,7 +26,13 @@ invocations. Batching means shallow searching, a blown context, and a return wit
 4. **`ingest_url` the ones worth keeping**, then record each one:
    - the fetched file belongs in `docs/sources/` named `S<nnn>-<slug>.md` (next free number - read
      `docs/SOURCES.md` to find it; never reuse an id)
-   - add its row to the `docs/SOURCES.md` table: `| S<nnn> | unknown | <YYYY-MM-DD> | <title> | <url> |`
+   - add its row to the `docs/SOURCES.md` table:
+     `| S<nnn> | unknown | <fetched YYYY-MM-DD> | <title> | <url> | <published YYYY-MM-DD> |`
+     `fetched` is today; `published` is the LAST column and is the page's own publication or last-updated
+     date, taken from the page you just ingested - a dateline, a "last updated", the version it documents.
+     Write the literal word `undated` when the page has none. Never copy `fetched` into `published`:
+     everything is fetched today, so that makes a 2019 page indistinguishable from last week's, and it is
+     the one thing `source-stats` cannot see through.
    - add a line under `## Why each source was captured` naming the question it answers
 5. **Set tier to `unknown`. Always.** Tiering is the human's call and yours is not a vote. Do not write
    `primary` even when it is obviously the standard - the orchestrator relays the list and the human decides.

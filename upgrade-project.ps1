@@ -195,8 +195,30 @@ $text = ((($out -join "`r`n") -replace '__DESIGN_DOC__', "``docs/$docName``")).T
 
 [System.IO.File]::WriteAllText($stampFile, "$kitVer`r`n", (New-Object System.Text.UTF8Encoding($false)))
 
+# The security-review header is deliberately NOT injected here. Adding 'Security review: REQUIRED' to a
+# project already mid-build would block its very next /build - a kit upgrade must not stop work that was
+# running fine. Absent = WARN by design. But silence would mean an existing web app never gets gated at
+# all, so name the one-line edit and let the human choose.
+# Join-Path $proj, NOT a $docs variable - upgrade-project has no such variable (doc-stats does). Reaching
+# for a name that exists in a NEIGHBOURING script is the third bug of this exact shape in this release;
+# it never errors, it just silently evaluates to nothing and the check quietly passes.
+$designPath = Join-Path $proj "docs\$docName"
+$needsSecHeader = $false
+if (Test-Path -LiteralPath $designPath) {
+  $needsSecHeader = -not (Select-String -Path $designPath -Pattern '^\s*Security review:' -Quiet)
+}
+
 Write-Host ""
 Write-Host "Done. Next:" -ForegroundColor Green
 Write-Host "  1. Review CLAUDE.md (your Stack/Build/test sections were preserved; kit sections refreshed)."
 Write-Host "  2. Reindex: run index_datasheets in a session (or reindex.cmd $proj\docs)."
 Write-Host "  3. /audit status  - populate the new docs\STATUS.md dashboard."
+if ($needsSecHeader) {
+  Write-Host ""
+  Write-Host "  NOTE: docs\$docName has no 'Security review:' header, so /build will WARN and continue." -ForegroundColor Yellow
+  Write-Host "        If this project handles auth, user data, uploads or is internet-facing, add this line" -ForegroundColor Yellow
+  Write-Host "        under 'Status:' to make /build gate on it (then run /design to satisfy it):" -ForegroundColor Yellow
+  Write-Host "          Security review: REQUIRED" -ForegroundColor Cyan
+  Write-Host "        Otherwise record the decision instead, so a later reader knows it was one:" -ForegroundColor Yellow
+  Write-Host "          Security review: NOT-REQUIRED (local-only tool, no auth, never deployed)" -ForegroundColor Cyan
+}

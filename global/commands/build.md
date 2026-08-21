@@ -17,9 +17,16 @@ continue "in PROTO mode" - a real run did that, then made 106 blind edits agains
 `/build` is the LOCKED-design loop; that is what R7 says and this command obeys it.
 
 **Gate 2b - the SECURITY REVIEW must be settled.** Read the design doc's `Security review:` header.
-`REQUIRED` -> **STOP** and tell me to run `/design` (it spawns security-agent). `NOT-REQUIRED (<reason>)`
-or `DONE <date>` -> proceed. Retrofitting auth and input handling after a dozen stories is how the
-insecure version ships, and a header saying REQUIRED means nobody has decided yet - not that it is safe.
+`REQUIRED` -> **STOP**. `NOT-REQUIRED (<reason>)` or `DONE <date>` -> proceed. Retrofitting auth and input
+handling after a dozen stories is how the insecure version ships, and a header saying REQUIRED means nobody
+has decided yet - not that it is safe.
+When you stop here, give me BOTH ways out, because one of them may not be available:
+  1. run `/design` - it spawns security-agent, which needs the `local-tools` MCP server for `web_search`;
+  2. or decide it without the agent, and set `Security review: NOT-REQUIRED (<reason>)` yourself.
+Route 2 exists so this gate cannot deadlock. security-agent's tools are ALL MCP tools, so if the server is
+not connected (`/mcp` to check, `dad-doctor.cmd` to diagnose) route 1 cannot complete - and without route 2
+the only exit from REQUIRED would be a tool that does not run. **You may not take route 2 yourself**; state
+it and wait for me.
 If the header is ABSENT entirely (a project scaffolded before this existed), treat it as a WARNING, say
 so, and continue - do not block work on an older project.
 
