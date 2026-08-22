@@ -11,9 +11,15 @@
 # directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
 # wrong folder. These scripts are invoked by MODELS, which typo parameter names.
 [CmdletBinding()]
-param([switch]$Full)
+param(
+  [switch]$Full,
+  # -ClaudeDir exists so the teardown can be TESTED. It was previously asserted by grepping this file for
+  # the string "Remove('Stop')", which pinned an implementation detail: generalising the removal to cover
+  # a second hook event broke the test while improving the code. A gate that cannot be run is prose.
+  [string]$ClaudeDir = ""
+)
 $ErrorActionPreference = "Stop"
-$claude = Join-Path $env:USERPROFILE ".claude"
+$claude = if ($ClaudeDir) { $ClaudeDir } else { Join-Path $env:USERPROFILE ".claude" }
 
 # Keep these lists in sync with install.ps1 (global\commands and global\agents).
 $commands = @("scaffold","research","document","design","taskmap","proto","spec","build","assets","tidy","stories","diagram","audit","grade","retro")
@@ -48,13 +54,22 @@ if (Test-Path $bak) {
   if (Test-Path $settings) {
     try {
       $s = Get-Content $settings -Raw | ConvertFrom-Json
-      $stop = @()
-      try { $stop = @($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) } catch { }
-      if (($stop -join " ") -match 'dad-guard') {
-        $s.hooks.PSObject.Properties.Remove('Stop')
+      # Every hook event, not just Stop - 0.19.3 added a PreToolUse hook (dad-loopguard), and one left
+      # behind would fire on every single tool call and fail once this folder is gone.
+      $all = @()
+      try {
+        $all = @($s.hooks.PSObject.Properties.Name | ForEach-Object { $s.hooks.$_ } |
+                 ForEach-Object { $_.hooks } | ForEach-Object { $_.command })
+      } catch { }
+      if (($all -join " ") -match 'dad-guard|dad-loopguard') {
+        foreach ($evt in @($s.hooks.PSObject.Properties.Name)) {
+          $cmds = @()
+          try { $cmds = @($s.hooks.$evt | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) } catch { }
+          if (($cmds -join " ") -match 'dad-guard|dad-loopguard') { $s.hooks.PSObject.Properties.Remove($evt) }
+        }
         if (-not $s.hooks.PSObject.Properties.Name) { $s.PSObject.Properties.Remove('hooks') }
         [System.IO.File]::WriteAllText($settings, ($s | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
-        Write-Host "  removed the dad-guard Stop hook (it would fail once this folder is gone)" -ForegroundColor Yellow
+        Write-Host "  removed the DAD hooks (they would fail once this folder is gone)" -ForegroundColor Yellow
       }
     } catch { Write-Host "  could not edit settings.json - remove the 'hooks' block by hand" -ForegroundColor Yellow }
   }

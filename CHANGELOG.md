@@ -2,6 +2,74 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.19.3 - 2026-08-22
+
+A real CMS run hung: a taskmap subagent ran the SAME command **920 times in a row** and had to be killed by
+hand. Nothing in 0.19.2 addressed any part of it.
+
+```
+taskmap-agent(Taskmap S4.1-S4.7)
+  Bash(dir "D:\projects\Claude\projects\cms\src" 2>nul)      x920
+  Interrupted
+```
+
+### Added - `dad-loopguard.ps1`, a PreToolUse hook
+Two things combined to make that loop possible, and both are now blocked by the harness rather than asked
+for in prose.
+
+**`2>nul` is cmd.exe syntax.** Under the Bash tool it silences nothing - it redirects stderr into a FILE
+named `nul`. Reproduced here: exit 2, **empty stdout, no error text**, and an 84-byte file called `nul`.
+So the model could not distinguish "that directory does not exist" from "that directory is empty", and had
+nothing to learn from. It also left **28 zero-byte `nul` files** across the project, including inside
+`.git\objects\` - and `nul` is a reserved device name on Windows, so they are awkward to delete. The guard
+rejects this shape on the FIRST occurrence and names the alternatives (`2>/dev/null`, `2>$null`,
+`Test-Path`). `nul`/`NUL` are now gitignored by scaffold and upgrade.
+
+**Nothing noticed the repetition.** The guard blocks the 4th **consecutive** identical command and tells
+the model that the result it keeps getting IS the answer. Consecutive is the load-bearing word: a
+build-fix-build-fix cycle has edits in between and is legitimate, and a guard with false positives gets
+switched off. `dotnet build` repeated with work between calls is explicitly tested as allowed.
+`# dad-allow-repeat` in a command opts out; the guard fails OPEN on any error of its own, because a
+PreToolUse hook sits in front of every single tool call.
+
+**Note on what this does NOT prove.** The looping agent's `tools:` frontmatter did not include `Bash` - it
+has never included Bash, unchanged since 0.9.0 - and it ran Bash anyway. So per-agent tool restriction
+cannot be relied on as a safety mechanism, which is exactly why this is a hook. Whether the hook fires for
+tool calls made INSIDE a subagent could not be verified here (Claude Code is not installed on the dev box);
+if it does not, the prose fixes below are what stop this recurrence.
+
+### Fixed - an unreadable task ledger was reported as "0 tasks"
+The same run produced a **41 KB `docs/TASKS.md`** that every gate read as empty:
+
+- task blocks headed `### S1.1: Dashboard Overview` - no `[ ]`, no `T` id - with anonymous bullets under them
+- `## Build order` sequencing **19 `T` ids that were defined nowhere in the file**
+- no `## Tasks` section at all
+
+`doc-stats` printed `tasks 0/0`. A **number** - indistinguishable from a project that simply has no tasks
+yet. So nothing looked wrong, while `close-unit` could tick nothing and `/build` could select no unit. A
+day of planning produced a document no tool could read, and the tool that should have caught it reported a
+count instead of an error.
+
+`doc-stats -Findings` now separates "no tasks" from "a ledger I cannot parse": it reports the file size,
+states the heading shape that would work, and flags Build-order ids that resolve to nothing. `/taskmap`
+gained a gate that runs it and refuses to report success on a dead map, and `taskmap-agent` must now verify
+its own output is parseable and report the count it wrote. A correct ledger and a freshly scaffolded
+template both stay silent - a finding that fires on good input is noise.
+
+### Fixed - taskmap probed for paths that cannot exist yet
+`Touches:` names files to be CREATED. Taskmap runs before any code, so `src/` is normally absent and that
+is correct - not a problem to investigate. `taskmap-agent` is now told this plainly, with the incident
+attached, and told to ask ONCE with `Test-Path` if it genuinely needs to know.
+
+### Changed - the teardown is tested instead of grepped
+`uninstall.ps1` took a `-ClaudeDir` parameter so the suite can RUN it against a sandbox. The old assertion
+grepped this file for the literal string `Remove('Stop')`, which pinned an implementation detail:
+generalising hook removal to cover PreToolUse broke the test while making the code correct. `install`,
+`uninstall` and `dad-doctor` now all walk every hook event rather than hard-coding `Stop`, so the next hook
+cannot ship with a stale path - the bug that shipped in three consecutive releases.
+
+### Tests
+106 cases (was 104).
 ## 0.19.2 - 2026-08-21
 
 Three bugs found by scaffolding a fresh project and looking at what the model actually receives on turn

@@ -25,6 +25,18 @@
      otherwise, and because the failure mode is always the same: PS 5.1 accepts the syntax and
      misbehaves at runtime, so "it ran" is not evidence. Append project-specific entries above. -->
 
+- **Command:** `powershell -NoProfile -Command "Test-Path -LiteralPath 'C:\path'"` to test existence;
+  `2>/dev/null` under bash, `2>$null` under PowerShell - **never `2>nul`**
+- **Does:** checks whether a path exists, or discards stderr, without hiding the outcome.
+- **When:** any "does this directory/file exist yet" probe.
+- **Gotcha:** `2>nul` is cmd.exe syntax. Under the Bash tool it silences NOTHING - it redirects stderr into
+  a FILE named `nul`, so you get empty output and no error text and cannot tell "missing" from "empty".
+  A real run looped `dir "...\src" 2>nul` **920 times** on this and had to be killed by hand; it also left
+  28 zero-byte files named `nul` across the project, including inside `.git\objects\`, and `nul` is a
+  reserved device name on Windows so those are awkward to delete. The kit's PreToolUse hook
+  (`dad-loopguard`) now blocks this command shape outright.
+- **Verified:** 2026-08-22, Opus
+
 - **Command:** `git commit -F <msgfile>` (write the message with `[System.IO.File]::WriteAllText`)
 - **Does:** commits with a multi-line message.
 - **When:** any commit message longer than one line.

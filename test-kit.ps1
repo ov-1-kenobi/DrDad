@@ -771,8 +771,21 @@ Test-Case "settings.json wires dad-guard as a Stop hook, at a rewritable path" {
   Assert (($rewritten -join " ") -notmatch [regex]::Escape($devPath)) "placeholder is not rewritable via the parsed object"
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match '\$h\.command\s*=\s*\$h\.command\.Replace') "install.ps1 does not rewrite the hook command"
-  $unin = Get-Content (Join-Path $kit "uninstall.ps1") -Raw
-  Assert ($unin -match "Remove\('Stop'\)") "uninstall.ps1 leaves a Stop hook pointing at a deleted script"
+  # RUN the teardown against a sandbox, rather than grepping uninstall.ps1 for "Remove('Stop')". That grep
+  # pinned an implementation detail: generalising the removal to cover a second hook event (PreToolUse)
+  # broke the test while making the code correct. A hook left behind pointing at a deleted script fires on
+  # every turn and fails, so what matters is that EVERY DAD hook is gone - not how.
+  $sb2 = New-Sandbox
+  try {
+    $fake = Join-Path $sb2 ".claude"
+    New-Item -ItemType Directory -Force $fake | Out-Null
+    Copy-Item (Join-Path $kit "settings.json") (Join-Path $fake "settings.json") -Force
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "uninstall.ps1") -ClaudeDir $fake 2>&1 | Out-Null
+    $after = Get-Content (Join-Path $fake "settings.json") -Raw
+    Assert ($after -notmatch 'dad-guard') "uninstall left the Stop hook behind - it would fail on every turn once the folder is gone"
+    Assert ($after -notmatch 'dad-loopguard') "uninstall left the PreToolUse hook behind - it would fail on every TOOL CALL"
+    Assert (($after | ConvertFrom-Json).env.ANTHROPIC_BASE_URL) "uninstall damaged the rest of settings.json"
+  } finally { Remove-Sandbox $sb2 }
 }
 
 Test-Case "dad-guard BLOCKS unverified code and clears after close-unit" {
@@ -1520,6 +1533,100 @@ Test-Case "the security gate cannot DEADLOCK when the MCP server is down" {
   # with a newline in the middle of it. This assertion failed exactly that way on "from\nmemory".
   Assert ($agent -match '(?is)could\s+not\s+search') "security-agent has no defined behaviour when its tools do not answer"
   Assert ($agent -match '(?is)from\s+memory') "security-agent is not forbidden from answering from memory - the exact thing it exists to replace"
+}
+
+Test-Case "the loop guard breaks a repeated command, and rejects 2>nul outright" {
+  # Measured, CMS run: a taskmap subagent ran `dir "D:\...\cms\src" 2>nul` NINE HUNDRED AND TWENTY times
+  # in a row and the session had to be killed by hand. Two causes, both fixed here.
+  #   1. `2>nul` is cmd.exe. Under Bash it writes stderr to a FILE named `nul`, so the model got empty
+  #      output and NO error - nothing to learn from, so it retried forever. (Reproduced: exit 2, no
+  #      stdout, a 'nul' file created.) It also left 28 such files, including in .git\objects.
+  #   2. Nothing noticed the repetition. The agent's `tools:` frontmatter did NOT include Bash and it ran
+  #      Bash anyway, so per-agent tool restriction cannot be the guard. A HOOK is enforced by the harness.
+  $lg = Join-Path $kit "dad-loopguard.ps1"
+  Assert (Test-Path $lg) "dad-loopguard.ps1 is missing"
+
+  function Invoke-Guard($cmd, $session) {
+    $j = @{ session_id = $session; tool_name = "Bash"; tool_input = @{ command = $cmd } } | ConvertTo-Json -Compress
+    $out = ($j | & powershell -NoProfile -ExecutionPolicy Bypass -File $lg 2>&1 | Out-String)
+    return @{ Code = $LASTEXITCODE; Text = $out }
+  }
+  $sid = "testkit-$PID-$(Get-Random)"
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+
+  # the exact command from the incident: blocked on the FIRST call, not the fourth
+  $r = Invoke-Guard 'dir "D:\projects\Claude\projects\cms\src" 2>nul' $sid
+  Assert ($r.Code -eq 2) "2>nul was allowed (exit $($r.Code)) - the invisible-failure shape must be refused"
+  Assert ($r.Text -match '(?is)2>/dev/null|Test-Path') "the block does not say what to use instead"
+
+  # legitimate commands are untouched, however often they repeat NON-consecutively
+  foreach ($ok in @('ls -la src 2>/dev/null', 'dotnet build', 'git status --porcelain')) {
+    $r2 = Invoke-Guard $ok $sid
+    Assert ($r2.Code -eq 0) "'$ok' was blocked (exit $($r2.Code)) - false positives make a guard get deleted"
+  }
+
+  # a build-fix-build cycle must survive: identical commands with something in between are NOT a loop
+  for ($i = 0; $i -lt 4; $i++) {
+    $a = Invoke-Guard 'dotnet build' $sid
+    Assert ($a.Code -eq 0) "dotnet build was blocked on pass $i - repeats with other work between them are legitimate"
+    Invoke-Guard 'git status' $sid | Out-Null
+  }
+
+  # but four IDENTICAL calls back to back, with nothing between, is a loop
+  $blocked = $false
+  for ($i = 1; $i -le 4; $i++) {
+    $r3 = Invoke-Guard 'ls -la nowhere-at-all' $sid
+    if ($r3.Code -eq 2) { $blocked = $true; Assert ($i -ge 3) "blocked too early (attempt $i) - a couple of retries is normal"; break }
+  }
+  Assert $blocked "four consecutive identical commands were never blocked - this is the 920-call loop"
+
+  # and it must FAIL OPEN: garbage in, allow. A PreToolUse hook sits in front of EVERY tool call, so one
+  # that errors on its own bugs makes the session unusable and gets switched off within the hour.
+  foreach ($junk in @('', 'not json at all', '{"tool_name":"Bash"}', '{"tool_input":{}}')) {
+    $out = ($junk | & powershell -NoProfile -ExecutionPolicy Bypass -File $lg 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "malformed hook input returned $LASTEXITCODE - the guard must fail OPEN"
+  }
+  # non-shell tools are none of its business
+  $j2 = '{"session_id":"x","tool_name":"Read","tool_input":{"command":"dir x 2>nul"}}'
+  $j2 | & powershell -NoProfile -ExecutionPolicy Bypass -File $lg 2>&1 | Out-Null
+  Assert ($LASTEXITCODE -eq 0) "the guard interfered with a non-shell tool"
+
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+}
+
+Test-Case "an UNREADABLE task ledger is an error, not a count of zero" {
+  # Measured, same CMS run: a 41 KB TASKS.md whose blocks were headed `### S1.1: Dashboard Overview` with
+  # anonymous `- [ ]` bullets, and whose Build order sequenced 19 `T` ids defined NOWHERE in the file.
+  # doc-stats printed "tasks 0/0" - a NUMBER - so it read as "no tasks yet" rather than "I cannot parse
+  # your ledger". close-unit could tick nothing; /build could select no unit. A day of planning, unusable.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED`nSecurity review: NOT-REQUIRED (test)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    # the real shape that produced 0/0
+    $body = "# Tasks`r`n`r`n## Build order (dependency-sorted)`r`nT1.1 -> T1.2 -> T2.1`r`n`r`n## E1: Admin`r`n"
+    foreach ($n in 1..40) {
+      $body += "### S1.$n`: Story-numbered heading, no checkbox and no T id`r`n- [ ] do a thing in ``src/A$n.cs```r`n- [ ] do another thing`r`n`r`n"
+    }
+    Set-Content "$p\docs\TASKS.md" $body -Encoding UTF8
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out -match '(?is)NOT\s+ONE\s+task\s+id\s+is\s+parseable') "a 40-block TASKS.md that parses to zero was reported as a plain count"
+    Assert ($out -match '(?is)###\s*\[\s*\]\s*T') "the finding does not state the heading shape that would work"
+    Assert ($out -match '(?is)Build\s+order\s+sequences\s+3\s+id') "dangling Build-order ids went unreported: /build walks that list"
+
+    # A CORRECT ledger must stay silent - a finding that fires on good input is noise, and noise gets ignored.
+    $good = "# Tasks`r`n`r`n## Build order`r`nT1.1 -> T1.2`r`n`r`n## Tasks`r`n`r`n### [ ] T1.1 - first   (Story S1.1)`r`n- **Goal:** x`r`n`r`n### [x] T1.2 - second   (Story S1.1)`r`n- **Goal:** y`r`n"
+    Set-Content "$p\docs\TASKS.md" $good -Encoding UTF8
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out2 -notmatch '(?is)NOT\s+ONE\s+task\s+id') "a well-formed ledger was flagged as unparseable"
+    Assert ($out2 -notmatch '(?is)DEFINED\s+NOWHERE') "ids that ARE defined were reported as dangling"
+
+    # And a freshly scaffolded template (small, legitimately empty) must not be flagged either.
+    Copy-Item (Join-Path $kit "templates\_common\docs\STORIES.md") "$p\docs\STORIES.md" -Force
+    Remove-Item "$p\docs\TASKS.md" -Force
+    $out3 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out3 -notmatch '(?is)NOT\s+ONE\s+story\s+id') "the shipped template was flagged - a new project would start with a false alarm"
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "recency is checked on PUBLICATION date, and old ledgers still parse" {

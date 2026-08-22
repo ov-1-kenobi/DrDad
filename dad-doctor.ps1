@@ -237,6 +237,27 @@ if (-not (Test-Path $settings)) {
       Say "FAIL" "stop guard" "no Stop hook - nothing stops a turn ending on unverified code" `
           "re-run install.cmd, then RESTART Claude Code (hooks load at startup)"
     }
+
+    # The loop guard. Same path checks, for the same reason: a hook pointing at a folder that no longer
+    # exists is silently dead, and this one is what stops a subagent repeating one failing command 920
+    # times (measured). Checked separately from the Stop hook - either can be stale on its own.
+    $preCmd = ""
+    try { $preCmd = ($s.hooks.PreToolUse | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) -join " " } catch { }
+    if ($preCmd -match 'dad-loopguard') {
+      $expectedLoop = Join-Path $kit "dad-loopguard.ps1"
+      $devLoop = 'C:\Projects\Claude\MCP\DAD-kit\dad-loopguard.ps1'
+      if ($preCmd -like "*$expectedLoop*") {
+        Say "OK" "loop guard" "dad-loopguard.ps1 wired as a PreToolUse hook"
+      } elseif ($preCmd -like "*$devLoop*") {
+        Say "WARN" "loop guard" "still points at the dev placeholder path" "re-run install.cmd from the kit's real location"
+      } else {
+        Say "WARN" "loop guard" "points at another copy of the kit, not $expectedLoop" `
+            "re-run install.cmd from the folder you actually want to use"
+      }
+    } else {
+      Say "WARN" "loop guard" "no PreToolUse hook - a subagent can repeat one failing command indefinitely" `
+          "re-run install.cmd, then RESTART Claude Code (hooks load at startup)"
+    }
   } catch { Say "FAIL" "settings.json" "invalid JSON" "re-run install.cmd" }
 }
 $iCmd = (Get-ChildItem (Join-Path $claudeDir "commands") -Filter *.md -ErrorAction SilentlyContinue).Count

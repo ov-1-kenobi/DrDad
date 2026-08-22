@@ -91,16 +91,19 @@ New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 if (Get-Command git -ErrorAction SilentlyContinue) {
   $gi = Join-Path $proj ".gitignore"
   $secretIgnores = @(".env",".env.*","!.env.example","*.pem","*.pfx","*.key","secrets/","appsettings.*.local.json")
+  # `nul` is what a bash `2>nul` leaves behind - a reserved Windows device name, awkward to delete and
+  # poisonous in a repo other Windows machines clone. Never commit one.
+  $noiseIgnores2 = @("nul","NUL")
   # .claude/ holds agent worktrees - one project showed 247 of them as "changed". Never source.
   $noiseIgnores  = @(".claude/")
   if (-not (Test-Path $gi)) {
-    $ignore = ((@("bin/","obj/","docs/.index/",".tmp/","__pycache__/","node_modules/","*.user",".claude/") + $secretIgnores) -join "`r`n") + "`r`n"
+    $ignore = ((@("bin/","obj/","docs/.index/",".tmp/","__pycache__/","node_modules/","*.user",".claude/") + $secretIgnores + $noiseIgnores2) -join "`r`n") + "`r`n"
     [System.IO.File]::WriteAllText($gi, $ignore, (New-Object System.Text.UTF8Encoding($false)))
     Write-Host "  added .gitignore" -ForegroundColor Green
   } else {
     # Append only the secret-bearing entries that are missing (never rewrite the user's file).
     $cur = Get-Content $gi -Encoding UTF8
-    $missing = ($secretIgnores + $noiseIgnores) | Where-Object { $cur -notcontains $_ }
+    $missing = ($secretIgnores + $noiseIgnores + $noiseIgnores2) | Where-Object { $cur -notcontains $_ }
     if ($missing) {
       Add-Content $gi (($missing -join "`r`n"))
       Write-Host "  .gitignore: added $($missing.Count) secret-file pattern(s)" -ForegroundColor Green

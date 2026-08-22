@@ -93,9 +93,14 @@ $s = Get-Content (Join-Path $root "settings.json") -Raw | ConvertFrom-Json
 # settings.json carries the dev-path placeholder too, in the Stop hook's command line. Rewrite it on the
 # PARSED object, not the raw text: JSON escapes backslashes, so the on-disk form is C:\\Projects\\... and
 # a text replace of C:\Projects\... silently matches nothing (same trap as the .mcp.json paths above).
+# Walk EVERY hook event, not just Stop. 0.19.3 added a PreToolUse hook and a Stop-only loop here would
+# have installed it still pointing at the dev machine's folder - the same stale-path bug that shipped in
+# three consecutive releases (guard commands, project .mcp.json, pre-commit hook).
 try {
-  foreach ($entry in $s.hooks.Stop) {
-    foreach ($h in $entry.hooks) { if ($h.command) { $h.command = $h.command.Replace($old, $root) } }
+  foreach ($evt in $s.hooks.PSObject.Properties.Name) {
+    foreach ($entry in $s.hooks.$evt) {
+      foreach ($h in $entry.hooks) { if ($h.command) { $h.command = $h.command.Replace($old, $root) } }
+    }
   }
 } catch { }
 # (apiKeyHelper intentionally NOT set: ANTHROPIC_AUTH_TOKEN alone skips login; setting both
@@ -103,9 +108,16 @@ try {
 Write-NoBom $dst ($s | ConvertTo-Json -Depth 10)
 Write-Host "  wrote $dst"
 $hookCmd = ""
-try { $hookCmd = ($s.hooks.Stop | ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) -join " " } catch { }
-if ($hookCmd -match 'dad-guard') { Write-Host "  Stop hook: dad-guard.ps1 (blocks a turn ending on unverified code)" -ForegroundColor Green }
+try {
+  $hookCmd = ($s.hooks.PSObject.Properties.Name | ForEach-Object { $s.hooks.$_ } |
+              ForEach-Object { $_.hooks } | ForEach-Object { $_.command }) -join " "
+} catch { }
+# 'dad-guard\.' matches the FILE, so a future sibling script named ...guard cannot satisfy this check by
+# accident. ("dad-loopguard" does not contain "dad-guard", but the next one might.)
+if ($hookCmd -match 'dad-guard\.') { Write-Host "  Stop hook: dad-guard.ps1 (blocks a turn ending on unverified code)" -ForegroundColor Green }
 else { Write-Host "  WARNING: no Stop hook in settings.json - the close-out gates are model-optional again" -ForegroundColor Yellow }
+if ($hookCmd -match 'dad-loopguard') { Write-Host "  PreToolUse hook: dad-loopguard.ps1 (breaks command loops; rejects 2>nul under Bash)" -ForegroundColor Green }
+else { Write-Host "  WARNING: no PreToolUse hook - a subagent can repeat one failing command indefinitely" -ForegroundColor Yellow }
 
 Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
 & (Join-Path $root "ollama-tuning.ps1")

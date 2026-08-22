@@ -26,7 +26,17 @@ project (we have seen it fabricate peer networking, a metrics endpoint, and merg
    nothing appeared that is absent from DESIGN/STORIES. Send it back if any check fails.
 2. If it reports the stack isn't decided yet (DESIGN architecture still TBD), tell me to finish `/design` first.
 3. Relay its summary: tasks per story, the build order, the first ready tasks, and any open questions.
-4. Then tell me: review `docs/TASKS.md`, and run `/build` (or `/spec`) - they work the next unchecked task
+4. **GATE - prove the map is MACHINE-READABLE before you report success.** Run:
+   ```
+   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Findings
+   ```
+   The task count it prints must be non-zero and must match what the agent said it wrote. If you see
+   `TASKS.md is NNKB but NOT ONE task id is parseable` or `Build order sequences N id(s) that are DEFINED
+   NOWHERE`, the map is a dead document - **fix the headings to `### [ ] T<n>.<n> - <title>   (Story S<id>)`
+   and re-run this gate** before telling me anything is done.
+   Measured on a real CMS run: 41 KB of tasks, `doc-stats` counted **0**, `/build` could select no unit,
+   and nobody noticed because "tasks 0/0" reads like a project that simply has no tasks yet.
+5. Then tell me: review `docs/TASKS.md`, and run `/build` (or `/spec`) - they work the next unchecked task
    whose dependencies are done, so each dev step stays small and the RAG already holds the map.
 
 **Be decisive - act, don't narrate.** Spawn the agent immediately; do not ask permission for read-only steps.

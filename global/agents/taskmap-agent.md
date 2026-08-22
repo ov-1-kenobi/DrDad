@@ -47,7 +47,27 @@ Do:
 4. Write/refresh **`docs/TASKS.md`** (in the corpus, so it gets indexed) using the structure below.
    Preserve any `[x]` done-state already in the file when regenerating, and keep existing task ids stable
    (only add new ids for new tasks) - grades and done-state are keyed by task id.
-5. **Reindex** (`index_datasheets`) so the map is immediately searchable by the dev/spec agents.
+5. **VERIFY YOUR OWN OUTPUT IS READABLE - this step is not optional.** The heading shape below is not a
+   style preference; it is the only thing every gate can parse. A real CMS run produced a 41 KB TASKS.md
+   whose task blocks were headed `### S1.1: Dashboard Overview` with anonymous `- [ ]` bullets under them,
+   and whose Build order sequenced nineteen `T` ids that were defined NOWHERE in the file. `doc-stats`
+   counted **0 tasks**, `close-unit` could tick nothing, and `/build` could select no unit. A day of
+   planning produced a document no tool could read. So, after writing the file, confirm:
+   - every task heading is exactly `### [ ] T<n>.<n> - <title>   (Story S<id>)` - the `[ ]` and the `T` id
+     are load-bearing; a heading without them is invisible
+   - every id named in `## Build order` is DEFINED as one of those headings
+   - the file has a `## Tasks` section
+   Then report the task count you wrote, so the orchestrator can compare it against `doc-stats`.
+6. **Reindex** (`index_datasheets`) so the map is immediately searchable by the dev/spec agents.
+
+**Do NOT probe the filesystem for the paths you are planning.** `Touches:` names files that DO NOT EXIST
+YET - taskmap runs before any code is written, so `src/` is normally absent and that is correct, not a
+problem to investigate. A real run lost an entire session here: an agent ran
+`dir "D:\...\cms\src" 2>nul` **920 times in a row** looking for a directory that could not exist, got
+empty output every time (`2>nul` is cmd.exe syntax - under Bash it writes stderr to a FILE named `nul`,
+so there was no error message to learn from), and had to be killed by hand. You plan paths; you do not
+verify them. If you genuinely need to know whether something exists, ask ONCE with
+`powershell -NoProfile -Command "Test-Path -LiteralPath '<path>'"` and believe the answer.
 
 `docs/TASKS.md` structure (keep each task block self-contained - a RAG hit on one task = everything needed):
 

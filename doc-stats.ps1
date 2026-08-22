@@ -221,6 +221,47 @@ if ($Findings) {
     }
   }
 
+  # UNREADABLE LEDGER - a file full of work that no gate can parse. Measured on a CMS run: a 40 KB
+  # TASKS.md whose "## Build order" named T1.1 -> T3.6 while NOT ONE of those ids appeared anywhere else
+  # in the file; the actual work was anonymous "- [ ]" bullets under "### S1.1: Dashboard Overview"
+  # headings. doc-stats reported "tasks: 0/0" - a NUMBER, as though the project simply had no tasks yet -
+  # so nothing looked wrong, while close-unit could tick nothing and /build could select no unit.
+  # "Zero tasks" and "a task ledger I cannot read" are completely different facts and must not print alike.
+  foreach ($pair in @(
+    @{ File = $tasksFile;   Found = $tasks.Count;      What = 'task';  Owner = 'taskmap'
+       Shape = '### [ ] T1.1 - <title>   (Story S1.1)' },
+    @{ File = $storiesFile; Found = $storyIds.Count;   What = 'story'; Owner = 'scribe'
+       Shape = '### Story S1.1: <title>   <!-- Status: TODO -->' }
+  )) {
+    if (-not (Test-Path -LiteralPath $pair.File)) { continue }
+    if ($pair.Found -gt 0) { continue }
+    # Substantive content, but nothing parseable. A freshly scaffolded template is small and is NOT this.
+    $bytes = (Get-Item -LiteralPath $pair.File).Length
+    if ($bytes -lt 2000) { continue }
+    $name = [System.IO.Path]::GetFileName($pair.File)
+    $f.Add("[$($pair.Owner)] $name is $([math]::Round($bytes/1KB))KB but NOT ONE $($pair.What) id is parseable - every gate reads this file as EMPTY (close-unit cannot tick, /build cannot pick a unit). Required heading shape: '$($pair.Shape)'")
+  }
+
+  # Build-order ids that resolve to nothing. Same incident: 19 ids sequenced in "## Build order", zero of
+  # them defined. /build walks that list to choose work, so a dangling id sends it looking for a task that
+  # does not exist - and the run stalls without an error.
+  if (Test-Path -LiteralPath $tasksFile) {
+    $raw = Get-Content -LiteralPath $tasksFile -Raw
+    $bo = [regex]::Match($raw, '(?ms)^##\s+Build order\b.*?(?=^##\s|\z)')
+    if ($bo.Success) {
+      $defined = @($tasks | ForEach-Object { $_.Id })
+      $dangling = @()
+      foreach ($m in [regex]::Matches($bo.Value, '\b([A-Z]\d+\.\d+[A-Za-z0-9._-]*)\b')) {
+        $id = $m.Groups[1].Value
+        if ($defined -notcontains $id -and $dangling -notcontains $id) { $dangling += $id }
+      }
+      if ($dangling.Count -gt 0) {
+        $shown = ($dangling | Select-Object -First 8) -join ', '
+        $f.Add("[taskmap] Build order sequences $($dangling.Count) id(s) that are DEFINED NOWHERE in the file ($shown) - /build walks this list to choose work and will find nothing")
+      }
+    }
+  }
+
   foreach ($m in $missing) { $f.Add("[grade] $m") }
   foreach ($o in $orphanTests) { $f.Add("[dev] test project not in the solution (dotnet test silently skips it): $o") }
 
