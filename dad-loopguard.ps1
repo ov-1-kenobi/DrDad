@@ -78,8 +78,33 @@ If you were checking whether a path exists, use Test-Path. Do not re-run this co
   }
 
   # --- 2) the same command, over and over ---------------------------------------------------------
-  # CONSECUTIVE repeats only. A build-fix-build-fix cycle is legitimate and has edits in between; four
-  # identical calls with nothing at all between them is a loop, not progress.
+  # EXEMPT: commands whose result legitimately CHANGES between identical invocations, because the
+  # workspace changed underneath them. This hook only sees shell calls, so a build-fix-build-fix cycle
+  # looks like four consecutive identical `dotnet build` calls - the Edit calls in between are invisible
+  # to it. Measured while benchmarking this very script: it blocked `dotnet build`. For these commands
+  # "repeating it gives the same result" is simply FALSE, and a guard that interrupts a compile-error fix
+  # loop is a guard someone switches off within the hour.
+  #
+  # Probes are the opposite: `dir`/`ls`/`cat` on an unchanged tree really do return the same thing every
+  # time, and every loop this kit has actually suffered was a probe. So the streak applies to probes and
+  # not to work.
+  $exempt = @(
+    'dotnet','msbuild','npm','pnpm','yarn','node','cargo','go','make','gradle','mvn','python','py',
+    'pytest','pip','dvc','docker','git','gh','close-unit','ratchet','recover-lost','test-kit',
+    'install','upgrade-project','api-surface','scan-secrets','index_datasheets','reindex'
+  )
+  $firstWord = ($norm -split '[\s\\/]' | Where-Object { $_ } | Select-Object -First 1)
+  if ($firstWord) {
+    $bare = [System.IO.Path]::GetFileNameWithoutExtension($firstWord)
+    # powershell -File <script>.ps1 -> judge by the SCRIPT, not by "powershell"
+    if ($bare -match '(?i)^(powershell|pwsh|cmd)$') {
+      $m2 = [regex]::Match($norm, '(?i)-File\s+"?([^"\s]+)"?')
+      if ($m2.Success) { $bare = [System.IO.Path]::GetFileNameWithoutExtension($m2.Groups[1].Value) }
+    }
+    if ($exempt -contains $bare.ToLower()) { return $null }
+  }
+
+  # CONSECUTIVE repeats only. Four identical PROBES with nothing at all between them is a loop.
   if (-not $sessionId) { $sessionId = "nosession" }
   $safe = ($sessionId -replace '[^A-Za-z0-9_.-]', '_')
   if ($safe.Length -gt 64) { $safe = $safe.Substring(0, 64) }

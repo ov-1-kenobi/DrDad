@@ -262,6 +262,19 @@ if ($Findings) {
     }
   }
 
+  # STORIES WITH NO TASKS - how a truncated taskmap goes unnoticed. Measured on the CMS run: 5 epics and
+  # ~30 stories, and the task map covered E1-E3 then stopped, because the agent hung partway through E4.
+  # Nothing said so. The totals looked plausible, and 13 stories had simply never been planned.
+  # Only meaningful once SOME tasks parse - otherwise the unreadable-ledger finding above already owns it.
+  if ($tasks.Count -gt 0 -and $storyIds.Count -gt 0) {
+    $mapped = @($tasks | Where-Object { $_.Story } | ForEach-Object { $_.Story } | Select-Object -Unique)
+    $unmapped = @($storyIds | Where-Object { $mapped -notcontains $_ })
+    if ($unmapped.Count -gt 0) {
+      $shown = ($unmapped | Select-Object -First 10) -join ', '
+      $f.Add("[taskmap] $($unmapped.Count) of $($storyIds.Count) stories have NO tasks ($shown) - /taskmap stopped early or skipped them; /build will never reach that work")
+    }
+  }
+
   foreach ($m in $missing) { $f.Add("[grade] $m") }
   foreach ($o in $orphanTests) { $f.Add("[dev] test project not in the solution (dotnet test silently skips it): $o") }
 

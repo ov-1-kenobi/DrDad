@@ -2,6 +2,43 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.19.4 - 2026-08-22
+
+A pre-flight pass over 0.19.3, and the three CMS-run failures that still had no gate. One of the fixes is
+to a bug in 0.19.3's own loop guard, found by benchmarking it.
+
+### Fixed - the loop guard blocked `dotnet build`
+Benchmarking the hook's overhead ran `dotnet build` ten times in a row - and it was BLOCKED on the fourth.
+The hook only fires on **shell** calls, so a build-fix-build-fix cycle reaches it as four consecutive
+identical `dotnet build` calls: the `Edit` calls in between are invisible to it, and cannot reset the
+streak. For a build, a test, or `close-unit`, "repeating it gives the same result" is simply FALSE - the
+workspace changed underneath it. A guard that interrupts a compile-error fix loop is one somebody switches
+off within the hour.
+
+Build/test/run/git/`close-unit`-style commands are now exempt from repeat-counting entirely (judged by the
+script name, so `powershell -File close-unit.ps1` is recognised too). The streak applies to PROBES -
+`dir`, `ls`, `cat`, `find` - which on an unchanged tree really do return the same thing every time, and
+which is what every loop this kit has actually suffered was made of. Both halves are now tested: six
+consecutive builds allowed, repeated probes blocked.
+
+**Overhead, measured:** ~446 ms per shell call (PowerShell startup). About 73 s across a 163-call run.
+Real, but a fifth of what the 920-call loop cost in a single incident.
+
+### Fixed - a truncated task map looked complete
+The CMS run had 5 epics and ~30 stories; the task map covered E1-E3 and stopped, because the agent hung
+partway through E4. **Nothing said so.** The totals looked plausible and 13 stories had simply never been
+planned - `/build` would never have reached that work. `doc-stats -Findings` now reports stories with no
+tasks, naming them. Suppressed when the ledger is unparseable, since that finding already owns the case.
+
+### Fixed - a corpus that nothing cites printed as the number 0
+11 sources captured, a 17-contract design, and `cited in docs: 0`. The research phase produced files and
+changed nothing downstream. Two failures at once: the count read like "not citing YET" rather than "never
+will", and the per-source "hoarded" warning fired ELEVEN times, burying the three real FAILs under it.
+Now one loud line when nothing at all is cited, and the per-source warning only fires once SOME are - at
+which point an uncited straggler is genuinely worth naming.
+
+### Tests
+107 cases (was 106).
 ## 0.19.3 - 2026-08-22
 
 A real CMS run hung: a taskmap subagent ran the SAME command **920 times in a row** and had to be killed by

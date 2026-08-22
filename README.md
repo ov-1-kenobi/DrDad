@@ -1,7 +1,7 @@
 #| `dad-loopguard.ps1` / `.cmd` | **The loop guard** - a `PreToolUse` hook that blocks the 4th CONSECUTIVE identical shell command, and rejects `2>nul` outright. A subagent once ran one `dir ... 2>nul` **920 times** and had to be killed by hand: `2>nul` is cmd.exe syntax, so under Bash it writes stderr to a file named `nul` and the model gets no error to learn from. Its `tools:` list did not even include Bash - so tool restriction is not a guard; a hook is. `-Check` to self-test. |
  DAD - Design Document Aligned Development
 
-**Version 0.19.3** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.19.4** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 

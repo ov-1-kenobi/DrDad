@@ -105,7 +105,12 @@ foreach ($id in $rows.Keys) {
   if (-not $files.ContainsKey($id)) {
     $fails.Add("$id is in the ledger but docs\sources\$id-*.* is missing - the corpus lost it")
   }
-  if (-not $cited.ContainsKey($id)) { $warns.Add("$id is captured but never cited - hoarded, not used") }
+  # When NOTHING is cited, that is ONE problem, not one per source. Measured on the CMS run: 11 sources
+  # captured, a 17-contract design, and `cited in docs: 0` - the research was decorative. Printing eleven
+  # identical "hoarded" lines buries that under noise; it is said once, loudly, below instead.
+  if ($cited.Count -gt 0 -and -not $cited.ContainsKey($id)) {
+    $warns.Add("$id is captured but never cited - hoarded, not used")
+  }
   $tier = $rows[$id].Tier
   if (-not $tier -or $tier -match '^(unknown|<)') { $warns.Add("$id has no tier yet - YOU assess it; a script cannot") }
   elseif ($tier -notmatch '^(primary|secondary)$') { $warns.Add("$id tier '$tier' is not primary/secondary/unknown") }
@@ -144,6 +149,13 @@ if ($noPubDate.Count) {
 }
 foreach ($id in $files.Keys) {
   if (-not $rows.ContainsKey($id)) { $warns.Add("docs\sources\$($files[$id][0]) has no ledger row - arrived unrecorded") }
+}
+# A corpus that nothing cites is DECORATIVE, and that is one finding rather than one per source. Measured
+# on the CMS run: 11 sources captured, a 17-contract design doc, and ZERO [Snnn] citations anywhere. The
+# research phase ran, produced files, and changed nothing downstream - and "cited in docs: 0" printed as a
+# bare number, which reads like a project that has not started citing yet rather than one that never will.
+if ($rows.Count -gt 0 -and $cited.Count -eq 0) {
+  $warns.Add("$($rows.Count) source(s) captured and NOT ONE is cited - the design rests on nothing you gathered. Cite them as [Snnn] where they decided something, or drop them; a corpus nobody references is cost without benefit")
 }
 
 $result = [pscustomobject]@{

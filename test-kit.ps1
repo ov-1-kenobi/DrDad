@@ -1565,11 +1565,24 @@ Test-Case "the loop guard breaks a repeated command, and rejects 2>nul outright"
     Assert ($r2.Code -eq 0) "'$ok' was blocked (exit $($r2.Code)) - false positives make a guard get deleted"
   }
 
-  # a build-fix-build cycle must survive: identical commands with something in between are NOT a loop
-  for ($i = 0; $i -lt 4; $i++) {
-    $a = Invoke-Guard 'dotnet build' $sid
-    Assert ($a.Code -eq 0) "dotnet build was blocked on pass $i - repeats with other work between them are legitimate"
-    Invoke-Guard 'git status' $sid | Out-Null
+  # WORK COMMANDS ARE EXEMPT, even back to back. This hook only sees SHELL calls, so a build-fix-build-fix
+  # cycle reaches it as four consecutive identical `dotnet build` calls - the Edit calls in between are
+  # invisible to it. Found by benchmarking the guard: it blocked `dotnet build`. For a build, a test, or
+  # anything else whose result changes when the workspace changes, "you will get the same result" is FALSE,
+  # and a guard that interrupts a compile-error fix loop is one somebody switches off within the hour.
+  foreach ($work in @('dotnet build', 'dotnet test --nologo', 'npm run build', 'git status --porcelain',
+                      'powershell -File "C:\k\close-unit.ps1" -Id T1.1')) {
+    for ($i = 1; $i -le 6; $i++) {
+      $a = Invoke-Guard $work $sid
+      Assert ($a.Code -eq 0) "'$work' was BLOCKED on consecutive call $i - work commands must never be throttled"
+    }
+  }
+  # Probes are the opposite: on an unchanged tree they really do return the same thing, and every loop this
+  # kit has actually suffered was a probe.
+  foreach ($probe in @('cat docs/DESIGN.md', 'find . -name Foo.cs')) {
+    $hit = $false
+    for ($i = 1; $i -le 5; $i++) { if ((Invoke-Guard $probe $sid).Code -eq 2) { $hit = $true; break } }
+    Assert $hit "repeating the probe '$probe' was never blocked"
   }
 
   # but four IDENTICAL calls back to back, with nothing between, is a loop
@@ -1621,11 +1634,53 @@ Test-Case "an UNREADABLE task ledger is an error, not a count of zero" {
     Assert ($out2 -notmatch '(?is)NOT\s+ONE\s+task\s+id') "a well-formed ledger was flagged as unparseable"
     Assert ($out2 -notmatch '(?is)DEFINED\s+NOWHERE') "ids that ARE defined were reported as dangling"
 
+    # A TRUNCATED task map: stories that were never planned at all. This is how the CMS run lost 13
+    # stories - the agent hung partway through E4, the totals still looked plausible, and nothing said
+    # that E4 and E5 had never been mapped. /build would simply never reach that work.
+    $st = "# Stories`r`n`r`n### Story S1.1: mapped   <!-- Status: TODO -->`r`n`r`n### Story S4.1: never mapped   <!-- Status: TODO -->`r`n`r`n### Story S4.2: also never mapped   <!-- Status: TODO -->`r`n"
+    Set-Content "$p\docs\STORIES.md" $st -Encoding UTF8
+    Set-Content "$p\docs\TASKS.md" $good -Encoding UTF8      # only S1.1 has tasks
+    $out4 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out4 -match '(?is)2\s+of\s+3\s+stories\s+have\s+NO\s+tasks') "stories with no tasks went unreported - a truncated taskmap looks complete"
+    Assert ($out4 -match 'S4\.1') "the finding does not name which stories were skipped"
+
     # And a freshly scaffolded template (small, legitimately empty) must not be flagged either.
     Copy-Item (Join-Path $kit "templates\_common\docs\STORIES.md") "$p\docs\STORIES.md" -Force
     Remove-Item "$p\docs\TASKS.md" -Force
     $out3 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
     Assert ($out3 -notmatch '(?is)NOT\s+ONE\s+story\s+id') "the shipped template was flagged - a new project would start with a false alarm"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "a corpus that nothing cites is ONE finding, said loudly" {
+  # Measured on the CMS run: 11 source files, a 17-contract design doc, and `cited in docs: 0`. The whole
+  # research phase produced files and changed nothing downstream. Two failures at once: the count printed
+  # as a bare number (reads like "not citing YET"), and the per-source "hoarded" warning fired ELEVEN
+  # times, burying the three real FAILs underneath it.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs\sources" | Out-Null
+    $rows = "# Sources`r`n`r`n| id | tier | fetched | title | url | published |`r`n|--|--|--|--|--|--|`r`n"
+    foreach ($n in 1..5) {
+      $id = "S00$n"
+      $rows += "| $id | primary | 2026-08-22 | doc $n | https://e$n.example | 2026-08-01 |`r`n"
+      "x" | Set-Content "$p\docs\sources\$id-x.md" -Encoding UTF8
+    }
+    Set-Content "$p\docs\SOURCES.md" $rows -Encoding UTF8
+    "# D`r`n`r`nStatus: DRAFT`r`n`r`nA design that cites nothing it gathered." | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+
+    $ss = Join-Path $kit "source-stats.ps1"
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p 2>&1 | Out-String
+    Assert ($out -match '(?is)NOT\s+ONE\s+is\s+cited') "a corpus with zero citations was reported only as the number 0"
+    Assert ($LASTEXITCODE -eq 0) "zero citations must WARN, not FAIL - sources may legitimately be cited later"
+    $hoarded = ([regex]::Matches($out, 'hoarded')).Count
+    Assert ($hoarded -eq 0) "the per-source 'hoarded' warning fired $hoarded times on top of the aggregate - that noise buried the real FAILs"
+
+    # But once SOME are cited, an uncited one is genuinely worth naming individually again.
+    "# D`r`n`r`nStatus: DRAFT`r`n`r`nCites [S001] only." | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p 2>&1 | Out-String
+    Assert ($out2 -notmatch '(?is)NOT\s+ONE\s+is\s+cited') "the aggregate fired even though a source WAS cited"
+    Assert ($out2 -match 'hoarded') "an individually uncited source stopped being reported"
   } finally { Remove-Sandbox $sb }
 }
 
