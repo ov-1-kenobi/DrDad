@@ -37,6 +37,15 @@
   (`dad-loopguard`) now blocks this command shape outright.
 - **Verified:** 2026-08-22, Opus
 
+- **Command:** delete a stray `nul` with `[System.IO.File]::Delete("\\?\C:\full\path\nul")`
+- **Does:** removes a file whose name is a reserved Windows device name.
+- **When:** cleaning up after a `2>nul` under bash (see above).
+- **Gotcha:** `Remove-Item -LiteralPath "C:\...\nul"` FAILS with *"because it does not exist"* - PowerShell
+  resolves `nul` as the NUL DEVICE, not as your file, so it cannot see it at all. `Get-ChildItem -Filter nul`
+  still ENUMERATES them fine; it is only the by-path operations that break. The `\\?\` prefix bypasses
+  Win32 path parsing and must be given the FULL path (an 8.3 short path like `KOVERM~1` will not resolve).
+- **Verified:** 2026-08-22, Opus
+
 - **Command:** `git commit -F <msgfile>` (write the message with `[System.IO.File]::WriteAllText`)
 - **Does:** commits with a multi-line message.
 - **When:** any commit message longer than one line.
