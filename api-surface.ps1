@@ -15,6 +15,12 @@
 # The reflection itself is in local-tools.exe (C#), not here: Windows PowerShell 5.1 runs on .NET
 # Framework and cannot load a net8.0+ assembly at all.
 
+# CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
+# ADVANCED function, so PowerShell silently drops unmatched arguments into $args instead of failing:
+# `-Path C:\x` on a script whose parameter is -ProjectDir ran against the DEFAULT (the current
+# directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
+# wrong folder. These scripts are invoked by MODELS, which typo parameter names.
+[CmdletBinding()]
 param(
   [string]$ProjectDir = ".",
   [string]$Lookup = "",

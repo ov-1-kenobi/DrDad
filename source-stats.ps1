@@ -19,6 +19,12 @@
 #   WARN  tier 'unknown' or missing                                           (never assessed)
 #   WARN  fetched more than -StaleDays ago                                    (may have moved on)
 
+# CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
+# ADVANCED function, so PowerShell silently drops unmatched arguments into $args instead of failing:
+# `-Path C:\x` on a script whose parameter is -ProjectDir ran against the DEFAULT (the current
+# directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
+# wrong folder. These scripts are invoked by MODELS, which typo parameter names.
+[CmdletBinding()]
 param(
   [string]$ProjectDir = ".",
   [int]$StaleDays = 365,

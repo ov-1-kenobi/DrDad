@@ -8,6 +8,12 @@
 #
 # Exit code 0 = all passed, 1 = at least one failure.
 
+# CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
+# ADVANCED function, so PowerShell silently drops unmatched arguments into $args instead of failing:
+# `-Path C:\x` on a script whose parameter is -ProjectDir ran against the DEFAULT (the current
+# directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
+# wrong folder. These scripts are invoked by MODELS, which typo parameter names.
+[CmdletBinding()]
 param([switch]$SkipBuild)
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
@@ -161,6 +167,61 @@ Get-ChildItem $ProjectDir | ForEach-Object { $_.Name }
   $bad = @()
   foreach ($f in (Get-KitFiles @("*.ps1"))) { $bad += @(Get-UnassignedReads $f.FullName) }
   Assert ($bad.Count -eq 0) "read but never assigned in the same file (silently evaluates to `$null): $($bad -join ', ')"
+}
+
+Test-Case "a MISTYPED parameter is an error, not a silent default" {
+  # A .ps1 with a plain param() block is not an ADVANCED function, so PowerShell puts unmatched arguments
+  # into $args and carries on with the DEFAULTS. `new-project.ps1 -Kind general -Path C:\tmp\x` therefore
+  # ignored -Path entirely and scaffolded into the CURRENT directory: CLAUDE.md, .mcp.json, docs\ and a
+  # `git init` landed one level above an existing checkout. These scripts are invoked by MODELS, which
+  # typo parameter names constantly, and every one of them takes a -ProjectDir that defaults to ".".
+  $missing = @()
+  foreach ($f in (Get-KitFiles @("*.ps1"))) {
+    $t = Get-Content $f.FullName -Raw
+    if ($t -notmatch '(?m)^\s*param\s*\(') { continue }
+    # [Parameter(...)] on any parameter also makes a script advanced, which is equally sufficient
+    if ($t -match '(?m)^\s*\[CmdletBinding' -or $t -match '\[Parameter\(') { continue }
+    $missing += $f.Name
+  }
+  Assert ($missing.Count -eq 0) "these accept a bad parameter silently and run against their defaults: $($missing -join ', ')"
+
+  # And prove it BEHAVES that way, rather than trusting that the attribute is present and effective.
+  $np = Join-Path $kit "new-project.ps1"
+  $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $np -Kind general -Path "C:\this-must-not-be-used" 2>&1 | Out-String
+  # \s+ not literal spaces: captured native-command output is HARD-WRAPPED at the console width, so any
+  # asserted phrase can arrive with a newline inside it. This assertion failed on 'matches\nparameter'.
+  Assert ($out -match '(?s)cannot\s+be\s+found\s+that\s+matches\s+parameter\s+name') "a bogus -Path was accepted instead of rejected"
+  Assert ($out -notmatch 'Scaffolding') "it started scaffolding despite a parameter it did not understand"
+}
+
+Test-Case "scaffold never leaves a repo with NO commits" {
+  # git accepts `init` in a folder that contains other repositories, warns about an embedded repo, and
+  # then fails the commit - leaving a .git with no HEAD. That is strictly worse than no repo: the ratchet
+  # has no baseline, recover-lost has nothing to diff against, and dad-guard sees every file as untracked
+  # forever. Observed for real when a scaffold landed one level above an existing checkout.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "outer"; New-Item -ItemType Directory -Force $p | Out-Null
+    $inner = Join-Path $p "inner-repo"; New-Item -ItemType Directory -Force $inner | Out-Null
+    Push-Location $inner
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    "x" | Set-Content "$inner\f.txt" -Encoding UTF8
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $p 2>&1 | Out-String
+    Assert ($out -match 'git: SKIPPED') "it tried to init a repo around an existing one: $out"
+    Assert (-not (Test-Path (Join-Path $p ".git"))) "a .git was left behind wrapping an embedded repository"
+    Assert ($out -match 'OWN empty folder|own empty folder') "the message does not say what to do instead"
+    # the scaffold itself must still have happened - no git is a degraded mode, not a failure
+    Assert (Test-Path (Join-Path $p "CLAUDE.md")) "the scaffold aborted; skipping git should only cost checkpoints"
+    Assert (Test-Path (Join-Path $p "docs\DESIGN.md")) "the design doc was not created"
+    # and the pre-existing repo must be untouched
+    Push-Location $inner; $stillThere = (git rev-parse --verify HEAD 2>$null); Pop-Location
+    Assert ([bool]$stillThere) "the embedded repository lost its history"
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "config JSON parses" {
@@ -1582,7 +1643,22 @@ Test-Case "the stack is decided EARLY, and the record says so" {
   Assert ($archStep -and $reqStep) "could not find the architecture and requirements steps"
   Assert ([int]$archStep.Groups[1].Value -lt [int]$reqStep.Groups[1].Value) `
     "architecture is step $($archStep.Groups[1].Value) but requirements is $($reqStep.Groups[1].Value) - stack must come FIRST"
-  Assert ($d -notmatch 'decide LATE') "design.md still says the stack is decided late"
+  Assert ($d -notmatch '(?i)decided?\s+LATE') "design.md still says the stack is decided late"
+  # Every surface, not just design.md. The reversal in 0.13.0 left the claim standing in FIVE other places
+  # - new-project's closing advice, the README's mode table, /scaffold, /design's own frontmatter
+  # description, and the heading of the very section the model fills in ("decide LATE - once requirements
+  # are stable"). A rule reversed in one file and restated in six is not reversed.
+  $stale = @()
+  $surfaces = @("new-project.ps1","README.md","global\commands\scaffold.md","global\commands\design.md",
+                "templates\_common\docs\DESIGN.md","templates\_common\docs\TEDD.md")
+  foreach ($s in $surfaces) {
+    $p = Join-Path $kit $s
+    if (-not (Test-Path $p)) { continue }
+    foreach ($m in [regex]::Matches((Get-Content $p -Raw), '(?i)(decided?|choose|chosen|pick)\s+(the\s+)?(stack\s+)?LATE')) {
+      $stale += "$s -> '$($m.Value)'"
+    }
+  }
+  Assert ($stale.Count -eq 0) "the stack is decided FIRST, but these still say otherwise: $($stale -join '; ')"
   $des = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
   Assert ($des -match 'EARLY architecture') "R7 still records late architecture"
   Assert ($des -notmatch 'late architecture') "R7 still contains the old 'late architecture' wording"

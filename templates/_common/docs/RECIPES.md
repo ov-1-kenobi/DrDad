@@ -63,6 +63,24 @@
   non-existent drive letter. Guard for empty before either.
 - **Verified:** 2026-08-21, Opus
 
+- **Command:** match captured output with `-match 'no\s+such\s+file'`, never `-match 'no such file'`
+- **Does:** finds a phrase in a command's output reliably.
+- **When:** checking whether a build/test/git command reported a particular error.
+- **Gotcha:** output captured from a native command is HARD-WRAPPED at the console width, so a phrase you
+  are matching can arrive with a newline in the middle of it. A literal-space regex then silently fails
+  and you conclude the error was not there. Use `\s+` between words. Same applies to matching phrases in
+  hard-wrapped markdown.
+- **Verified:** 2026-08-21, Opus
+
+- **Command:** put `[CmdletBinding()]` above `param(...)` in every script
+- **Does:** makes a mistyped parameter name a hard error.
+- **When:** always, for any script that takes parameters.
+- **Gotcha:** a plain `param()` block is not an ADVANCED function, so PowerShell silently drops unmatched
+  arguments into `$args` and runs with the DEFAULTS. `script.ps1 -Path C:\x` where the parameter is
+  actually `-ProjectDir` ran against `.` - the current directory - and wrote files into the wrong folder.
+  It does not warn.
+- **Verified:** 2026-08-21, Opus
+
 - **Command:** name a type holder `$tVar`, never `$V`, when a loop in the same scope uses `$v`
 - **Does:** keeps two variables actually separate.
 - **When:** any script with short variable names, especially AST/reflection code.

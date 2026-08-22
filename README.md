@@ -1,6 +1,6 @@
 # DAD - Design Document Aligned Development
 
-**Version 0.19.1** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.19.2** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 
@@ -252,7 +252,7 @@ PDFs you drop in + pages you ingest all end up in one unified, searchable index.
 
 `/scaffold <general|experience>` lays down the project and creates the design doc (`docs/DESIGN.md` for
 general software, `docs/TEDD.md` for an experience) as `Status: DRAFT`. Then grow and implement it:
-- `/design` - **design-first**: shape DESIGN (requirements, epics, stack LATE), no stories, no code.
+- `/design` - **design-first**: shape DESIGN (stack FIRST, then requirements, epics), no stories, no code.
 - `/stories` - manage the story backlog in `docs/STORIES.md` (expand epics into stories, normalize, migrate).
 - `/taskmap` - shard `STORIES.md` into `docs/TASKS.md`: bite-sized tasks + dependencies, reindexed - so `/spec`/`/build` pull one tight task at a time.
 - `/spec` - implement the LOCKED design faithfully (works a task/story); gaps become questions.

@@ -37,11 +37,12 @@ Security review: REQUIRED
 - **Worked example:** <concrete values -> exact expected outcome>
 - **Out of scope:** <deliberately not covered>
 
-## Solution architecture (decide LATE - once requirements + epics are stable)
-<!-- Do NOT pick an engine/framework up front. When solid, /design proposes 2-3 architectures that FIT
-     (engine/framework/platform), you choose, and the choice + rationale go here. Then fill CLAUDE.md from
-     the matching stack profile. -->
-- Chosen stack: <TBD>
+## Solution architecture (decided FIRST - /design step 2, before requirements and contracts)
+<!-- Filled in /design STEP 2, before requirements and contracts: CLAUDE.md has no build/run command until
+     an engine is chosen, so /build cannot verify anything, and the engine's docs cannot be ingested until
+     it is known. /design proposes 2-3 engines/frameworks/platforms that FIT (it must not default to a
+     favorite), YOU choose, and the choice + rationale go here. Then fill CLAUDE.md from the matching
+     stack profile. -->- Chosen stack: <TBD>
 - Rationale: <why it fits>
 - Build / test / run: <filled from the chosen stack profile>
 

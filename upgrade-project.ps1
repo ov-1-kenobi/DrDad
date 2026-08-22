@@ -9,6 +9,12 @@
 #
 # Usage:  upgrade-project.ps1 [projectDir]     (default: current folder; safe to re-run)
 
+# CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
+# ADVANCED function, so PowerShell silently drops unmatched arguments into $args instead of failing:
+# `-Path C:\x` on a script whose parameter is -ProjectDir ran against the DEFAULT (the current
+# directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
+# wrong folder. These scripts are invoked by MODELS, which typo parameter names.
+[CmdletBinding()]
 param([string]$ProjectDir = ".")
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
@@ -118,14 +124,37 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     } catch { } finally { $ErrorActionPreference = $prevEap; Pop-Location }
   }
   if (-not (Test-Path (Join-Path $proj ".git"))) {
-    Push-Location $proj
+    # Same rule as new-project.ps1: never init AROUND existing repos, and never leave a .git with no HEAD.
+    # A baseline-less repo looks version-controlled to every gate while guaranteeing nothing - the ratchet
+    # has no baseline, recover-lost has nothing to diff, dad-guard sees every file as untracked forever.
+    $embedded = @()
     try {
-      git init -q
-      git config core.autocrlf false   # see new-project.ps1: predictable endings, no CRLF notices
-      git add -A
-      git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m "DAD upgrade: baseline commit"
-      Write-Host "  git: initialized + baseline commit" -ForegroundColor Green
-    } catch { Write-Host "  git init/commit failed - continuing" -ForegroundColor Yellow } finally { Pop-Location }
+      $embedded = @(Get-ChildItem $proj -Directory -Force -ErrorAction SilentlyContinue |
+                    Where-Object { Test-Path (Join-Path $_.FullName ".git") } |
+                    Select-Object -First 5 -ExpandProperty Name)
+    } catch { }
+    if ($embedded.Count -gt 0) {
+      Write-Host "  git: SKIPPED - this folder contains git repositories ($($embedded -join ', ')); a repo" -ForegroundColor Yellow
+      Write-Host "       wrapped around them cannot produce a usable baseline." -ForegroundColor Yellow
+    } else {
+      Push-Location $proj
+      $gitOk = $false
+      try {
+        git init -q
+        git config core.autocrlf false   # see new-project.ps1: predictable endings, no CRLF notices
+        git add -A
+        git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m "DAD upgrade: baseline commit"
+        $gitOk = [bool](git rev-parse --verify HEAD 2>$null)   # a commit must EXIST, not merely not-throw
+        if ($gitOk) { Write-Host "  git: initialized + baseline commit" -ForegroundColor Green }
+      } catch { Write-Host "  git init/commit failed" -ForegroundColor Yellow } finally { Pop-Location }
+      if (-not $gitOk) {
+        $dotGit = Join-Path $proj ".git"
+        if (Test-Path $dotGit) {
+          try { Remove-Item $dotGit -Recurse -Force; Write-Host "  git: removed the baseline-less repo it left behind" -ForegroundColor Yellow } catch { }
+        }
+        Write-Host "  git: continuing WITHOUT checkpoints" -ForegroundColor Yellow
+      }
+    }
   }
   & (Join-Path $kit "install-hooks.ps1") -ProjectDir $proj
 } else { Write-Host "  git not found - skipped safety net" -ForegroundColor Yellow }

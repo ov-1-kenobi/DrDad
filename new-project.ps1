@@ -1,13 +1,19 @@
 # new-project.ps1 - deterministic, STACK-AGNOSTIC DAD-kit scaffolder (no local-model involved).
 # Lays down the DAD structure: a generic CLAUDE.md + .mcp.json (wired) + docs/ + the design doc as DRAFT.
-# The KIND (general vs experience) picks WHICH design doc is created; the STACK is still decided LATE
-# in /design once the stories are implementable.
+# The KIND (general vs experience) picks WHICH design doc is created. The STACK is decided FIRST inside
+# /design (step 2) - scaffold stays stack-agnostic so the choice is made with the requirements in view.
 #
 # Usage:
 #   new-project.ps1 general                 (general software -> docs\DESIGN.md, into the CURRENT folder)
 #   new-project.ps1 experience              (interactive/game/XR/sim -> docs\TEDD.md)
 #   new-project.ps1 general C:\src\MyApp    (scaffold into a named folder)
 
+# CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
+# ADVANCED function, so PowerShell silently drops unmatched arguments into $args instead of failing:
+# `-Path C:\x` on a script whose parameter is -ProjectDir ran against the DEFAULT (the current
+# directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
+# wrong folder. These scripts are invoked by MODELS, which typo parameter names.
+[CmdletBinding()]
 param(
   [string]$Kind = "",
   [string]$ProjectDir = "."
@@ -84,19 +90,51 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
                    "appsettings.*.local.json") -join "`r`n") + "`r`n"
       [System.IO.File]::WriteAllText($gi, $ignore, (New-Object System.Text.UTF8Encoding($false)))
     }
-    Push-Location $proj
+    # Refuse to init over a folder that CONTAINS other repositories. git accepts this and warns
+    # ("adding embedded git repository"), the commit then fails, and what is left behind is a .git with
+    # NO commits - strictly worse than no repo at all, because the ratchet has no baseline, recover-lost
+    # has nothing to diff, and dad-guard sees every file as untracked forever. Observed for real when a
+    # scaffold landed one level above an existing kit checkout.
+    $embedded = @()
     try {
-      git init -q
-      # Commit files exactly as written - avoids git's "LF will be replaced by CRLF" notices (which PS 5.1
-      # can escalate into errors) and keeps line endings predictable for the agents editing these files.
-      git config core.autocrlf false
-      git add -A
-      # -c fallbacks so the commit works even if git user.name/email is not configured on this box.
-      git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m "DAD scaffold: initial commit"
-      Write-Host "  git: initialized + initial commit (each /build unit will be a checkpoint)" -ForegroundColor Green
-    } catch {
-      Write-Host "  git: init/commit failed ($($_.Exception.Message)) - continuing without checkpoints" -ForegroundColor Yellow
-    } finally { Pop-Location }
+      $embedded = @(Get-ChildItem $proj -Directory -Force -ErrorAction SilentlyContinue |
+                    Where-Object { Test-Path (Join-Path $_.FullName ".git") } |
+                    Select-Object -First 5 -ExpandProperty Name)
+    } catch { }
+    if ($embedded.Count -gt 0) {
+      Write-Host "  git: SKIPPED - this folder already contains git repositories ($($embedded -join ', '))." -ForegroundColor Yellow
+      Write-Host "       Scaffolding a repo AROUND existing repos produces a baseline-less repo and every" -ForegroundColor Yellow
+      Write-Host "       git-based gate (ratchet, recover-lost, dad-guard) then misreports. Scaffold into" -ForegroundColor Yellow
+      Write-Host "       its OWN empty folder instead:  new-project.cmd $Kind C:\src\<project>" -ForegroundColor Yellow
+    } else {
+      Push-Location $proj
+      $gitOk = $false
+      try {
+        git init -q
+        # Commit files exactly as written - avoids git's "LF will be replaced by CRLF" notices (which PS 5.1
+        # can escalate into errors) and keeps line endings predictable for the agents editing these files.
+        git config core.autocrlf false
+        git add -A
+        # -c fallbacks so the commit works even if git user.name/email is not configured on this box.
+        git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m "DAD scaffold: initial commit"
+        # Verify a commit EXISTS rather than trusting that the command did not throw - git reports plenty
+        # of failures through its exit code and stderr without raising anything PowerShell would catch.
+        $head = (git rev-parse --verify HEAD 2>$null)
+        $gitOk = [bool]$head
+        if ($gitOk) { Write-Host "  git: initialized + initial commit (each /build unit will be a checkpoint)" -ForegroundColor Green }
+      } catch {
+        Write-Host "  git: init/commit failed ($($_.Exception.Message))" -ForegroundColor Yellow
+      } finally { Pop-Location }
+      if (-not $gitOk) {
+        # Remove the half-made repo. A .git with no HEAD makes the project LOOK version-controlled to
+        # every gate while providing none of the guarantees, which is the worst of both.
+        $dotGit = Join-Path $proj ".git"
+        if (Test-Path $dotGit) {
+          try { Remove-Item $dotGit -Recurse -Force; Write-Host "  git: removed the baseline-less repo it left behind" -ForegroundColor Yellow } catch { }
+        }
+        Write-Host "  git: continuing WITHOUT checkpoints - 'git init' + a first commit by hand restores them" -ForegroundColor Yellow
+      }
+    }
     & (Join-Path $kit "install-hooks.ps1") -ProjectDir $proj
   }
 } else {
@@ -108,6 +146,6 @@ Write-Host ""
 Write-Host "Next:" -ForegroundColor Green
 Write-Host "  1. Open $proj in VS Code (Claude Code); approve the local-tools server."
 Write-Host "  2. Run /design (design-first) or /proto (build-as-you-go) - grow docs\$docName while DRAFT."
-Write-Host "     /design decides the stack LATE and fills CLAUDE.md's build/test."
+Write-Host "     /design decides the STACK FIRST (step 2) and fills CLAUDE.md's build/test."
 Write-Host "  3. When stories + architecture are set, /design or /proto will offer to set Status: LOCKED."
 Write-Host "  4. Optional: /taskmap shards stories into docs\TASKS.md. Then /spec or /build to implement."

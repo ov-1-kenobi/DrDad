@@ -1,5 +1,5 @@
 ---
-description: DESIGN mode - design-first. Shape the design doc: requirements, epics, and the stack (decided LATE). No stories, no code.
+description: DESIGN mode - design-first. Shape the design doc: the STACK (decided FIRST), then requirements and epics. No stories, no code.
 argument-hint: [the idea / area to flesh out]
 ---
 We are in **DESIGN mode** - we shape the DESIGN doc (the contract): requirements, epics, and eventually the

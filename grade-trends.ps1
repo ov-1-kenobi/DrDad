@@ -11,6 +11,12 @@
 # It reports TRENDS, not causes. "Six cards mention error handling" is a fact; whether that means the
 # convention is missing or the model is sloppy is a judgement, and it stays with the human.
 
+# CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
+# ADVANCED function, so PowerShell silently drops unmatched arguments into $args instead of failing:
+# `-Path C:\x` on a script whose parameter is -ProjectDir ran against the DEFAULT (the current
+# directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
+# wrong folder. These scripts are invoked by MODELS, which typo parameter names.
+[CmdletBinding()]
 param([string]$ProjectDir = ".", [switch]$Json)
 $ErrorActionPreference = "Stop"
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path

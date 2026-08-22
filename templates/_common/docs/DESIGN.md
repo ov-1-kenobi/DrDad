@@ -50,11 +50,15 @@ Security review: REQUIRED
 - **Worked example:** <concrete input values -> operation -> exact expected output>
 - **Out of scope:** <what this deliberately does not cover>
 
-## Solution architecture (decide LATE - once requirements + epics are stable)
-<!-- Do NOT pick a stack up front. When the design is solid, /design proposes 2-3 architectures that FIT,
-     you choose, and the choice + rationale go here. Then fill CLAUDE.md's stack + build/test/run +
-     placeholder + human-in-loop from the matching stack profile (templates/<stack>). -->
-- Chosen stack: <TBD>
+## Solution architecture (decided FIRST - /design step 2, before requirements and contracts)
+<!-- Filled in /design STEP 2, before requirements and contracts. Not because early commitment is ideal,
+     but because everything downstream needs it: CLAUDE.md has no Build/test command until a stack exists,
+     so /build Gate 1 refuses to start and close-unit can verify nothing; the contracts above name real
+     library types anyway; and the library docs cannot be ingested until the libraries are known - which
+     is how one project shipped 16 compile errors from guessed API calls. /design proposes 2-3
+     architectures that FIT the requirements (it must not default to a favorite), YOU choose, and the
+     choice + rationale go here. Then fill CLAUDE.md's stack + build/test/run + placeholder +
+     human-in-loop from the matching stack profile (templates/<stack>). -->- Chosen stack: <TBD>
 - Rationale: <why it fits>
 - Build / test / run: <filled from the chosen stack profile>
 

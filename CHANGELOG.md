@@ -2,6 +2,45 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.19.2 - 2026-08-21
+
+Three bugs found by scaffolding a fresh project and looking at what the model actually receives on turn
+one. Two of them were exposed by making the mistake a model would make.
+
+### Fixed - a mistyped parameter ran against the DEFAULT instead of failing
+A `.ps1` with a plain `param()` block is **not an advanced function**, so PowerShell drops unmatched
+arguments into `$args` and carries on with the defaults - silently. `new-project.ps1 -Kind general
+-Path C:\tmp\x` therefore ignored `-Path` entirely and scaffolded into the CURRENT directory: `CLAUDE.md`,
+`.mcp.json`, `docs\` and a `git init` landed one level above an existing checkout. No warning.
+
+**16 of 21 scripts** were exposed this way, including every writer (`close-unit` was already safe via
+`[Parameter()]`). They all now carry `[CmdletBinding()]`, so a bad parameter is a hard error naming the
+offending switch. This matters because these scripts are invoked by MODELS, which typo parameter names,
+and nearly all of them take a `-ProjectDir` that defaults to `.`.
+
+### Fixed - a failed `git init` left a repo with NO commits
+git accepts `init` in a folder containing other repositories, warns about an embedded repo, and then fails
+the commit - leaving a `.git` with no HEAD. That is strictly worse than no repo: the ratchet has no
+baseline, `recover-lost` has nothing to diff against, and `dad-guard` sees every file as untracked forever,
+while the project *looks* version-controlled to every gate. `new-project` and `upgrade-project` now refuse
+to init around existing repos (naming them, and saying to use an empty folder), verify a commit actually
+EXISTS with `rev-parse --verify HEAD` rather than trusting that nothing threw, and delete the half-made
+repo if it does not. The scaffold itself still completes - no git is a degraded mode, not a failure.
+
+### Fixed - the kit still told you to decide the stack LATE
+0.13.0 reversed that rule and the reversal never reached six other surfaces: `new-project`'s closing
+advice, the README's mode table, `/scaffold` (twice), `/design`'s own frontmatter description - and the
+heading of the very section the model fills in, which read *"Solution architecture (decide LATE - once
+requirements + epics are stable)"* with a comment underneath saying *"Do NOT pick a stack up front"*. A
+project scaffolded yesterday was being told the opposite of what `/design` step 2 does. The existing test
+only checked `design.md`, and its pattern (`decide LATE`) did not even match `decided LATE`. It now sweeps
+all six surfaces case-insensitively.
+
+### Tests
+104 cases (was 102). Two new: mistyped parameters rejected (asserted statically AND behaviourally), and the scaffold
+never leaving a baseline-less repo. Two seeded RECIPES traps added - `[CmdletBinding()]`, and matching
+captured output with `\s+` because console output is hard-wrapped mid-phrase (that one broke two
+assertions in this release before it was understood).
 ## 0.19.1 - 2026-08-21
 
 A pre-flight re-check of 0.19.0 before running it on real hardware. Four misses, one of which could have
