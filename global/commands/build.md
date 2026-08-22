@@ -16,7 +16,12 @@ to either lock it (`/design`, it will offer) or use `/proto` if I actually want 
 continue "in PROTO mode" - a real run did that, then made 106 blind edits against an unfinished contract.
 `/build` is the LOCKED-design loop; that is what R7 says and this command obeys it.
 
-**Gate 2b - the SECURITY REVIEW must be settled.** Read the design doc's `Security review:` header.
+**Gate 2b - the SECURITY REVIEW must be settled.** Do NOT read the header and judge it yourself - run
+`doc-stats.ps1 -Findings` (Gate 3 runs it anyway) and obey what it says. It settles the cases a
+one-word edit can fake: `NOT-REQUIRED` with no stated reason, and `DONE` over an empty or uncited
+`## Security decisions` section. It also reports a design LOCKED with an EMPTY `## Contracts` section -
+treat that as Gate 2 failing, because a lock with nothing pinned is the unfinished state Gate 2 exists
+to refuse. Then read the header:
 `REQUIRED` -> **STOP**. `NOT-REQUIRED (<reason>)` or `DONE <date>` -> proceed. Retrofitting auth and input
 handling after a dozen stories is how the insecure version ships, and a header saying REQUIRED means nobody
 has decided yet - not that it is safe.

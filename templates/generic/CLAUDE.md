@@ -8,7 +8,8 @@
 
 ## Modes / flow  <- read this
 If I haven't said which, ASK first. DESIGN's `Status:` header is the source of truth (it is the contract).
-- `/design` - design-first: shape DESIGN (requirements, epics, stack decided LATE). No stories, no code.
+- `/design` - design-first: shape DESIGN - the STACK first (step 2), then the security review,
+  requirements, epics, and contracts. No stories, no code.
 - `/proto` - co-design: greybox + record dated decisions into DESIGN (DRAFT).
 - `/stories` - manage STORIES.md: expand epics into stories, normalize, migrate. Write ONE story at a time
   as a succinct block. Stories are managed ATOMICALLY - the whole story lands or none of it; never

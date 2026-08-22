@@ -117,7 +117,20 @@ try {
 
 $codeExt = @(".cs",".fs",".vb",".py",".ts",".tsx",".js",".jsx",".go",".rs",".java",".kt",".c",".h",
              ".cpp",".hpp",".cc",".rb",".php",".swift",".m",".mm",".scala",".sql",".csproj",".fsproj",
-             ".sln",".props",".targets")
+             ".sln",".props",".targets",
+             # WEB/UI SOURCE. Omitting these meant that for the project types this kit is most likely to
+             # be pointed at - an ASP.NET Razor Pages site, or anything ui-agent touches - the actual
+             # user-facing files were NOT code as far as this guard was concerned. A turn could end with
+             # every .cshtml uncommitted and unverified and the guard would say the tree was clean.
+             ".cshtml",".razor",".razor.css",".html",".htm",".css",".scss",".sass",".less",
+             ".vue",".svelte",".astro",
+             # Runtime configuration is load-bearing: a connection string or an upload size limit in
+             # appsettings.json decides whether the app works at all.
+             # (matching is on GetExtension, so a compound name like .env.example would arrive as
+             #  ".example" - do not list compound names here, they can never match)
+             ".json",".yml",".yaml",".toml",".xml",".config",
+             # Schema/migration text that is not .cs
+             ".prisma",".graphql",".proto")
 $changed = @()
 foreach ($line in $porcelain) {
   if ($line.Length -lt 4) { continue }

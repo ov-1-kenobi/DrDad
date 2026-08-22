@@ -74,7 +74,8 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       roots collapse so nothing is indexed twice, and a missing root degrades the corpus instead of
       breaking the server (`local-tools --corpus` shows what would be indexed, per root, with no Ollama
       needed). Unsettled questions stay under `## Open questions` in SOURCES.md - "we could not establish
-      X" is a finding; guessing X is a defect.- [x] R8: One-command installer (`install.ps1` / `install.cmd`) that detects its own location, builds the model
+      X" is a finding; guessing X is a defect.
+- [x] R8: One-command installer (`install.ps1` / `install.cmd`) that detects its own location, builds the model
       `-cc` variants + the C# server, installs commands/agents/`settings.json` with paths auto-fixed
       (JSON parse/serialize, idempotent, move-safe), and tunes Ollama.
 - [x] R9: Model switching (`use-model.ps1`/`.cmd`, `use-fast`/`use-quality.cmd`) editing `ANTHROPIC_MODEL`; aliases
@@ -111,7 +112,8 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       contamination, traceability judgement, corpus health. Paired with `-Contract <Cn>`, which refutes a
       claimed-missing contract by grep (the same run called C2PA signing absent when it is `C10-b`). The
       general rule, now applied three times: **never accept an assertion a script can settle** - not for
-      counts (R14), not for a contract, not for document state.- [x] R25: **UI units are gated on behaviour and accessibility, never on looks** (`ui-agent`,
+      counts (R14), not for a contract, not for document state.
+- [x] R25: **UI units are gated on behaviour and accessibility, never on looks** (`ui-agent`,
       `templates/web/PROFILE.md`). There is no exit code for taste, so the parts that CAN be verified are
       the ones the agent is accountable for: the build with type errors fatal, tests that drive the thing
       like a user ("renders without crashing" passes on a blank page), an axe/pa11y run treated exactly
@@ -138,7 +140,8 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       `/design` (a missing contract) or - when no prose will stop a recurring defect - escalated as a
       request for a GATE in the kit. The human approves. Grades are read from where a card STATES them
       (`**Current grade: X**` / the history table), never by scanning prose for a capital letter: a first
-      version matched "A worked example" and reported the wrong direction on a real project.- [x] R28: **The verification surface may not SHRINK silently** (`ratchet.ps1`, enforced by `close-unit`).
+      version matched "A worked example" and reported the wrong direction on a real project.
+- [x] R28: **The verification surface may not SHRINK silently** (`ratchet.ps1`, enforced by `close-unit`).
       Every gate up to here asked "is X OK right now?" - and a gate of that shape is satisfied by DELETING
       X. Measured: a run set out to fix the IIIF tests, rewrote the test file to introduce a fixture, and
       15 of 16 tests did not survive the rewrite (including the C9 worked example, the level-2 conformance
@@ -156,7 +159,8 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       records the smaller number deliberately. What it must never be is silent. The ratchet FAILS OPEN on
       its own errors, for the same reason dad-guard does: a gate that fails closed on its own bugs stops
       real work and gets switched off. (The first version failed closed and broke three passing tests -
-      which is exactly the evidence for the rule.)- [x] R29: **Recovery works at the level of NAMED UNITS, not whole files** (`recover-lost.ps1`). R28
+      which is exactly the evidence for the rule.)
+- [x] R29: **Recovery works at the level of NAMED UNITS, not whole files** (`recover-lost.ps1`). R28
       detects a shrink; this is how you undo one. The generic shape to recognise: *a change removed far
       more than it added, the result still compiles, and nothing looks broken.* The worked example is the
       one that motivated both: a test file was rewritten to introduce a fixture and 12 of 16 tests
@@ -173,7 +177,8 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       Recovered content is written back COMMENTED, under a marker, with the diff command - it is a
       starting point for reconciliation, not a merge, because restored code routinely needs a using, a
       fixture or a helper that also changed. Nothing is ever restored without `-Restore`: deletion is
-      sometimes correct, and a tool that silently undoes deliberate work is worse than the problem.- [x] R30: **S1 is a WALKING skeleton, not a build skeleton.** Measured: a project reached 183 passing unit
+      sometimes correct, and a tool that silently undoes deliberate work is worse than the problem.
+- [x] R30: **S1 is a WALKING skeleton, not a build skeleton.** Measured: a project reached 183 passing unit
       tests across 12 building projects with a TWENTY-LINE host and zero integration tests, having never
       once served a request. Every part worked; the thing did not exist. Its S1 was "create solution
       skeleton with warnings as errors" - build configuration - so every later story added to a pile nobody
@@ -198,7 +203,8 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       It pins one cited line per decision into `## Security decisions`, writes no code, and may NOT flip
       the header itself - the human approves. `/design` gates the citations with
       `source-stats -StaleDays 180` rather than the default year. The most valuable thing it can return is
-      "use the framework's built-in and do not build this yourself", which is the common case for auth.- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
+      "use the framework's built-in and do not build this yourself", which is the common case for auth.
+- [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
       kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
       refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)
       by header-prefix splice while preserving user sections (Stack/Build/test/Placeholder/Human-in-loop).
@@ -253,7 +259,8 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       `.claude/settings.local.json` has accreted one-off `Bash(...)` approvals (the fingerprint of a
       session that spent its time answering permission prompts and then stopped using the shell);
       `grade-agent` has a ~25-call search budget and may not repeat a query, after one invocation burned
-      1015+ identical searches.- [x] R18: **Loop cost discipline** (measured: 5-8 subagent spawns and 20-40+ min per task made the gates
+      1015+ identical searches.
+- [x] R18: **Loop cost discipline** (measured: 5-8 subagent spawns and 20-40+ min per task made the gates
       get skipped). Three cuts: (a) mechanical close-out is a SCRIPT - `close-unit.ps1` ticks the task, rolls
       the parent story up only when ALL its tasks are `[x]`, reindexes, commits, and VERIFIES, exiting
       non-zero if any step did not happen (deterministic beats a prose checklist); (b) when `docs/TASKS.md`
@@ -285,7 +292,7 @@ mode system, and one-command model switching. No Anthropic account; offline afte
 ### local-tools (C# MCP server)
 - Behavior: R2. `net8.0`, `RollForward=LatestMajor`. Config via env: `LOCALTOOLS_DOCS_DIR`, `OLLAMA_HOST`,
   `RAG_EMBED_MODEL`, `LOCALTOOLS_AUTO_REINDEX`.
-- Acceptance: builds 0 errors; stdio `initialize` + `tools/list` returns the 5 tools; `--reindex` exits 0.
+- Acceptance: builds 0 errors; stdio `initialize` + `tools/list` returns the 8 tools; `--reindex` exits 0.
 
 ### Installer (install.ps1 / install.cmd)
 - Behavior: R8. Sets paths deterministically; safe to re-run; works wherever the folder lives.
@@ -303,7 +310,7 @@ mode system, and one-command model switching. No Anthropic account; offline afte
 - [x] T1: `dotnet build local-tools\local-tools.csproj -c Release` -> 0 errors.
 - [x] T2: `settings.json` + all `.mcp.json` parse as JSON.
 - [x] T3: all `*.ps1` parse (PS AST); all `*.ps1`/`*.cmd` are ASCII-only.
-- [x] T4: `local-tools.exe` handshake returns the 5 tools; `--reindex <empty>` exits 0.
+- [x] T4: `local-tools.exe` handshake returns the 8 tools; `--reindex <empty>` exits 0.
 - [x] T5: `install.ps1` rewrites config paths to the install location (idempotent, move-safe).
 
 ## Conventions

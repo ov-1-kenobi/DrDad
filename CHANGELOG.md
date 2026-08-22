@@ -2,6 +2,74 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.20.0 - 2026-08-22
+
+A comb for duplication, confused documentation, and prose-only gates, driven by a six-lens audit and then
+verified by hand. Nine of the ten findings I checked were real; one was fabricated, which is why every one
+was checked. The theme: **a regression test with a hardcoded list of places to look only ever catches the
+bug you already found.**
+
+### Fixed - the README's own H1 was mangled, by me, in 0.19.3
+The loop-guard row I inserted into the Files table landed at character offset 1, splitting the title:
+`#| `dad-loopguard.ps1` ... |` then a bare ` DAD - Design Document Aligned Development`. Cause: the insert
+searched for `\r\n` and README.md uses **LF**, so `IndexOf` returned -1 and `-1 + 2` put the row after the
+`#`. Shipped in two releases. The front door of the project.
+
+### Fixed - three classes of unrunnable or untrue prose, each now swept by a test
+- **`/research`'s last step ran `reindex.ps1`, which does not exist.** Only `reindex.cmd` does. So the final
+  step of the kit's ONLY online mode failed with "no such file" while the model, having just been told the
+  gate passed, reported the corpus was searchable - and every later offline command queried an index missing
+  the sources just captured. New test extracts every `<name>.ps1|.cmd` a command or agent tells the model to
+  run and asserts it exists; it also fails if it finds fewer than 20 references, so it cannot pass by
+  matching nothing.
+- **README told you to run `use-model.cmd plan`.** The planner alias was renamed `plan` -> `oss` in 0.10.0.
+  New test: every alias named in prose must exist in `models.json`.
+- **"the 11 commands / 10 agents"** while the kit ships 15 and 14. New test: any "N commands"/"N agents"
+  claim in prose must match what is on disk.
+
+### Fixed - the "stack decided LATE" rule, occurrences 7 through 10
+0.19.2 fixed six and added a test naming six files. The audit found three more it did not look at
+(`templates/README.md` x3) and the generalised sweep then found a **tenth on its first run**:
+`templates/generic/CLAUDE.md` - the CLAUDE.md **every scaffolded project receives**, telling every new
+project's model the opposite of what `/design` step 2 does. The test now sweeps every `.md` and `.ps1` in
+the kit. `templates/README.md` was rewritten: it also still documented `<stack>/CLAUDE.md` (they are
+`PROFILE.md` fragments now) and `new-project.cmd [dir]` (the KIND is required and comes first, so that
+form exits 1), and omitted the `web/` profile entirely.
+
+### Fixed - the kit's own design doc lost 7 of its 31 requirements to the ratchet
+`R8, R15, R18, R25, R28, R29, R30` were **glued onto the end of the previous line** by my own
+string-replace edits over several releases, so the ratchet's requirement pattern could not see them and had
+been baselining **24**. Its floor was wrong. Restored; all 31 visible.
+
+### Added - a one-word edit can no longer satisfy the LOCK or the SECURITY gate
+Both gates cost the model one word to pass and then report green forever.
+- `LOCKED` with an **empty `## Contracts` section** is now a finding: `/design` step 5 never landed, so
+  `/build` would start dev-agents against a design with no pinned semantics - exactly what the lock exists
+  to prevent. Silent when the design carries no Contracts section at all (the kit's own is
+  requirement-based), because a finding that fires on good input is noise.
+- `Security review: NOT-REQUIRED` **with no stated reason** is a finding - without one, nobody can tell a
+  decision from an omission.
+- `Security review: DONE` over a **missing or uncited `## Security decisions`** section is a finding -
+  `security-agent` pins one dated `[Snnn]` per decision, so zero citations means it never ran.
+- `/build` Gate 2b now RUNS `doc-stats -Findings` and obeys it instead of reading the header and judging.
+
+### Fixed - grade cards were demanded per TASK, contradicting the whole rest of the kit
+`/build:2` says "grade + hygiene per story", `/build:98` "grade the completed STORY", `DESIGN.md` R18 "per
+STORY grade", and `close-unit` only asks under `-RequireGrade` on a story close. `doc-stats` asked for a
+card for every done TASK, so any project with a task map carried a permanent `[grade]` finding per closed
+task - unresolvable findings, which is how a model learns the findings list is noise. An existing test had
+locked the bug in by asserting `[grade] T1.1`.
+
+### Fixed - the stop guard did not consider web source to be code
+The extension list was C#/Python/JS-shaped: no `.cshtml`, `.razor`, `.html`, `.css`, `.vue`, `.svelte`, and
+no `.json`. For an ASP.NET Razor Pages site - or anything `ui-agent` touches - the actual user-facing files
+were invisible, so a turn could end with the entire UI uncommitted and unverified and the guard would report
+a clean tree. Verified against a real Razor project: `Pages/Upload.cshtml` and `appsettings.json` now block.
+`docs\` still does not, so documentation edits stay unblocked.
+
+### Tests
+112 cases (was 107). The two sweep-style ones are the durable additions: files-that-must-exist, and
+prose-facts-that-must-match-disk.
 ## 0.19.4 - 2026-08-22
 
 A pre-flight pass over 0.19.3, and the three CMS-run failures that still had no gate. One of the fixes is

@@ -1,7 +1,6 @@
-#| `dad-loopguard.ps1` / `.cmd` | **The loop guard** - a `PreToolUse` hook that blocks the 4th CONSECUTIVE identical shell command, and rejects `2>nul` outright. A subagent once ran one `dir ... 2>nul` **920 times** and had to be killed by hand: `2>nul` is cmd.exe syntax, so under Bash it writes stderr to a file named `nul` and the model gets no error to learn from. Its `tools:` list did not even include Bash - so tool restriction is not a guard; a hook is. `-Check` to self-test. |
- DAD - Design Document Aligned Development
+# DAD - Design Document Aligned Development
 
-**Version 0.19.4** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.20.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 
@@ -71,6 +70,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `scan-secrets.ps1` / `.cmd` | **Credential scanner.** Blocks secrets from reaching git or the plaintext RAG index. Never prints the matched value - only file:line, pattern name, and a fingerprint. |
 | `install-hooks.ps1` | Installs the project's `pre-commit` hook (runs `scan-secrets -Staged`). Called by scaffold + upgrade; re-runnable. |
 | `dad-guard.ps1` / `.cmd` | **The stop guard** - a Claude Code `Stop` hook (wired by `install.ps1`) that refuses to let a turn end with uncommitted code nothing has built or tested. The only gate here the model cannot decline to invoke. `-Check` to test it, `-Ack` to override. |
+| `dad-loopguard.ps1` / `.cmd` | **The loop guard** - a `PreToolUse` hook that blocks the 4th CONSECUTIVE identical shell command, and rejects `2>nul` outright. A subagent once ran one `dir ... 2>nul` **920 times** and had to be killed by hand: `2>nul` is cmd.exe syntax, so under Bash it writes stderr to a file named `nul` and the model gets no error to learn from. Its `tools:` list did not even include Bash - so tool restriction is not a guard; a hook is. `-Check` to self-test. |
 | `docs-find.ps1` / `.cmd` | **The corpus, from the shell.** Same indexed docs as the `search_datasheets` MCP tool - which nine graded runs called ZERO times while calling shell commands constantly. Works even when the MCP server is not connected, and falls back to a literal scan if Ollama is down. |
 | `recover-lost.ps1` / `.cmd` | **Puts back what a rewrite dropped.** Diffs NAMED UNITS (tests, methods, functions, headings) against the ratchet baseline, separates genuinely-lost from merely-MOVED, and `-Restore`s the vanished ones while keeping whatever the change added - a whole-file revert would discard the good half. Recovered content lands commented, to reconcile. |
 | `ratchet.ps1` / `.cmd` | **Refuses a shrinking verification surface.** Every other gate asks "is X OK now?", which is satisfied by DELETING X. This records tests, contracts, requirements, backlog totals, sources, grade-card bytes and CLAUDE.md's Build/Test commands on each clean close, and blocks the next close if any fell. `-AcceptShrink` on close-unit records a deliberate removal. |
@@ -168,7 +168,7 @@ this before you install it on a machine you use for other work:
 | What it changes | Scope | Reversible by |
 |---|---|---|
 | `%USERPROFILE%\.claude\settings.json` - **redirects Claude Code to Ollama** | **GLOBAL - every project on the machine** | `uninstall.cmd` (restores `settings.json.bak`) |
-| `%USERPROFILE%\.claude\commands\*.md`, `agents\*.md` | GLOBAL - the 11 commands / 10 agents appear everywhere | `uninstall.cmd` |
+| `%USERPROFILE%\.claude\commands\*.md`, `agents\*.md` | GLOBAL - the 15 commands / 14 agents appear everywhere | `uninstall.cmd` |
 | `OLLAMA_FLASH_ATTENTION` / `KV_CACHE_TYPE` / `KEEP_ALIVE` User env vars | machine | `uninstall.cmd -Full` |
 | Ollama `-cc` model variants | machine | `uninstall.cmd -Full` |
 | Per project: `CLAUDE.md`, `.mcp.json`, `docs/`, `.gitignore`, `.git/hooks/pre-commit` | that project | delete / `git` |
@@ -181,7 +181,7 @@ global file. Claude Code reads project settings over global ones, so DAD project
 else stays normal.
 
 **No name collisions** (the test suite enforces this):
-- None of the 11 commands match a Claude Code built-in - important because a colliding custom command is
+- None of the 15 commands match a Claude Code built-in - important because a colliding custom command is
   **silently shadowed** (it simply never loads).
 - No agent name matches a built-in agent type (`Explore`, `Plan`, `general-purpose`, ...). Ours all carry an
   `-agent` suffix; `taskmap-agent` is deliberately distinct from the built-in `Plan`.
@@ -327,7 +327,7 @@ Four roles (full table in `CHEATSHEET.md`):
 
 Switch the whole session, then start a new Claude Code session. Any of these:
 ```
-use-model.cmd dev    (or: plan | fast | quality | <any Ollama model>)
+use-model.cmd dev    (or: coder | oss | fast | quality | gemma | <any Ollama model>)
 double-click  use-fast.cmd  or  use-quality.cmd       (Explorer-friendly)
 powershell -File use-model.ps1 dev
 ```

@@ -102,9 +102,14 @@ $tasksDone = @($tasks | Where-Object { $_.Done })
 # --- next ready: first unchecked task in file order (deps unresolved here - the map's Build order rules) ---
 $next = ($tasks | Where-Object { -not $_.Done } | Select-Object -First 1)
 
-# --- DONE units missing a REAL grade card (>=800 bytes and has a history table) ---
+# --- DONE STORIES missing a REAL grade card (>=800 bytes and has a history table) ---
+# STORIES ONLY. This used to include every done TASK, contradicting the rest of the kit - /build:2
+# ("grade + hygiene per story"), /build:98 ("grade the completed STORY"), DESIGN.md R18 ("per STORY grade")
+# and close-unit, which only demands a card under -RequireGrade on a story close. On any project with a
+# task map that produced a permanent [grade] finding for every closed task: findings that can never be
+# resolved, which is how a model learns to ignore the findings list entirely.
 $missing = @()
-$doneUnits = @($storiesDone) + @($tasksDone | ForEach-Object { $_.Id })
+$doneUnits = @($storiesDone)
 foreach ($u in ($doneUnits | Select-Object -Unique)) {
   $card = Join-Path $gradesDir "$($u)_GRADE.md"
   if (-not (Test-Path $card)) { $missing += "$u (no card)"; continue }
@@ -161,10 +166,45 @@ if ($Findings) {
   # ratchet.ps1) - referencing it here silently skipped the whole check.
   $designPath = if ($designName) { Join-Path $docs $designName } else { "" }
   if ($designPath -and (Test-Path -LiteralPath $designPath)) {
-    $sr = [regex]::Match((Get-Content $designPath -Raw), '(?im)^\s*Security review:\s*(.+?)\s*$')
+    $designRaw = Get-Content -LiteralPath $designPath -Raw
+    # LOCKED is the kit's central gate - /build Gate 2 STOPs on DRAFT because a run once made 106 blind
+    # edits against an unfinished contract. But the gate only reads the WORD "LOCKED", and locking is a
+    # one-word edit. A design locked with ZERO pinned contracts is the same unfinished state the gate
+    # exists to refuse: /design step 5 (architect-agent) either never ran or wrote nothing, and every
+    # dev-agent downstream then improvises the semantics. Computable, so it should not be prose.
+    # Gated on the '## Contracts' SECTION existing: the template ships it, so every scaffolded project has
+    # one and an EMPTY one means step 5 never landed. A design that deliberately carries no such section
+    # (the kit's own is requirement-based, and a script-only project has no data formats to pin) is silent -
+    # a finding that fires on good input is noise, and noise is how findings stop being read.
+    if ($designStatus -eq 'LOCKED' -and $designRaw -match '(?m)^##\s*Contracts\b') {
+      $pinned = @([regex]::Matches($designRaw, '(?m)^#{2,4}\s*(C[0-9]+[A-Za-z0-9-]*)\s*:'))
+      if ($pinned.Count -eq 0) {
+        $f.Add("[design] $designName is LOCKED and its '## Contracts' section is EMPTY - /design step 5 (architect-agent) never landed anything. /build will start dev-agents against a design with no pinned semantics, which is exactly what LOCKED is supposed to prevent.")
+      }
+    }
+    $sr = [regex]::Match($designRaw, '(?im)^\s*Security review:\s*(.+?)\s*$')
     if (-not $sr.Success) {
       $f.Add("[design] no 'Security review:' header in $designName - scaffolded before this existed; add REQUIRED or NOT-REQUIRED (<why>)")
-    } elseif ($sr.Groups[1].Value.Trim() -match '^REQUIRED') {
+    } elseif ($sr.Groups[1].Value.Trim() -match '^NOT-REQUIRED') {
+      # NOT-REQUIRED is the escape hatch from a gate that STOPS /build, and it costs one word to write.
+      # The reason is the whole point: it is what tells a later reader this was a DECISION and not an
+      # omission. An empty parenthetical, or none at all, is the model waving the gate through.
+      $reason = [regex]::Match($sr.Groups[1].Value, '\(([^)]*)\)')
+      if (-not $reason.Success -or $reason.Groups[1].Value.Trim().Length -lt 4) {
+        $f.Add("[design] Security review: NOT-REQUIRED with no stated reason - write 'NOT-REQUIRED (<why>)', e.g. 'poc, no auth, never deployed'. Without it nobody can tell a decision from an omission.")
+      }
+    } elseif ($sr.Groups[1].Value.Trim() -match '^DONE') {
+      # DONE is also one word. What makes it true is security-agent having written CITED decisions into
+      # the doc; the header alone proves nothing, and flipping it is the cheapest way past Gate 2b.
+      $secSection = [regex]::Match($designRaw, '(?ms)^##\s*Security decisions\b.*?(?=^##\s|\z)')
+      $citedLines = if ($secSection.Success) { ([regex]::Matches($secSection.Value, '\[S\d+\]')).Count } else { 0 }
+      if (-not $secSection.Success) {
+        $f.Add("[design] Security review: DONE but there is no '## Security decisions' section - nothing was recorded, so the review cannot be reviewed")
+      } elseif ($citedLines -eq 0) {
+        $f.Add("[design] Security review: DONE but '## Security decisions' cites no sources - security-agent pins one dated [Snnn] per decision, so zero citations means it never ran or wrote nothing")
+      }
+    }
+    if ($sr.Groups[1].Value.Trim() -match '^REQUIRED') {
       $f.Add("[design] Security review: REQUIRED and not done - /design spawns security-agent. /build will refuse to start.")
     }
   }

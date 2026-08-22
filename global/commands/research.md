@@ -34,7 +34,7 @@ Topic: **$ARGUMENTS**  (empty = take the next items from `## Open questions` in 
    Non-zero means the design doc cites something that is not in the corpus. Fix that before you stop.
    Then reindex so the new sources are searchable:
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\reindex.ps1" docs
+   reindex.cmd "<project>\docs"
    ```
 
 ## Corpus rules

@@ -224,6 +224,75 @@ Test-Case "scaffold never leaves a repo with NO commits" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "every kit file the docs tell you to RUN actually exists" {
+  # /research's last step said `-File "...\DAD-kit\reindex.ps1" docs`. There is no reindex.ps1 - only
+  # reindex.cmd, which takes an absolute path. So the final step of the kit's ONLY online mode failed with
+  # "no such file", and the model, having just been told the gate passed, reported the corpus was
+  # searchable. Every later offline command then queried an index missing the sources just captured.
+  # The existing "every executable a command tells the model to run is permitted" test checks that
+  # `powershell` is allow-listed - it never checked that the -File TARGET resolves. This does.
+  $missing = @()
+  $checked = 0
+  $docs = @(Get-KitFiles @("*.md")) + @(Get-ChildItem (Join-Path $kit "global") -Recurse -Filter *.md -File)
+  foreach ($f in ($docs | Sort-Object FullName -Unique)) {
+    # CHANGELOG is HISTORY: it must be free to name the broken thing it is recording the fix for.
+    if ($f.Name -eq "CHANGELOG.md") { continue }
+    $text = Get-Content $f.FullName -Raw
+    # any reference to a kit script, however it is written: via the dev-path placeholder, or bare
+    foreach ($m in [regex]::Matches($text, '(?i)(?:DAD-kit[\\/])?([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
+      $name = $m.Groups[1].Value
+      # only judge names that LOOK like kit scripts: the kit is flat, so a real one sits at its root
+      if ($name -match '(?i)^(setup|build|run|deploy|foo|bar|example|script|my)') { continue }
+      $isKitish = ($name -match '(?i)^(dad-|close-|doc-|docs-|api-|new-|upgrade-|use-|sync-|install|uninstall|package-|scan-|test-|reindex|recover-|ratchet|source-|grade-|ollama-)')
+      if (-not $isKitish) { continue }
+      $checked++
+      if (-not (Test-Path (Join-Path $kit $name))) {
+        $line = ($text.Substring(0, $m.Index) -split "`n").Count
+        $missing += "$($f.Name):$line -> $name"
+      }
+    }
+  }
+  Assert ($checked -gt 20) "this test found only $checked kit-script references - the pattern stopped matching, so it is proving nothing"
+  Assert ($missing.Count -eq 0) "the docs tell the model to run files that do not exist: $(($missing | Sort-Object -Unique) -join '; ')"
+}
+
+Test-Case "prose never names a model alias or roster count that is not real" {
+  # Two drift classes that a reader cannot detect and a model will obey.
+  # (1) The planner alias was renamed plan -> oss, and README kept telling you `use-model.cmd plan`, which
+  #     simply fails. models.json is the single source of truth for aliases; prose must agree with it.
+  # (2) "the 11 commands / 10 agents" survived in README while the kit shipped 15 and 14. A count in prose
+  #     is a fact a script can settle, so it must be settled by one.
+  $aliases = @((Get-Content (Join-Path $kit "models.json") -Raw | ConvertFrom-Json).models | ForEach-Object { $_.alias })
+  Assert ($aliases.Count -ge 4) "could not read the alias list from models.json"
+  $badAlias = @()
+  foreach ($f in (Get-KitFiles @("*.md"))) {
+    if ($f.Name -eq "CHANGELOG.md") { continue }   # history: 'plan' WAS an alias before 0.10.0
+    $text = Get-Content $f.FullName -Raw
+    foreach ($m in [regex]::Matches($text, '(?i)use-model(?:\.cmd|\.ps1)?\s+([a-z0-9|<> \-]+)')) {
+      foreach ($tok in ($m.Groups[1].Value -split '\|')) {
+        $tok = $tok.Trim()
+        if (-not $tok -or $tok -match '^<' -or $tok -match '\s') { continue }   # <any model>, prose tails
+        if ($aliases -notcontains $tok) { $badAlias += "$($f.Name): '$tok'" }
+      }
+    }
+  }
+  Assert ($badAlias.Count -eq 0) "prose names model aliases that models.json does not define: $(($badAlias | Sort-Object -Unique) -join '; ')"
+
+  $realCommands = @(Get-ChildItem (Join-Path $kit "global\commands") -Filter *.md -File).Count
+  $realAgents   = @(Get-ChildItem (Join-Path $kit "global\agents")   -Filter *.md -File).Count
+  $badCount = @()
+  foreach ($f in (Get-KitFiles @("*.md"))) {
+    if ($f.Name -eq "CHANGELOG.md") { continue }        # history: correct when written, not now
+    foreach ($m in [regex]::Matches((Get-Content $f.FullName -Raw), '(?i)\b(\d{1,2})\s+(commands|agents)\b')) {
+      $n = [int]$m.Groups[1].Value
+      $what = $m.Groups[2].Value.ToLower()
+      $expected = if ($what -eq 'commands') { $realCommands } else { $realAgents }
+      if ($n -ne $expected) { $badCount += "$($f.Name): says $n $what, ships $expected" }
+    }
+  }
+  Assert ($badCount.Count -eq 0) "roster counts in prose have drifted from what ships: $(($badCount | Sort-Object -Unique) -join '; ')"
+}
+
 Test-Case "config JSON parses" {
   foreach ($rel in @("settings.json", ".mcp.json", "templates\_common\.mcp.json", "templates\unity\.mcp.json")) {
     $p = Join-Path $kit $rel
@@ -786,6 +855,45 @@ Test-Case "settings.json wires dad-guard as a Stop hook, at a rewritable path" {
     Assert ($after -notmatch 'dad-loopguard') "uninstall left the PreToolUse hook behind - it would fail on every TOOL CALL"
     Assert (($after | ConvertFrom-Json).env.ANTHROPIC_BASE_URL) "uninstall damaged the rest of settings.json"
   } finally { Remove-Sandbox $sb2 }
+}
+
+Test-Case "the guard counts WEB source as code (.cshtml, appsettings.json)" {
+  # The extension list was C#/Python/JS-shaped and omitted .cshtml, .razor, .html, .css and .json. So for
+  # the project types this kit is most likely to be pointed at - an ASP.NET Razor Pages site, or anything
+  # ui-agent touches - the actual USER-FACING files were not "code" as far as the guard was concerned. A
+  # turn could end with the whole UI uncommitted and unverified and the guard would report a clean tree.
+  # Config counts too: an upload size limit or a connection string in appsettings.json decides whether the
+  # app works at all.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"
+    New-Item -ItemType Directory -Force "$p\Pages" | Out-Null
+    New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "0.19.4" | Set-Content "$p\.dad-kit-version" -Encoding UTF8
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $guard = Join-Path $kit "dad-guard.ps1"
+    foreach ($f in @("Pages\Upload.cshtml", "appsettings.json", "wwwroot\site.css", "Pages\Index.razor")) {
+      $full = Join-Path $p $f
+      New-Item -ItemType Directory -Force (Split-Path $full) | Out-Null
+      "content" | Set-Content $full -Encoding UTF8
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p 2>&1 | Out-Null
+      Assert ($LASTEXITCODE -eq 1) "an uncommitted $f did NOT block - it is user-facing source"
+      Remove-Item $full -Force
+    }
+    # and docs must still NOT trip it: the guard is about code, and blocking doc edits would be constant
+    "notes" | Set-Content "$p\docs\NOTES.md" -Encoding UTF8
+    '{"x":1}' | Set-Content "$p\docs\data.json" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Check -ProjectDir $p 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "a docs\ change blocked the turn - adding .json must not make the guard fire on documentation"
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "dad-guard BLOCKS unverified code and clears after close-unit" {
@@ -1367,7 +1475,13 @@ Test-Case "state findings are GENERATED, not authored by the librarian" {
     Assert ($out -match 'story S4 has no <!-- Status') "a genuinely unmarked story was missed"
     Assert ($out -match "S3 Status marker is 'COMPLETE'") "a non-vocabulary marker was missed"
     Assert ($out -match 'story S1 has all 1 task\(s\) \[x\] but is not marked DONE') "a roll-up gap was missed"
-    Assert ($out -match '\[grade\] T1\.1') "a done unit with no grade card was missed"
+    # Grading is per STORY - /build:2 "grade + hygiene per story", /build:98 "grade the completed STORY",
+    # DESIGN R18, and close-unit only asking under -RequireGrade on a story close. This assertion used to
+    # demand `[grade] T1.1`, i.e. a card per TASK, which locked in a contradiction: on any project with a
+    # task map it produced an unresolvable finding for every closed task, and unresolvable findings are how
+    # a model learns to skip the list. S2 is DONE and has a real card, so nothing should be demanded here.
+    Assert ($out -notmatch '\[grade\] T1\.1') "a closed TASK was reported as missing a grade card"
+    Assert ($out -notmatch '\[grade\] T2\.1') "a closed TASK was reported as missing a grade card"
     Assert ($out -notmatch '\[grade\] S2') "it demanded a card that exists"
 
     # the loop and the agent must both be held to it
@@ -1652,6 +1766,76 @@ Test-Case "an UNREADABLE task ledger is an error, not a count of zero" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "a one-word edit cannot satisfy the LOCK or the SECURITY gate" {
+  # Both gates cost the model exactly one word to pass, and both then report green forever.
+  #   LOCKED: /build Gate 2 reads only the WORD "LOCKED". A design locked with an EMPTY '## Contracts'
+  #     section is the same unfinished state the gate exists to refuse - /design step 5 never landed - and
+  #     every dev-agent downstream improvises the semantics that were supposed to be pinned.
+  #   Security review: NOT-REQUIRED is the escape from a gate that STOPS the build. Written without a
+  #     reason it is indistinguishable from an omission. DONE is likewise one word, and what makes it TRUE
+  #     is security-agent having written CITED decisions into the doc.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $ds = Join-Path $kit "doc-stats.ps1"
+    function Set-Design($header, $extra) {
+      $body = "# Design`r`n`r`nStatus: LOCKED`r`n$header`r`n`r`n## Requirements`r`n- R1: a`r`n`r`n## Contracts`r`n$extra`r`n"
+      Set-Content "$p\docs\DESIGN.md" $body -Encoding UTF8
+    }
+    function Findings() { return (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) }
+
+    # LOCKED + empty Contracts section -> flagged
+    Set-Design "Security review: NOT-REQUIRED (local-only tool, no auth)" "<!-- nothing pinned yet -->"
+    $o = Findings
+    Assert ($o -match "(?is)LOCKED and its '## Contracts' section is EMPTY") "a design locked with nothing pinned was accepted"
+    # ...and a real contract silences it
+    Set-Design "Security review: NOT-REQUIRED (local-only tool, no auth)" "### C1: File naming`r`n- **Decision:** slug"
+    $o2 = Findings
+    Assert ($o2 -notmatch "(?is)Contracts' section is EMPTY") "a pinned contract did not clear the finding"
+
+    # NOT-REQUIRED with no reason -> flagged; with a reason -> silent (already asserted above)
+    Set-Design "Security review: NOT-REQUIRED" "### C1: x`r`n- **Decision:** y"
+    Assert ((Findings) -match '(?is)NOT-REQUIRED with no stated reason') "NOT-REQUIRED with no reason was accepted - that is the gate waved through"
+    Set-Design "Security review: NOT-REQUIRED ()" "### C1: x`r`n- **Decision:** y"
+    Assert ((Findings) -match '(?is)NOT-REQUIRED with no stated reason') "an EMPTY parenthetical counted as a reason"
+
+    # DONE with no decisions section -> flagged
+    Set-Design "Security review: DONE 2026-08-22" "### C1: x`r`n- **Decision:** y"
+    Assert ((Findings) -match '(?is)no .## Security decisions. section') "DONE was accepted with nothing recorded"
+    # DONE with an UNCITED decisions section -> flagged
+    $body = "# Design`r`n`r`nStatus: LOCKED`r`nSecurity review: DONE 2026-08-22`r`n`r`n## Contracts`r`n### C1: x`r`n- **Decision:** y`r`n`r`n## Security decisions`r`n- Use the framework's built-in auth.`r`n"
+    Set-Content "$p\docs\DESIGN.md" $body -Encoding UTF8
+    Assert ((Findings) -match '(?is)cites no sources') "DONE was accepted over decisions that cite nothing"
+    # DONE with a cited decision -> silent
+    $body2 = $body.Replace("- Use the framework's built-in auth.", "- Use the framework's built-in auth. [S007]")
+    Set-Content "$p\docs\DESIGN.md" $body2 -Encoding UTF8
+    $o3 = Findings
+    Assert ($o3 -notmatch '(?is)cites no sources') "a properly cited decision was still flagged"
+    Assert ($o3 -notmatch '(?is)Security review') "a correctly completed review produced noise"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "grade cards are demanded for STORIES only, not for every task" {
+  # doc-stats demanded a card for every done TASK as well as every done story, contradicting /build:2
+  # ("grade + hygiene per story"), /build:98, DESIGN R18 and close-unit (which only asks under
+  # -RequireGrade, on a story close). On any project with a task map that meant a permanent [grade]
+  # finding for every closed task - findings that can never be resolved, which is exactly how a model
+  # learns that the findings list is noise and stops reading it.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`r`n`r`nStatus: LOCKED`r`nSecurity review: NOT-REQUIRED (test fixture)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`r`n`r`n### Story S1: one   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Tasks`r`n`r`n## Tasks`r`n`r`n### [x] T1.1 - done task   (Story S1)`r`n- **Goal:** x`r`n" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out -notmatch '\[grade\] T1\.1') "a closed TASK was reported as missing a grade card - grading is per STORY"
+    # a DONE story with no card SHOULD still be reported
+    "# Stories`r`n`r`n### Story S1: one   <!-- Status: DONE -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out2 -match '\[grade\] S1') "a DONE story with no grade card went unreported - that check must stay"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "a corpus that nothing cites is ONE finding, said loudly" {
   # Measured on the CMS run: 11 source files, a 17-contract design doc, and `cited in docs: 0`. The whole
   # research phase produced files and changed nothing downstream. Two failures at once: the count printed
@@ -1810,14 +1994,19 @@ Test-Case "the stack is decided EARLY, and the record says so" {
   # - new-project's closing advice, the README's mode table, /scaffold, /design's own frontmatter
   # description, and the heading of the very section the model fills in ("decide LATE - once requirements
   # are stable"). A rule reversed in one file and restated in six is not reversed.
+  # EVERY markdown and script in the kit, not a hand-picked list. The previous version of this test named
+  # six surfaces - and the reversed rule was then found in THREE MORE places it did not look
+  # (templates/README.md twice, and the kit's own LOCKED docs/DESIGN.md). A regression test with a
+  # hardcoded list of places to check is a test that only ever catches the bug you already found.
   $stale = @()
-  $surfaces = @("new-project.ps1","README.md","global\commands\scaffold.md","global\commands\design.md",
-                "templates\_common\docs\DESIGN.md","templates\_common\docs\TEDD.md")
-  foreach ($s in $surfaces) {
-    $p = Join-Path $kit $s
-    if (-not (Test-Path $p)) { continue }
-    foreach ($m in [regex]::Matches((Get-Content $p -Raw), '(?i)(decided?|choose|chosen|pick)\s+(the\s+)?(stack\s+)?LATE')) {
-      $stale += "$s -> '$($m.Value)'"
+  $sweep = @(Get-KitFiles @("*.md","*.ps1")) + @(Get-ChildItem (Join-Path $kit "global") -Recurse -Filter *.md -File) +
+           @(Get-ChildItem (Join-Path $kit "templates") -Recurse -Filter *.md -File)
+  foreach ($p in ($sweep | Sort-Object FullName -Unique)) {
+    if ($p.Name -eq "CHANGELOG.md") { continue }   # history: "decided late" WAS true before 0.13.0
+    if ($p.Name -eq "test-kit.ps1") { continue }   # this test's own pattern strings
+    foreach ($m in [regex]::Matches((Get-Content $p.FullName -Raw),
+        '(?i)(decided?|choose|chosen|chooses|pick|picked|emerges?)\s+(the\s+)?(stack\s+|platform\s+|architecture\s+)?(LATE|later)\b')) {
+      $stale += "$($p.Name) -> '$($m.Value)'"
     }
   }
   Assert ($stale.Count -eq 0) "the stack is decided FIRST, but these still say otherwise: $($stale -join '; ')"
