@@ -2,6 +2,68 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.21.0 - 2026-08-22
+
+One shell-neutral entry point, and line endings settled where they are actually governed.
+
+### The diagnosis first
+The reported pain was "line-ending shenanigans between shells". Measured, it was not a shell problem:
+**27 of the kit's text files held BOTH CRLF and LF**, and every one of them got that way from edits that
+wrote CRLF strings into an LF file - all inside a single shell. There was no `.gitattributes` and no test.
+A kit-level "line-ending style" setting could not have prevented any of it either, because the tools that
+read these files - git, .NET's regex engine, Node reading `settings.json`, `cmd.exe` parsing a `.cmd` - do
+not consult kit settings.
+
+What it broke, both observed here: .NET multiline `^...$` anchors match before `\n` and NOT before `\r\n`,
+so a pattern silently half-works on a mixed file; and a literal replace built with CRLF matches nothing in
+an LF region, so the edit no-ops - which is how the README's H1 got mangled and how 7 of the design doc's
+31 requirements got glued onto previous lines where the ratchet could not count them.
+
+### Added - `.gitattributes`, and a test
+LF everywhere; **CRLF for `.cmd`/`.bat`**, because `cmd.exe` has historically misparsed LF-only labels and
+`goto` (it happens to work on Windows 11 - tested - but this installs on other people's machines and the
+cost of being conservative is zero). All 27 mixed files normalized. A test now asserts every text file is
+internally consistent AND matches the rule, and fails if it scans fewer than 50 files so it cannot pass by
+matching nothing.
+
+### Added - `dad`, one entry point for every kit operation
+```
+dad doc-stats -Findings
+dad close-unit -Id T1.1 -Title "walking skeleton"
+dad doctor
+```
+Three reasons this is a `.cmd` and not a bash script:
+
+- **Shell neutrality.** It behaves identically from Git Bash, cmd and PowerShell (all three tested,
+  including a path containing spaces), and Git Bash converts POSIX paths on the way in - so `dad doc-stats
+  -ProjectDir /c/foo/bar` and the Windows-path form resolve to the same place. The model never picks a
+  dialect for a kit operation. Dialect-guessing is what produced `dir ... 2>nul` under bash: cmd syntax,
+  which writes stderr to a FILE named `nul`, returns nothing, and got repeated 920 times.
+- **Permissions.** Claude Code's allow list is per-executable. 24 wrappers means 24 entries that drift, or
+  a prompt per call - and prompts are what make agents stall. One entry point needs one entry: `Bash(dad:*)`.
+- **Brevity.** It replaces `powershell -ExecutionPolicy Bypass -File "C:\long\path\doc-stats.ps1"` at all
+  **22 call sites** across 13 command and agent files. Shorter lines are less for a 14-32B local model to
+  get wrong.
+
+`install.ps1` puts the kit on the USER PATH; `dad-doctor` checks that `dad` is runnable, that it is merely
+not-yet-in-this-shell, or that it is missing entirely, and checks the allow-list entry. The individual
+`<name>.cmd` wrappers still exist and still work.
+
+### Why the scripts stay PowerShell
+They are the implementation, now invisible. **Git Bash ships no `jq`** (verified), and the kit does real
+JSON surgery on `settings.json`, `.mcp.json` and `models.json` - parse/serialize, never string-replace,
+precisely because JSON escapes backslashes and a text replace silently matches nothing. Doing that with
+`sed` would reintroduce the exact class of bug this release is closing. Add Windows user env vars for the
+Ollama tuning, and 112 passing tests, and a rewrite is a large regression risk for zero functional gain.
+
+### Fixed - a bad `-ProjectDir` exited 0
+`dad doc-stats -ProjectDir C:\definitely\not\here` printed a `Resolve-Path` error and **exited 0**, so a
+mistyped path looked like a project with no stories and no tasks. Six scripts now exit 2 with a clear
+message. Same silent-nothing shape as everything else in this kit's history: the check ran, found nothing,
+and reported fine.
+
+### Tests
+115 cases (was 112).
 ## 0.20.0 - 2026-08-22
 
 A comb for duplication, confused documentation, and prose-only gates, driven by a six-lens audit and then

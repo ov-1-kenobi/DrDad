@@ -24,8 +24,13 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
+# GUARD: -ProjectDir must exist. Resolve-Path ERRORS on a missing path but the .cmd wrapper still exited 0,
+# so a mistyped path looked like a project with no stories and no tasks. Fail loudly instead.
+if (-not (Test-Path -LiteralPath $ProjectDir)) {
+  Write-Host "ERROR: -ProjectDir does not exist: $ProjectDir" -ForegroundColor Red
+  exit 2
+}
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
-
 # The corpus location is the project's own, exactly as the MCP server would resolve it.
 $docs = Join-Path $proj "docs"
 $mcp = Join-Path $proj ".mcp.json"

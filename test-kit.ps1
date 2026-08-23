@@ -293,6 +293,94 @@ Test-Case "prose never names a model alias or roster count that is not real" {
   Assert ($badCount.Count -eq 0) "roster counts in prose have drifted from what ships: $(($badCount | Sort-Object -Unique) -join '; ')"
 }
 
+Test-Case "ONE shell-neutral entry point: dad <subcommand>, from any shell" {
+  # The kit is Windows-native but the model is not reliably in any one shell, and every dialect it guesses
+  # wrong is a silent failure: `2>nul` under bash writes stderr to a FILE and returns nothing (920-call
+  # loop), `&&` is a parser error in PS 5.1, and a POSIX path handed to a Windows script may or may not
+  # convert. `dad` is a .cmd, so it behaves identically from Git Bash, cmd and PowerShell, and Git Bash
+  # converts POSIX paths on the way in. The model never picks a dialect for a kit operation.
+  $dad = Join-Path $kit "dad.cmd"
+  Assert (Test-Path $dad) "dad.cmd is missing - the single entry point"
+
+  # It must resolve subcommands, alias the dad- prefix, and pass exit codes through UNCHANGED. Exit codes
+  # are the whole contract: /build decides whether a unit closed by reading them.
+  & cmd /c "`"$dad`" doc-stats -ProjectDir `"$kit`" >nul 2>&1"
+  Assert ($LASTEXITCODE -eq 0) "dad doc-stats failed (exit $LASTEXITCODE)"
+  & cmd /c "`"$dad`" doctor >nul 2>&1"
+  Assert ($LASTEXITCODE -ne 127) "the dad- prefix alias does not resolve ('dad doctor' -> dad-doctor.cmd)"
+  & cmd /c "`"$dad`" no-such-subcommand >nul 2>&1"
+  Assert ($LASTEXITCODE -ne 0) "an unknown subcommand exited 0"
+  & cmd /c "`"$dad`" >nul 2>&1"
+  Assert ($LASTEXITCODE -ne 0) "bare 'dad' exited 0 - usage is not success"
+  # a failing subcommand's code must reach the caller, not be swallowed by the dispatcher
+  & cmd /c "`"$dad`" doc-stats -ProjectDir `"$kit\_no_such_dir_zz`" >nul 2>&1"
+  Assert ($LASTEXITCODE -eq 2) "the subcommand's exit code was not passed through (got $LASTEXITCODE, want 2)"
+
+  # Every subcommand the usage text advertises must actually exist, or the help lies.
+  $usage = (& cmd /c "`"$dad`" 2>&1" | Out-String)
+  foreach ($m in [regex]::Matches($usage, '(?m)^\s{4,}dad ([a-z][a-z0-9-]+)')) {
+    $sub = $m.Groups[1].Value
+    $ok = (Test-Path (Join-Path $kit "$sub.cmd")) -or (Test-Path (Join-Path $kit "dad-$sub.cmd"))
+    Assert $ok "dad's usage advertises '$sub', which has no wrapper"
+  }
+
+  # The allow list needs exactly ONE entry for all of this. Without it every call prompts, and a prompt
+  # per call is what makes agents stall and start improvising their own reporting files.
+  $allow = @((Get-Content (Join-Path $kit "settings.json") -Raw | ConvertFrom-Json).permissions.allow)
+  Assert ($allow -contains "Bash(dad:*)") "settings.json does not permit Bash(dad:*) - every kit call would prompt"
+
+  # And the commands must USE it: no command or agent should still spell out a powershell invocation.
+  $longForm = @(Select-String -Path (Join-Path $kit "global\commands\*.md"),(Join-Path $kit "global\agents\*.md") `
+                  -Pattern 'powershell\s+-ExecutionPolicy\s+Bypass\s+-File')
+  Assert ($longForm.Count -eq 0) "these still tell the model to type a raw powershell invocation: $(($longForm | ForEach-Object { [System.IO.Path]::GetFileName($_.Path) } | Sort-Object -Unique) -join ', ')"
+  $usesDad = @(Select-String -Path (Join-Path $kit "global\commands\*.md") -Pattern '(?m)^\s*dad\s+[a-z]')
+  Assert ($usesDad.Count -ge 10) "only $($usesDad.Count) commands invoke 'dad' - the migration did not land"
+}
+
+Test-Case "line endings are consistent per file (LF, CRLF for batch)" {
+  # 27 of the kit's text files held BOTH CRLF and LF. Every one was a file edited by writing CRLF strings
+  # into an LF file - all inside a single shell, so this was never a shell-mixing problem. What it broke:
+  #   - .NET multiline regex anchors `^...$` match before \n and NOT before \r\n, so a pattern that works
+  #     on one half of a mixed file silently fails on the other half.
+  #   - a literal replace built with "`r`n" matches nothing in an LF region, so the edit no-ops. That is
+  #     how the README's H1 got mangled and how 7 of the design doc's 31 requirements got glued onto the
+  #     end of previous lines, where the ratchet could not count them.
+  # .gitattributes states the rule; this asserts the working tree obeys it.
+  $mixed = @(); $wrongEol = @()
+  $files = Get-ChildItem $kit -Recurse -File -Include *.ps1,*.cmd,*.md,*.json,*.cs |
+           Where-Object { $_.FullName -notmatch '\\(_tempReference|bin|obj|\.git|node_modules)\\' }
+  foreach ($f in $files) {
+    $t = [System.IO.File]::ReadAllText($f.FullName)
+    $crlf = ([regex]::Matches($t, "`r`n")).Count
+    $lf   = ([regex]::Matches($t, "(?<!`r)`n")).Count
+    if ($crlf -gt 0 -and $lf -gt 0) { $mixed += "$($f.Name) (crlf=$crlf lf=$lf)"; continue }
+    # batch files keep CRLF: cmd.exe has historically misparsed LF-only labels and goto
+    if ($f.Extension -in @(".cmd",".bat")) {
+      if ($lf -gt 0) { $wrongEol += "$($f.Name) is LF but batch must be CRLF" }
+    } elseif ($crlf -gt 0) {
+      $wrongEol += "$($f.Name) is CRLF but should be LF"
+    }
+  }
+  Assert ($files.Count -gt 50) "only $($files.Count) files scanned - the filter broke, so this proves nothing"
+  Assert ($mixed.Count -eq 0) "files with MIXED line endings (a regex or a replace WILL silently half-fail): $(($mixed | Sort-Object) -join '; ')"
+  Assert ($wrongEol.Count -eq 0) "files whose line endings do not match .gitattributes: $(($wrongEol | Sort-Object) -join '; ')"
+  Assert (Test-Path (Join-Path $kit ".gitattributes")) "no .gitattributes - nothing normalizes this on commit, so it will drift back"
+}
+
+Test-Case "a script given a project dir that does not exist FAILS, loudly" {
+  # Found while testing the shells: `doc-stats.cmd -ProjectDir C:\definitely\not\here` printed a
+  # Resolve-Path error and exited **0**. A model that mistypes a path therefore gets success plus a stderr
+  # blob it may not read, and carries on believing the project has no stories and no tasks. Same
+  # silent-nothing shape as every other bug in this kit: the check ran, found nothing, and reported fine.
+  $bogus = Join-Path $kit "_no_such_project_dir_xyz"
+  foreach ($s in @("doc-stats.ps1","ratchet.ps1","source-stats.ps1")) {
+    $p = Join-Path $kit $s
+    if (-not (Test-Path $p)) { continue }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $p -ProjectDir $bogus 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "$s exited 0 for a project directory that does not exist"
+  }
+}
+
 Test-Case "config JSON parses" {
   foreach ($rel in @("settings.json", ".mcp.json", "templates\_common\.mcp.json", "templates\unity\.mcp.json")) {
     $p = Join-Path $kit $rel
@@ -1422,7 +1510,7 @@ Test-Case "UI work is gated on behaviour and accessibility, not on looks" {
 
 Test-Case "brownfield /document describes, and cites, rather than inventing" {
   $d = Get-Content (Join-Path $kit "global\commands\document.md") -Raw
-  Assert ($d -match 'api-surface\.ps1') "/document does not use the real API surface"
+  Assert ($d -match '(?i)(api-surface\.ps1|dad api-surface)') "/document does not use the real API surface"
   Assert ($d -match 'DESCRIBE, never invent') "/document does not forbid invention"
   Assert ($d -match '\(inferred\)') "/document does not mark inference"
   Assert ($d -match 'WORK REMAINING') "/document may write stories for already-done work"
@@ -1915,7 +2003,7 @@ Test-Case "/research is wired, online, and owns only the corpus" {
   $r = Get-Content (Join-Path $kit "global\commands\research.md") -Raw
   Assert ($r -match 'research-agent') "/research does not spawn its agent"
   Assert ($r -match 'Task tool') "/research does not name the Task tool"
-  Assert ($r -match 'source-stats\.ps1') "/research has no gate"
+  Assert ($r -match '(?i)(source-stats\.ps1|dad source-stats)') "/research has no gate"
   Assert ($r -match 'ONLINE') "/research does not flag that it is the online mode"
   $a = Get-Content (Join-Path $kit "global\agents\research-agent.md") -Raw
   Assert ($a -match 'web_search' -and $a -match 'ingest_url') "research-agent lacks the web tools"
@@ -2061,7 +2149,7 @@ Test-Case "a build failure hands over the real signatures" {
   # and the agent that writes the code has to be told it exists
   $dev = Get-Content (Join-Path $kit "global\agents\dev-agent.md") -Raw
   Assert ($dev -match 'API-SURFACE\.md') "dev-agent is not told about the API surface"
-  Assert ($dev -match 'api-surface\.ps1') "dev-agent has no command to look a signature up"
+  Assert ($dev -match '(?i)(api-surface\.ps1|dad api-surface)') "dev-agent has no command to look a signature up"
 }
 
 Test-Case "scaffold and upgrade ignore .claude/ (agent worktrees are not source)" {
@@ -2270,7 +2358,7 @@ Test-Case "doc-stats -UpdateStatus writes the Snapshot; the model never counts" 
     Assert (([regex]::Matches($s2, '## Snapshot')).Count -eq 1) "a second run stacked another Snapshot block"
 
     # /audit and the librarian must both point at the generating flag
-    Assert ((Get-Content (Join-Path $kit "global\commands\audit.md") -Raw) -match 'doc-stats\.ps1" -UpdateStatus') `
+    Assert ((Get-Content (Join-Path $kit "global\commands\audit.md") -Raw) -match '(?i)(doc-stats\.ps1" -UpdateStatus|dad doc-stats -UpdateStatus)') `
       "/audit does not generate the counts before spawning the librarian"
     Assert ((Get-Content (Join-Path $kit "global\agents\librarian-agent.md") -Raw) -match '-UpdateStatus') `
       "librarian-agent still computes its own counts"

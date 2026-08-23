@@ -77,7 +77,7 @@ HARD RULES for the rewrite (a placeholder-ridden or miscounted dashboard is wors
 - **RUN the counter, do not estimate.** A hand-counted dashboard once reported "Stories: 1/1 Tasks: 1/1" on
   a project with 13 stories (5 done) and 16 tasks (6 done). Run this FIRST and use its numbers verbatim:
   ```
-  powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -UpdateStatus
+  dad doc-stats -UpdateStatus
   ```
   It reports design Status, stories done/total, tasks done/total, the next task, and every DONE unit whose
   grade card is missing or a stub. If its numbers disagree with what you believed, IT is right.

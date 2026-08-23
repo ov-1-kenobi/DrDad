@@ -20,8 +20,13 @@
 [CmdletBinding()]
 param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus, [string]$Contract = "", [switch]$Findings)
 $ErrorActionPreference = "Stop"
+# GUARD: -ProjectDir must exist. Resolve-Path ERRORS on a missing path but the .cmd wrapper still exited 0,
+# so a mistyped path looked like a project with no stories and no tasks. Fail loudly instead.
+if (-not (Test-Path -LiteralPath $ProjectDir)) {
+  Write-Host "ERROR: -ProjectDir does not exist: $ProjectDir" -ForegroundColor Red
+  exit 2
+}
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
-
 $docs = Join-Path $proj "docs"
 # --- contract existence: settle it with a script, never on the model's word ------------------------
 # A real run halted claiming "the contracts C6 and C7 are not present in DESIGN.md - a critical gap

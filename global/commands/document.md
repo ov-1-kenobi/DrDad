@@ -16,13 +16,13 @@ how something works, that is a FINDING ("cannot determine X"), not a gap to fill
 
 1. **Prove the shell and orient.**
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1"
+   dad doc-stats
    ```
    Then `upgrade-project.cmd` if `docs/` is missing - this project may never have had one.
 
 2. **Extract the real API surface** (this is why brownfield works here at all):
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\api-surface.ps1"
+   dad api-surface
    ```
    Needs a successful build first. It writes `docs/API-SURFACE.md` - the EXACT public types and signatures
    of every assembly, read out of the compiled output. Contracts derived from that are derived from what
@@ -48,7 +48,7 @@ how something works, that is a FINDING ("cannot determine X"), not a gap to fill
 
 6. **GATE - the citations must resolve:**
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Findings
+   dad doc-stats -Findings
    ```
    plus re-read your own doc: every `(path:line)` must be a file that exists. A citation to a file that is
    not there is a fabrication, and it is the failure mode this whole mode is guarding against.

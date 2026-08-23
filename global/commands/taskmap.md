@@ -28,7 +28,7 @@ project (we have seen it fabricate peer networking, a metrics endpoint, and merg
 3. Relay its summary: tasks per story, the build order, the first ready tasks, and any open questions.
 4. **GATE - prove the map is MACHINE-READABLE before you report success.** Run:
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Findings
+   dad doc-stats -Findings
    ```
    The task count it prints must be non-zero and must match what the agent said it wrote. If you see
    `TASKS.md is NNKB but NOT ONE task id is parseable` or `Build order sequences N id(s) that are DEFINED

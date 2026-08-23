@@ -11,7 +11,7 @@ stories later. This turns that record into changes to how the project works.
 ## 1. Get the numbers (computed - do not eyeball the cards)
 
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\grade-trends.ps1"
+dad grade-trends
 ```
 
 It reports grade direction, units that needed rework, stub cards, and **recurring themes** - a theme in
@@ -20,7 +20,7 @@ you must not contradict them, same rule as `/audit`.
 
 Also run, for the state half:
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Findings
+dad doc-stats -Findings
 ```
 
 ## 2. Read the cards behind the top 2-3 themes

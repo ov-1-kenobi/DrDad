@@ -38,7 +38,7 @@ otherwise the next unbuilt story in `docs/STORIES.md`.
 6. Run the tests (CLAUDE.md's test command). On PASS, **close out by RUNNING the script** (it ticks the
    task, rolls the story up when all its tasks are done, reindexes, commits, and verifies):
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\close-unit.ps1" -Id <unit id> -Title "<short title>"
+   dad close-unit -Id <unit id> -Title "<short title>"
    ```
    Non-zero exit = not closed; fix what it reports. Then WAIT for my confirmation before the next item.
    (If a file got mangled: restore via `/audit recover <file>` - never hand-reconstruct it.)

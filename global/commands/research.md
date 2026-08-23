@@ -29,7 +29,7 @@ Topic: **$ARGUMENTS**  (empty = take the next items from `## Open questions` in 
    design doc. "We could not establish X" is a finding; guessing X is a defect.
 6. **GATE - run it, do not eyeball it:**
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\source-stats.ps1"
+   dad source-stats
    ```
    Non-zero means the design doc cites something that is not in the corpus. Fix that before you stop.
    Then reindex so the new sources are searchable:

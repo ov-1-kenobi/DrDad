@@ -25,7 +25,7 @@ and placeholder convention are in CLAUDE.md.
   `docs/API-SURFACE.md` carries the EXACT public signatures of this solution AND of every NuGet package it
   references, generated from the compiled assemblies after each successful build, so it cannot be stale:
   ```
-  powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\api-surface.ps1" -Lookup <TypeOrMember>
+  dad api-surface -Lookup <TypeOrMember>
   ```
   or `search_datasheets "<type> signature"` - it is in the index like every other doc. Guessing overloads
   is how one project shipped 16 compile errors from invented Magick.NET calls, and how a single task spent

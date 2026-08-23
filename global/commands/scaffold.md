@@ -15,7 +15,7 @@ If `$ARGUMENTS` doesn't already say which, ASK me general vs experience before r
 
 Run from the current project folder (it scaffolds into the current directory):
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\new-project.ps1" $ARGUMENTS
+dad new-project $ARGUMENTS
 ```
 After it runs, report exactly what it created (CLAUDE.md, .mcp.json, and `docs/DESIGN.md` or `docs/TEDD.md`
 as DRAFT), then tell me to: approve the `local-tools` server, then run `/design` (design-first) or `/proto`

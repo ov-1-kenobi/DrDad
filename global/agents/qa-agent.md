@@ -9,7 +9,7 @@ The project's test command and framework are in CLAUDE.md.
 
 **Need a spec value or an expected behaviour? Look it up from the SHELL:**
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\docs-find.ps1" "<your question>"
+dad docs-find "<your question>"
 ```
 Same indexed corpus as the `search_datasheets` tool, behind the interface that actually gets used - across
 nine graded runs `search_datasheets` was called ZERO times while shell commands were called constantly. It

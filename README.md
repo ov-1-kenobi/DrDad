@@ -1,6 +1,6 @@
 # DAD - Design Document Aligned Development
 
-**Version 0.20.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.21.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 
@@ -69,6 +69,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `test-kit.ps1` / `.cmd` | **The kit's own test suite** - run after ANY change to the kit; it *is* the validation gate. No Ollama/GPU/network needed. Also runs in CI (`.github/workflows/kit-ci.yml`). |
 | `scan-secrets.ps1` / `.cmd` | **Credential scanner.** Blocks secrets from reaching git or the plaintext RAG index. Never prints the matched value - only file:line, pattern name, and a fingerprint. |
 | `install-hooks.ps1` | Installs the project's `pre-commit` hook (runs `scan-secrets -Staged`). Called by scaffold + upgrade; re-runnable. |
+| `dad.cmd` | **The single entry point.** `dad doc-stats -Findings`, `dad close-unit -Id T1.1 ...`, `dad doctor`. A `.cmd`, so it behaves identically from Git Bash, cmd and PowerShell - the model never picks a shell dialect for a kit operation. One entry point also means ONE allow-list entry (`Bash(dad:*)`) instead of one per script, and a permission prompt per call is what makes agents stall. `dad` with no args lists the subcommands. |
 | `dad-guard.ps1` / `.cmd` | **The stop guard** - a Claude Code `Stop` hook (wired by `install.ps1`) that refuses to let a turn end with uncommitted code nothing has built or tested. The only gate here the model cannot decline to invoke. `-Check` to test it, `-Ack` to override. |
 | `dad-loopguard.ps1` / `.cmd` | **The loop guard** - a `PreToolUse` hook that blocks the 4th CONSECUTIVE identical shell command, and rejects `2>nul` outright. A subagent once ran one `dir ... 2>nul` **920 times** and had to be killed by hand: `2>nul` is cmd.exe syntax, so under Bash it writes stderr to a file named `nul` and the model gets no error to learn from. Its `tools:` list did not even include Bash - so tool restriction is not a guard; a hook is. `-Check` to self-test. |
 | `docs-find.ps1` / `.cmd` | **The corpus, from the shell.** Same indexed docs as the `search_datasheets` MCP tool - which nine graded runs called ZERO times while calling shell commands constantly. Works even when the MCP server is not connected, and falls back to a literal scan if Ollama is down. |

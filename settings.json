@@ -29,6 +29,7 @@
                                       "Bash(npm:*)",
                                       "Bash(pio:*)",
                                       "Bash(python:*)",
+                                      "Bash(dad:*)",
                                       "Bash(powershell:*)",
                                       "Bash(pwsh:*)"
                                   ]

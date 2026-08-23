@@ -37,7 +37,7 @@ so, and continue - do not block work on an older project.
 
 **Gate 3 - PROVE THE SHELL WORKS before writing a single line.** Run:
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1"
+dad doc-stats
 ```
 Use its numbers (done counts, next task) instead of counting by hand. If this command does not run - blocked,
 denied, no such file - **STOP and tell me the shell is unavailable.** Do not proceed with edits. Everything
@@ -71,7 +71,7 @@ its dependencies satisfied, STOP and report the blocked tasks.
      will flag it. A run once rewrote a test file to add a fixture and 15 of 16 tests did not survive; the
      suite went green and every gate passed. Run:
      ```
-     powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\recover-lost.ps1"
+     dad recover-lost
      ```
      It reports which NAMED UNITS (tests, methods, functions, headings) vanished, and separately which
      merely MOVED to another file - on the real incident 3 of 15 had moved, and restoring those would have
@@ -81,7 +81,7 @@ its dependencies satisfied, STOP and report the blocked tasks.
      unless I say the removal was deliberate.
    - If it returns **"needs contract"**: do NOT relay that to me until you have CHECKED it:
      ```
-     powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Contract <Cn>
+     dad doc-stats -Contract <Cn>
      ```
      **Exit 0 means the contract EXISTS and the claim is wrong** - it prints the heading and line number.
      Send dev-agent back with that location and tell it to `search_datasheets` for the contract instead of
@@ -94,7 +94,7 @@ its dependencies satisfied, STOP and report the blocked tasks.
    and summarize). PASS -> continue.
 4. **Close it out by RUNNING the script** - do not perform these steps by hand:
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\close-unit.ps1" -Id <unit id> -Title "<short title>"
+   dad close-unit -Id <unit id> -Title "<short title>"
    ```
    It ticks the task, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits,
    and verifies. **Non-zero exit means the unit is NOT closed** - fix what it reports before the next unit.
@@ -111,7 +111,7 @@ its dependencies satisfied, STOP and report the blocked tasks.
    re-grade (max 3 rounds). Then commit the story with the grade REQUIRED - the script fails if the card is
    missing or a stub, so you cannot close a story ungraded:
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\close-unit.ps1" -Id <story id> -Title "<story> polish" -RequireGrade
+   dad close-unit -Id <story id> -Title "<story> polish" -RequireGrade
    ```
 8. Present any manual steps + the human-verification checklist and WAIT for my confirmation.
 

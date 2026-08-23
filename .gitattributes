@@ -1,0 +1,36 @@
+# Line endings are settled HERE, not per-shell and not per-editor.
+#
+# Why this file exists: 27 of the kit's text files had MIXED line endings - CRLF and LF in the same file -
+# because edits written with CRLF strings landed in LF files. That is not a shell problem; every one of
+# those edits happened inside a single shell. What was missing was a normalization rule and a test.
+#
+# A "line-ending style" setting in the kit could not have prevented any of it: the tools that read these
+# files (git, .NET's regex engine, Node reading settings.json, cmd.exe parsing a .cmd) do not consult kit
+# settings. git's attributes are the mechanism that actually governs this, so this is where the rule lives.
+#
+# Consequences of a mixed file, all observed in this project:
+#   - .NET multiline regex: `^...$` anchors match before \n, NOT before \r\n, so a pattern that works on
+#     the LF half silently fails on the CRLF half of the same file.
+#   - a literal string replace built with "`r`n" matches nothing in an LF region, so the edit no-ops -
+#     which is how the README's H1 got mangled and how 7 requirements got glued onto previous lines.
+
+# Default: normalize on commit, LF in the working tree. PowerShell, .NET, Node and git all read LF fine.
+* text=auto eol=lf
+
+# EXCEPT batch files. cmd.exe has historically misparsed LF-only batch (labels and goto in particular).
+# It happens to work on current Windows 11, but this kit installs on other people's machines and the cost
+# of being conservative here is zero.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary: never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.onnx binary

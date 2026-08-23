@@ -74,7 +74,7 @@ vision model transcribes it to text - and use that as design input.)
    the insecure version ships. `/build` refuses to start while the header says REQUIRED.
    Then gate the citations:
    ```
-   powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\source-stats.ps1" -StaleDays 180
+   dad source-stats -StaleDays 180
    ```
    180 days, not the default year: security guidance ages faster than anything else here.
 

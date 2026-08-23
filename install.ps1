@@ -119,6 +119,29 @@ else { Write-Host "  WARNING: no Stop hook in settings.json - the close-out gate
 if ($hookCmd -match 'dad-loopguard') { Write-Host "  PreToolUse hook: dad-loopguard.ps1 (breaks command loops; rejects 2>nul under Bash)" -ForegroundColor Green }
 else { Write-Host "  WARNING: no PreToolUse hook - a subagent can repeat one failing command indefinitely" -ForegroundColor Yellow }
 
+Write-Host "`n== 7b) Put the kit on PATH so `dad` works from any shell ==" -ForegroundColor Cyan
+# ONE entry point, on PATH, is what makes the kit shell-neutral. `dad doc-stats` runs identically from
+# Git Bash, cmd and PowerShell, so the model never picks a shell dialect for a kit operation - which is
+# how one run emitted cmd's `2>nul` under bash, got an empty result with no error, and looped 920 times.
+# It also means the Claude Code allow list needs ONE entry, Bash(dad:*), instead of one per script; a
+# permission prompt per call is what makes agents stall and start improvising.
+try {
+  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  if (-not $userPath) { $userPath = "" }
+  $already = ($userPath -split ';' | Where-Object { $_ -and ((($_.TrimEnd('\')) -ieq $root.TrimEnd('\'))) })
+  if ($already) {
+    Write-Host "  already on PATH: $root" -ForegroundColor Green
+  } else {
+    $sep = if ($userPath -and -not $userPath.EndsWith(';')) { ';' } else { '' }
+    [Environment]::SetEnvironmentVariable("Path", "$userPath$sep$root", "User")
+    Write-Host "  added to your USER PATH: $root" -ForegroundColor Green
+    Write-Host "  (open a NEW shell for it to take effect)" -ForegroundColor Yellow
+  }
+  $env:Path = "$env:Path;$root"       # live for the rest of this install
+} catch {
+  Write-Host "  could not update PATH: $($_.Exception.Message)" -ForegroundColor Yellow
+  Write-Host "  add $root to PATH by hand, or call the wrappers by full path" -ForegroundColor Yellow
+}
 Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
 & (Join-Path $root "ollama-tuning.ps1")
 

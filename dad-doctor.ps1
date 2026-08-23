@@ -238,6 +238,24 @@ if (-not (Test-Path $settings)) {
           "re-run install.cmd, then RESTART Claude Code (hooks load at startup)"
     }
 
+    # ONE entry point on PATH is what makes the kit shell-neutral: `dad doc-stats` behaves identically from
+    # Git Bash, cmd and PowerShell. If PATH is missing the failure is at least LOUD ("command not found")
+    # rather than silent - but every kit call in every command file would fail, so check it.
+    $onPath = [bool](Get-Command dad -ErrorAction SilentlyContinue)
+    $userPath = ""
+    try { $userPath = [Environment]::GetEnvironmentVariable("Path", "User") } catch { }
+    $inUserPath = ($userPath -split ';' | Where-Object { $_ -and (($_.TrimEnd('\')) -ieq $kit.TrimEnd('\')) })
+    if ($onPath) { Say "OK" "dad on PATH" "kit commands run from any shell" }
+    elseif ($inUserPath) {
+      Say "WARN" "dad on PATH" "in your USER PATH but not in THIS shell" "open a new shell (PATH is read at process start)"
+    } else {
+      Say "FAIL" "dad on PATH" "'dad' is not runnable - every command file invokes it" `
+          "re-run install.cmd, then open a NEW shell"
+    }
+    if (-not ($s.permissions.allow -contains "Bash(dad:*)")) {
+      Say "WARN" "dad permitted" "settings.json has no Bash(dad:*)" "re-run install.cmd, or every kit call will prompt"
+    }
+
     # The loop guard. Same path checks, for the same reason: a hook pointing at a folder that no longer
     # exists is silently dead, and this one is what stops a subagent repeating one failing command 920
     # times (measured). Checked separately from the Stop hook - either can be stale on its own.

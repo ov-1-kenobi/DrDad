@@ -4,7 +4,7 @@ argument-hint: [empty = full audit | status = refresh docs/STATUS.md | recover <
 ---
 **FIRST, before spawning anything, GENERATE the state half of the audit:**
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Findings
+dad doc-stats -Findings
 ```
 Those `STATE FINDINGS` are yours to route directly - they are computed, so they are true. The `STATE FACTS`
 line is ground truth: **paste it verbatim into the librarian's prompt and tell it those facts may not be
@@ -19,7 +19,7 @@ returns that contradicts the STATE FACTS**, and tell it so rather than acting on
 
 **A claimed-missing CONTRACT must be checked, never believed:**
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -Contract <Cn>
+dad doc-stats -Contract <Cn>
 ```
 Exit 0 means it exists, with its line number - the finding is wrong. (Same run claimed C2PA signing was
 "not in the design contracts"; it is `C10-b`.) Use `-Contract *` to list them all before accepting any
@@ -27,7 +27,7 @@ Exit 0 means it exists, with its line number - the finding is wrong. (Same run c
 
 **THEN update the dashboard:**
 ```
-powershell -ExecutionPolicy Bypass -File "C:\Projects\Claude\MCP\DAD-kit\doc-stats.ps1" -UpdateStatus
+dad doc-stats -UpdateStatus
 ```
 That writes the `## Snapshot` block of `docs/STATUS.md` deterministically and prints the numbers. Use
 them verbatim from here on. A real audit once reported "STATUS.md refreshed with current progress
