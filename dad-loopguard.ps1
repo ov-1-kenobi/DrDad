@@ -34,6 +34,8 @@
 param(
   [switch]$Check,
   [switch]$Reset,
+  [switch]$Bench,
+  [int]$SpiralLimit = 25,   # tests override this; 25 invocations x ~1.7s each is too slow for a suite
   [int]$MaxRepeats = 4          # the Nth CONSECUTIVE identical command is blocked
 )
 
@@ -45,6 +47,18 @@ function Normalize([string]$s) {
   if (-not $s) { return "" }
   # collapse whitespace so trivial reformatting is still recognised as the same command
   return ([regex]::Replace($s.Trim(), '\s+', ' '))
+}
+
+# The payload is read with a regex rather than ConvertFrom-Json (see hook mode for why), so JSON escapes
+# arrive verbatim and have to be undone here. This is not theoretical: PowerShell's own ConvertTo-Json
+# encodes '>' as >, so `2>nul` reaches a naive matcher as `2>nul` and sails straight through.
+# Different producers escape differently - Node does not escape '>' - and a guard that only works against
+# one encoding is a guard that silently stops working.
+function Unescape-Json([string]$s) {
+  if (-not $s) { return "" }
+  if ($s.IndexOf('\') -lt 0) { return $s }                      # fast path: nothing escaped
+  $s = [regex]::Replace($s, '\\u([0-9a-fA-F]{4})', { param($m) [char][Convert]::ToInt32($m.Groups[1].Value, 16) })
+  return $s.Replace('\"', '"').Replace('\n', "`n").Replace('\r', "`r").Replace('\t', "`t").Replace('\/', '/').Replace('\\', '\')
 }
 
 # Returns $null to allow, or a reason string to block.
@@ -110,25 +124,26 @@ If you were checking whether a path exists, use Test-Path. Do not re-run this co
   if ($safe.Length -gt 64) { $safe = $safe.Substring(0, 64) }
   $stateFile = Join-Path $stateDir "$safe.json"
 
+  # FLAT text, not JSON. ConvertFrom-Json alone measured ~500 ms per invocation in PS 5.1 (it loads the
+  # serializer), and this runs before EVERY tool call - so the guard would cost more than the loops it
+  # prevents. Format: "<streak>|<normalized command>".
   $last = ""; $streak = 0
-  if (Test-Path -LiteralPath $stateFile) {
+  if ([System.IO.File]::Exists($stateFile)) {
     try {
-      $j = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
-      $last = [string]$j.last
-      $streak = [int]$j.streak
+      $line = [System.IO.File]::ReadAllText($stateFile)
+      $bar = $line.IndexOf('|')
+      if ($bar -gt 0) { $streak = [int]$line.Substring(0, $bar); $last = $line.Substring($bar + 1) }
     } catch { $last = ""; $streak = 0 }
   }
 
   if ($norm -eq $last) { $streak = $streak + 1 } else { $streak = 1 }
 
-  if (-not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Force $stateDir | Out-Null }
-  $obj = [pscustomobject]@{ last = $norm; streak = $streak }
-  [System.IO.File]::WriteAllText($stateFile, ($obj | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+  if (-not [System.IO.Directory]::Exists($stateDir)) { [System.IO.Directory]::CreateDirectory($stateDir) | Out-Null }
+  [System.IO.File]::WriteAllText($stateFile, "$streak|$norm", (New-Object System.Text.UTF8Encoding($false)))
 
   if ($streak -ge $MaxRepeats) {
     # Reset so the model gets to try ONE different thing without being blocked again on the next call.
-    $obj2 = [pscustomobject]@{ last = ""; streak = 0 }
-    [System.IO.File]::WriteAllText($stateFile, ($obj2 | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($stateFile, "0|", (New-Object System.Text.UTF8Encoding($false)))
     $short = if ($norm.Length -gt 160) { $norm.Substring(0, 160) + "..." } else { $norm }
     return @"
 BLOCKED: you have now run this SAME command $streak times in a row, with nothing in between:
@@ -150,10 +165,99 @@ missing, that may simply be the truth of this project - say that instead of prob
   return $null
 }
 
+# READ-ONLY SPIRAL: many looks, nothing written.
+#
+# The identical-command rule cannot catch this one. A subagent searching with a DIFFERENT query each time
+# is making a different call every time, so no streak ever forms - and that is exactly how a scribe
+# subagent reached 947 tool calls and produced NO STORIES.md at all. "Lost in search" is the accurate
+# description: it kept looking for context instead of writing the thing it was asked for.
+#
+# So this counts consecutive READ-ONLY calls with no WRITE in between. A write (Edit/Write/NotebookEdit, or
+# a shell command, which can have effects) resets it. The threshold is deliberately generous - real work
+# reads a lot before writing - but 25 looks with nothing produced is not research, it is a spiral.
+$SPIRAL_LIMIT = $SpiralLimit
+
+function Test-Spiral([string]$toolName, [string]$sessionId) {
+  if (-not $sessionId) { $sessionId = "nosession" }
+  $safe = ($sessionId -replace '[^A-Za-z0-9_.-]', '_')
+  if ($safe.Length -gt 64) { $safe = $safe.Substring(0, 64) }
+  $stateFile = Join-Path $stateDir "$safe.spiral.json"
+
+  # Anything that changes the world - or a shell command, which might - counts as progress.
+  $isWrite = ($toolName -match '(?i)^(Edit|Write|NotebookEdit|MultiEdit)$') -or
+             ($toolName -match '(?i)bash|powershell|shell|terminal') -or
+             ($toolName -match '(?i)index_datasheets|ingest_url')
+
+  $n = 0
+  if ([System.IO.File]::Exists($stateFile)) {
+    try { $n = [int][System.IO.File]::ReadAllText($stateFile) } catch { $n = 0 }
+  }
+  if ($isWrite) { $n = 0 } else { $n = $n + 1 }
+
+  if (-not [System.IO.Directory]::Exists($stateDir)) { [System.IO.Directory]::CreateDirectory($stateDir) | Out-Null }
+  $store = if ($n -ge $SPIRAL_LIMIT) { 0 } else { $n }   # reset after blocking, so one nudge is enough
+  [System.IO.File]::WriteAllText($stateFile, "$store", (New-Object System.Text.UTF8Encoding($false)))
+
+  if ($n -lt $SPIRAL_LIMIT) { return $null }
+  return @"
+BLOCKED: $n reads/searches in a row and nothing written.
+
+You are looking for context instead of producing the thing you were asked for. A real run did this 947
+times and produced an EMPTY output file before it had to be killed by hand.
+
+What to do NOW, in this order:
+  1. If you need the design doc, the stories or the tasks: **Read the file directly.** They are one file
+     each, usually 10-20 KB. Searching a corpus for a document you can simply open is pure overhead, and
+     if the MCP server is not answering, search returns nothing no matter how you reword the query.
+  2. Write what you already have. A partial, correct artifact beats a perfect one you never produced.
+  3. If something you genuinely need is absent, SAY SO and stop. "I could not find X, so I did not write
+     Y" is a usable result. Another twenty searches is not.
+
+Do not reword the query and try again.
+"@
+}
+
 # ---------------- self-test ------------------------------------------------------------------------
 if ($Reset) {
   if (Test-Path -LiteralPath $stateDir) { Remove-Item -LiteralPath $stateDir -Recurse -Force }
   Write-Host "dad-loopguard: state cleared"
+  exit 0
+}
+
+if ($Bench) {
+  # MEASURE IT ON YOUR OWN MACHINE. This hook runs before EVERY tool call, so its cost is multiplied by
+  # every tool call in the run - and the dominant term is not this script, it is how long your machine
+  # takes to START a PowerShell process. On the dev box that was ~900 ms (antivirus scanning each launch),
+  # making the guard ~2 s per call: about 10 minutes over a 300-call run. On a machine with fast process
+  # launch the same guard costs a fraction of that. Do not guess - run this.
+  Write-Host "== dad-loopguard overhead on THIS machine ==" -ForegroundColor Cyan
+  $self = $PSCommandPath
+  # a DIFFERENT payload each time, or the bench trips the repeat guard on its own fourth call
+  $sw = [System.Diagnostics.Stopwatch]::StartNew()
+  for ($i = 0; $i -lt 5; $i++) { & powershell -NoProfile -Command "exit 0" | Out-Null }
+  $sw.Stop(); $floor = $sw.ElapsedMilliseconds / 5
+  '{"session_id":"bench","tool_name":"Read","tool_input":{"file_path":"warm.md"}}' |
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $self 2>$null | Out-Null
+  $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
+  for ($i = 0; $i -lt 5; $i++) {
+    "{`"session_id`":`"bench`",`"tool_name`":`"Read`",`"tool_input`":{`"file_path`":`"f$i.md`"}}" |
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $self 2>$null | Out-Null
+  }
+  $sw2.Stop(); $per = $sw2.ElapsedMilliseconds / 5
+  Write-Host ("  bare PowerShell startup : {0} ms  (the floor - nothing can beat this)" -f [math]::Round($floor))
+  Write-Host ("  this guard, per call    : {0} ms" -f [math]::Round($per))
+  Write-Host ("  cost over 300 tool calls: {0} s" -f [math]::Round($per * 300 / 1000, 1))
+  Write-Host ""
+  if ($per -gt 700) {
+    Write-Host "  That is expensive. To trade some coverage for speed, edit settings.json's PreToolUse" -ForegroundColor Yellow
+    Write-Host "  matcher from `"`" (every tool) to a narrower set, e.g.:" -ForegroundColor Yellow
+    Write-Host "      `"matcher`": `"Bash|Grep|Glob|Edit|Write|mcp__local-tools__.*`"" -ForegroundColor Cyan
+    Write-Host "  That skips Read - the highest-volume tool - while still catching command loops and" -ForegroundColor Yellow
+    Write-Host "  search spirals, and still seeing the writes that RESET the spiral counter." -ForegroundColor Yellow
+    Write-Host "  Weigh it against what a loop costs: two sessions here were lost to 920 and 947 calls." -ForegroundColor Yellow
+  } else {
+    Write-Host "  Cheap enough to leave on every tool." -ForegroundColor Green
+  }
   exit 0
 }
 
@@ -185,24 +289,42 @@ if ($Check) {
 try {
   $raw = [Console]::In.ReadToEnd()
   if (-not $raw) { exit 0 }
-  $payload = $raw | ConvertFrom-Json
-
-  # Only shell-ish tools carry a command to loop on. Everything else is none of this guard's business.
-  $toolName = [string]$payload.tool_name
-  if ($toolName -and $toolName -notmatch '(?i)bash|powershell|shell|terminal') { exit 0 }
-
-  $cmd = ""
-  try { $cmd = [string]$payload.tool_input.command } catch { }
-  if (-not $cmd) { exit 0 }
-
+  # REGEX, not ConvertFrom-Json. Measured: ConvertFrom-Json costs ~500 ms per invocation in PS 5.1 because
+  # it loads the serializer, and this hook runs before EVERY tool call - so the guard would cost far more
+  # than the loops it prevents. We need exactly three things out of the payload, and none of them needs a
+  # full parse: the tool name, the session id, and enough of tool_input to identify a repeat.
+  $toolName = ""
+  $m = [regex]::Match($raw, '"tool_name"\s*:\s*"([^"]*)"')
+  if ($m.Success) { $toolName = $m.Groups[1].Value }
   $sessionId = ""
-  try { $sessionId = [string]$payload.session_id } catch { }
+  $m = [regex]::Match($raw, '"session_id"\s*:\s*"([^"]*)"')
+  if ($m.Success) { $sessionId = $m.Groups[1].Value }
+  # tool_input verbatim - its exact text IS the signature of the call, which is all we need
+  $inputSig = ""
+  $m = [regex]::Match($raw, '"tool_input"\s*:\s*(\{.*)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+  if ($m.Success) { $inputSig = $m.Groups[1].Value }
+  $cmdMatch = [regex]::Match($inputSig, '"command"\s*:\s*"((?:[^"\\]|\\.)*)"')
 
-  $reason = Test-Command $cmd $sessionId
-  if ($reason) {
-    [Console]::Error.WriteLine($reason)
-    exit 2
+  # EVERY tool, not just shell. This guard was matched on Bash alone, and then a scribe subagent made
+  # NINE HUNDRED AND FORTY-SEVEN tool calls and had to be killed by hand - not one of them Bash, because
+  # scribe-agent's tool list is Read/Grep/Edit/Write plus MCP search. The guard was structurally incapable
+  # of seeing a single one. A loop breaker that watches one tool is not a loop breaker.
+  if (-not $toolName) { exit 0 }
+
+  if ($cmdMatch.Success) {
+    # A shell command: the 2>nul check and the work-command exemption both apply.
+    $reason = Test-Command (Unescape-Json $cmdMatch.Groups[1].Value) $sessionId
+    if ($reason) { [Console]::Error.WriteLine($reason); exit 2 }
+  } else {
+    # Any other tool: the call's identity is its name plus its input verbatim, so a repeated identical
+    # Read / Grep / search_datasheets is caught exactly the way a repeated command is.
+    $reason = Test-Command "$toolName $inputSig" $sessionId
+    if ($reason) { [Console]::Error.WriteLine($reason); exit 2 }
   }
+
+  # And the spiral check applies to everything: many looks, nothing written.
+  $spiral = Test-Spiral $toolName $sessionId
+  if ($spiral) { [Console]::Error.WriteLine($spiral); exit 2 }
   exit 0
 } catch {
   exit 0

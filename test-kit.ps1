@@ -1801,12 +1801,94 @@ Test-Case "the loop guard breaks a repeated command, and rejects 2>nul outright"
     $out = ($junk | & powershell -NoProfile -ExecutionPolicy Bypass -File $lg 2>&1 | Out-String)
     Assert ($LASTEXITCODE -eq 0) "malformed hook input returned $LASTEXITCODE - the guard must fail OPEN"
   }
-  # non-shell tools are none of its business
-  $j2 = '{"session_id":"x","tool_name":"Read","tool_input":{"command":"dir x 2>nul"}}'
+  # A non-shell tool is now very much its business - see "the loop guard sees EVERY tool". What must NOT
+  # happen is a FIRST-time call being blocked: only a repeat or a spiral blocks.
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+  $j2 = '{"session_id":"firsttime","tool_name":"Read","tool_input":{"file_path":"once.md"}}'
   $j2 | & powershell -NoProfile -ExecutionPolicy Bypass -File $lg 2>&1 | Out-Null
-  Assert ($LASTEXITCODE -eq 0) "the guard interfered with a non-shell tool"
+  Assert ($LASTEXITCODE -eq 0) "a first-time non-shell tool call was blocked"
 
   & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+}
+
+Test-Case "the loop guard sees EVERY tool, and catches a search spiral" {
+  # Measured, CMS2 run: a scribe subagent made NINE HUNDRED AND FORTY-SEVEN tool calls and produced NO
+  # STORIES.md at all, then had to be killed by hand. The guard could not see one of them: it was matched
+  # on "Bash", and scribe-agent's tool list is Read/Grep/Edit/Write plus MCP search - no Bash anywhere.
+  # A loop breaker that watches one tool is not a loop breaker.
+  #
+  # And the identical-call rule alone would still have missed it: an agent searching with a DIFFERENT
+  # query each time never forms a streak. That is what "lost in search" means, so there is a second rule -
+  # many reads, nothing written.
+  $lg = Join-Path $kit "dad-loopguard.ps1"
+  $s = Get-Content (Join-Path $kit "settings.json") -Raw | ConvertFrom-Json
+  $matchers = @($s.hooks.PreToolUse | ForEach-Object { $_.matcher })
+  Assert ($matchers -contains "") "the PreToolUse matcher is narrowed to specific tools - a non-Bash subagent loop is invisible again"
+
+  # -SpiralLimit 5 keeps this test to a handful of invocations. The hook costs ~1.7 s per call on a machine
+  # with slow process launch, so a 25-deep test would add a minute to the suite for no extra coverage.
+  function Fire($tool, $inp, $sess) {
+    (@{ session_id = $sess; tool_name = $tool; tool_input = $inp } | ConvertTo-Json -Compress) |
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -SpiralLimit 5 2>$null | Out-Null
+    return $LASTEXITCODE
+  }
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+
+  # a NON-shell tool repeated identically is now caught
+  $hit = 0
+  for ($i = 1; $i -le 6; $i++) { if ((Fire "Read" @{ file_path = "same.md" } "t1") -eq 2) { $hit = $i; break } }
+  Assert ($hit -eq 4) "an identical non-shell tool call was not blocked on the 4th (got $hit)"
+
+  # a VARYING search spiral with nothing written is caught by the second rule
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+  $hit2 = 0
+  for ($i = 1; $i -le 7; $i++) {
+    if ((Fire "mcp__local-tools__search_datasheets" @{ query = "reworded query $i" } "t2") -eq 2) { $hit2 = $i; break }
+  }
+  Assert ($hit2 -eq 5) "differently-worded searches with nothing written were not blocked at the limit (got $hit2)"
+
+  # but a WRITE resets it: real work reads a lot before it writes, and a guard that punishes that gets removed
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+  $falsePositive = $false
+  for ($round = 1; $round -le 3; $round++) {
+    for ($i = 1; $i -le 4; $i++) { if ((Fire "Read" @{ file_path = "r$round-$i.md" } "t3") -eq 2) { $falsePositive = $true } }
+    Fire "Write" @{ file_path = "STORIES.md"; content = "a story" } "t3" | Out-Null
+  }
+  Assert (-not $falsePositive) "reads with a write before the limit was blocked - legitimate work must not trip this"
+
+  # JSON escaping must not defeat the 2>nul check. PowerShell's ConvertTo-Json encodes '>' as \u003e while
+  # Node emits it literally; a guard that only handles one encoding silently stops working.
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+  Assert ((Fire "Bash" @{ command = 'dir "D:\p\src" 2>nul' } "t4") -eq 2) "2>nul escaped as \u003e was not caught"
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+  '{"session_id":"t5","tool_name":"Bash","tool_input":{"command":"dir \"D:\\p\" 2>nul"}}' |
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $lg 2>$null | Out-Null
+  Assert ($LASTEXITCODE -eq 2) "2>nul in literal (Node-style) JSON was not caught"
+
+  # -Bench must exist: this hook's cost is multiplied by every tool call, and it is dominated by how fast
+  # the MACHINE starts a process - so the number cannot be assumed, it has to be measured where it runs.
+  $bench = (& powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Bench 2>&1 | Out-String)
+  Assert ($bench -match '(?i)per\s+call') "-Bench does not report per-call overhead"
+  Assert ($bench -match '(?i)300\s+tool\s+calls') "-Bench does not translate the cost into a whole run"
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+}
+
+Test-Case "corpus-consuming agents are told to READ the doc, not search for it" {
+  # Seven agents have MCP search as their ONLY corpus door and no shell, so when local-tools is not
+  # answering they have no second door - and rewording the query cannot help. One of them burned 947 calls
+  # and produced an empty file. The design doc is ONE file of 10-20 KB and every one of these agents has
+  # Read: searching a corpus for a document you can simply open is pure overhead even when it works.
+  foreach ($a in @("scribe-agent","taskmap-agent","architect-agent","requirements-agent","grade-agent")) {
+    $t = Get-Content (Join-Path $kit "global\agents\$a.md") -Raw
+    Assert ($t -match '(?is)Read\s+the\s+document;\s+do\s+not\s+search\s+for\s+it') "$a is not told to read the doc directly"
+    Assert ($t -match '(?is)give\s+up\s+after') "$a has no bound on failed searches - rewording forever is the failure mode"
+    Assert ($t -match '947') "$a does not carry the measurement, so a later editor will soften the rule"
+  }
+  # and none of them should be told a shell path for an MCP tool - one run invented docs/search_datasheets.ps1
+  foreach ($f in (Get-ChildItem (Join-Path $kit "global\agents") -Filter *.md)) {
+    $t = Get-Content $f.FullName -Raw
+    Assert ($t -notmatch 'search_datasheets\.ps1') "$($f.Name) names a search_datasheets script, which does not exist"
+  }
 }
 
 Test-Case "an UNREADABLE task ledger is an error, not a count of zero" {

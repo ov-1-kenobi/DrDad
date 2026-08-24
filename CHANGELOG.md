@@ -2,6 +2,73 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.22.0 - 2026-08-23
+
+A `/stories` run died the same way the CMS run did, one layer up: **`scribe-agent` made 947 tool calls and
+wrote no STORIES.md at all** before it had to be killed by hand. Three verified causes, all fixed.
+
+### Fixed - the loop guard was structurally blind to it
+0.19.3's guard was matched on **`Bash`**. `scribe-agent` has no Bash - its tools are `Read, Grep, Edit,
+Write` plus three MCP search tools - so **not one of those 947 calls was visible to the guard**. A loop
+breaker that watches one tool is not a loop breaker. The matcher is now `""` (every tool), and a non-shell
+call's identity is its tool name plus its input verbatim, so a repeated identical `Read` / `Grep` /
+`search_datasheets` is caught exactly the way a repeated command is.
+
+### Added - the read-only spiral rule, because identical-match could never have caught this
+An agent that **rewords the query each time** never forms a streak, so the repeat rule was blind to it too.
+That is precisely what "lost in search" means. So: **25 consecutive read-only calls with nothing written**
+now blocks, and says to read the file directly, write what it has, or report the gap and stop. Any write
+resets the counter, so read-heavy work is untouched - verified with reads interleaved with writes.
+
+### Fixed - seven agents had MCP search as their ONLY corpus door
+`architect`, `doc-researcher`, `grade`, `requirements`, `research`, `scribe` and `taskmap` all have
+`search_datasheets` and **no shell**, so when `local-tools` is not answering they cannot fall back to
+`dad docs-find` - and rewording cannot help. What the failing run actually did, recorded in the project's
+own `settings.local.json`:
+
+```
+"Bash(./docs/search_datasheets.ps1 -Query \"security\")"
+"Bash(node cli.js new-project general)"
+```
+
+It fabricated a script named after the search tool and tried to execute it. No such file exists anywhere.
+
+Five agents now carry an explicit rule: the design doc, STORIES.md and TASKS.md are **one file each, 10-20
+KB** - `Read` them. Searching a corpus for a document you can open is pure overhead even when it works.
+Give up after **two** empty searches: two failures mean the door is shut, not that the query was wrong.
+
+### Fixed - the kit had TAUGHT that mistake
+The first version of that rule spelled out the fake path as an example of what not to do. For a 14-32B
+model a concrete, plausible path in a prompt reads as a suggestion, not a prohibition - the same way a
+negative example becomes a template. It is now stated abstractly, and a test forbids any agent naming a
+`search_datasheets` script. That test is what caught it.
+
+### Fixed - `2>nul` was invisible in one JSON encoding
+The guard reads its payload with a regex rather than `ConvertFrom-Json` (measured: ~500 ms per invocation
+in PS 5.1, on a hook that runs before every tool call). So JSON escapes arrive verbatim - and PowerShell's
+own `ConvertTo-Json` encodes `>` as `\u003e`, which meant `2>nul` sailed straight past the check in that
+encoding while Node's literal form was caught. Both handled now.
+
+### Added - `dad loopguard -Bench`, because this cost cannot be assumed
+The guard now runs before EVERY tool call, so its cost is multiplied by the whole run - and the dominant
+term is not the script, it is **how fast the machine starts a process**. On the dev box bare PowerShell
+startup alone is ~800 ms, making the guard ~1.7 s per call: roughly 8 minutes over a 300-call run. On a
+machine with fast process launch it is a fraction of that. `-Bench` measures it where it actually runs and,
+if it is expensive, prints the exact `settings.json` edit to narrow the matcher to
+`Bash|Grep|Glob|Edit|Write|mcp__local-tools__.*` - which skips `Read`, the highest-volume tool, while still
+catching command loops and search spirals and still seeing the writes that reset the spiral counter.
+State handling was moved from JSON to flat text for the same reason.
+
+### Still unverified
+**Whether `PreToolUse` hooks fire for calls made inside a subagent.** Claude Code is not installed on the
+dev box, so this cannot be settled here - and the evidence is mixed, since `scribe-agent` ran a Bash
+command its `tools:` list does not include. If hooks do not reach subagents, the prose fixes above are what
+has to hold, and the next honest step is bounding these agents by construction rather than by hook. The
+next real run answers it either way.
+
+### Tests
+117 cases (was 115). The spiral threshold is injectable (`-SpiralLimit`) so the suite proves the behaviour
+in a handful of invocations rather than 25 at ~1.7 s each.
 ## 0.21.0 - 2026-08-22
 
 One shell-neutral entry point, and line endings settled where they are actually governed.

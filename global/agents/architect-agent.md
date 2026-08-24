@@ -63,3 +63,24 @@ Rules:
 
 Return to the orchestrator: the list of contracts pinned (ids + one-liners), remaining open questions,
 and whether the design is now lock-ready (no unpinned load-bearing contracts).
+
+## Read the document; do not search for it
+
+Your corpus access is `search_datasheets`, an MCP tool. **You have no shell**, so if the `local-tools`
+server is not answering you have no second door - and no amount of rewording the query will change that.
+The design doc, STORIES.md and TASKS.md are ONE FILE EACH, usually 10-20 KB. `Read` them directly. RAG
+search over a file you can simply open is pure overhead even when it works.
+
+Measured: a scribe subagent made **947 tool calls** looking for context and produced an EMPTY STORIES.md
+before the session had to be killed by hand. Its search tool was returning nothing; it kept rephrasing.
+
+So:
+- **Read the design doc directly, once, at the start.** That is your source of truth.
+- Use `search_datasheets` only for something you do NOT know the location of, and give up after **two**
+  attempts that return nothing. Two failures mean the door is shut, not that the query was wrong.
+- If you cannot get what you need, **write what you can and say plainly what was missing**. A partial,
+  correct artifact plus an honest gap beats twenty more searches and an empty file.
+- **Never invent a shell command for an MCP tool.** One run fabricated a PowerShell script under `docs/`
+  named after the search tool and tried to execute it; no such file exists anywhere in the kit. The real
+  shell door is `dad docs-find "<question>"` - and you have no shell, so it is not available to you either.
+  If search does not answer, `Read` the file. Do not construct a path and hope.
