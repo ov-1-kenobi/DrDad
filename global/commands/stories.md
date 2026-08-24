@@ -5,7 +5,42 @@ argument-hint: [audit | migrate | expand <epic> | <story id> | empty = audit]
 Manage the story backlog in **STORIES.md** - ONE story at a time, WITHOUT rewriting the whole file (a full
 rewrite is what makes a local model loop and blow the output limit).
 
-## DO THIS WORK YOURSELF. Do NOT spawn a subagent to expand stories.
+## ONE AGENT PER UNIT. Never one agent for the whole job.
+
+Measured across four real runs - the scope of the spawn is what decides whether it survives:
+
+| spawn | scope | tool calls |
+|---|---|---|
+| `taskmap-agent(S1.2-S1.5)` | 4 stories | **5** - fine |
+| `taskmap-agent(S2.1-S2.8)` | 8 stories | **9** - fine |
+| `taskmap-agent(S4.1-S4.7)` | 7 stories | **920** - killed by hand |
+| `scribe-agent(all epics)` | everything | **947**, then **1023** - hours lost |
+
+Small spawns finish in single digits. So delegation is fine; **one agent trying to manage the whole job is
+not**. Spawn a SEPARATE agent for each unit, so every one starts with a clean context holding only what
+that unit needs, and so you get control back between them.
+
+**Nothing can interrupt a spawn once it starts.** Not the `PreToolUse` loop guard (it does not fire for a
+subagent's calls - proven by 1023 identical calls with the matcher set to every tool), not the `tools:`
+frontmatter (it looped on a tool it does not even list), and not you: while a Task runs, YOU ARE SUSPENDED
+awaiting its result, so you cannot poll it, read a progress file, or cut it short. Asking the agent to
+check in is a prose instruction given to the one component that has stopped following instructions - that
+was tried on a real run and it spiralled for hours anyway.
+
+So the only controls you actually have are: **make each spawn small**, and **verify the moment it returns**.
+
+**Tell the human to start the watchdog before a long pass** - it is the only thing that shortens a spiral,
+by making the silence loud:
+```
+dad watch
+```
+(in a second terminal; a spiral writes NOTHING, so no-writes is the signal.)
+
+**RETRY LIMIT - this applies to YOU, not the agent.** If a spawn returns and the count has not risen, you
+may re-spawn that ONE unit ONCE. If the second attempt also fails, STOP and report which unit failed and
+what the gate said. Do not work down the list re-spawning: an orchestrator that retries forever is the same
+loop one level up.
+## The old failure, for context
 
 Measured, three consecutive runs, all inside a subagent:
 
@@ -50,17 +85,20 @@ Pick the mode from **$ARGUMENTS**:
 - **`expand <epic>`** (e.g. `expand E1`) -> write the stories that epic implies, ONE AT A TIME.
 - **a story id** (e.g. `S3`) or **"go"** -> normalize/create that story with small Edit calls.
 
-**The loop, per story - do not batch:**
-1. Write ONE story with a single Edit/Write. Never reprint the file.
+**The loop, ONE EPIC AT A TIME - do not batch:**
+1. Spawn **scribe-agent** via the **Task tool** (subagent_type: "scribe-agent"), scoped to **exactly one
+   epic**, and say so in the prompt ("expand ONLY epic E2; do not touch any other epic"). It writes those
+   stories with small Edits and returns a short summary. For a tiny project you may simply write the
+   stories yourself here instead - both are fine, and the main loop has the guards.
 2. Run the gate:
    ```
    dad doc-stats -Findings
    ```
-   The story count must have gone UP by one, and no `[scribe]` finding may appear. If you see
+   The story count must have RISEN, and no `[scribe]` finding may appear. If you see
    `STORIES.md is NNKB but NOT ONE story id is parseable`, the heading shape is wrong - fix it NOW, at
    story one, rather than discovering it after thirty. Required shape:
    `### Story S<n>: <title>   <!-- Status: TODO -->`
-3. Next story. After the last one, reindex.
+3. Next epic - a FRESH agent, not the same one. After the last one, reindex.
 
 **If you find yourself running the same search twice, stop searching and Read the file.** Two identical
 lookups mean the answer is not coming from that door.

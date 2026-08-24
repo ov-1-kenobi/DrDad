@@ -216,12 +216,16 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       (b) the `tools:` frontmatter does not restrain it either - it looped on `Glob`, which `scribe-agent`
           does not list, and an earlier run had it invoking `Bash`, which it also does not list;
       (c) the subagent transcript cannot reliably be exported, so the run cannot even be reviewed.
-      Therefore `/stories` and `/taskmap` - the two commands that ITERATE over many items, which is where a
-      spiral has room to grow - now do their work in the main loop, one unit at a time, running
-      `doc-stats -Findings` after each. Delegation is kept only for genuinely ONE-SHOT, human-approved
-      steps that have never looped: contracts (`architect-agent`), the security review, a single grade card,
-      one brownfield description, one research pass. The rule generalises: **if a step needs a gate, it
-      cannot run where the gates do not reach.**
+      The first fix for this was too blunt - it banned delegation from `/stories` and `/taskmap` outright.
+      The data refutes that: bounded spawns SUCCEED. `taskmap-agent(S1.2-S1.5)` finished in **5** calls and
+      `(S2.1-S2.8)` in **9**. What fails is ONE agent asked to manage the WHOLE job. So the rule is
+      **one agent per unit** - one epic, one story - each with a clean context, with the orchestrator
+      regaining control and running `doc-stats -Findings` between them, plus a RETRY LIMIT of one so an
+      orchestrator that re-spawns forever cannot become the same loop one level up.
+      Since nothing can interrupt a spawn, the remaining win is DETECTION, not prevention: `dad watch`
+      (R33) makes the silence loud in minutes instead of hours, because a spiral writes nothing.
+      The rule generalises: **a step that needs a gate cannot run where the gates do not reach - so keep
+      each delegated step small enough that its failure is cheap, and verify the moment it returns.**
 - [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
       kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
       refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)

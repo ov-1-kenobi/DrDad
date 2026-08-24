@@ -17,28 +17,20 @@ Scope: **$ARGUMENTS**  (empty = all of STORIES.md).
 whole map in one pass. Whole-file regeneration is what makes a local model drift into inventing a different
 project (we have seen it fabricate peer networking, a metrics endpoint, and merged PRs that never existed).
 
-1. **DO THIS YOURSELF - do not spawn taskmap-agent.** Measured, three consecutive runs, every one inside a
-   subagent: `taskmap-agent` made **920** identical `dir ... 2>nul` calls; `scribe-agent` made **947** calls
-   and never wrote its file; `scribe-agent` made **1023** identical `Search **/STORIES.md` calls and burned
-   hours. Eleven graded runs in the main loop: zero loops.
-   Inside a subagent nothing governs the tool calls. The `PreToolUse` loop guard **does not fire** there -
-   the 1023-call run was the ideal case for it (identical, consecutive, matcher set to every tool) and not
-   one call was blocked. The `tools:` frontmatter does not restrain it either: it looped on `Glob`, which
-   `scribe-agent` does not even list. And the subagent transcript cannot reliably be exported, so you
-   cannot review what it did. Sharding iterates over many stories - exactly where a spiral grows - so it
-   stays in the main loop, where both guards work and every call is in the transcript.
-
-   **Read `docs/STORIES.md` and the design doc DIRECTLY with Read.** They are one file each, 10-20 KB.
-   Do not search for a path CLAUDE.md already gives you; that search was the 1023-call loop.
-
-   Then, **one story at a time** - do not batch:
-   - append that story's task blocks with a single Edit,
+1. **ONE AGENT PER STORY.** Spawn **taskmap-agent** via the **Task tool** (subagent_type: "taskmap-agent" -
+   an AGENT, not a skill), scoped to **exactly one story**, and say so in the prompt ("shard ONLY story S3").
+   Then, before the next one:
    - run `dad doc-stats -Findings`: the task count must rise, and no `[taskmap]` finding may appear,
-   - move to the next story. Reindex once at the end.
+   - then spawn a FRESH agent for the next story. Reindex once at the end.
+
+   **Read `docs/STORIES.md` and the design doc DIRECTLY with Read** before you start - they are one file
+   each, 10-20 KB. Do not search for a path CLAUDE.md already gives you; a repeated
+   `Search **/STORIES.md` was the 1023-call loop.
 
    Verify per story: every task cites a story id that exists in `docs/STORIES.md`, every task heading is
    `### [ ] T<n>.<n> - <title>   (Story S<id>)` (close-unit matches that shape by regex), and nothing
    appeared that is absent from DESIGN/STORIES.
+
 2. If the stack isn't decided yet (DESIGN architecture still TBD), tell me to finish `/design` first.
 3. Relay its summary: tasks per story, the build order, the first ready tasks, and any open questions.
 4. **GATE - prove the map is MACHINE-READABLE before you report success.** Run:
@@ -53,6 +45,42 @@ project (we have seen it fabricate peer networking, a metrics endpoint, and merg
    and nobody noticed because "tasks 0/0" reads like a project that simply has no tasks yet.
 5. Then tell me: review `docs/TASKS.md`, and run `/build` (or `/spec`) - they work the next unchecked task
    whose dependencies are done, so each dev step stays small and the RAG already holds the map.
+
+## ONE AGENT PER UNIT. Never one agent for the whole job.
+
+Measured across four real runs - the scope of the spawn is what decides whether it survives:
+
+| spawn | scope | tool calls |
+|---|---|---|
+| `taskmap-agent(S1.2-S1.5)` | 4 stories | **5** - fine |
+| `taskmap-agent(S2.1-S2.8)` | 8 stories | **9** - fine |
+| `taskmap-agent(S4.1-S4.7)` | 7 stories | **920** - killed by hand |
+| `scribe-agent(all epics)` | everything | **947**, then **1023** - hours lost |
+
+Small spawns finish in single digits. So delegation is fine; **one agent trying to manage the whole job is
+not**. Spawn a SEPARATE agent for each unit, so every one starts with a clean context holding only what
+that unit needs, and so you get control back between them.
+
+**Nothing can interrupt a spawn once it starts.** Not the `PreToolUse` loop guard (it does not fire for a
+subagent's calls - proven by 1023 identical calls with the matcher set to every tool), not the `tools:`
+frontmatter (it looped on a tool it does not even list), and not you: while a Task runs, YOU ARE SUSPENDED
+awaiting its result, so you cannot poll it, read a progress file, or cut it short. Asking the agent to
+check in is a prose instruction given to the one component that has stopped following instructions - that
+was tried on a real run and it spiralled for hours anyway.
+
+So the only controls you actually have are: **make each spawn small**, and **verify the moment it returns**.
+
+**Tell the human to start the watchdog before a long pass** - it is the only thing that shortens a spiral,
+by making the silence loud:
+```
+dad watch
+```
+(in a second terminal; a spiral writes NOTHING, so no-writes is the signal.)
+
+**RETRY LIMIT - this applies to YOU, not the agent.** If a spawn returns and the count has not risen, you
+may re-spawn that ONE unit ONCE. If the second attempt also fails, STOP and report which unit failed and
+what the gate said. Do not work down the list re-spawning: an orchestrator that retries forever is the same
+loop one level up.
 
 **Be decisive - act, don't narrate.** Spawn the agent immediately; do not ask permission for read-only steps.
 The only WAIT is if the architecture isn't set (step 2) or there are blocking open questions.

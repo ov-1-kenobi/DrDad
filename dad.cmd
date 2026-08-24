@@ -69,6 +69,11 @@ echo     dad source-stats              citation integrity for /research
 echo     dad grade-trends              grade direction over time
 echo     dad doctor                    readiness check; prints the fix commands
 echo.
+echo   While a long pass runs (SECOND terminal):
+echo     dad watch                     alerts when nothing has been written for 3 minutes.
+echo                                   Nothing can interrupt a spiralling subagent - this makes the
+echo                                   silence loud in minutes instead of hours. -IdleMinutes to tune.
+echo.
 echo   Closing work out (these VERIFY - they build, test, and commit):
 echo     dad close-unit -Id T1.1 -Title "short title"
 echo     dad ratchet                   has the verification surface shrunk?

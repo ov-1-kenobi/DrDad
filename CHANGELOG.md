@@ -2,6 +2,63 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.24.0 - 2026-08-23
+
+0.23.0 banned delegation from `/stories` and `/taskmap` after three subagent loops. That was an
+overcorrection, made by looking only at the failures. The successes refute it:
+
+| spawn | scope | tool calls |
+|---|---|---|
+| `taskmap-agent(S1.2-S1.5)` | 4 stories | **5** - fine |
+| `taskmap-agent(S2.1-S2.8)` | 8 stories | **9** - fine |
+| `taskmap-agent(S4.1-S4.7)` | 7 stories | 920 - killed by hand |
+| `scribe-agent(all epics)` | everything | 947, then 1023 - hours lost |
+
+Bounded spawns finish in single digits. **Delegation is fine; ONE agent asked to manage the WHOLE job is
+not.**
+
+### Changed - one agent per unit (R32, corrected)
+`/stories` spawns one `scribe-agent` per **epic**; `/taskmap` spawns one `taskmap-agent` per **story**.
+Each starts with a clean context holding only that unit, and the orchestrator gets control back between
+them to run `dad doc-stats -Findings`. Both commands also read the design doc **directly with `Read`** -
+the 1023-call loop was a repeated `Search **/STORIES.md` for a path `CLAUDE.md` already states.
+
+Added a **RETRY LIMIT of one**, aimed at the orchestrator rather than the agent: if a spawn returns and the
+count has not risen, re-spawn that ONE unit once, then stop and report. An orchestrator that keeps
+re-spawning is the same loop one level up.
+
+This keeps the context isolation a subagent gives you - which matters at 64K - while making each delegated
+step small enough that its failure is cheap.
+
+### Added - `dad watch`, the watchdog
+**Nothing can interrupt a spawn once it starts.** Not the `PreToolUse` guard (it does not fire for a
+subagent's calls), not the `tools:` frontmatter (it looped on a tool it does not list), and not the
+orchestrator - **while a Task runs the orchestrator is SUSPENDED awaiting the result**, so it cannot poll,
+cannot read a progress file, and cannot cut the call short. Asking the agent to check in is a prose
+instruction given to the one component that has stopped following instructions; that was tried on a real
+run and it spiralled for hours anyway.
+
+So prevention is unavailable and the remaining win is DETECTION. A spiral writes NOTHING, so silence on
+disk is the signal:
+
+```
+dad watch                  # second terminal; alerts after 3 idle minutes
+dad watch -IdleMinutes 2
+```
+
+It reports each write, re-arms on progress, and on silence prints a red banner, beeps, and says what to run
+next (`dad doc-stats -Findings`). It never writes to the project - a watcher that changes what it watches
+would reset its own timer and never alarm, which the suite asserts. Verified end to end: sees a write, then
+alarms on silence. **Hours lost becomes minutes lost**, which is the whole of the available win.
+
+### Fixed - a test that fired on its own fix, and one stale test name
+The `exactly one epic` assertion used a literal space, and the phrase is hard-wrapped as `exactly one\n
+epic` - the third time this session a phrase assertion has failed on wrapped markdown, despite a seeded
+RECIPES entry about exactly that. All four assertions in that test are now `\s+`-tolerant. The test was
+also still named "stays in the MAIN LOOP", describing the superseded rule.
+
+### Tests
+119 cases (was 118).
 ## 0.23.0 - 2026-08-23
 
 A third `/stories` run died the same way, on 0.22.0, with the loop guard installed and watching every tool:

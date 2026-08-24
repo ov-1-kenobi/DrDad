@@ -1882,7 +1882,7 @@ Test-Case "the loop guard sees EVERY tool, and catches a search spiral" {
   & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
 }
 
-Test-Case "iterative doc generation stays in the MAIN LOOP, where the gates reach" {
+Test-Case "iterative work is ONE AGENT PER UNIT, verified between, retry-limited" {
   # Three consecutive runs died inside a subagent and nowhere else: taskmap-agent 920 identical
   # `dir ... 2>nul` calls; scribe-agent 947 calls with STORIES.md never written; scribe-agent 1023 identical
   # `Search **/STORIES.md` calls. Eleven graded runs in the main loop: zero loops.
@@ -1892,16 +1892,21 @@ Test-Case "iterative doc generation stays in the MAIN LOOP, where the gates reac
   # tool - and not one call was blocked. The tools: frontmatter does not restrain it either; it looped on
   # Glob, which scribe-agent does not list. So a subagent is a region where NO gate applies, and the two
   # commands that ITERATE over many items must not run there.
+  # NOT "never delegate" - that was an overcorrection from three failures without looking at the successes.
+  # Bounded spawns finish in single digits (S1.2-S1.5 -> 5 calls, S2.1-S2.8 -> 9). What fails is ONE agent
+  # asked to manage the WHOLE job. So: one agent per unit, control back between them, and a retry limit so
+  # the ORCHESTRATOR cannot become the same loop one level up.
   foreach ($c in @("stories","taskmap")) {
     $t = Get-Content (Join-Path $kit "global\commands\$c.md") -Raw
-    Assert ($t -notmatch 'subagent_type') "/$c still delegates to a subagent - that is where all three loops happened"
-    Assert ($t -match '(?i)do\s+(this\s+work\s+)?yourself|do\s+NOT\s+spawn') "/$c does not tell the model to do the work itself"
-    Assert ($t -match '1023') "/$c does not carry the measurement, so a later editor will delegate it again"
-    # one unit at a time, verified after each - the point of doing it here
-    Assert ($t -match '(?i)one\s+(story|unit|at\s+a\s+time)') "/$c does not say one unit at a time"
-    Assert ($t -match 'doc-stats -Findings') "/$c does not verify after each unit"
-    # and it must say to READ the doc rather than search for it: the loop WAS a repeated search
-    Assert ($t -match '(?i)(Read\s+(the\s+)?(design\s+)?doc|DIRECTLY with Read|Read them directly)') "/$c does not say to read the doc directly"
+    Assert ($t -match '(?is)ONE\s+AGENT\s+PER\s+(UNIT|STORY|EPIC)') "/$c does not state the one-agent-per-unit rule"
+    Assert ($t -match '(?is)exactly\s+one\s+(epic|story)') "/$c does not scope each spawn to a single unit"
+    Assert ($t -match '(?is)RETRY\s+LIMIT') "/$c has no retry limit - an orchestrator that re-spawns forever is the same loop"
+    Assert ($t -match '1023') "/$c does not carry the measurement, so a later editor will widen the scope again"
+    Assert ($t -match 'doc-stats -Findings') "/$c does not verify between units"
+    Assert ($t -match '(?i)(DIRECTLY with Read|Read.{0,40}(design doc|STORIES\.md).{0,40}direct)') "/$c does not say to read the doc directly"
+    Assert ($t -match 'dad watch') "/$c does not point at the watchdog - detection is the only remaining control"
+    # the evidence table is what stops a later editor 'simplifying' this back to one big spawn
+    Assert ($t -match '(?s)\|\s*5\s*\*{0,2}\s*-?\s*fine|5\*{0,2} - fine') "/$c does not show that SMALL spawns succeed - without it the rule reads as anti-agent"
   }
   # The one-shot delegations have never looped and stay. If this list ever empties, the kit has lost its
   # subagents entirely - which is NOT the finding; the finding is about iteration.
@@ -1915,6 +1920,43 @@ Test-Case "iterative doc generation stays in the MAIN LOOP, where the gates reac
   $design = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
   Assert ($design -match '(?s)R32.*?UNOBSERVABLE') "R32 does not record the subagent finding"
   Assert ($design -match '(?s)R32.*?1023') "R32 does not carry the measurement"
+}
+
+Test-Case "the watchdog makes a spiral loud in minutes, and never writes to the project" {
+  # Nothing can interrupt a spiralling subagent: hooks do not fire there, the tools list does not restrain
+  # it, and while a Task runs the orchestrator is SUSPENDED so it cannot poll or cut the call short. Two
+  # runs therefore burned HOURS before a human noticed. Prevention is unavailable; detection is not. A
+  # spiral writes NOTHING, so silence on disk is the signal.
+  $w = Join-Path $kit "dad-watch.ps1"
+  Assert (Test-Path $w) "dad-watch.ps1 is missing"
+  Assert (Test-Path (Join-Path $kit "dad-watch.cmd")) "dad-watch.cmd wrapper is missing"
+  $src = Get-Content $w -Raw
+  # It must never write into what it watches - a watcher that changes the thing it watches is useless,
+  # and would also reset its own idle timer forever.
+  Assert ($src -notmatch 'WriteAllText|Set-Content|New-Item|Out-File|Add-Content') "dad-watch WRITES - it would reset its own idle timer and never alarm"
+  # a bad path must fail loudly, like every other script
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $w -ProjectDir (Join-Path $kit "_no_such_dir_zz") 2>&1 | Out-Null
+  Assert ($LASTEXITCODE -ne 0) "dad-watch accepted a project dir that does not exist"
+
+  # END TO END: it must report progress, then alarm on silence. Run it against a sandbox with a tiny
+  # idle window so the test takes seconds rather than minutes.
+  $sb = New-Sandbox
+  try {
+    $proj = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$proj\docs" | Out-Null
+    "# D" | Set-Content "$proj\docs\DESIGN.md" -Encoding UTF8
+    $job = Start-Job -ScriptBlock { param($ps1, $dir)
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $ps1 -ProjectDir $dir -IdleMinutes 0.2 -PollSeconds 2 -NoBeep
+    } -ArgumentList $w, $proj
+    try {
+      Start-Sleep -Seconds 5
+      "s" | Set-Content "$proj\docs\STORIES.md" -Encoding UTF8      # progress
+      Start-Sleep -Seconds 22                                        # then silence
+      $out = (Receive-Job $job) -join "`n"
+    } finally { Stop-Job $job -ErrorAction SilentlyContinue; Remove-Job $job -Force -ErrorAction SilentlyContinue }
+    Assert ($out -match 'wrote docs\\STORIES\.md') "the watchdog did not notice a write - it would alarm during healthy work"
+    Assert ($out -match '(?i)NOTHING HAS BEEN WRITTEN') "the watchdog never alarmed on silence - that is its whole job"
+    Assert ($out -match '(?i)doc-stats') "the alarm does not tell the human what to run next"
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "corpus-consuming agents are told to READ the doc, not search for it" {
