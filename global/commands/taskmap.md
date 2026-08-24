@@ -17,14 +17,29 @@ Scope: **$ARGUMENTS**  (empty = all of STORIES.md).
 whole map in one pass. Whole-file regeneration is what makes a local model drift into inventing a different
 project (we have seen it fabricate peer networking, a metrics endpoint, and merged PRs that never existed).
 
-1. Spawn the **taskmap-agent** via the **Task tool** (subagent_type: "taskmap-agent" - it is an AGENT, not
-   a skill; the Skill tool will fail), once per story in scope. It reads that story + the DESIGN
-   architecture, appends bite-sized self-contained task blocks with dependencies to **`docs/TASKS.md`**,
-   and **reindexes** so the map is searchable.
-   **After each story, verify:** every new task cites a story id that exists in `docs/STORIES.md`, every
-   task heading is `### [ ] <id> - <title>   (Story Sx)` (close-unit.ps1 matches that shape by regex), and
-   nothing appeared that is absent from DESIGN/STORIES. Send it back if any check fails.
-2. If it reports the stack isn't decided yet (DESIGN architecture still TBD), tell me to finish `/design` first.
+1. **DO THIS YOURSELF - do not spawn taskmap-agent.** Measured, three consecutive runs, every one inside a
+   subagent: `taskmap-agent` made **920** identical `dir ... 2>nul` calls; `scribe-agent` made **947** calls
+   and never wrote its file; `scribe-agent` made **1023** identical `Search **/STORIES.md` calls and burned
+   hours. Eleven graded runs in the main loop: zero loops.
+   Inside a subagent nothing governs the tool calls. The `PreToolUse` loop guard **does not fire** there -
+   the 1023-call run was the ideal case for it (identical, consecutive, matcher set to every tool) and not
+   one call was blocked. The `tools:` frontmatter does not restrain it either: it looped on `Glob`, which
+   `scribe-agent` does not even list. And the subagent transcript cannot reliably be exported, so you
+   cannot review what it did. Sharding iterates over many stories - exactly where a spiral grows - so it
+   stays in the main loop, where both guards work and every call is in the transcript.
+
+   **Read `docs/STORIES.md` and the design doc DIRECTLY with Read.** They are one file each, 10-20 KB.
+   Do not search for a path CLAUDE.md already gives you; that search was the 1023-call loop.
+
+   Then, **one story at a time** - do not batch:
+   - append that story's task blocks with a single Edit,
+   - run `dad doc-stats -Findings`: the task count must rise, and no `[taskmap]` finding may appear,
+   - move to the next story. Reindex once at the end.
+
+   Verify per story: every task cites a story id that exists in `docs/STORIES.md`, every task heading is
+   `### [ ] T<n>.<n> - <title>   (Story S<id>)` (close-unit matches that shape by regex), and nothing
+   appeared that is absent from DESIGN/STORIES.
+2. If the stack isn't decided yet (DESIGN architecture still TBD), tell me to finish `/design` first.
 3. Relay its summary: tasks per story, the build order, the first ready tasks, and any open questions.
 4. **GATE - prove the map is MACHINE-READABLE before you report success.** Run:
    ```

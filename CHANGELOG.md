@@ -2,6 +2,56 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.23.0 - 2026-08-23
+
+A third `/stories` run died the same way, on 0.22.0, with the loop guard installed and watching every tool:
+
+```
+scribe-agent(Expand epics into stories)
+  Search(pattern: "**/STORIES.md", path: "D:\projects\Claude\projects\cms3")   x1023
+  Interrupted
+```
+
+That was the ideal case for the guard - an **identical, consecutive, non-shell** call with the matcher set
+to `""` (every tool). It should have been blocked on the fourth. It ran **1023 times**, and the transcript
+contains no guard output at all.
+
+### The finding: a subagent is an unguarded, unobservable region (R32)
+
+| where | outcome |
+|---|---|
+| `taskmap-agent` | 920 identical `dir ... 2>nul` calls, killed by hand |
+| `scribe-agent` | 947 calls, STORIES.md never written |
+| `scribe-agent` | **1023** identical `Search **/STORIES.md` calls, hours burned |
+| **main loop, 11 graded runs** | **zero loops** |
+
+Three independent controls do not reach inside a subagent:
+
+1. **`PreToolUse` hooks do not fire** for a subagent's tool calls. Two releases of loop-guard work could
+   never have caught any of these. This had been flagged as unverified in 0.19.3 and 0.22.0; it is now
+   settled, by the cleanest possible test case.
+2. **The `tools:` frontmatter does not restrain it.** It looped on `Glob`, which `scribe-agent` does not
+   list; an earlier run had it invoking `Bash`, which it also does not list.
+3. **The subagent transcript cannot reliably be exported**, so the run cannot even be reviewed afterwards.
+
+### Changed - `/stories` and `/taskmap` do their work in the MAIN LOOP
+Both commands ITERATE over many items, which is where a spiral has room to grow, and both were delegating.
+They now do the work directly, **one unit at a time**, running `dad doc-stats -Findings` after each - so an
+unparseable ledger surfaces at story ONE instead of after thirty. Both also now say to `Read` the design doc
+directly: the 1023-call loop was a repeated search for a path `CLAUDE.md` already states.
+
+Delegation is kept for the genuinely ONE-SHOT, human-approved steps that have never looped: contracts
+(`architect-agent`), the security review, a single grade card, one brownfield description, one research pass.
+**The rule generalises: if a step needs a gate, it cannot run where the gates do not reach.**
+
+### Fixed - a test that fired on the fix it was meant to protect
+"agent-spawning commands name the Task tool" keyed on a command MENTIONING an agent. `/stories` now mentions
+`scribe-agent` only to say it must not be spawned, so the test failed on the correct change. It keys on the
+spawn instead, and separately requires that a command naming an agent either spawns it properly or forbids
+it explicitly - ambiguity is what a weak model resolves by guessing.
+
+### Tests
+118 cases (was 117).
 ## 0.22.0 - 2026-08-23
 
 A `/stories` run died the same way the CMS run did, one layer up: **`scribe-agent` made 947 tool calls and

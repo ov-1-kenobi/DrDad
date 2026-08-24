@@ -204,6 +204,24 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       the header itself - the human approves. `/design` gates the citations with
       `source-stats -StaleDays 180` rather than the default year. The most valuable thing it can return is
       "use the framework's built-in and do not build this yourself", which is the common case for auth.
+- [x] R32: **A SUBAGENT IS AN UNGUARDED, UNOBSERVABLE REGION - iterative document generation stays in the
+      main loop.** Three consecutive runs died inside a subagent and nowhere else: `taskmap-agent` made 920
+      identical `dir ... 2>nul` calls; `scribe-agent` made 947 calls and never wrote STORIES.md; then
+      `scribe-agent` made **1023 identical `Search **/STORIES.md` calls** and burned hours. Eleven graded
+      runs in the main loop produced zero loops. The cause is not model quality, it is that NOTHING inside a
+      subagent is governed:
+      (a) the `PreToolUse` hook does not fire for a subagent's tool calls - the 1023-call run was the ideal
+          case for the loop guard (identical, consecutive, non-shell, matcher set to EVERY tool) and not one
+          call was blocked, which settles a question two releases had left open;
+      (b) the `tools:` frontmatter does not restrain it either - it looped on `Glob`, which `scribe-agent`
+          does not list, and an earlier run had it invoking `Bash`, which it also does not list;
+      (c) the subagent transcript cannot reliably be exported, so the run cannot even be reviewed.
+      Therefore `/stories` and `/taskmap` - the two commands that ITERATE over many items, which is where a
+      spiral has room to grow - now do their work in the main loop, one unit at a time, running
+      `doc-stats -Findings` after each. Delegation is kept only for genuinely ONE-SHOT, human-approved
+      steps that have never looped: contracts (`architect-agent`), the security review, a single grade card,
+      one brownfield description, one research pass. The rule generalises: **if a step needs a gate, it
+      cannot run where the gates do not reach.**
 - [x] R15: Project upgrade path: `upgrade-project.ps1`/`.cmd` retrofits an EXISTING project to the current
       kit deterministically - adds missing `docs/STATUS.md`/`RECIPES.md`, git safety net if absent, and
       refreshes CLAUDE.md's kit-owned sections (Modes/Design docs/Proven recipes/Web/Working agreement)

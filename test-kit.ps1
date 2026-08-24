@@ -550,10 +550,19 @@ Test-Case "every agent referenced by a command exists" {
 
 Test-Case "agent-spawning commands name the Task tool" {
   # A local model that reaches for the Skill tool gets 'Unknown skill' and stalls the whole run.
+  # MENTIONING an agent is not the same as SPAWNING one: /stories and /taskmap now name scribe-agent and
+  # taskmap-agent only to say they must NOT be spawned (R32 - three loops, 920/947/1023 calls, all inside a
+  # subagent). Keying on the mention made this test fire on the very fix it should be protecting, so it
+  # keys on the spawn instead - and separately insists that a command naming an agent either spawns it
+  # properly or forbids it explicitly. Ambiguity is what a weak model resolves by guessing.
   foreach ($f in Get-ChildItem (Join-Path $kit "global\commands") -Filter *.md) {
     $text = Get-Content $f.FullName -Raw
-    if ($text -match '\b[a-z][a-z0-9-]*-agent\b') {
-      Assert ($text -match 'Task tool') "$($f.Name) mentions an agent but never says 'Task tool'"
+    $spawns  = ($text -match 'subagent_type')
+    $forbids = ($text -match '(?i)do\s+NOT\s+spawn')
+    if ($spawns) {
+      Assert ($text -match 'Task tool') "$($f.Name) spawns an agent but never says 'Task tool'"
+    } elseif ($text -match '\b[a-z][a-z0-9-]*-agent\b') {
+      Assert $forbids "$($f.Name) names an agent without either spawning it or saying not to - the model will guess"
     }
   }
 }
@@ -1871,6 +1880,41 @@ Test-Case "the loop guard sees EVERY tool, and catches a search spiral" {
   Assert ($bench -match '(?i)per\s+call') "-Bench does not report per-call overhead"
   Assert ($bench -match '(?i)300\s+tool\s+calls') "-Bench does not translate the cost into a whole run"
   & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+}
+
+Test-Case "iterative doc generation stays in the MAIN LOOP, where the gates reach" {
+  # Three consecutive runs died inside a subagent and nowhere else: taskmap-agent 920 identical
+  # `dir ... 2>nul` calls; scribe-agent 947 calls with STORIES.md never written; scribe-agent 1023 identical
+  # `Search **/STORIES.md` calls. Eleven graded runs in the main loop: zero loops.
+  #
+  # The 1023-call run SETTLED the question two releases had left open: the PreToolUse hook does not fire for
+  # a subagent's tool calls. It was the ideal case - identical, consecutive, non-shell, matcher set to every
+  # tool - and not one call was blocked. The tools: frontmatter does not restrain it either; it looped on
+  # Glob, which scribe-agent does not list. So a subagent is a region where NO gate applies, and the two
+  # commands that ITERATE over many items must not run there.
+  foreach ($c in @("stories","taskmap")) {
+    $t = Get-Content (Join-Path $kit "global\commands\$c.md") -Raw
+    Assert ($t -notmatch 'subagent_type') "/$c still delegates to a subagent - that is where all three loops happened"
+    Assert ($t -match '(?i)do\s+(this\s+work\s+)?yourself|do\s+NOT\s+spawn') "/$c does not tell the model to do the work itself"
+    Assert ($t -match '1023') "/$c does not carry the measurement, so a later editor will delegate it again"
+    # one unit at a time, verified after each - the point of doing it here
+    Assert ($t -match '(?i)one\s+(story|unit|at\s+a\s+time)') "/$c does not say one unit at a time"
+    Assert ($t -match 'doc-stats -Findings') "/$c does not verify after each unit"
+    # and it must say to READ the doc rather than search for it: the loop WAS a repeated search
+    Assert ($t -match '(?i)(Read\s+(the\s+)?(design\s+)?doc|DIRECTLY with Read|Read them directly)') "/$c does not say to read the doc directly"
+  }
+  # The one-shot delegations have never looped and stay. If this list ever empties, the kit has lost its
+  # subagents entirely - which is NOT the finding; the finding is about iteration.
+  $oneShot = 0
+  foreach ($c in @("design","document","audit","grade","research")) {
+    $p = Join-Path $kit "global\commands\$c.md"
+    if ((Test-Path $p) -and ((Get-Content $p -Raw) -match 'subagent_type')) { $oneShot++ }
+  }
+  Assert ($oneShot -ge 4) "the one-shot agent delegations disappeared - only ITERATIVE generation was supposed to move"
+  # R32 must record why, or the next maintainer re-delegates it
+  $design = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
+  Assert ($design -match '(?s)R32.*?UNOBSERVABLE') "R32 does not record the subagent finding"
+  Assert ($design -match '(?s)R32.*?1023') "R32 does not carry the measurement"
 }
 
 Test-Case "corpus-consuming agents are told to READ the doc, not search for it" {
