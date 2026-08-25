@@ -67,6 +67,9 @@ Copy-Item (Join-Path $templates "_common\docs\STATUS.md") (Join-Path $proj "docs
 # The research corpus: captured sources live here, their provenance in SOURCES.md. Both exist from the
 # start so /research has somewhere to put things and source-stats has something to check.
 Copy-Item (Join-Path $templates "_common\docs\SOURCES.md") (Join-Path $proj "docs\SOURCES.md") -Force
+# The schema ledger for data the project charts - the counterpart to SOURCES.md. `dad data-stats`
+# checks real files against it; a column that vanishes or a unit that changes is otherwise invisible.
+Copy-Item (Join-Path $templates "_common\docs\DATASETS.md") (Join-Path $proj "docs\DATASETS.md") -Force
 New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 
 # Shared MCP config (RAG over this project's docs).

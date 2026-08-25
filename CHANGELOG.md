@@ -2,6 +2,57 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.25.0 - 2026-08-25
+
+Research projects can now carry DATA, not just documents - for a research site with charts, or a
+permaculture harvest log.
+
+### Added - `dad data-stats` and `docs/DATASETS.md`
+`/research` captures SOURCES: documents, with provenance, policed by `source-stats`. But a site that charts
+anything also needs a DATASET, and nothing in the kit knew what one was. So a column could disappear, a
+unit could change from kg to lb, and a scrape could return 3 rows instead of 300 - while the code still
+compiled, the tests still passed, and every gate stayed green. **A chart drawn from that data is
+confidently wrong, which is worse than one that is obviously broken.**
+
+Same declare-then-verify shape as `SOURCES.md`, which is a proven pattern here. Declare the dataset:
+
+```markdown
+## D001: harvest-log
+- **File:** `data/harvest-log.csv`
+- **Key:** date+bed
+- **Min rows:** 5
+- **Columns:**
+  | column | type | required | range |
+  |---|---|---|---|
+  | date | date | yes | 2020-01-01..2035-12-31 |
+  | kg | number | yes | 0..500 |
+  | method | text | no | broadfork;no-dig;mulch |
+```
+
+`dad data-stats` then FAILs on: the declared file missing, a declared column absent from the file, an empty
+required value, a wrong type, a value outside its range or allowed set, fewer rows than the declared
+minimum, and duplicate `Key` values. It WARNs on a column in the file that nobody declared (drift). A clean
+dataset exits 0 silently - a gate that fires on good input gets switched off.
+
+Verified against a deliberately broken harvest log: it caught all four defect classes plus the drift
+warning, then went silent on the corrected file.
+
+**It checks SHAPE, not TRUTH** - 40 kg logged as 400 passes if 400 is in range. That is the same honest
+limit `source-stats` has, and the tool says so in its own output.
+
+### Added - the corpus indexes data files
+`.csv`, `.tsv` and `.json` join `.pdf`/`.txt`/`.md`, so "what columns does the harvest log have, and what
+does a typical row look like?" is finally answerable from the corpus. For CSV the **header is repeated at
+the top of every chunk** - without that, chunk 7 is a wall of anonymous numbers.
+
+### A trap worth recording
+The allowed-value separator is `;`, not `|`. The first version used `|` and the check silently passed
+everything: the range lives in a markdown TABLE CELL, so a pipe ends the cell and the list was truncated to
+its first option. Precisely the silent-nothing shape this kit keeps finding - the check ran, matched
+nothing, and reported success.
+
+### Tests
+120 cases (was 119).
 ## 0.24.0 - 2026-08-23
 
 0.23.0 banned delegation from `/stories` and `/taskmap` after three subagent loops. That was an

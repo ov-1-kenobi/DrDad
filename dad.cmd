@@ -66,6 +66,7 @@ echo     dad doc-stats -Findings       computed state findings (the model must n
 echo     dad doc-stats -Contract C6    does contract C6 exist? settles it by grep
 echo     dad docs-find "question"      search the indexed corpus from the shell
 echo     dad source-stats              citation integrity for /research
+echo     dad data-stats                dataset integrity: do the files match docs\DATASETS.md?
 echo     dad grade-trends              grade direction over time
 echo     dad doctor                    readiness check; prints the fix commands
 echo.

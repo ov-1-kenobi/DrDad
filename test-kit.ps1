@@ -1671,6 +1671,91 @@ Test-Case "the corpus spans MULTIPLE roots (and does not double-count)" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "data-stats gates DATASET integrity, and the corpus indexes data files" {
+  # /research captures SOURCES (documents with provenance). A research SITE also needs DATA - the rows it
+  # charts - and nothing here knew what a dataset was. A column can vanish, a unit can change from kg to
+  # lb, a scrape can return 3 rows instead of 300, and the code still compiles, the tests still pass, and
+  # every gate stays green. A chart drawn from that is confidently wrong, which is worse than one that is
+  # obviously broken. Same declare-then-verify shape as SOURCES.md/source-stats.
+  $ds = Join-Path $kit "data-stats.ps1"
+  Assert (Test-Path $ds) "data-stats.ps1 is missing"
+  Assert (Test-Path (Join-Path $kit "data-stats.cmd")) "data-stats.cmd wrapper is missing"
+  Assert (Test-Path (Join-Path $kit "templates\_common\docs\DATASETS.md")) "the DATASETS.md template is missing"
+
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"
+    New-Item -ItemType Directory -Force "$p\docs","$p\data" | Out-Null
+    @'
+# Datasets
+
+## D001: harvest-log
+- **File:** `data/harvest-log.csv`
+- **Key:** date+bed
+- **Min rows:** 3
+- **Columns:**
+  | column | type | required | range |
+  |---|---|---|---|
+  | date | date | yes | 2020-01-01..2035-12-31 |
+  | bed | text | yes | |
+  | kg | number | yes | 0..500 |
+  | method | text | no | broadfork;no-dig;mulch |
+'@ | Set-Content "$p\docs\DATASETS.md" -Encoding UTF8
+
+    # every defect class at once
+    @'
+date,bed,kg,method,notes
+2026-06-01,B1,12.4,no-dig,ok
+2026-06-08,B2,,mulch,
+2026-06-15,B1,880,no-dig,
+2026-06-22,B3,4.2,hugelkultur,
+2026-06-01,B1,12.4,no-dig,dupe
+'@ | Set-Content "$p\data\harvest-log.csv" -Encoding UTF8
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p 2>&1 | Out-String
+    Assert ($LASTEXITCODE -eq 1) "a dataset full of defects exited $LASTEXITCODE - it must FAIL"
+    Assert ($out -match "(?i)required but empty")        "an empty required value was not caught"
+    Assert ($out -match "(?i)880 outside")               "an out-of-range value was not caught"
+    Assert ($out -match "(?i)hugelkultur.*not one of")   "a value outside the allowed SET was not caught - note the set separator is ';' because '|' would end the markdown table cell"
+    Assert ($out -match "(?i)duplicate key")             "a duplicate key row was not caught"
+    Assert ($out -match "(?i)WARN.*notes")               "an undeclared column was not reported as drift"
+
+    # a CLEAN dataset must be silent and exit 0 - a gate that fires on good data gets switched off
+    @'
+date,bed,kg,method
+2026-06-01,B1,12.4,no-dig
+2026-06-08,B2,7.5,mulch
+2026-06-15,B3,4.2,broadfork
+'@ | Set-Content "$p\data\harvest-log.csv" -Encoding UTF8
+    $ok = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p 2>&1 | Out-String
+    Assert ($LASTEXITCODE -eq 0) "a clean dataset failed: $ok"
+    Assert ($ok -notmatch 'FAIL') "a clean dataset produced a FAIL"
+
+    # a missing file, and a short load - the silent killers
+    Remove-Item "$p\data\harvest-log.csv" -Force
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "a MISSING declared file did not fail"
+    "date,bed,kg,method`n2026-06-01,B1,1,no-dig" | Set-Content "$p\data\harvest-log.csv" -Encoding UTF8
+    $short = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p 2>&1 | Out-String
+    Assert ($short -match '(?i)declared minimum') "1 row against a declared minimum of 3 was accepted - a partial load looks exactly like this"
+
+    # no ledger at all = not a data project, stay silent
+    Remove-Item "$p\docs\DATASETS.md" -Force
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "a project with no DATASETS.md was failed - it simply declares no data"
+  } finally { Remove-Sandbox $sb }
+
+  # the corpus must actually INDEX data files, or the model cannot answer "what columns does this have?"
+  $rag = Get-Content (Join-Path $kit "local-tools\Rag.cs") -Raw
+  Assert ($rag -match '"\.csv"') "the corpus does not index .csv - a dataset would be invisible to search"
+  Assert ($rag -match '"\.json"') "the corpus does not index .json"
+  # the header must be repeated per chunk, or chunk 7 is a wall of anonymous numbers
+  Assert ($rag -match '(?s)ext == "\.csv".{0,1200}header') "CSV chunks do not carry the header - rows without column names are unsearchable"
+
+  # and it must be honest about what it does NOT do
+  $src = Get-Content $ds -Raw
+  Assert ($src -match '(?i)not.{0,20}TRUE|traceability, not truth|SHAPE, NOT TRUTH') "data-stats does not state that it checks shape, not truth"
+}
+
 Test-Case "source-stats gates citation integrity" {
   # Research has no compiler. It DOES have something checkable: whether the design doc's claims trace to
   # sources that exist and were actually assessed. Verifies traceability, not truth.

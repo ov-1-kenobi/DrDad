@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Numerics.Tensors;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AngleSharp.Html.Parser;
@@ -23,7 +24,7 @@ public class Chunk
 /// </summary>
 public static class Rag
 {
-    static readonly string[] Exts = { ".pdf", ".txt", ".md" };
+    static readonly string[] Exts = { ".pdf", ".txt", ".md", ".csv", ".tsv", ".json" };
     // Multimodal corpus: images are CAPTIONED and audio TRANSCRIBED at index time, and the resulting TEXT
     // is what gets embedded - so a whiteboard photo or a recorded spec discussion becomes searchable with
     // the normal text pipeline. Results are cached per file (see CachedSidecarAsync) so reindexing is cheap.
@@ -226,6 +227,33 @@ public static class Rag
         }
         else if (ext == ".txt")
         {
+            foreach (var c in ChunkText(File.ReadAllText(path), name, null)) yield return c;
+        }
+        else if (ext == ".csv" || ext == ".tsv")
+        {
+            // A dataset is part of the corpus too: "what columns does the harvest log have, and what do
+            // typical rows look like?" is a question the model asks constantly and previously could not
+            // answer, because the index only held .pdf/.txt/.md. Chunking a CSV naively would bury the
+            // header - the single most useful line - somewhere in chunk 1 and nowhere else, so the header
+            // is REPEATED at the top of every chunk. Without that, chunk 7 is a wall of anonymous numbers.
+            var lines = File.ReadAllLines(path);
+            if (lines.Length == 0) yield break;
+            var header = lines[0];
+            const int rowsPerChunk = 40;
+            for (int start = 1; start < lines.Length; start += rowsPerChunk)
+            {
+                var take = Math.Min(rowsPerChunk, lines.Length - start);
+                var sb = new StringBuilder();
+                sb.Append(name).Append(" rows ").Append(start).Append('-').Append(start + take - 1).Append('\n');
+                sb.Append(header).Append('\n');
+                for (int i = start; i < start + take; i++) sb.Append(lines[i]).Append('\n');
+                yield return new Chunk { Source = name, Page = null, Text = sb.ToString() };
+            }
+        }
+        else if (ext == ".json")
+        {
+            // Indexed as text. No parsing: a malformed or unusual JSON file must not break a reindex of
+            // the whole corpus, and for retrieval the raw text is what answers "what shape is this file".
             foreach (var c in ChunkText(File.ReadAllText(path), name, null)) yield return c;
         }
     }

@@ -1,6 +1,6 @@
 # DAD - Design Document Aligned Development
 
-**Version 0.24.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
+**Version 0.25.0** (see [CHANGELOG.md](CHANGELOG.md)). Feature-complete and self-tested - held below 1.0
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 
@@ -78,6 +78,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `ratchet.ps1` / `.cmd` | **Refuses a shrinking verification surface.** Every other gate asks "is X OK now?", which is satisfied by DELETING X. This records tests, contracts, requirements, backlog totals, sources, grade-card bytes and CLAUDE.md's Build/Test commands on each clean close, and blocks the next close if any fell. `-AcceptShrink` on close-unit records a deliberate removal. |
 | `grade-trends.ps1` / `.cmd` | **The computed half of a retrospective**: grade direction over time, units that needed rework, stub cards, and recurring themes across every grade card. `/retro` turns these into at most three proposed convention changes; you approve them. |
 | `source-stats.ps1` / `.cmd` | **Citation-integrity gate** for `/research`: do the design doc's `[Snnn]` citations resolve to sources that exist and were tiered? FAILs on a claim resting on nothing. Verifies traceability, not truth. |
+| `data-stats.ps1` / `.cmd` | **Dataset integrity gate** - the counterpart to `source-stats`. Declare each dataset in `docs/DATASETS.md` (file, key, min rows, columns with type/required/range) and this checks the real `.csv`/`.tsv`/`.json` against it: missing file, missing or undeclared column, empty required value, wrong type, out-of-range or out-of-set value, short row count, duplicate keys. A column that vanishes or a unit that changes from kg to lb is otherwise invisible - the code still compiles and the tests still pass. Checks SHAPE, not truth. |
 | `api-surface.ps1` / `.cmd` | **The signature registry.** Reflects over the project's built assemblies AND its NuGet packages, writing exact public signatures to `docs/API-SURFACE.md` - regenerated after every successful build, so it cannot drift. `-Lookup <Type>` answers one question. A build failure prints the relevant signatures automatically. |
 | `close-unit.ps1` | **Deterministic unit close-out** used by `/build` and `/spec`: ticks the task in TASKS.md, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits, and verifies. Non-zero exit = not closed. Mechanical bookkeeping is scripted because models skip prose checklists. |
 | `voice.py` / `voice.cmd` | **Push-to-talk voice loop** (optional): mic -> faster-whisper (GPU STT) -> headless `claude -p --continue` -> Windows TTS. Run from your project folder; needs `uv` (winget install astral-sh.uv). First run downloads deps + the whisper model; offline after. |
