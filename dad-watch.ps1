@@ -25,6 +25,8 @@
 param(
   [string]$ProjectDir = ".",
   [double]$IdleMinutes = 3,
+  [double]$ReAlarmMinutes = 15,   # how often to re-print the FULL alarm (with beep) during a long silence;
+                                  # between those, a compact dotted tick each poll instead of a re-banner
   [int]$PollSeconds = 15,
   [switch]$NoBeep
 )
@@ -51,26 +53,22 @@ function Get-Newest {
   return [pscustomobject]@{ When = $newest; What = $name; Count = $count }
 }
 
+# The FULL alarm: three lines, not the old twelve-line banner. Printed the FIRST time silence crosses the
+# threshold, and again only on a long re-alarm cadence - not every poll. A warning that repeats in full
+# every interval buries the log and trains you to ignore it.
 function Alarm([double]$idleMin, [string]$lastFile, [datetime]$lastWhen) {
-  Write-Host ""
-  Write-Host "  ############################################################" -ForegroundColor Red
-  Write-Host "  #  NOTHING HAS BEEN WRITTEN FOR $([math]::Round($idleMin,1)) MINUTES" -ForegroundColor Red
-  Write-Host "  ############################################################" -ForegroundColor Red
-  Write-Host "  last write : $lastFile" -ForegroundColor Yellow
-  Write-Host "  at         : $($lastWhen.ToLocalTime().ToString('HH:mm:ss'))" -ForegroundColor Yellow
-  Write-Host ""
-  Write-Host "  If a subagent is running, it may be spiralling. A spiral writes NOTHING." -ForegroundColor Yellow
-  Write-Host "  Three runs were lost this way at 920, 947 and 1023 tool calls." -ForegroundColor Yellow
-  Write-Host ""
-  Write-Host "  GO LOOK AT THE SESSION. If you see the same call repeating, or a" -ForegroundColor Cyan
-  Write-Host "  collapsed 'agent(...)' line whose tool count keeps climbing:" -ForegroundColor Cyan
-  Write-Host "    - interrupt it (Esc / Ctrl+C in the session)" -ForegroundColor Cyan
-  Write-Host "    - then:  dad doc-stats -Findings     (what actually landed?)" -ForegroundColor Cyan
-  Write-Host "  Nothing can break the loop for you - that is why you are being told." -ForegroundColor Cyan
-  Write-Host ""
-  if (-not $NoBeep) {
-    try { foreach ($i in 1..3) { [Console]::Beep(880, 250); Start-Sleep -Milliseconds 120 } } catch { }
-  }
+  Write-Host ("  !! QUIET {0}m - last write '{1}' at {2}. A spiralling subagent writes NOTHING." -f `
+    [math]::Round($idleMin,1), $lastFile, $lastWhen.ToLocalTime().ToString('HH:mm:ss')) -ForegroundColor Red
+  Write-Host "     GO LOOK: if a call repeats or an agent(...) tool count climbs, interrupt it (Esc)," -ForegroundColor Yellow
+  Write-Host "     then run: dad doc-stats -Findings   (nothing can break the loop for you)" -ForegroundColor Yellow
+  if (-not $NoBeep) { try { foreach ($i in 1..3) { [Console]::Beep(880, 250); Start-Sleep -Milliseconds 120 } } catch { } }
+}
+
+# The compact re-nudge: one dotted line with a timecode, printed each poll while silence continues, in
+# place of re-banging the full alarm. This is what "if the last message was the warning, print a dot with a
+# time code" asked for - it keeps the hold legible without eating the screen.
+function Tick([double]$idleMin) {
+  Write-Host ("  . [{0}] still quiet {1}m" -f (Get-Date -Format "HH:mm:ss"), [math]::Round($idleMin,1)) -ForegroundColor DarkGray
 }
 
 Write-Host "== dad watch ==" -ForegroundColor Cyan
@@ -100,11 +98,17 @@ while ($true) {
   $since = if ($lastWhen -gt [datetime]::MinValue) { $lastWhen } else { $startedUtc }
   $idle = ((Get-Date).ToUniversalTime() - $since).TotalMinutes
   if ($idle -ge $IdleMinutes) {
-    # Re-alarm on each further whole interval, so it keeps nagging rather than shouting once at 3 minutes
-    # and then letting the next two hours pass in silence.
-    if ($alarmedAt -eq [datetime]::MinValue -or ((Get-Date).ToUniversalTime() - $alarmedAt).TotalMinutes -ge $IdleMinutes) {
+    # FULL alarm the first time silence crosses the threshold, and again only every -ReAlarmMinutes so a
+    # long spiral still pulls you back with a beep. In between, a compact dotted Tick each poll - so the
+    # last thing on screen updates in place of a re-banner rather than stacking another one.
+    if ($alarmedAt -eq [datetime]::MinValue) {
       Alarm $idle $lastWhat $since
       $alarmedAt = (Get-Date).ToUniversalTime()
+    } elseif (((Get-Date).ToUniversalTime() - $alarmedAt).TotalMinutes -ge $ReAlarmMinutes) {
+      Alarm $idle $lastWhat $since                          # periodic loud reminder (with beep)
+      $alarmedAt = (Get-Date).ToUniversalTime()
+    } else {
+      Tick $idle                                            # quiet dotted nudge in between
     }
   } else {
     Write-Host ("  [{0}] quiet {1}m" -f (Get-Date -Format "HH:mm:ss"), [math]::Round($idle,1)) -ForegroundColor DarkGray

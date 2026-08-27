@@ -2,6 +2,20 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.26.1 - 2026-08-27
+
+`dad watch` was too loud. The alarm was a twelve-line banner, and it re-printed in full on every re-alarm
+interval - so a long quiet hold buried the log under repeated banners, which is exactly how a warning
+trains you to ignore it.
+
+- The alarm is now **three lines** (quiet duration + last write, what to look for, what to run).
+- After it fires once, each further poll prints a **compact dotted tick** - `. [HH:mm:ss] still quiet Nm` -
+  in place of re-banging the banner. The last line updates the hold in place instead of stacking.
+- The FULL alarm (with beep) re-fires only every `-ReAlarmMinutes` (default 15), so a genuinely long
+  spiral still pulls you back, without shouting every 15 seconds.
+- Progress re-arms it: the next silence after a write gets a fresh full alarm.
+
+Behaviour verified: one full alarm, then ticks, then a fresh full alarm after a write.
 ## 0.26.0 - 2026-08-27
 
 The best CMS run yet - a real `src/` with controllers, EF Core migrations and integration tests, `/stories`

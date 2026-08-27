@@ -2039,8 +2039,13 @@ Test-Case "the watchdog makes a spiral loud in minutes, and never writes to the 
       $out = (Receive-Job $job) -join "`n"
     } finally { Stop-Job $job -ErrorAction SilentlyContinue; Remove-Job $job -Force -ErrorAction SilentlyContinue }
     Assert ($out -match 'wrote docs\\STORIES\.md') "the watchdog did not notice a write - it would alarm during healthy work"
-    Assert ($out -match '(?i)NOTHING HAS BEEN WRITTEN') "the watchdog never alarmed on silence - that is its whole job"
+    Assert ($out -match '(?i)QUIET') "the watchdog never alarmed on silence - that is its whole job"
     Assert ($out -match '(?i)doc-stats') "the alarm does not tell the human what to run next"
+    # after the first full alarm, repeats must be COMPACT dotted ticks, not the whole banner again -
+    # a warning that re-bangs in full every poll buries the log (the reason for this change)
+    Assert ($out -match '(?im)^\s*\.\s*\[\d\d:\d\d:\d\d\]\s*still quiet') "repeats are not compact ticks - the banner is re-printing in full"
+    $fullAlarms = ([regex]::Matches($out, 'GO LOOK')).Count
+    Assert ($fullAlarms -le 2) "the full alarm printed $fullAlarms times in a short window - it should fire once, then tick"
   } finally { Remove-Sandbox $sb }
 }
 
