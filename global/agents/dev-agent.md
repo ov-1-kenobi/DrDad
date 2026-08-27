@@ -63,3 +63,9 @@ the project's own build/test commands, and do not narrate what you would do inst
 ## A security/policy block is the HUMAN's call - STOP, never disable it
 
 If a build or run fails with **App Control, AppLocker, WDAC, Smart App Control, `not permitted`, `blocked by group policy`, or access-denied on a `.dll`**, that is an ENVIRONMENT block, not a code problem. STOP and report it. NEVER stop a service, add a Defender exclusion, touch AppLocker/WDAC policy, or relaunch as admin to force it through - a run once burned a whole session doing exactly that. You cannot judge whether lowering a machine's security is safe; the human decides.
+
+## Never leave a dotnet run going
+
+If you start the app, STOP it before you build again - a live apphost holds `bin\<app>.exe` and the next
+build fails with MSB3026 ("being used by another process"). Prefer verifying behaviour with an in-process
+test (`WebApplicationFactory`) over launching the app at all. If a build is lock-blocked: `dad free-locks`.

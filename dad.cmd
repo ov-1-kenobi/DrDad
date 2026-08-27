@@ -79,6 +79,7 @@ echo   Closing work out (these VERIFY - they build, test, and commit):
 echo     dad close-unit -Id T1.1 -Title "short title"
 echo     dad ratchet                   has the verification surface shrunk?
 echo     dad recover-lost              what did a rewrite drop? -Restore puts it back
+echo     dad free-locks                clear a build lock a left-over app process holds (MSB3026)
 echo     dad api-surface -Lookup Type  real signatures from the compiled assembly
 echo.
 echo   Project lifecycle:

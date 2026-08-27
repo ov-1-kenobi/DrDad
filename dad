@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# dad - POSIX shim so `dad <subcommand>` works in Git Bash / WSL, matching dad.cmd for cmd + PowerShell.
+#
+# Why this exists: cmd and PowerShell find `dad.cmd` on PATH via PATHEXT, but bash does NOT append .cmd to
+# a bare name - so `dad doctor` in Git Bash is "command not found" even with the kit on PATH. A real run hit
+# exactly that. This extensionless script is what bash resolves; it dispatches to the same .ps1/.cmd the
+# .cmd wrapper does. Keep it LF (a CRLF shebang breaks bash).
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ "$#" -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+  # reuse the .cmd's usage text so the two never drift
+  exec "$here/dad.cmd"
+fi
+
+sub="$1"; shift
+# Prefer a .ps1 (run via powershell, which Git Bash finds and which converts POSIX path args to Windows).
+for cand in "$here/$sub.ps1" "$here/dad-$sub.ps1"; do
+  if [ -f "$cand" ]; then
+    exec powershell -NoProfile -ExecutionPolicy Bypass -File "$cand" "$@"
+  fi
+done
+# Fall back to a .cmd-only subcommand (apikey, reindex, use-fast, use-quality, voice).
+for cand in "$here/$sub.cmd" "$here/dad-$sub.cmd"; do
+  if [ -f "$cand" ]; then
+    exec "$cand" "$@"
+  fi
+done
+echo "dad: unknown subcommand '$sub'" >&2
+exec "$here/dad.cmd"

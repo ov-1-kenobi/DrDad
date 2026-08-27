@@ -93,6 +93,36 @@ if ($Full) {
   }
 }
 
+# Reverse install's cross-shell wiring: the kit dir on PATH, DAD_HOME, and the ~/.bashrc block.
+# $PSScriptRoot is the kit dir being uninstalled.
+Write-Host "== Removing cross-shell wiring (PATH, DAD_HOME, ~/.bashrc block) ==" -ForegroundColor Cyan
+$root = $PSScriptRoot
+try {
+  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  if ($userPath) {
+    $kept = ($userPath -split ';' | Where-Object { $_ -and ($_.TrimEnd('\') -ine $root.TrimEnd('\')) })
+    $new = ($kept -join ';')
+    if ($new -ne $userPath) { [Environment]::SetEnvironmentVariable("Path", $new, "User"); Write-Host "  removed $root from USER PATH" }
+  }
+} catch { Write-Host "  could not edit PATH: $($_.Exception.Message)" -ForegroundColor Yellow }
+try {
+  if ([Environment]::GetEnvironmentVariable("DAD_HOME", "User")) {
+    [Environment]::SetEnvironmentVariable("DAD_HOME", $null, "User"); Write-Host "  unset DAD_HOME (User)"
+  }
+} catch { }
+try {
+  $bashHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+  $bashrc = Join-Path $bashHome ".bashrc"
+  if (Test-Path $bashrc) {
+    $t = [System.IO.File]::ReadAllText($bashrc)
+    $stripped = [regex]::Replace($t, "(?s)\r?\n?# >>> DAD-kit >>>.*?# <<< DAD-kit <<<\r?\n?", "`n")
+    if ($stripped -ne $t) {
+      [System.IO.File]::WriteAllText($bashrc, ($stripped -replace "`r`n","`n"), (New-Object System.Text.UTF8Encoding($false)))
+      Write-Host "  removed the DAD-kit block from ~/.bashrc"
+    }
+  }
+} catch { }
+
 Write-Host "`n== DONE ==" -ForegroundColor Green
 Write-Host "Manual (not removed): the kit folder, npm '@anthropic-ai/claude-code', the VS Code extension." -ForegroundColor Green
 Write-Host "Restart Claude Code so it stops loading the removed commands/agents." -ForegroundColor Green

@@ -2,6 +2,35 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.27.0 - 2026-08-27
+
+Two fixes from the best CMS run to date (a real ASP.NET Core app, 15 of 44 tasks closed before it snagged).
+
+### Added - build-lock recovery (`dad free-locks`, auto in close-unit)
+A left-over apphost - a `dotnet run` nobody stopped - held `bin\app.exe`, so the next `dotnet build` failed
+with **MSB3026 / "being used by another process" SEVEN times**, and the model could not clear it. `dad
+free-locks` clears it, and `close-unit` now calls it automatically on a lock signature and retries the
+build once before failing.
+
+It is **safe on any machine**: it only kills processes whose executable runs from THIS project's own folder,
+or `dotnet` processes whose command line names this project - never by image name, so it cannot touch
+Ollama, Claude Code, the MCP server, or your other work. It runs `dotnet build-server shutdown` first
+(harmless), and refuses to operate on a root or home path. `qa-agent` and `dev-agent` are now told to test
+IN-PROCESS (`WebApplicationFactory`) rather than launching the app and leaving it running - the root cause.
+
+### Added - the kit reaches EVERY shell
+`dad.cmd` works in cmd and PowerShell (PATHEXT), but bash does not append `.cmd` to a bare name, so `dad
+doctor` in Git Bash was "command not found" - which a real run hit. Now:
+- an extensionless **`dad` bash shim** (LF) that Git Bash resolves, dispatching to the same scripts;
+- **`DAD_HOME`** set as a Windows USER variable, inherited by cmd, PowerShell, AND Git Bash;
+- an idempotent, clearly-marked block appended to `~/.bashrc` (exports `DAD_HOME`, adds it to PATH) for
+  interactive Git Bash with a custom profile.
+`uninstall.ps1` reverses all three (PATH entry, `DAD_HOME`, the `.bashrc` block). Re-running install never
+stacks a second block - checked deterministically.
+
+### Tests
+118 cases (was 117): free-locks is project-scoped and cleared-then-retried by close-unit; the shim exists,
+is LF, and dispatches; DAD_HOME + the `.bashrc` block are written and are idempotent and symmetric.
 ## 0.26.1 - 2026-08-27
 
 `dad watch` was too loud. The alarm was a twelve-line banner, and it re-printed in full on every re-alarm

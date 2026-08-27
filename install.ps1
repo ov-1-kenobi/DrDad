@@ -142,6 +142,35 @@ try {
   Write-Host "  could not update PATH: $($_.Exception.Message)" -ForegroundColor Yellow
   Write-Host "  add $root to PATH by hand, or call the wrappers by full path" -ForegroundColor Yellow
 }
+
+# DAD_HOME: a named handle on the kit, set as a Windows USER variable so EVERY Windows-launched shell -
+# cmd, PowerShell, AND Git Bash (which inherits the Windows environment) - sees it. Projects and scripts
+# can reference it without hard-coding the install path.
+try {
+  [Environment]::SetEnvironmentVariable("DAD_HOME", $root, "User")
+  $env:DAD_HOME = $root
+  Write-Host "  set DAD_HOME=$root (User; inherited by cmd, PowerShell, and Git Bash)" -ForegroundColor Green
+} catch { Write-Host "  could not set DAD_HOME: $($_.Exception.Message)" -ForegroundColor Yellow }
+
+# Git Bash reach. The Bash TOOL runs non-interactively and inherits the Windows PATH above, so a NEW
+# session already finds the `dad` shim. But an INTERACTIVE Git Bash whose ~/.bashrc rewrites PATH would
+# lose it - so drop an idempotent, clearly-marked, removable block there too. Bash form of the path
+# (D:\x -> /d/x); written LF (a CRLF .bashrc breaks bash).
+try {
+  $bashHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+  $bashrc = Join-Path $bashHome ".bashrc"
+  $bashRoot = '/' + $root.Substring(0,1).ToLower() + ($root.Substring(2) -replace '\\','/')
+  $begin = "# >>> DAD-kit >>>"; $end = "# <<< DAD-kit <<<"
+  $block = "$begin`nexport DAD_HOME=`"$bashRoot`"`ncase `":`$PATH:`" in *`":`$DAD_HOME:`"*) ;; *) export PATH=`"`$DAD_HOME:`$PATH`";; esac`n$end`n"
+  $existing = if (Test-Path $bashrc) { [System.IO.File]::ReadAllText($bashrc) } else { "" }
+  # strip any prior managed block, then append the fresh one (idempotent)
+  $stripped = [regex]::Replace($existing, "(?s)\r?\n?" + [regex]::Escape($begin) + ".*?" + [regex]::Escape($end) + "\r?\n?", "`n")
+  $stripped = $stripped.TrimEnd("`r","`n")
+  $out = if ($stripped) { $stripped + "`n`n" + $block } else { $block }
+  [System.IO.File]::WriteAllText($bashrc, ($out -replace "`r`n","`n"), (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host "  updated $bashrc (DAD-kit block: exports DAD_HOME + adds it to PATH for interactive Git Bash)" -ForegroundColor Green
+} catch { Write-Host "  could not update ~/.bashrc (Git Bash): $($_.Exception.Message) - not fatal; the Windows PATH already covers the Bash tool" -ForegroundColor Yellow }
+
 Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
 & (Join-Path $root "ollama-tuning.ps1")
 

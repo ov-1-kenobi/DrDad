@@ -1,6 +1,6 @@
 # DAD-kit - Design Document Aligned Development
 
-**Version 0.26.1** - local, offline, agentic software development on your own GPU.
+**Version 0.27.0** - local, offline, agentic software development on your own GPU.
 
 DAD-kit runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
@@ -20,7 +20,7 @@ This is **pre-1.0 and candid about it.**
   sabotaged itself and the deterministic check that stopped it.
 - **A full `/design -> /build -> close` has not yet completed on a local model without human repair.** The
   best run to date produced a real ASP.NET Core app - controllers, EF Core migrations, integration tests,
-  9 of 44 tasks closed - before an external Windows policy blocked test execution. Getting one clean,
+  15 of 44 tasks closed - before an external Windows policy blocked test execution. Getting one clean,
   reproducible end-to-end run is the current goal, in the open.
 - **Windows-first.** The scripts are PowerShell + `.cmd`. A cross-platform port is not done.
 

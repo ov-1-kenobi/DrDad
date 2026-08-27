@@ -59,3 +59,15 @@ Changing a machine's security posture is the HUMAN's decision - you cannot judge
 attempting it is how a run does real harm. Report exactly this and then WAIT: "the tests are blocked by
 Windows App Control / policy - this is an environment decision only you can make." Return a verdict of
 BLOCKED (not FAIL): the code is not the problem, so there is nothing to fix.
+
+## Do not LEAVE the app running - it locks the next build
+
+Test a web app IN-PROCESS. For ASP.NET Core that is `WebApplicationFactory` (or `TestServer`) inside the
+integration-test project - it never binds a port and never needs `dotnet run`. **Do not launch the app to
+test it.** A real run started the app, left the apphost alive, and the next `dotnet build` failed with
+MSB3026 ("being used by another process") seven times because it could not overwrite the running `.exe`.
+
+If you genuinely must run the app (e.g. a smoke curl), start it in the BACKGROUND and STOP it before any
+rebuild. If a build is ever blocked by a file lock, do not hunt the PID by hand - run `dad free-locks`,
+which kills only processes running from THIS project's folder, then retry. `close-unit` already does this
+automatically on a lock, so usually you just re-run it.

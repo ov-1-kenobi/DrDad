@@ -337,6 +337,49 @@ Test-Case "ONE shell-neutral entry point: dad <subcommand>, from any shell" {
   Assert ($usesDad.Count -ge 10) "only $($usesDad.Count) commands invoke 'dad' - the migration did not land"
 }
 
+Test-Case "the kit reaches EVERY shell: dad shim + DAD_HOME + PATH, install/uninstall symmetric" {
+  # cmd/PowerShell find dad.cmd via PATHEXT; bash does NOT append .cmd to a bare name, so `dad doctor` in
+  # Git Bash was "command not found" on a real run even with the kit on PATH. The fix is an extensionless
+  # `dad` bash shim, a DAD_HOME variable every Windows-launched shell inherits, and the kit on PATH.
+  $shim = Join-Path $kit "dad"
+  Assert (Test-Path $shim) "the extensionless dad bash shim is missing - Git Bash cannot resolve bare dad"
+  $bytes = [System.IO.File]::ReadAllBytes($shim)
+  Assert ($bytes -notcontains 13) "the dad shim has CR bytes - a CRLF shebang breaks bash"
+  $shimText = [System.Text.Encoding]::ASCII.GetString($bytes)
+  Assert ($shimText.StartsWith("#!/usr/bin/env bash")) "the dad shim has no bash shebang"
+  Assert ($shimText -match 'powershell -NoProfile -ExecutionPolicy Bypass -File') "the shim does not dispatch .ps1 subcommands"
+  Assert ($shimText -match '\$sub\.cmd') "the shim has no .cmd fallback for cmd-only subcommands"
+
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  Assert ($inst -match 'SetEnvironmentVariable\("DAD_HOME"') "install does not set DAD_HOME"
+  Assert ($inst.Contains('# >>> DAD-kit >>>')) "install does not write a managed ~/.bashrc block"
+  Assert ($inst.Contains('.ToLower()')) "install does not convert the kit path to bash form for .bashrc"
+
+  $unin = Get-Content (Join-Path $kit "uninstall.ps1") -Raw
+  Assert ($unin.Contains('DAD_HOME')) "uninstall does not remove DAD_HOME"
+  Assert ($unin.Contains('# >>> DAD-kit >>>')) "uninstall does not strip the ~/.bashrc block"
+  Assert ($unin.Contains('USER PATH')) "uninstall does not remove the kit from PATH"
+
+  # IDEMPOTENCY, checked deterministically: the exact strip+append install uses must not stack blocks when
+  # run twice. Replicate it on a fixture. (Single-quoted markers so PowerShell does not read >>> as a
+  # redirection.)
+  $bMark = '# >>> DAD-kit >>>'; $eMark = '# <<< DAD-kit <<<'
+  $blk = $bMark + "`n" + 'export DAD_HOME="/d/x"' + "`n" + $eMark + "`n"
+  $rx = "(?s)\r?\n?" + [regex]::Escape($bMark) + ".*?" + [regex]::Escape($eMark) + "\r?\n?"
+  function Apply($existing) {
+    $s = [regex]::Replace($existing, $rx, "`n").TrimEnd("`r","`n")
+    if ($s) { return $s + "`n`n" + $blk } else { return $blk }
+  }
+  $once = Apply 'export FOO=1'
+  $twice = Apply $once
+  $blockCount = ([regex]::Matches($twice, [regex]::Escape($bMark))).Count
+  Assert ($blockCount -eq 1) "re-install stacked a second DAD-kit block in ~/.bashrc (found $blockCount)"
+  Assert ($twice.Contains('export FOO=1')) "the .bashrc rewrite dropped the user's own lines"
+  $removed = [regex]::Replace($twice, $rx, "`n")
+  Assert (-not $removed.Contains('DAD-kit')) "uninstall's strip left the block behind"
+  Assert ($removed.Contains('export FOO=1')) "uninstall's strip removed the user's own lines"
+}
+
 Test-Case "line endings are consistent per file (LF, CRLF for batch)" {
   # 27 of the kit's text files held BOTH CRLF and LF. Every one was a file edited by writing CRLF strings
   # into an LF file - all inside a single shell, so this was never a shell-mixing problem. What it broke:
@@ -2838,6 +2881,64 @@ Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
     Assert ($LASTEXITCODE -eq 0) "rejected a real grade card"
     Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE"
   } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "a build FILE-LOCK is cleared (project-scoped) and the build retried" {
+  # Measured: a left-over apphost (a `dotnet run` nobody stopped) held bin\app.exe, so `dotnet build` failed
+  # with MSB3026 / "being used by another process" seven times and the model could not clear it. free-locks
+  # kills only processes running from THIS project's folder - safe on any machine - and close-unit clears
+  # the lock and retries the build once before declaring failure.
+  $fl = Join-Path $kit "free-locks.ps1"
+  Assert (Test-Path $fl) "free-locks.ps1 is missing"
+  Assert (Test-Path (Join-Path $kit "free-locks.cmd")) "free-locks.cmd wrapper is missing"
+
+  # SAFETY is structural: it must scope by PROJECT PATH, never kill by image name alone (that could hit
+  # Ollama, Claude Code, or the user's other work). Assert the scoping is in the source and no blanket kill.
+  $src = Get-Content $fl -Raw
+  Assert ($src -match 'StartsWith\(\$projPrefix') "free-locks does not scope kills to the project path"
+  Assert ($src -notmatch 'Stop-Process\s+-Name') "free-locks kills by image NAME - that could hit unrelated processes"
+  Assert ($src -match '(?i)REFUS') "free-locks has no guard against a too-broad project path"
+
+  # refuses a shallow / non-project path
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $fl -ProjectDir $env:SystemRoot 2>&1 | Out-Null
+  Assert ($LASTEXITCODE -eq 2) "free-locks operated on a system path - the guard failed"
+
+  # clean project, nothing running -> nothing to free, exit 0
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Project: t" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $fl -ProjectDir $p 2>&1 | Out-String
+    Assert ($LASTEXITCODE -eq 0) "free-locks failed on a clean project"
+    Assert ($out -match '(?i)nothing to free') "free-locks did not report a clean project cleanly"
+
+    # close-unit: a build that reports MSB3026 must trigger the clear-and-retry path, and (still failing)
+    # report the lock specifically rather than the generic 'fix the build'.
+    if ($haveGit) {
+      "# Project: t`n`n## Build / test`n- Build: ``cmd /c ""echo error MSB3026: could not copy app.exe - being used by another process & exit 1""```n- Test:  ``exit 0``" |
+        Set-Content "$p\CLAUDE.md" -Encoding UTF8
+      "# Tasks`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+      "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+      Push-Location $p
+      $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+      git init -q; git config core.autocrlf false
+      git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+      $ErrorActionPreference = $prev; Pop-Location
+      $cu = Join-Path $kit "close-unit.ps1"
+      $co = & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "a" -ProjectDir $p -NoReindex 2>&1 | Out-String
+      Assert ($LASTEXITCODE -ne 0) "close-unit closed a unit whose build stayed locked"
+      Assert ($co -match '(?i)FILE LOCK') "close-unit did not recognise the lock signature"
+      Assert ($co -match '(?i)retrying the build') "close-unit did not retry the build after clearing"
+      Assert ($co -match '(?i)free-locks|Still locked') "close-unit did not point at the lock remedy"
+    }
+  } finally { Remove-Sandbox $sb }
+
+  # the agents that run builds must carry the prevention rule (test in-process; do not leave the app up)
+  foreach ($f in @("global\agents\qa-agent.md","global\agents\dev-agent.md")) {
+    $t = Get-Content (Join-Path $kit $f) -Raw
+    Assert ($t -match '(?i)free-locks') "$f does not mention free-locks"
+    Assert ($t -match '(?i)in-process|WebApplicationFactory|leave.{0,20}running|dotnet run') "$f does not warn against leaving the app running"
+  }
 }
 
 Test-Case "an environment block is named as such, and security-tampering is forbidden" {

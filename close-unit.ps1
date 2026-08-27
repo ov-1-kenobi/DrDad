@@ -214,10 +214,27 @@ if (-not $SkipVerify) {
   } else {
     Write-Host "[close-unit] build: $cmd" -ForegroundColor Cyan
     $r = Invoke-Verify $cmd
+    # A FILE-LOCK failure is not a code failure: a left-over apphost (a `dotnet run` nobody stopped) holds
+    # the output DLL/exe, so the build cannot overwrite it - MSB3026 / "being used by another process". A
+    # real run hit this seven times and could not clear it. Clear the project-owned lock and retry ONCE
+    # before declaring failure. free-locks is scoped to processes running from THIS project's own folder,
+    # so it is safe to invoke automatically.
+    if ($r.Code -ne 0 -and $r.Output -match '(?i)MSB3026|being used by another process|cannot access the file.{0,40}\.(dll|exe)|locked by') {
+      Write-Host "[close-unit] build blocked by a FILE LOCK (a left-over app process holds the output). Clearing it..." -ForegroundColor Yellow
+      $fl = Join-Path $kit "free-locks.ps1"
+      if (Test-Path $fl) { & powershell -NoProfile -ExecutionPolicy Bypass -File $fl -ProjectDir $proj 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray } }
+      Write-Host "[close-unit] retrying the build once..." -ForegroundColor Yellow
+      $r = Invoke-Verify $cmd
+    }
     if ($r.Code -ne 0) {
       Write-Host "[close-unit] BUILD FAILED (exit $($r.Code)) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
       Show-Tail $r.Output
       if (Show-EnvBlock $r.Output) { exit 1 }        # environmental: do not offer "fix the build"
+      if ($r.Output -match '(?i)MSB3026|being used by another process') {
+        Write-Host "             Still locked after clearing project processes. A process OUTSIDE this project" -ForegroundColor Red
+        Write-Host "             may hold the file (an editor, a debugger). Close it, or run: dad free-locks" -ForegroundColor Red
+        exit 1
+      }
       Show-Signatures $r.Output
       Write-Host "             Fix the build, then re-run. (-SkipVerify overrides, but then 'done' means nothing.)" -ForegroundColor Red
       exit 1
