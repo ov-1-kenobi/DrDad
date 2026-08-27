@@ -40,3 +40,22 @@ Output: verdict (PASS/FAIL), the evidence, and the checklist (if any).
 
 **Act now:** write and run the tests yourself - do not ask permission for read-only steps or the project's
 test command, and do not narrate what you would do instead of doing it.
+
+## When Windows REFUSES to run the tests, STOP - never disable security
+
+If the test command fails with **App Control, Smart App Control, AppLocker, WDAC, "not permitted to run",
+"blocked by group policy", or access-denied on a `.dll`**, that is an ENVIRONMENT block, not a code
+failure. The code may be perfect; the machine will not execute the assembly as configured.
+
+**STOP and report it as an environment blocker. Do not attempt to work around it.** Specifically, NEVER:
+- stop or disable a service (Application Identity / `AppIDSvc`, or any other),
+- add Windows Defender exclusions or change any Defender setting,
+- modify AppLocker / WDAC / Smart App Control policy,
+- relaunch as administrator to force it through,
+- move the build to a different folder hoping to dodge the policy.
+
+Measured: a qa-agent with no instruction for this case spent an entire session trying every one of those.
+Changing a machine's security posture is the HUMAN's decision - you cannot judge whether it is safe, and
+attempting it is how a run does real harm. Report exactly this and then WAIT: "the tests are blocked by
+Windows App Control / policy - this is an environment decision only you can make." Return a verdict of
+BLOCKED (not FAIL): the code is not the problem, so there is nothing to fix.

@@ -94,6 +94,38 @@ function Show-Signatures([string]$buildOutput) {
   }
 }
 
+# An ENVIRONMENT block is not a code failure, and the difference matters enormously to what happens next.
+# Measured: qa-agent hit Windows App Control refusing to run the built test DLL, and - with no instruction
+# for this case - spent the session trying to STOP the Application Identity service, add Defender
+# exclusions, and disable AppLocker/WDAC. That is the worst possible response: it attacks the machine's
+# security instead of reporting a wall it cannot (and must not) climb. A build/test failure that carries
+# one of these signatures is environmental. Say so loudly, tell the human it is THEIRS to resolve, and
+# forbid the security-tampering path in the same breath. Returns $true if it printed a block notice.
+function Show-EnvBlock([string]$output) {
+  $sig = '(?i)(App ?Control|AppLocker|WDAC|Windows Defender Application|Smart App Control|' +
+         'not permitted to (run|load)|blocked by (group |)policy|0x800704C8|0x80070005|' +
+         'ERROR_ACCESS_DENIED|program is blocked by group policy|this program is blocked|' +
+         'operation.{0,20}not permitted|access is denied.{0,40}\.dll)'
+  if ($output -notmatch $sig) { return $false }
+  Write-Host ""
+  Write-Host "[close-unit] THIS IS AN ENVIRONMENT BLOCK, NOT A CODE FAILURE." -ForegroundColor Magenta
+  Write-Host "  Windows refused to run the built assembly (App Control / AppLocker / a policy / access denied)." -ForegroundColor Magenta
+  Write-Host "  The code may be fine; the machine will not execute it as configured." -ForegroundColor Magenta
+  Write-Host ""
+  Write-Host "  DO NOT attempt to work around this. Specifically, DO NOT:" -ForegroundColor Yellow
+  Write-Host "    - stop or disable any service (Application Identity / AppIDSvc, etc.)" -ForegroundColor Yellow
+  Write-Host "    - add Windows Defender exclusions or change Defender settings" -ForegroundColor Yellow
+  Write-Host "    - modify AppLocker / WDAC / Smart App Control policy" -ForegroundColor Yellow
+  Write-Host "    - relaunch as administrator to force it through" -ForegroundColor Yellow
+  Write-Host "  Changing a machine's security posture is the HUMAN's decision, never the agent's, and a" -ForegroundColor Yellow
+  Write-Host "  local model has no way to judge whether it is safe. Trying it is how a run does real harm." -ForegroundColor Yellow
+  Write-Host ""
+  Write-Host "  STOP and report to the human: 'the build is blocked by Windows App Control / policy - this" -ForegroundColor Cyan
+  Write-Host "  is an environment decision only you can make.' Then wait. The unit is NOT closed, but nothing" -ForegroundColor Cyan
+  Write-Host "  is wrong with the code, so do not 'fix' it." -ForegroundColor Cyan
+  return $true
+}
+
 # How many tests actually ran? -1 = could not tell. A story must never close on 0 or unknown: mediamotor
 # had six test projects missing from the .sln, so 'dotnet test' printed "Build succeeded" and ran NOTHING.
 function Get-TestCount([string]$out) {
@@ -185,6 +217,7 @@ if (-not $SkipVerify) {
     if ($r.Code -ne 0) {
       Write-Host "[close-unit] BUILD FAILED (exit $($r.Code)) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
       Show-Tail $r.Output
+      if (Show-EnvBlock $r.Output) { exit 1 }        # environmental: do not offer "fix the build"
       Show-Signatures $r.Output
       Write-Host "             Fix the build, then re-run. (-SkipVerify overrides, but then 'done' means nothing.)" -ForegroundColor Red
       exit 1
@@ -214,6 +247,7 @@ if (-not $SkipVerify) {
       if ($t.Code -ne 0) {
         Write-Host "[close-unit] TESTS FAILED (exit $($t.Code)) - story $predictedStory is NOT closed. Nothing changed." -ForegroundColor Red
         Show-Tail $t.Output
+        [void](Show-EnvBlock $t.Output)             # a refusal to RUN the test DLL lands here, not a real failure
         exit 1
       }
       if ($count -eq 0) {

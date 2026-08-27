@@ -44,6 +44,11 @@ denied, no such file - **STOP and tell me the shell is unavailable.** Do not pro
 below this line depends on running the build, the tests and `close-unit`; a `/build` that cannot reach a
 shell can only produce unverified code, and it will produce a great deal of it before anyone notices.
 
+**If close-unit or qa-agent reports an ENVIRONMENT BLOCK (App Control / AppLocker / WDAC / policy /
+access-denied on a .dll):** relay it to me verbatim and STOP. Do NOT send dev-agent back to 'fix' it - the
+code is not the problem - and do NOT let any agent disable a service, add a Defender exclusion, or change
+security policy. Lowering the machine's security is my decision, not the loop's.
+
 Read `docs/STATUS.md` if present to orient. The docs are indexed - look things up with
 `docs-find.ps1 "<question>"` (a shell command; `search_datasheets` is the same corpus) rather than
 re-reading whole files. Nine graded runs called the MCP tool zero times and the shell constantly, so

@@ -2835,6 +2835,53 @@ Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "an environment block is named as such, and security-tampering is forbidden" {
+  # Measured, CMS run: Windows App Control refused to run the built test DLL. qa-agent, with no instruction
+  # for this case, spent the session trying to STOP the Application Identity service, add Defender
+  # exclusions, and disable AppLocker/WDAC. A build/test failure carrying that signature is ENVIRONMENTAL,
+  # not a code failure, and the response must be STOP-and-report, never lower the machine's security.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    # a build command that PRINTS the App Control signature and fails, so close-unit's build path sees it
+    "# Project: t`n`n## Build / test`n- Build: ``cmd /c ""echo This program is blocked by Windows App Control policy & exit 1""```n- Test:  ``exit 0``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "# Tasks`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "a" -ProjectDir $p -NoReindex 2>&1 | Out-String
+    Assert ($LASTEXITCODE -ne 0) "close-unit closed a unit whose build was blocked"
+    Assert ($out -match '(?i)ENVIRONMENT BLOCK') "a policy block was reported as an ordinary build failure"
+    Assert ($out -match '(?is)(disable|stop).{0,80}service') "the block notice does not forbid stopping a service"
+    Assert ($out -match '(?i)Defender') "the block notice does not forbid Defender exclusions"
+    Assert ($out -match '(?i)human') "the block notice does not say it is the human's decision"
+    # and it must NOT offer the ordinary 'fix the build' advice, which sends the model back to churn on code
+    Assert ($out -notmatch '(?i)Fix the build, then re-run') "it told the model to fix code for an environment block"
+
+    # a NORMAL build failure must still get the ordinary path, not be mislabelled as environmental
+    "# Project: t`n`n## Build / test`n- Build: ``cmd /c ""echo error CS1002 syntax & exit 1""```n- Test:  ``exit 0``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Push-Location $p; git add -A; git -c user.name=t -c user.email=t@t commit -q -m b2; Pop-Location
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "a" -ProjectDir $p -NoReindex 2>&1 | Out-String
+    Assert ($out2 -notmatch '(?i)ENVIRONMENT BLOCK') "an ordinary compile error was mislabelled as an environment block"
+    Assert ($out2 -match '(?i)Fix the build') "an ordinary build failure lost its normal guidance"
+  } finally { Remove-Sandbox $sb }
+
+  # the prose surfaces must carry the rule too - close-unit is the gate, but the agents act before it runs
+  foreach ($f in @("global\agents\qa-agent.md","global\agents\dev-agent.md","global\commands\build.md")) {
+    $t = Get-Content (Join-Path $kit $f) -Raw
+    Assert ($t -match '(?i)App Control|AppLocker|WDAC') "$f does not mention the security-block signature"
+    Assert ($t -match '(?i)(never|do not|not).{0,60}(disable|stop|exclusion|admin|policy)') "$f does not forbid the security-tampering workaround"
+  }
+}
+
 Test-Case "close-unit REFUSES to close a unit whose build fails" {
   # The failure this guards: 5 stories DONE, 6 tasks ticked, 4 checkpoint commits - over a build with 21
   # errors and zero tests ever run. Bookkeeping must never outrun verification.

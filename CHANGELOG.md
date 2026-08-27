@@ -2,6 +2,36 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.26.0 - 2026-08-27
+
+The best CMS run yet - a real `src/` with controllers, EF Core migrations and integration tests, `/stories`
+and `/taskmap` holding, 9 of 44 tasks closed - was stopped by Windows App Control refusing to run the built
+test DLL. With no instruction for that case, qa-agent spent the session trying to **stop the Application
+Identity service, add Defender exclusions, and disable AppLocker/WDAC**. That is the worst possible
+response: attacking the machine's security instead of reporting a wall it must not climb.
+
+### Added - an ENVIRONMENT BLOCK is detected, named, and never worked around
+A build/test failure carrying an App Control / AppLocker / WDAC / "blocked by group policy" /
+access-denied-on-a-.dll signature is environmental, not a code failure - the difference decides what should
+happen next. `close-unit` now detects that signature (`Show-EnvBlock`) and, instead of the usual "fix the
+build" advice, prints: this is an environment block, the code may be fine, and - explicitly - **do NOT stop
+a service, add a Defender exclusion, modify AppLocker/WDAC/Smart App Control, or relaunch as admin.**
+Lowering a machine's security posture is the human's decision; a local model cannot judge whether it is
+safe, and attempting it is how a run does real harm. A normal compile error still gets the normal path -
+verified both directions.
+
+The same rule is now in `qa-agent` (return a verdict of BLOCKED, not FAIL), `dev-agent`, and the `/build`
+orchestrator (relay verbatim and STOP; never let an agent disable security). Prose AND a script gate,
+because prose alone has failed at every layer in this project.
+
+### Tests
+121 cases (was 120). A build that prints the App Control signature is reported as an environment block and
+forbids the tampering path; an ordinary compile error is NOT mislabelled.
+
+### Note
+This does not make a WDAC-locked machine able to run tests - nothing in the kit can, and nothing in it
+should try. It makes the kit STOP cleanly and hand the decision to the human, instead of flailing at the
+security config for hours.
 ## 0.25.0 - 2026-08-25
 
 Research projects can now carry DATA, not just documents - for a research site with charts, or a
