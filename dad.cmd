@@ -86,6 +86,7 @@ echo   Project lifecycle:
 echo     dad new-project general [dir] scaffold (the KIND is required and comes first)
 echo     dad upgrade-project [dir]     retrofit an existing project to this kit
 echo     dad reindex "<dir>\docs"      rebuild the RAG index
+echo     dad publish-run -Transcript <f> -ProjectDir <p>   secret-scan + record a run in runs\ (commits, never pushes)
 echo     dad scan-secrets              credential scan
 echo.
 echo   Kit maintenance:

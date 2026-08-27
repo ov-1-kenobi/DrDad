@@ -2,6 +2,30 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.28.0 - 2026-08-27
+
+### Added - `dad publish-run`, the proving-ground artifact
+Records a real session into a git repo's `runs/` folder so "runs as they happen" is an auditable trail
+feeding the kit's own hardening:
+
+```
+dad publish-run -ProjectDir C:\src\cms3 -Transcript .\run.txt -Label s2-auth
+```
+
+It **secret-scans the transcript first and aborts on any hit with nothing written** - a transcript is
+exactly where a pasted key ends up, and a secret in a public history is compromised even after deletion.
+On a clean transcript it copies `transcript.txt` plus a COMPUTED `doc-stats.txt` / `findings.txt` (the
+numbers the kit trusts, not a hand summary), writes `meta.txt` (kit version, model, date, the project's git
+HEAD), appends a row to `runs/INDEX.md`, and **commits locally - it never pushes** (publishing to a remote
+stays the human's decision). `-RunsRepo` targets a separate proving-ground repo; `-NoCommit` stages only.
+
+The real proof of a run is the project's own `close-unit` commit trail (build- and test-verified per unit);
+this wraps human-readable context and provenance around it. `meta.txt` ties each run to an exact kit
+version - the seed for a future per-model benchmark.
+
+### Tests
+124 cases (was 123): the transcript is scanned before copy, a secret aborts with nothing written, a
+non-git target is refused, provenance is recorded, it commits locally, and the script contains no push.
 ## 0.27.0 - 2026-08-27
 
 Two fixes from the best CMS run to date (a real ASP.NET Core app, 15 of 44 tasks closed before it snagged).

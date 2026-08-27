@@ -1714,6 +1714,66 @@ Test-Case "the corpus spans MULTIPLE roots (and does not double-count)" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "publish-run secret-scans, records provenance, commits locally, never pushes" {
+  # The proving-ground artifact: a session transcript + a COMPUTED state snapshot copied into a repo's
+  # runs/, so "runs as they happen" is a real git trail. The gate that matters: a transcript is exactly
+  # where a pasted key ends up, so it is secret-scanned BEFORE anything is copied, and a hit aborts with
+  # nothing written. It commits locally but NEVER pushes - publishing to a remote stays the human's call.
+  $pr = Join-Path $kit "publish-run.ps1"
+  Assert (Test-Path $pr) "publish-run.ps1 is missing"
+  Assert (Test-Path (Join-Path $kit "publish-run.cmd")) "publish-run.cmd wrapper is missing"
+  $src = Get-Content $pr -Raw
+  Assert ($src -notmatch 'git\s+push') "publish-run contains a git push - it must never push"
+  Assert ($src -match 'scan-secrets') "publish-run does not secret-scan the transcript"
+
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Tasks`n`n## Tasks`n`n### [x] T1.1 - a   (Story S1)`n- **Goal:** x" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # missing transcript -> usage error
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $pr -Transcript (Join-Path $sb "nope.txt") -ProjectDir $p 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 2) "a missing transcript was not rejected"
+
+    # a SECRET in the transcript -> abort, publish NOTHING. Build the key by CONCATENATION so this suite
+    # file never itself holds a credential-shaped literal (that would trip the "kit is clean" test - which
+    # is exactly what caught the first version of this test).
+    $bad = Join-Path $sb "bad.txt"
+    $fakeKey = "aws_access_key_id = A" + "KIA" + "IOSFODNN7" + "ABCDEFG"
+    "log line`n$fakeKey`nmore" | Set-Content $bad -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $pr -Transcript $bad -ProjectDir $p 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "a transcript with a secret was not blocked"
+    Assert (-not (Test-Path (Join-Path $p "runs"))) "a blocked publish still created runs/ - it must write nothing"
+
+    # a non-git runs repo -> refuse (the proof IS the commit)
+    $bare = Join-Path $sb "notrepo"; New-Item -ItemType Directory -Force $bare | Out-Null
+    $good = Join-Path $sb "good.txt"; "/build`nT1.1 closed, tests green." | Set-Content $good -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $pr -Transcript $good -ProjectDir $p -RunsRepo $bare 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 2) "publishing into a non-git folder was allowed"
+
+    # clean transcript -> publish + local commit
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $pr -Transcript $good -ProjectDir $p -Label s1 2>&1 | Out-String
+    Assert ($LASTEXITCODE -eq 0) "a clean publish failed: $out"
+    $runDir = Get-ChildItem (Join-Path $p "runs") -Directory | Select-Object -First 1
+    Assert ($null -ne $runDir) "nothing was published"
+    Assert (Test-Path (Join-Path $runDir.FullName "transcript.txt")) "the transcript was not copied"
+    Assert (Test-Path (Join-Path $runDir.FullName "meta.txt")) "no provenance meta.txt was written"
+    $meta = Get-Content (Join-Path $runDir.FullName "meta.txt") -Raw
+    Assert ($meta -match 'kit version:') "meta.txt does not record the kit version"
+    Assert (Test-Path (Join-Path $p "runs\INDEX.md")) "no runs/INDEX.md index"
+    # it committed locally
+    Push-Location $p; $log = (git log --oneline | Out-String); Pop-Location
+    Assert ($log -match 'run:') "the run was not committed locally"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "data-stats gates DATASET integrity, and the corpus indexes data files" {
   # /research captures SOURCES (documents with provenance). A research SITE also needs DATA - the rows it
   # charts - and nothing here knew what a dataset was. A column can vanish, a unit can change from kg to
