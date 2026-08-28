@@ -284,8 +284,20 @@ if ($iCmd -eq $cmdCount -and $iAgt -eq $agtCount) { Say "OK" "commands/agents in
 else { Say "WARN" "commands/agents installed" "$iCmd/$iAgt vs kit $cmdCount/$agtCount" "re-run install.cmd to sync them" }
 
 # ---------------------------------------------------------------- optional: a project
+# If no -ProjectDir was given but we are standing INSIDE a DAD project, check it anyway. The whole point of
+# these checks (a stale .mcp.json or git hook after the kit or project was MOVED) is to catch a break nobody
+# went looking for, and "run dad doctor" is the natural reflex. Skip the kit's own folder - it is not a
+# project to onboard, and it self-hosts a .mcp.json that would otherwise look like one.
+$autoProject = $false
+if (-not $ProjectDir) {
+  $cwd = (Get-Location).Path
+  $looksProject = (Test-Path (Join-Path $cwd ".mcp.json")) -and
+                  ((Test-Path (Join-Path $cwd "CLAUDE.md")) -or (Test-Path (Join-Path $cwd "docs")))
+  if ($looksProject -and ($cwd.TrimEnd('\') -ne $kit.TrimEnd('\'))) { $ProjectDir = $cwd; $autoProject = $true }
+}
 if ($ProjectDir) {
   Write-Host "`n-- project --" -ForegroundColor Cyan
+  if ($autoProject) { Write-Host "  (auto-detected the current directory - pass -ProjectDir to check another)" -ForegroundColor DarkGray }
   if (-not (Test-Path $ProjectDir)) { Say "FAIL" "project" "$ProjectDir not found" }
   else {
     $p = (Resolve-Path $ProjectDir).Path
@@ -318,6 +330,12 @@ if ($ProjectDir) {
         $j = Get-Content $mcp -Raw | ConvertFrom-Json
         $cmd = $j.mcpServers.'local-tools'.command
         if ($cmd -eq $exe) { Say "OK" ".mcp.json" "points at this kit's exe" }
+        elseif ($cmd -and -not (Test-Path -LiteralPath $cmd)) {
+          # The stale-after-a-move case: the path does not resolve, so the MCP server never starts and
+          # search_datasheets silently returns nothing. This is the .mcp.json half of the relocation break.
+          Say "WARN" ".mcp.json" "kit exe '$cmd' does NOT exist - MCP server will not start (stale after a move?)" `
+              "upgrade-project.cmd `"$p`"   (repoints .mcp.json AND the git hook at this kit)"
+        }
         else { Say "WARN" ".mcp.json" "exe path is '$cmd' - not this kit" "upgrade-project.cmd `"$p`"   (install.cmd only fixes the kit's OWN .mcp.json, never a project's)" }
         $dd = $j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
         if ($dd -and (Test-Path $dd)) { Say "OK" "docs dir" $dd } else { Say "WARN" "docs dir" "'$dd' not found" }
@@ -343,7 +361,7 @@ if ($ProjectDir) {
         elseif (Test-Path -LiteralPath $ref.Groups[1].Value) { Say "OK" "pre-commit hook" "secret scan installed" }
         else {
           Say "FAIL" "pre-commit hook" "points at a MISSING scanner - every commit here is blocked" `
-              "powershell -File `"$kit\install-hooks.ps1`" -ProjectDir `"$p`" -Force"
+              "upgrade-project.cmd `"$p`"   (repoints the hook AND .mcp.json; or: install-hooks.ps1 -ProjectDir `"$p`" -Force)"
         }
       }
       else { Say "WARN" "pre-commit hook" "missing" "install-hooks.ps1 -ProjectDir `"$p`"" }

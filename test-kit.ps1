@@ -2779,6 +2779,41 @@ Test-Case "dad-doctor's fix hints name commands that actually fix the thing" {
   Assert ($doc -notmatch 'close-unit\.cmd -Id <id>') "dad-doctor still hands out bare close-unit.cmd (not on PATH)"
 }
 
+Test-Case "dad-doctor flags a stale kit path and checks the current project by default" {
+  # After a machine move, a project's .mcp.json + git hook still name the OLD kit location: the MCP server
+  # silently never starts and every commit aborts (cms3 hit both). The doctor's project checks catch this -
+  # but they only ran with -ProjectDir, and the .mcp.json message did not distinguish a MISSING path from a
+  # different kit. Now it names the missing path and routes to upgrade-project, and it checks the project
+  # you are STANDING in when no -ProjectDir is passed.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    $stale = 'D:\gone\OLD-kit\local-tools\bin\Release\net8.0\local-tools.exe'
+    $mcp = @{ mcpServers = @{ 'local-tools' = @{
+      command = $stale; args = @(); env = @{ LOCALTOOLS_DOCS_DIR = "$p\docs" } } } } | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText("$p\.mcp.json", $mcp, (New-Object System.Text.UTF8Encoding($false)))
+
+    # explicit -ProjectDir: the stale exe path is named as missing, and the fix is upgrade-project
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") -ProjectDir $p 2>&1 | Out-String
+    Assert ($out -match '(?i)does NOT exist|stale after a move') "doctor did not flag the stale .mcp.json kit path as missing"
+    Assert ($out -match 'upgrade-project') "doctor did not name upgrade-project as the fix for the stale path"
+
+    # no -ProjectDir, run from INSIDE the project: it auto-detects and still flags the break
+    Push-Location $p
+    $auto = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") 2>&1 | Out-String
+    Pop-Location
+    Assert ($auto -match '(?i)auto-detected the current directory') "doctor did not auto-detect the project it was standing in"
+    Assert ($auto -match '(?i)does NOT exist|stale after a move') "the auto-detected run did not flag the stale .mcp.json"
+
+    # but the doctor must NOT treat the KIT's own folder as a project to onboard (it self-hosts a .mcp.json)
+    Push-Location $kit
+    $kitRun = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") 2>&1 | Out-String
+    Pop-Location
+    Assert ($kitRun -notmatch '(?i)auto-detected the current directory') "doctor wrongly auto-detected the kit folder as a project"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "upgrade-project migrates a pre-rename project's markers" {   # DAD-RENAME-OK
   $sb = New-Sandbox
   try {

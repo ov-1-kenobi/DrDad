@@ -2,6 +2,20 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.29.2 - 2026-08-28
+
+### Fixed - dad-doctor catches a stale kit path after a move, and checks the project you are in
+Moving a project (or the kit) leaves ABSOLUTE paths behind in two places the model never looks: the
+project's `.mcp.json` (its `local-tools.exe` command) and the git `pre-commit` hook (its `scan-secrets.ps1`
+path). Both fail quietly - a dead MCP server just looks like "no search_datasheets", and the hook aborts
+every commit. cms3, moved off `D:\projects\...`, hit both. dad-doctor already flagged them, but only with
+`-ProjectDir`, and it did not distinguish a MISSING path from a different kit. Now:
+- run from inside a project with no `-ProjectDir`, it auto-detects and checks it - the natural "run dad
+  doctor" reflex works (and it skips the kit's own self-hosting folder);
+- a `.mcp.json` exe path that does not exist is named as such ("does NOT exist ... stale after a move?");
+- both the `.mcp.json` and pre-commit-hook fixes route to `dad upgrade-project`, the one command that
+  repoints them at the current kit.
+
 ## 0.29.1 - 2026-08-28
 
 ### Fixed - doc-stats accepts IN-PROGRESS as a story status
