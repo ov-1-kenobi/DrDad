@@ -457,6 +457,25 @@ if ($Findings) {
     }
   }
 
+  # --- PLAYTEST (experience projects, WARN) --------------------------------------------------------
+  # An experience (the design doc is TEDD.md) is mostly FEEL, which no test can score - and for a game that
+  # is most of the point. The kit routes feel to the human, but "hand me a checklist" is prose and gets
+  # skipped. So if this is an experience with commits but NOT ONE records a playtest (close-unit stamps
+  # "Playtested:" when /build passes -Playtested), say so once. WARN, not FAIL: a local box may have no one
+  # at the controls, and this must never deadlock a close.
+  if ($designName -eq 'TEDD.md' -and (Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $ptSeen = $false
+    try {
+      Push-Location $proj
+      $ptBodies = (git log --format=%B | Out-String)
+      if ($ptBodies -match '(?im)^\s*Playtested:') { $ptSeen = $true }
+    } catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }
+    if (-not $ptSeen) {
+      $f.Add("[playtest] this is an experience (docs\TEDD.md) but NO commit records a playtest - feel was never verified. Run playtest-agent after a build, play it, then close with -Playtested (WARN).")
+    }
+  }
+
   # a done unit with no commit mentioning it - a missed checkpoint
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"

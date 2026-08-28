@@ -107,6 +107,15 @@ its dependencies satisfied, STOP and report the blocked tasks.
      costs a whole session, and whether a heading exists is a grep, not a judgement.
 3. **qa-agent** -> write/run the tests. FAIL -> back to dev-agent with the details (max 3 rounds, then stop
    and summarize). PASS -> continue.
+3b. **Playtest (EXPERIENCE / TEDD projects, interactive units ONLY).** After qa passes, if the design doc is
+   `docs/TEDD.md` (a game / sim / XR / interactive piece) and this unit is playable, spawn **playtest-agent**.
+   It does NOT edit and does NOT score fun: it reads the TEDD's Vision + the built systems and returns a
+   concrete **play protocol** plus any P1 mechanical gaps (an input with no handler, a lose with no restart)
+   to route to **dev-agent** first. Then relay its protocol and its feel-questions to me and **WAIT for my
+   playtest sign-off** - feel is mine to judge, there is no exit code for it. If it feels wrong, back to
+   dev-agent with my words; if it feels right, close with `-Playtested`. As with the UX pass, nothing goes
+   into TEDD / STORIES / TASKS - the commit is the record, and `doc-stats -Findings` reports `[playtest]` for
+   an experience whose history shows no playtest.
 4. **Close it out by RUNNING the script** - do not perform these steps by hand:
    ```
    dad close-unit -Id <unit id> -Title "<short title>"
@@ -117,6 +126,11 @@ its dependencies satisfied, STOP and report the blocked tasks.
    **`-UxNote "<what changed>"`**) so the commit records the pass and `doc-stats` stays quiet:
    ```
    dad close-unit -Id <unit id> -Title "<short title>" -UxReviewed -UxNote "nav + empty states"
+   ```
+   For an **experience** unit you playtested (step 3b), add **`-Playtested`** (optionally
+   **`-PlaytestNote "<what you played>"`**) instead of/alongside `-UxReviewed`:
+   ```
+   dad close-unit -Id <unit id> -Title "<short title>" -Playtested -PlaytestNote "core loop + lose/respawn"
    ```
 
 ## Per STORY (when close-unit reports `story <id> -> DONE`)

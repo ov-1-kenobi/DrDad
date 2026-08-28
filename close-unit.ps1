@@ -26,7 +26,12 @@ param(
   # hand-ticked story with no "closed:close-unit" stamp. Nothing about the review goes into the docs; the
   # code and its commit are the record.
   [switch]$UxReviewed,
-  [string]$UxNote = ""
+  [string]$UxNote = "",
+  # An experience (game/sim/XR) unit that passed a HUMAN playtest sets this, and the close stamps
+  # "Playtested:" into the commit body. Feel is the part automated tests cannot reach, so the sign-off is
+  # recorded rather than assumed - doc-stats -Findings flags an experience with a build but no such commit.
+  [switch]$Playtested,
+  [string]$PlaytestNote = ""
 )
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
@@ -453,31 +458,46 @@ if (-not $NoCommit) {
       # on a local box and a close must not deadlock on a design review. doc-stats -Findings carries the
       # [ux] finding that costs the grade; this is the in-loop reminder that fires the moment a surface lands
       # without a recorded review.
+      $stagedClean = @($stagedFiles | ForEach-Object { $_.Trim().Trim('"') })
       $surfRx = '(?i)\.(cshtml|razor|jsx|tsx|vue|svelte)$'
-      $touchedSurface = @($stagedFiles | ForEach-Object { $_.Trim().Trim('"') } |
-                          Where-Object { $_ -match $surfRx -and $_ -notmatch '(?i)_View(Imports|Start)\.cshtml$' })
+      $touchedSurface = @($stagedClean | Where-Object { $_ -match $surfRx -and $_ -notmatch '(?i)_View(Imports|Start)\.cshtml$' })
       if ($touchedSurface.Count -gt 0 -and -not $UxReviewed) {
         $warns.Add("visible surface changed ($($touchedSurface.Count) file(s): $(($touchedSurface | Select-Object -First 4) -join ', ')) but no UX pass recorded - run ux-agent, apply its review with ui-agent, and close with -UxReviewed. doc-stats -Findings will flag [ux] until a commit records it.")
       }
 
-      # Only close-unit writes "UX-reviewed:"; a model that closes a surface by hand cannot fake it, the same
-      # way it cannot fake "closed:close-unit" on a story. Two -m args = subject + a body paragraph (never a
-      # here-string: PS 5.1 mangles `-m @'...'@`).
-      $uxTrailer = @()
+      # An EXPERIENCE (a project with docs\TEDD.md) whose gameplay code changed but that nobody playtested is
+      # worth the same nudge: feel is the part tests cannot verify, and for a game it is most of the point.
+      # WARN, never block (a pure-logic unit may not need a playtest, and a local box may have no one at the
+      # controls). doc-stats carries the [playtest] finding that costs the grade.
+      $isExperience = Test-Path (Join-Path $docs "TEDD.md")
+      $touchedCode = @($stagedClean | Where-Object { [System.IO.Path]::GetExtension($_) -in @(".cs",".gd",".cpp",".h",".lua",".js",".ts",".rs") })
+      if ($isExperience -and $touchedCode.Count -gt 0 -and -not $Playtested) {
+        $warns.Add("experience code changed ($($touchedCode.Count) file(s)) but no playtest recorded - run playtest-agent, play it, and close with -Playtested. doc-stats -Findings will flag [playtest] until a commit records it.")
+      }
+
+      # Only close-unit writes these trailers; a model that closes by hand cannot fake them, the same way it
+      # cannot fake "closed:close-unit". Each is its own -m (subject + body paragraphs; never a here-string -
+      # PS 5.1 mangles `-m @'...'@`).
+      $trailers = @()
       if ($UxReviewed) {
         $note = if ($UxNote) { $UxNote } else { "ui-agent applied ux-agent design review" }
-        $uxTrailer = @('-m', "UX-reviewed: $note (ux-agent)")
+        $trailers += @('-m', "UX-reviewed: $note (ux-agent)")
+      }
+      if ($Playtested) {
+        $pnote = if ($PlaytestNote) { $PlaytestNote } else { "human playtest via playtest-agent protocol" }
+        $trailers += @('-m', "Playtested: $pnote (human sign-off)")
       }
 
       if (-not $staged) { $notes.Add("nothing to commit (working tree already clean)") ; $committed = $true }
       else {
-        git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m $msg @uxTrailer | Out-Null
+        git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m $msg @trailers | Out-Null
         if ($LASTEXITCODE -ne 0) { $problems.Add("git commit exited $LASTEXITCODE") }
         # --- 5) VERIFY the commit actually landed and mentions this unit ---
         $last = (git log --oneline -1 | Out-String).Trim()
         if ($last -match [regex]::Escape($Id)) {
           $notes.Add("committed: $last")
           if ($UxReviewed) { $notes.Add("UX pass recorded in the commit (UX-reviewed:)") }
+          if ($Playtested) { $notes.Add("playtest recorded in the commit (Playtested:)") }
           $committed = $true
         }
         else { $problems.Add("commit did not land or does not mention $Id (last: $last)") }

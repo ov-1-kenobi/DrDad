@@ -480,6 +480,13 @@ Test-Case "stack profiles are FRAGMENTS (no kit-owned sections to go stale)" {
     Assert (Test-Path $prof) "$($p.Name) has no PROFILE.md"
     Assert (-not (Test-Path (Join-Path $p.FullName "CLAUDE.md"))) `
       "$($p.Name) still has a CLAUDE.md - stack profiles must be PROFILE.md fragments"
+    # A stack dir must NOT carry a design-doc template: DESIGN.md/TEDD.md live ONLY in _common, or a copy
+    # goes stale. Unity shipped a divergent docs/TEDD.md (old shape: stories inline, no contracts/security)
+    # while the scaffold used the _common one - reconciled in 0.31.0 by deleting it and asserting it here.
+    foreach ($dd in @("docs\DESIGN.md","docs\TEDD.md")) {
+      Assert (-not (Test-Path (Join-Path $p.FullName $dd))) `
+        "$($p.Name) ships $dd - the design doc template lives ONLY in _common (a stack copy drifts)"
+    }
     $t = Get-Content $prof -Raw
     foreach ($s in $owned) {
       Assert ($t -notmatch [regex]::Escape($s)) "$($p.Name)/PROFILE.md contains kit-owned section '$s'"
@@ -1837,6 +1844,68 @@ Test-Case "a visible surface passes through ux-agent -> ui-agent, and close-unit
     # now that a commit records a review -> doc-stats is quiet on [ux]
     $find2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
     Assert ($find2 -notmatch '\[ux\]') "doc-stats still flags [ux] after a commit recorded the review"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "an experience unit is playtested (playtest-agent -> human), and close-unit records it (-Playtested)" {
+  # A game/sim is mostly FEEL, which no test can score. The kit routed feel to the human in prose ("hand me a
+  # checklist") and it got skipped. playtest-agent structures the human playtest - it cannot score fun - and
+  # close-unit stamps "Playtested:" so an experience cannot claim done with no one having played it. The
+  # backstop mirrors -UxReviewed, gated on the design doc being TEDD.md.
+
+  # playtest-agent is a protocol-maker, not an editor, and it hands FEEL to the human
+  $pa = Join-Path $kit "global\agents\playtest-agent.md"
+  Assert (Test-Path $pa) "playtest-agent.md is missing"
+  $paText = Get-Content $pa -Raw
+  Assert ($paText -match '(?m)^name:\s*playtest-agent\s*$') "playtest-agent frontmatter name is wrong"
+  $ptTools = ([regex]::Match($paText, '(?m)^tools:\s*(.+)$')).Groups[1].Value
+  Assert ($ptTools -notmatch '\bWrite\b' -and $ptTools -notmatch '\bEdit\b') "playtest-agent must not have Write/Edit - it structures the test, dev-agent implements"
+  Assert ($paText -match '(?i)cannot score fun|no exit code for feel') "playtest-agent must hand the feel/fun verdict to the human"
+
+  # /build routes it for experiences and records via -Playtested
+  $build = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+  Assert ($build -match '(?i)playtest-agent') "/build does not route playtest-agent"
+  Assert ($build -match '-Playtested') "/build does not tell close-unit to record the playtest"
+
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "game"; New-Item -ItemType Directory -Force "$p\docs","$p\src" | Out-Null
+    "# TEDD`n`nStatus: LOCKED`nSecurity review: NOT-REQUIRED (local game, no network)`n`n## Experience vision`nfast, punchy arcade feel`n`n## Contracts`n### C1 - score`npoints" | Set-Content "$p\docs\TEDD.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: play   <!-- Status: DOING -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    ("# Tasks`n`n## Build order`n`n" +
+     "### [ ] T1.1 - player   (Story S1)`n- **Goal:** move`n`n" +
+     "### [ ] T1.2 - enemy    (Story S1)`n- **Goal:** chase`n`n" +
+     "### [ ] T1.3 - score    (Story S1)`n- **Goal:** points") | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "public class Player {}" | Set-Content "$p\src\Player.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m "scaffold"
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # an experience with code but NO recorded playtest -> doc-stats flags [playtest]
+    $find1 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($find1 -match '\[playtest\]') "doc-stats did not flag an experience with no recorded playtest"
+
+    # close T1.1 WITHOUT -Playtested while gameplay code is staged -> in-loop WARN (still closes)
+    "public class Enemy {}" | Set-Content "$p\src\Enemy.cs" -Encoding UTF8
+    $c1 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") -ProjectDir $p -Id T1.1 -Title "player" -NoReindex 2>&1 | Out-String
+    Assert ($c1 -match '(?i)experience code changed') "close-unit did not WARN on experience code with no playtest"
+
+    # close T1.2 WITH -Playtested -> the commit body carries the trailer, and no WARN
+    "public class Score {}" | Set-Content "$p\src\Score.cs" -Encoding UTF8
+    $c2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") -ProjectDir $p -Id T1.2 -Title "enemy" -Playtested -PlaytestNote "core loop" -NoReindex 2>&1 | Out-String
+    Assert ($c2 -notmatch '(?i)experience code changed') "close-unit WARNed even though -Playtested was passed"
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $bodies = (git log --format=%B | Out-String)
+    $ErrorActionPreference = $prev; Pop-Location
+    Assert ($bodies -match '(?im)^\s*Playtested:\s*core loop') "close-unit -Playtested did not stamp 'Playtested:' into the commit body"
+
+    # now that a commit records a playtest -> doc-stats is quiet on [playtest]
+    $find2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($find2 -notmatch '\[playtest\]') "doc-stats still flags [playtest] after a commit recorded the playtest"
   } finally { Remove-Sandbox $sb }
 }
 

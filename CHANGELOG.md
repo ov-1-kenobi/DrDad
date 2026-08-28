@@ -2,6 +2,31 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.31.0 - 2026-08-28
+
+### Added - playtest-agent, a feel pass for experiences (the game analog to ux-agent)
+A game/sim/XR project is mostly FEEL, which no test can score - and the kit routed that to the human in prose
+("hand me a visual checklist"), exactly the kind of instruction that gets skipped. New `playtest-agent` is the
+build-time analog to ux-agent, for interactive units: it reads the TEDD's Vision + the built systems and
+returns a concrete PLAY PROTOCOL (launch, core-loop feel, controls, feedback, readability, pacing,
+failure/edge states, onboarding) plus any P1 mechanical gaps for dev-agent - but it does NOT score fun; it
+hands the verdict to the human. The sign-off is recorded: `close-unit -Playtested` stamps a `Playtested:`
+commit trailer, `doc-stats -Findings` reports `[playtest]` when the design doc is TEDD.md but no commit
+records a playtest, and close-unit nudges in-loop when experience code lands without one. WARN, not FAIL - a
+local box may have no one at the controls, and a close must never deadlock on a playtest.
+
+### Fixed - reconciled the stale Unity TEDD
+`templates/unity/docs/TEDD.md` was an old-shape design doc (stories inline, no contracts or security gate)
+that diverged from the modern `templates/_common/docs/TEDD.md` the scaffold actually uses - the exact
+"a kit-owned copy goes stale" trap the FRAGMENT rule exists to prevent. Deleted it (the design doc lives only
+in `_common`), rewrote `templates/unity/README.md` to the current stack-profile flow, and the FRAGMENTS test
+now asserts no stack dir carries a DESIGN.md/TEDD.md.
+
+### Tests
+16 agents now (playtest-agent added). New cases: playtest-agent is a protocol-maker (no Write/Edit),
+`-Playtested` stamps the commit and `doc-stats` flags an un-playtested experience; and a stack dir may not
+ship a design-doc template.
+
 ## 0.30.0 - 2026-08-28
 
 ### Changed - the kit is now DrDad (Design Research Document, Agentic Development)

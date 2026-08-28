@@ -30,7 +30,7 @@ tell you to detect the installed one instead). Both properties are enforced by `
 | `avalonia/` | C# / .NET cross-platform desktop UI (Avalonia 11 / XAML, MVVM) | `dotnet build` / `dotnet test` / `dotnet run` |
 | `python/`   | Python apps, services, data | `pytest`, `ruff`, `mypy` |
 | `embedded/` | MCU / IoT firmware (uses the datasheet RAG) | `pio run` / `pio test -e native` |
-| `unity/`    | Unity experiences (TEDD.md, ASSETS.md, BuildScript.cs, `/assets`) | Unity CLI batchmode |
+| `unity/`    | Unity experiences (PROFILE.md + BuildScript.cs to copy; TEDD from _common; playtest-agent) | Unity CLI batchmode |
 
 `_common/` holds the shared `.mcp.json` and the doc templates: `docs/DESIGN.md`, `docs/TEDD.md`,
 `docs/STORIES.md`, `docs/TASKS.md`, `docs/STATUS.md`, `docs/SOURCES.md`, `docs/RECIPES.md`.
