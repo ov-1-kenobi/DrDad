@@ -171,7 +171,7 @@ this before you install it on a machine you use for other work:
 | What it changes | Scope | Reversible by |
 |---|---|---|
 | `%USERPROFILE%\.claude\settings.json` - **redirects Claude Code to Ollama** | **GLOBAL - every project on the machine** | `uninstall.cmd` (restores `settings.json.bak`) |
-| `%USERPROFILE%\.claude\commands\*.md`, `agents\*.md` | GLOBAL - the 15 commands / 14 agents appear everywhere | `uninstall.cmd` |
+| `%USERPROFILE%\.claude\commands\*.md`, `agents\*.md` | GLOBAL - the 15 commands / 15 agents appear everywhere | `uninstall.cmd` |
 | `OLLAMA_FLASH_ATTENTION` / `KV_CACHE_TYPE` / `KEEP_ALIVE` User env vars | machine | `uninstall.cmd -Full` |
 | Ollama `-cc` model variants | machine | `uninstall.cmd -Full` |
 | Per project: `CLAUDE.md`, `.mcp.json`, `docs/`, `.gitignore`, `.git/hooks/pre-commit` | that project | delete / `git` |

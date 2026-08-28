@@ -116,3 +116,8 @@
 - **Gotcha:** `&&` and `||` are a PARSER ERROR in 5.1 (they work in PowerShell 7). Models write them
   constantly. `;` alone runs B even when A failed.
 - **Verified:** 2026-08-21, Opus
+- **Command:** in the shell use `D:/proj/src` or a relative path - never `D:\proj\src`
+- **Does:** creates/addresses a path without it collapsing.
+- **When:** any mkdir / redirect / path arg from the Bash tool.
+- **Gotcha:** bash EATS backslashes, so `mkdir "D:\proj\src"` makes ONE dir literally named `Dprojsrc` in the CWD. A real run left four such junk dirs. Forward slashes or relative paths survive; the Write tool avoids the shell entirely.
+- **Verified:** 2026-08-27, Opus

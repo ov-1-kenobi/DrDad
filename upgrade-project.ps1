@@ -90,7 +90,7 @@ New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 # --- 2) Git safety net (same as scaffold) ---
 if (Get-Command git -ErrorAction SilentlyContinue) {
   $gi = Join-Path $proj ".gitignore"
-  $secretIgnores = @(".env",".env.*","!.env.example","*.pem","*.pfx","*.key","secrets/","appsettings.*.local.json")
+  $secretIgnores = @(".env",".env.*","!.env.example","*.pem","*.pfx","*.key","secrets/","appsettings.*.local.json","*.binlog","_tmp/")
   # `nul` is what a bash `2>nul` leaves behind - a reserved Windows device name, awkward to delete and
   # poisonous in a repo other Windows machines clone. Never commit one.
   $noiseIgnores2 = @("nul","NUL")

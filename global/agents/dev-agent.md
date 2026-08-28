@@ -69,3 +69,8 @@ If a build or run fails with **App Control, AppLocker, WDAC, Smart App Control, 
 If you start the app, STOP it before you build again - a live apphost holds `bin\<app>.exe` and the next
 build fails with MSB3026 ("being used by another process"). Prefer verifying behaviour with an in-process
 test (`WebApplicationFactory`) over launching the app at all. If a build is lock-blocked: `dad free-locks`.
+
+## Leave no junk - two habits
+
+1. **No ad-hoc status/summary/notes files.** Do NOT write IMPLEMENTATION_SUMMARY.md, STORY_Sx_COMPLETE.md, completed_tasks.txt or the like - CLAUDE.md forbids them and `dad doc-stats -Findings` now flags them. State goes in TASKS/STORIES/STATUS via their owners; a summary goes in your reply, not a file. One run left ELEVEN such files at the root.
+2. **Never pass a Windows backslash path to the shell.** Under bash the backslashes are eaten, so `mkdir "D:\proj\src"` created a single literal directory named `Dprojsrc` in the CWD - four of those junk dirs in one run. Use forward slashes (`D:/proj/src`) or a RELATIVE path, or just use the Write tool. Same trap that produced `2>nul` and the mangled `dad` call.

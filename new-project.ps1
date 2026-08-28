@@ -90,7 +90,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
       # .claude/ holds agent worktrees - one project showed 247 of them as "changed" code.
     $ignore = (@("bin/","obj/","docs/.index/",".tmp/","__pycache__/","node_modules/","*.user",".claude/",
                    ".env",".env.*","!.env.example","*.pem","*.pfx","*.key","secrets/",
-                   "appsettings.*.local.json","nul","NUL") -join "`r`n") + "`r`n"
+                   "appsettings.*.local.json","*.binlog","_tmp/","nul","NUL") -join "`r`n") + "`r`n"
       [System.IO.File]::WriteAllText($gi, $ignore, (New-Object System.Text.UTF8Encoding($false)))
     }
     # Refuse to init over a folder that CONTAINS other repositories. git accepts this and warns

@@ -2,6 +2,65 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.29.0 - 2026-08-27
+
+The cms3 run went "through all 5 stories" and the project root came out full of junk. Both are now computed
+findings, and the missing navigation is too.
+
+### Added - `doc-stats -Findings` catches project-root JUNK
+A real run left the root with: eleven ad-hoc `IMPLEMENTATION_SUMMARY.md` / `STORY_S2_COMPLETE.md` /
+`completed_tasks.txt` files (which CLAUDE.md explicitly forbids), **four path-mangled directories** named
+`DprojectsClaudeprojectscms3srcCMS` (a Windows path passed to bash, backslashes eaten, so `mkdir` made one
+literal dir), a committed `msbuild.binlog`, and a duplicate `.slnx`. This was the librarian's remit in
+PROSE and it did not hold. Now computed:
+- ad-hoc status/summary/notes files at the root (the user's own `run*.txt` exports are excluded);
+- MANGLED path directories (run-together path names with the backslashes gone);
+- a `.binlog` in the tree, and more than one solution file.
+Prevention where it is possible: `*.binlog` is now gitignored by scaffold and upgrade; `dev-agent` is told
+not to write ad-hoc summaries and never to pass a backslash Windows path to the shell (use forward slashes
+or a relative path), with a seeded RECIPES trap. Full prevention of a subagent's file writes is not
+possible - so, as with the loops, the kit DETECTS and names it loudly.
+
+### Added - navigability finding (`[ui]`, WARN)
+cms3 shipped 5 controllers whose shared `_Layout.cshtml` linked to NONE of them - the app had no navigation,
+and `ui-agent` was never routed (that routing is prose). `doc-stats -Findings` now counts the controllers a
+web project has and how many the shared layout actually links to, and WARNs when the nav reaches none (or
+under half) of them. WARN, not FAIL - navigation design varies - but "5 controllers, 0 linked" is a real,
+computable smell. A layout that links them stays silent.
+
+### Added - only close-unit may close a story
+cms3 marked 5/5 stories DONE with 21 tasks still open and 4 commits - the DONE markers were written by hand,
+not by the close-out. `close-unit` now stamps `closed:close-unit` when it rolls a story up (it reaches that
+point only after the build passed, every task is `[x]`, and a commit landed), and `doc-stats -Findings`
+flags a `DONE` marker that lacks the stamp - UNLESS the story also looks genuinely closed (all tasks `[x]`
+AND a commit mentions it), so a legitimate legacy close stays silent while a fabricated one lights up.
+
+### Added - scratch goes in `_tmp/`, and `dad tidy` cleans up
+Two-part answer to the root-junk problem. Prevention: agents are told to put scratch work in `_tmp/`
+(gitignored, and emptied by tidy), and the generic `CLAUDE.md` records the convention. Cure: `dad tidy`
+lists the junk `doc-stats -Junk` computes (the default lists; nothing is removed until `-Fix`), and
+`dad tidy -Fix` removes the stray summaries, mangled dirs, binlogs and duplicate solutions AND empties
+`_tmp/`, while refusing to touch a non-project path (the same guard as `free-locks`). `_tmp/` and `*.binlog`
+are gitignored by scaffold and upgrade.
+
+### Added - ux-agent, a build-time design review
+ui-agent was routed 0 times across 39 dev-agent spawns on cms3, because "notice this is a page and route it
+to ui-agent" is a prose decision - the exact kind this kit stops trusting. New `ux-agent` is the build-time
+reviewer for a visible surface: it reads the built markup and returns prioritized, concrete suggestions
+(reachability, hierarchy, affordances, form labels, empty/loading/error states, consistency) for `ui-agent`
+to apply directly. It does NOT edit, and it hands aesthetic judgement to the human - there is still no exit
+code for taste. Nothing goes into DESIGN/STORIES/TASKS: the fix lands in the code and `close-unit -UxReviewed`
+records the pass as a `UX-reviewed:` commit trailer. The deterministic backstop mirrors the story stamp -
+`doc-stats -Findings` reports `[ux]` when a project has visible surfaces but no commit records a review, and
+`close-unit` nudges in-loop the moment a surface changes without the pass. WARN, not FAIL: a local box may
+have no ux-agent, and a close must never deadlock on a design review.
+
+### Tests
+127 cases pass, 0 failed: each junk class is planted and flagged, a user run-export is NOT flagged, a nav-less
+layout warns and a linked one does not, navigability never hard-fails; a hand-ticked incomplete story is
+flagged while a genuinely-closed one is not; `dad tidy` lists by default and only removes with `-Fix`,
+empties `_tmp/`, preserves real files and refuses a system path; ux-agent is a reviewer (no Write/Edit),
+`close-unit -UxReviewed` stamps the commit and `doc-stats` flags a surface with no recorded review.
 ## 0.28.0 - 2026-08-27
 
 ### Added - `dad publish-run`, the proving-ground artifact

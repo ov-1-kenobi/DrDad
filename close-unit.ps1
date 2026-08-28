@@ -19,7 +19,14 @@ param(
   [switch]$NoReindex,
   [switch]$SkipVerify,
   [switch]$RequireGrade,
-  [switch]$AcceptShrink
+  [switch]$AcceptShrink,
+  # A visible-surface unit that went through the ux-agent -> ui-agent design pass sets this, and the close
+  # stamps "UX-reviewed:" into the commit body. That token is the deterministic proof the pass happened -
+  # doc-stats -Findings flags a project with visible surfaces but no such commit, the same way it flags a
+  # hand-ticked story with no "closed:close-unit" stamp. Nothing about the review goes into the docs; the
+  # code and its commit are the record.
+  [switch]$UxReviewed,
+  [string]$UxNote = ""
 )
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
@@ -172,14 +179,18 @@ function Set-StoryDone([string]$storyId) {
   $sEsc = [regex]::Escape($storyId)
   for ($i = 0; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -match '^#{1,6}\s' -and $lines[$i] -match "\b$sEsc\b") {
-      if ($lines[$i] -match '<!--\s*Status:\s*DONE\s*-->') { $notes.Add("story $storyId already DONE"); return }
+      if ($lines[$i] -match '<!--\s*Status:\s*DONE\b') { $notes.Add("story $storyId already DONE"); return }
+      # PROVENANCE STAMP: only close-unit writes "closed:close-unit". A model that hand-ticks a story to
+      # DONE writes a bare "<!-- Status: DONE -->" without it - and doc-stats then flags that as not closed
+      # by close-unit. This is the deterministic half of "only close-unit may close a story": close-unit
+      # reaches here only after the build passed, the story's tasks are all [x], and a commit was made.
       if ($lines[$i] -match '<!--\s*Status:.*?-->') {
-        $lines[$i] = [regex]::Replace($lines[$i], '<!--\s*Status:.*?-->', '<!-- Status: DONE -->')
+        $lines[$i] = [regex]::Replace($lines[$i], '<!--\s*Status:.*?-->', '<!-- Status: DONE closed:close-unit -->')
       } else {
-        $lines[$i] = $lines[$i].TrimEnd() + "   <!-- Status: DONE -->"
+        $lines[$i] = $lines[$i].TrimEnd() + "   <!-- Status: DONE closed:close-unit -->"
       }
       Save-Text $storiesFile $lines
-      $notes.Add("story $storyId -> DONE (all its tasks are [x])")
+      $notes.Add("story $storyId -> DONE (all its tasks are [x], stamped closed:close-unit)")
       return
     }
   }
@@ -434,14 +445,41 @@ if (-not $NoCommit) {
     try {
       $msg = if ($Title) { "$Id`: $Title" } else { "$Id" }
       git add -A | Out-Null
-      $staged = (git diff --cached --name-only | Out-String).Trim()
+      $stagedFiles = @(git diff --cached --name-only)
+      $staged = ($stagedFiles -join "`n").Trim()
+
+      # A visible surface that changed but did NOT go through the ux-agent -> ui-agent design pass is worth a
+      # nudge here, in the loop, not only later in the grade. WARN, never block: ux-agent may be unavailable
+      # on a local box and a close must not deadlock on a design review. doc-stats -Findings carries the
+      # [ux] finding that costs the grade; this is the in-loop reminder that fires the moment a surface lands
+      # without a recorded review.
+      $surfRx = '(?i)\.(cshtml|razor|jsx|tsx|vue|svelte)$'
+      $touchedSurface = @($stagedFiles | ForEach-Object { $_.Trim().Trim('"') } |
+                          Where-Object { $_ -match $surfRx -and $_ -notmatch '(?i)_View(Imports|Start)\.cshtml$' })
+      if ($touchedSurface.Count -gt 0 -and -not $UxReviewed) {
+        $warns.Add("visible surface changed ($($touchedSurface.Count) file(s): $(($touchedSurface | Select-Object -First 4) -join ', ')) but no UX pass recorded - run ux-agent, apply its review with ui-agent, and close with -UxReviewed. doc-stats -Findings will flag [ux] until a commit records it.")
+      }
+
+      # Only close-unit writes "UX-reviewed:"; a model that closes a surface by hand cannot fake it, the same
+      # way it cannot fake "closed:close-unit" on a story. Two -m args = subject + a body paragraph (never a
+      # here-string: PS 5.1 mangles `-m @'...'@`).
+      $uxTrailer = @()
+      if ($UxReviewed) {
+        $note = if ($UxNote) { $UxNote } else { "ui-agent applied ux-agent design review" }
+        $uxTrailer = @('-m', "UX-reviewed: $note (ux-agent)")
+      }
+
       if (-not $staged) { $notes.Add("nothing to commit (working tree already clean)") ; $committed = $true }
       else {
-        git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m $msg | Out-Null
+        git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m $msg @uxTrailer | Out-Null
         if ($LASTEXITCODE -ne 0) { $problems.Add("git commit exited $LASTEXITCODE") }
         # --- 5) VERIFY the commit actually landed and mentions this unit ---
         $last = (git log --oneline -1 | Out-String).Trim()
-        if ($last -match [regex]::Escape($Id)) { $notes.Add("committed: $last"); $committed = $true }
+        if ($last -match [regex]::Escape($Id)) {
+          $notes.Add("committed: $last")
+          if ($UxReviewed) { $notes.Add("UX pass recorded in the commit (UX-reviewed:)") }
+          $committed = $true
+        }
         else { $problems.Add("commit did not land or does not mention $Id (last: $last)") }
       }
     } catch { $problems.Add("git commit failed: $($_.Exception.Message)") }

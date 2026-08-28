@@ -18,8 +18,49 @@
 # directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
 # wrong folder. These scripts are invoked by MODELS, which typo parameter names.
 [CmdletBinding()]
-param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus, [string]$Contract = "", [switch]$Findings)
+param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus, [string]$Contract = "", [switch]$Findings, [switch]$Junk)
 $ErrorActionPreference = "Stop"
+
+# PROJECT-ROOT JUNK, computed in ONE place so `-Findings`, `-Junk` and `dad tidy` never disagree about what
+# is junk. Scratch belongs in _tmp/ (gitignored, swept by tidy); anything junky at the ROOT is a mistake:
+#   strayFiles  ad-hoc SUMMARY/COMPLETE/IMPLEMENTATION/notes files the kit forbids (NOT the user's run*.txt)
+#   mangledDirs a dir whose name is a run-together path (a Windows path handed to bash, backslashes eaten)
+#   binlogs     MSBuild .binlog build artifacts
+#   extraSlns   a second .sln/.slnx (splits the build)
+#   tmpDir      _tmp/ exists (sanctioned scratch - not junk, but tidy clears it)
+function Get-ProjectJunk([string]$root) {
+  $rootFiles = @(Get-ChildItem $root -File -ErrorAction SilentlyContinue)
+  $strayRx = '(?i)(^|[_.-])(summary|complete|completed|notes?|results?|implementation|handoff|scratch|build_summary)([_.-]|\.md$|\.txt$)'
+  $stray = @($rootFiles | Where-Object { $_.Name -match $strayRx -and $_.Name -notmatch '(?i)^(CHANGELOG|CONTRIBUTING)\b' } | ForEach-Object { $_.Name })
+  $stray = @($stray | Where-Object { $_ -notmatch '(?i)run.*\.txt$|.*run\.txt$|.*run\d*\.txt$' })  # user run exports are not junk
+  $leaf = (Split-Path $root -Leaf)
+  $mangled = @(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Where-Object {
+    $n = $_.Name
+    ($n -notmatch '[\\/ ._-]') -and (
+      ($n.Length -ge 20 -and $n -match "(?i)$([regex]::Escape($leaf)).") -or
+      ($n -match '(?i)^[a-z]:?(users|projects|documents|desktop|home|src)[a-z0-9]{6,}')
+    )
+  } | ForEach-Object { $_.Name })
+  $binlogs = @($rootFiles | Where-Object { $_.Name -match '(?i)\.binlog$' } | ForEach-Object { $_.Name })
+  $slns = @($rootFiles | Where-Object { $_.Name -match '(?i)\.slnx?$' } | ForEach-Object { $_.Name })
+  $extraSlns = @()
+  if ($slns.Count -gt 1) { $extraSlns = $slns }
+  return [pscustomobject]@{
+    StrayFiles = $stray; MangledDirs = $mangled; Binlogs = $binlogs
+    ExtraSolutions = $extraSlns
+    TmpDir = (Test-Path -LiteralPath (Join-Path $root "_tmp"))
+  }
+}
+
+if (-not (Test-Path -LiteralPath $ProjectDir)) {
+  Write-Host "ERROR: -ProjectDir does not exist: $ProjectDir" -ForegroundColor Red
+  exit 2
+}
+if ($Junk) {
+  $j = Get-ProjectJunk ((Resolve-Path -LiteralPath $ProjectDir).Path)
+  $j | ConvertTo-Json -Depth 5
+  exit 0
+}
 # GUARD: -ProjectDir must exist. Resolve-Path ERRORS on a missing path but the .cmd wrapper still exited 0,
 # so a mistyped path looked like a project with no stories and no tasks. Fail loudly instead.
 if (-not (Test-Path -LiteralPath $ProjectDir)) {
@@ -78,14 +119,20 @@ foreach ($n in @("DESIGN.md", "TEDD.md")) {
   }
 }
 
-# --- stories: headings that carry an S-id, and how many are marked DONE ---
-$storyIds = @(); $storiesDone = @()
+# --- stories: headings that carry an S-id, how many are DONE, and which were HAND-ticked ---
+# DONE match is prefix-tolerant ('DONE' followed by anything) because close-unit now stamps a provenance
+# token: '<!-- Status: DONE closed:close-unit -->'. A story marked DONE WITHOUT that token was ticked by
+# hand, not closed by close-unit - which is how a run reported 5/5 done with 21 tasks still open.
+$storyIds = @(); $storiesDone = @(); $handTicked = @()
 if (Test-Path $storiesFile) {
   foreach ($line in Get-Content $storiesFile -Encoding UTF8) {
     if ($line -match '^#{1,6}\s' -and $line -match '\b(S\d+[A-Za-z0-9._-]*)\b') {
       $id = $Matches[1]
       if ($storyIds -notcontains $id) { $storyIds += $id }
-      if ($line -match '<!--\s*Status:\s*DONE\s*-->') { $storiesDone += $id }
+      if ($line -match '<!--\s*Status:\s*DONE\b') {
+        $storiesDone += $id
+        if ($line -notmatch 'closed:close-unit') { $handTicked += $id }
+      }
     }
   }
 }
@@ -323,6 +370,91 @@ if ($Findings) {
   foreach ($m in $missing) { $f.Add("[grade] $m") }
   foreach ($o in $orphanTests) { $f.Add("[dev] test project not in the solution (dotnet test silently skips it): $o") }
 
+  # --- HAND-TICKED STORIES: DONE without close-unit provenance --------------------------------------
+  # Only close-unit may close a story (it stamps 'closed:close-unit' after the build passed, the tasks are
+  # all [x], and a commit was made). A DONE marker WITHOUT that stamp was written by hand. To avoid
+  # false-positiving a legitimate close from before the stamp existed, a stamp-less DONE is only flagged
+  # when it does NOT also look genuinely closed - i.e. some of its tasks are still open, OR no commit
+  # mentions it. cms3 marked 5/5 DONE with 21 tasks open and 4 commits: every one lights up here.
+  if ($handTicked.Count -gt 0) {
+    $coveringLog = ""
+    if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
+      try { Push-Location $proj; $coveringLog = (git log --oneline 2>$null | Out-String); Pop-Location } catch { }
+    }
+    foreach ($sid in $handTicked) {
+      $mine = @($tasks | Where-Object { $_.Story -eq $sid })
+      $allDone = ($mine.Count -gt 0) -and (@($mine | Where-Object { -not $_.Done }).Count -eq 0)
+      $hasCommit = ($coveringLog -match [regex]::Escape($sid))
+      if (-not ($allDone -and $hasCommit)) {
+        $f.Add("[scribe] story $sid is marked DONE but has NO close-unit stamp - only close-unit may close a story (it verifies the build + tests). Either run close-unit on it, or revert the marker; a hand-ticked DONE is how a run claimed completion it had not done.")
+      }
+    }
+  }
+
+  # --- PROJECT-ROOT JUNK ---------------------------------------------------------------------------
+  # A real run left the project root littered: ten ad-hoc SUMMARY/COMPLETE/IMPLEMENTATION files (which
+  # CLAUDE.md explicitly forbids - "NEVER create ad-hoc status/summary/notes files"), four path-MANGLED
+  # directories (a Windows path passed to bash, backslashes eaten, so `mkdir` made one literal dir named
+  # DprojectsClaudeprojectscms3srcCMS), and a committed msbuild.binlog. This was the librarian's remit in
+  # PROSE, and it did not hold - so it is computed now.
+  $rootJunk = Get-ProjectJunk $proj
+  if ($rootJunk.StrayFiles.Count -gt 0) {
+    $f.Add("[hygiene] $($rootJunk.StrayFiles.Count) ad-hoc status/summary file(s) at the project root - CLAUDE.md forbids these; state belongs in TASKS/STORIES/STATUS (or _tmp/ for scratch). Run 'dad tidy -Fix'. $(($rootJunk.StrayFiles | Select-Object -First 8) -join ', ')")
+  }
+  if ($rootJunk.MangledDirs.Count -gt 0) {
+    $f.Add("[hygiene] $($rootJunk.MangledDirs.Count) MANGLED path director(y/ies) at the root - a Windows path was passed to bash and the backslashes were eaten. Run 'dad tidy -Fix'; and use forward-slash or relative paths: $(($rootJunk.MangledDirs | Select-Object -First 4) -join ', ')")
+  }
+  if ($rootJunk.Binlogs.Count -gt 0) {
+    $f.Add("[hygiene] a .binlog (MSBuild binary log) is in the tree - a build artifact, not source. 'dad tidy -Fix' removes it; *.binlog is now gitignored.")
+  }
+  if ($rootJunk.ExtraSolutions.Count -gt 1) {
+    $f.Add("[hygiene] $($rootJunk.ExtraSolutions.Count) solution files at the root ($(($rootJunk.ExtraSolutions) -join ', ')) - keep ONE; a second .sln/.slnx splits the build")
+  }
+
+  # --- NAVIGABILITY (web projects, WARN) -----------------------------------------------------------
+  # A run shipped 5 controllers whose shared layout linked to NONE of them - the site had no navigation.
+  # ui-agent was never routed (that routing is prose), and even it does not check this. So: for a web app,
+  # count the controllers/pages that exist and how many the shared layout actually links to. WARN, not
+  # FAIL - navigation design varies and a hard rule would false-positive - but a layout that links to
+  # nothing while N controllers exist is a real, computable smell.
+  $viewsDir = Join-Path $proj "src"
+  $layouts = @(Get-ChildItem $proj -Recurse -Filter "_Layout.cshtml" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' })
+  $controllers = @(Get-ChildItem $proj -Recurse -Filter "*Controller.cs" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' } |
+                   ForEach-Object { ($_.Name -replace 'Controller\.cs$','') } | Where-Object { $_ -ne 'Error' } | Select-Object -Unique)
+  if ($layouts.Count -gt 0 -and $controllers.Count -ge 2) {
+    $layoutText = ($layouts | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+    $linked = @($controllers | Where-Object {
+      $layoutText -match ("(?i)asp-controller\s*=\s*[""']" + [regex]::Escape($_) + "[""']") -or
+      $layoutText -match ("(?i)href\s*=\s*[""'][^""']*/" + [regex]::Escape($_) + "(/|[""'])")
+    })
+    if ($linked.Count -eq 0) {
+      $f.Add("[ui] the shared layout links to NONE of the $($controllers.Count) controllers ($(($controllers | Select-Object -First 6) -join ', ')) - the app has no navigation. Add a nav to _Layout.cshtml (this is a WARN).")
+    } elseif ($linked.Count -lt [math]::Ceiling($controllers.Count / 2)) {
+      $f.Add("[ui] the shared layout links to only $($linked.Count) of $($controllers.Count) controllers - most of the app is unreachable from the nav (WARN).")
+    }
+  }
+
+  # --- UX REVIEW (visible surfaces, WARN) ----------------------------------------------------------
+  # A visible surface is meant to pass through ux-agent -> ui-agent (a build-time design review, applied and
+  # recorded) before it closes. That routing is prose in /build, and prose routing is exactly what failed for
+  # ui-agent - 0 spawns across 39 on the cms3 run. So if the project HAS visible surfaces but NOT ONE commit
+  # records a review (close-unit stamps "UX-reviewed:" in the commit body when /build passes -UxReviewed),
+  # say so once. WARN, not FAIL: a local box may have no ux-agent, and this must never deadlock a close.
+  $surfaces = @(Get-ChildItem $proj -Recurse -Include *.cshtml,*.razor,*.jsx,*.tsx,*.vue,*.svelte -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -notmatch '\\(bin|obj|node_modules)\\' -and $_.Name -notmatch '(?i)^_View(Imports|Start)\.cshtml$' })
+  if ($surfaces.Count -ge 1 -and (Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $uxSeen = $false
+    try {
+      Push-Location $proj
+      $bodies = (git log --format=%B | Out-String)
+      if ($bodies -match '(?im)^\s*UX-reviewed:') { $uxSeen = $true }
+    } catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }
+    if (-not $uxSeen) {
+      $f.Add("[ux] $($surfaces.Count) visible surface(s) but NO commit records a UX review - ux-agent was never routed. Spawn it after ui-agent, apply its P1/P2 items, then close with -UxReviewed (WARN).")
+    }
+  }
+
   # a done unit with no commit mentioning it - a missed checkpoint
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
@@ -345,7 +477,7 @@ if ($Findings) {
   else { foreach ($x in $f) { Write-Host "  $x" -ForegroundColor Yellow } }
   Write-Host ""
   Write-Host "Librarian's remit is what this CANNOT compute: scope contamination, traceability judgement," -ForegroundColor DarkGray
-  Write-Host "stray/ad-hoc files, mangled markup. Anything above is already handled." -ForegroundColor DarkGray
+  Write-Host "mangled markup, prose quality. Stray/ad-hoc files, mangled dirs and navigation are computed above now." -ForegroundColor DarkGray
   exit 0
 }
 if ($Json) { $result | ConvertTo-Json -Depth 5; exit 0 }

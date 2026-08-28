@@ -69,6 +69,16 @@ its dependencies satisfied, STOP and report the blocked tasks.
    *(If the unit has a VISIBLE SURFACE - a page, screen or component - spawn **ui-agent** instead. It is
    held to behaviour + accessibility gates and hands visual judgement back to me, because there is no exit
    code for taste. It will WAIT for my look; relay that and stop rather than closing the unit yourself.)*
+2b. **UX review (visible surfaces ONLY).** After ui-agent builds the surface, spawn **ux-agent** to review
+   it - reachability from the nav, hierarchy, affordances, form labels, empty/loading/error states,
+   consistency. It does NOT edit; it returns a prioritized list (P1 broken, P2 confusing, P3 polish). Relay
+   its **P1 and P2** items to **ui-agent**, which applies them directly; note P3 for me. This is a BUILD-TIME
+   pass on purpose: **nothing is written into DESIGN / STORIES / TASKS** - the fix lands in the code and
+   `close-unit -UxReviewed` records it in the commit, so the code plus its history are the documentation.
+   ux-agent still hands the aesthetic call to me (no exit code for taste); it settles the mechanical half -
+   a page nothing links to, a form with no labels, a view with no empty state. Skipping this pass is not
+   silent: `doc-stats -Findings` reports `[ux]` when a project has visible surfaces but no commit records a
+   review, exactly as it caught `ui-agent` never being routed.
    - If it reports a file got MANGLED: spawn **librarian-agent** in RECOVER mode, restore on my OK, retry
      with a smaller edit. Never let it hand-reconstruct a broken file.
    - **If `close-unit` reports the verification surface SHRANK, that is a recovery, not a retry.** A file
@@ -103,6 +113,11 @@ its dependencies satisfied, STOP and report the blocked tasks.
    ```
    It ticks the task, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits,
    and verifies. **Non-zero exit means the unit is NOT closed** - fix what it reports before the next unit.
+   For a **visible-surface** unit that went through step 2b, add **`-UxReviewed`** (and optionally
+   **`-UxNote "<what changed>"`**) so the commit records the pass and `doc-stats` stays quiet:
+   ```
+   dad close-unit -Id <unit id> -Title "<short title>" -UxReviewed -UxNote "nav + empty states"
+   ```
 
 ## Per STORY (when close-unit reports `story <id> -> DONE`)
 5. **grade-agent** -> grade the completed STORY. It writes `grades/<story id>_GRADE.md` and returns the

@@ -1774,6 +1774,185 @@ Test-Case "publish-run secret-scans, records provenance, commits locally, never 
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "a visible surface passes through ux-agent -> ui-agent, and close-unit records it (-UxReviewed)" {
+  # cms3: ui-agent was routed 0 times in 39 dev spawns, so no design pass ever happened - the routing is
+  # prose, and prose routing is what this kit stops trusting. ux-agent is the build-time reviewer (it
+  # suggests; ui-agent applies), and the backstop is a commit trailer: close-unit stamps "UX-reviewed:" only
+  # when -UxReviewed is passed, and doc-stats flags a project that has visible surfaces but no such commit -
+  # the same shape as the "closed:close-unit" story stamp.
+
+  # ux-agent is a REVIEWER, not an editor, and it hands taste to the human
+  $ux = Join-Path $kit "global\agents\ux-agent.md"
+  Assert (Test-Path $ux) "ux-agent.md is missing"
+  $uxText = Get-Content $ux -Raw
+  Assert ($uxText -match '(?m)^name:\s*ux-agent\s*$') "ux-agent frontmatter name is not ux-agent"
+  $toolsLine = ([regex]::Match($uxText, '(?m)^tools:\s*(.+)$')).Groups[1].Value
+  Assert ($toolsLine -notmatch '\bWrite\b' -and $toolsLine -notmatch '\bEdit\b') "ux-agent must not have Write/Edit - it suggests, ui-agent implements"
+  Assert ($uxText -match '(?i)aesthetic|no exit code for taste') "ux-agent must hand aesthetic judgement to the human"
+
+  # /build routes the pass and keeps it OUT of the design docs (the code is the record)
+  $build = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+  Assert ($build -match '(?i)ux-agent') "/build does not route ux-agent"
+  Assert ($build -match '-UxReviewed') "/build does not tell close-unit to record the UX pass"
+  Assert ($build -match '(?i)nothing is written into DESIGN') "/build must say the UX pass is NOT baked into the design docs"
+
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "web"; New-Item -ItemType Directory -Force "$p\docs","$p\src\Pages" | Out-Null
+    "# Design`n`nStatus: LOCKED`n`n## Contracts`n### C1 - pages`nhome + about + contact" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: pages   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    ("# Tasks`n`n## Build order`n`n" +
+     "### [ ] T1.1 - home   (Story S1)`n- **Goal:** landing`n`n" +
+     "### [ ] T1.2 - about  (Story S1)`n- **Goal:** about`n`n" +
+     "### [ ] T1.3 - contact (Story S1)`n- **Goal:** contact") | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "<h1>Home</h1>" | Set-Content "$p\src\Pages\Home.cshtml" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m "scaffold"
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # a project WITH a visible surface but NO recorded review -> doc-stats flags [ux]
+    $find1 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($find1 -match '\[ux\]') "doc-stats did not flag a visible-surface project with no recorded UX review"
+
+    # close T1.1 WITHOUT -UxReviewed while a .cshtml is staged -> in-loop WARN (still closes)
+    "<h1>About</h1>" | Set-Content "$p\src\Pages\About.cshtml" -Encoding UTF8
+    $c1 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") -ProjectDir $p -Id T1.1 -Title "home" -NoReindex 2>&1 | Out-String
+    Assert ($c1 -match '(?i)visible surface changed') "close-unit did not WARN on a surface change with no UX pass"
+
+    # close T1.2 WITH -UxReviewed -> the commit body carries the trailer, and no WARN
+    "<h1>Contact</h1>" | Set-Content "$p\src\Pages\Contact.cshtml" -Encoding UTF8
+    $c2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") -ProjectDir $p -Id T1.2 -Title "about" -UxReviewed -UxNote "nav" -NoReindex 2>&1 | Out-String
+    Assert ($c2 -notmatch '(?i)visible surface changed') "close-unit WARNed even though -UxReviewed was passed"
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $bodies = (git log --format=%B | Out-String)
+    $ErrorActionPreference = $prev; Pop-Location
+    Assert ($bodies -match '(?im)^\s*UX-reviewed:\s*nav') "close-unit -UxReviewed did not stamp 'UX-reviewed:' into the commit body"
+
+    # now that a commit records a review -> doc-stats is quiet on [ux]
+    $find2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($find2 -notmatch '\[ux\]') "doc-stats still flags [ux] after a commit recorded the review"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "only close-unit may close a story: it stamps, a hand-tick is flagged, dad tidy cleans" {
+  # Measured, cms3: 5/5 stories marked DONE with 21 tasks still open and 4 commits - the DONE markers were
+  # written by hand, not by close-unit. Now close-unit stamps 'closed:close-unit' when it rolls a story up,
+  # and doc-stats flags a DONE marker lacking that stamp UNLESS the story also looks genuinely closed (all
+  # tasks [x] AND a commit mentions it) - so a legit legacy close stays silent, a fabricated one lights up.
+  if (-not $haveGit) { return }
+
+  # close-unit stamps the provenance token
+  Assert ((Get-Content (Join-Path $kit "close-unit.ps1") -Raw) -match 'closed:close-unit') "close-unit does not stamp story-close provenance"
+
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED`nSecurity review: NOT-REQUIRED (test)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    # S1 hand-ticked DONE, tasks NOT all done, no commit  -> flagged
+    # S2 hand-ticked DONE but all tasks [x] and a commit mentions it  -> legit-looking, NOT flagged
+    "# Stories`n`n### Story S1: one   <!-- Status: DONE -->`n`n### Story S2: two   <!-- Status: DONE -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Tasks`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [x] T2.1 - b   (Story S2)`n- **Goal:** y" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m "work on S2 done"
+    $ErrorActionPreference = $prev; Pop-Location
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out -match '(?i)story S1 is marked DONE but has NO close-unit stamp') "a hand-ticked, incomplete DONE was not flagged"
+    Assert ($out -notmatch '(?i)story S2 is marked DONE') "a story that looks genuinely closed (all tasks [x] + commit) was wrongly flagged"
+
+    # dad tidy: lists junk by default, removes with -Fix, empties _tmp, preserves real files
+    New-Item -ItemType Directory -Force "$p\_tmp","$p\src" | Out-Null
+    "keep" | Set-Content "$p\src\Program.cs" -Encoding UTF8
+    "x" | Set-Content "$p\IMPLEMENTATION_SUMMARY.md" -Encoding UTF8
+    "x" | Set-Content "$p\build.binlog" -Encoding UTF8
+    "scratch" | Set-Content "$p\_tmp\note.txt" -Encoding UTF8
+    $tidy = Join-Path $kit "tidy.ps1"
+    Assert (Test-Path $tidy) "tidy.ps1 is missing"
+    $list = & powershell -NoProfile -ExecutionPolicy Bypass -File $tidy -ProjectDir $p 2>&1 | Out-String
+    Assert ($list -match '(?i)WOULD remove') "tidy did not list junk in the default (no -Fix) mode"
+    Assert (Test-Path "$p\IMPLEMENTATION_SUMMARY.md") "tidy removed a file WITHOUT -Fix - default must be safe"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $tidy -ProjectDir $p -Fix 2>&1 | Out-Null
+    Assert (-not (Test-Path "$p\IMPLEMENTATION_SUMMARY.md")) "tidy -Fix did not remove the ad-hoc summary"
+    Assert (-not (Test-Path "$p\build.binlog")) "tidy -Fix did not remove the binlog"
+    Assert (@(Get-ChildItem "$p\_tmp" -Force).Count -eq 0) "tidy -Fix did not empty _tmp/"
+    Assert (Test-Path "$p\src\Program.cs") "tidy -Fix removed real source - it must only touch junk"
+    Assert (Test-Path "$p\docs\DESIGN.md") "tidy -Fix removed docs"
+    # tidy refuses a non-project path (same guard as free-locks)
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $tidy -ProjectDir $env:SystemRoot 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 2) "tidy operated on a system path - the guard failed"
+  } finally { Remove-Sandbox $sb }
+
+  # scaffold gitignores _tmp/ and *.binlog so scratch and build logs never get committed
+  $sb2 = New-Sandbox
+  try {
+    $pj = Join-Path $sb2 "np"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $pj 2>&1 | Out-Null
+    $gi = Get-Content (Join-Path $pj ".gitignore") -Raw
+    Assert ($gi -match '(?m)^_tmp/') "scaffold does not gitignore _tmp/"
+    Assert ($gi -match '(?m)^\*\.binlog') "scaffold does not gitignore *.binlog"
+  } finally { Remove-Sandbox $sb2 }
+}
+
+Test-Case "doc-stats flags project-root JUNK and a nav-less layout" {
+  # Measured, cms3: the root was littered with ELEVEN ad-hoc SUMMARY/COMPLETE/IMPLEMENTATION files (which
+  # CLAUDE.md forbids), FOUR path-mangled directories (a Windows path passed to bash, backslashes eaten, so
+  # mkdir made one literal dir named DprojectsClaudeprojectscms3srcCMS), a committed .binlog, a duplicate
+  # solution file, AND a shared layout that linked to none of the 5 controllers - the app had no nav. All
+  # of it was the librarian's remit in PROSE and none of it held, so it is computed now.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "cms"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED`nSecurity review: NOT-REQUIRED (test)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $ds = Join-Path $kit "doc-stats.ps1"
+
+    # plant each junk class
+    "done stuff"           | Set-Content "$p\IMPLEMENTATION_SUMMARY.md" -Encoding UTF8
+    "S2 done"              | Set-Content "$p\STORY_S2_COMPLETE.md" -Encoding UTF8
+    "x"                    | Set-Content "$p\completed_tasks.txt" -Encoding UTF8
+    "binlog"              | Set-Content "$p\msbuild.binlog" -Encoding UTF8
+    "sln1" | Set-Content "$p\App.sln" -Encoding UTF8; "sln2" | Set-Content "$p\App.slnx" -Encoding UTF8
+    New-Item -ItemType Directory -Force (Join-Path $p "DprojectsClaudeprojectscmssrcApp") | Out-Null   # mangled
+
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out -match '(?i)ad-hoc status/summary file') "stray summary files were not flagged"
+    Assert ($out -match '(?i)MANGLED path') "the mangled path directory was not flagged"
+    Assert ($out -match '(?i)\.binlog') "the committed .binlog was not flagged"
+    Assert ($out -match '(?i)2 solution files') "duplicate solution files were not flagged"
+    # the user's own run exports must NOT be scolded
+    "transcript" | Set-Content "$p\S5run.txt" -Encoding UTF8
+    "transcript" | Set-Content "$p\run.txt" -Encoding UTF8
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out2 -notmatch 'S5run\.txt|(^|[^a-z])run\.txt') "a user run-export was wrongly flagged as junk"
+
+    # NAVIGABILITY: controllers with a nav-less layout -> WARN; a layout that links them -> silent
+    New-Item -ItemType Directory -Force "$p\src\App\Controllers","$p\src\App\Views\Shared" | Out-Null
+    "public class HomeController {}"    | Set-Content "$p\src\App\Controllers\HomeController.cs" -Encoding UTF8
+    "public class PagesController {}"   | Set-Content "$p\src\App\Controllers\PagesController.cs" -Encoding UTF8
+    "public class AccountController {}" | Set-Content "$p\src\App\Controllers\AccountController.cs" -Encoding UTF8
+    "<html><body>@RenderBody()</body></html>" | Set-Content "$p\src\App\Views\Shared\_Layout.cshtml" -Encoding UTF8
+    $out3 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out3 -match '(?i)\[ui\].*links to NONE') "a nav-less layout with 3 controllers was not flagged"
+    # now give the layout real nav links -> the [ui] finding clears
+    '<html><body><nav><a asp-controller="Home" asp-action="Index">Home</a><a asp-controller="Pages">Pages</a><a asp-controller="Account">Login</a></nav>@RenderBody()</body></html>' |
+      Set-Content "$p\src\App\Views\Shared\_Layout.cshtml" -Encoding UTF8
+    $out4 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out4 -notmatch '(?i)\[ui\]') "a layout that links every controller still warned - false positive"
+
+    # navigability is a WARN, never a hard FAIL (navigation design varies)
+    Assert ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq $null) "navigability must not hard-fail the run"
+  } finally { Remove-Sandbox $sb }
+
+  # prevention guidance is present where the junk is created
+  $dv = Get-Content (Join-Path $kit "global\agents\dev-agent.md") -Raw
+  Assert ($dv -match '(?i)backslash') "dev-agent does not warn against backslash paths under bash"
+  Assert ($dv -match '(?i)ad-hoc status|summary') "dev-agent does not warn against ad-hoc summary files"
+}
+
 Test-Case "data-stats gates DATASET integrity, and the corpus indexes data files" {
   # /research captures SOURCES (documents with provenance). A research SITE also needs DATA - the rows it
   # charts - and nothing here knew what a dataset was. A column can vanish, a unit can change from kg to
