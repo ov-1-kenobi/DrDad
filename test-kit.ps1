@@ -1590,7 +1590,8 @@ Test-Case "state findings are GENERATED, not authored by the librarian" {
       "### Story S1: One   (Epic E1) <!-- Status: TODO -->","",
       "### Story S2: Two   (Epic E1) <!-- Status: DONE -->","",
       "### Story S3: Three (Epic E1) <!-- Status: COMPLETE -->","",
-      "### Story S4: Four  (Epic E1)","") | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+      "### Story S4: Four  (Epic E1)","",
+      "### Story S5: Five  (Epic E1) <!-- Status: IN-PROGRESS -->","") | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
     @("# Task map","","## Tasks","",
       "### [x] T1.1 - a   (Story S1)","- **Goal:** x","",
       "### [x] T2.1 - b   (Story S2)","- **Goal:** y","",
@@ -1614,6 +1615,7 @@ Test-Case "state findings are GENERATED, not authored by the librarian" {
     # real problems, found deterministically
     Assert ($out -match 'story S4 has no <!-- Status') "a genuinely unmarked story was missed"
     Assert ($out -match "S3 Status marker is 'COMPLETE'") "a non-vocabulary marker was missed"
+    Assert ($out -notmatch "S5 Status marker") "IN-PROGRESS must be accepted as a synonym for DOING, not flagged as bad"
     Assert ($out -match 'story S1 has all 1 task\(s\) \[x\] but is not marked DONE') "a roll-up gap was missed"
     # Grading is per STORY - /build:2 "grade + hygiene per story", /build:98 "grade the completed STORY",
     # DESIGN R18, and close-unit only asking under -RequireGrade on a story close. This assertion used to

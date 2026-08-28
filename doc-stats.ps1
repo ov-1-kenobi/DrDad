@@ -270,9 +270,11 @@ if ($Findings) {
       if ($line -match '^#{1,6}\s' -and $line -match '\b(S\d+[A-Za-z0-9._-]*)\b') {
         $sid = $Matches[1]
         if ($line -notmatch '<!--\s*Status:') { $f.Add("[scribe] story $sid has no <!-- Status: ... --> marker on its heading") }
-        elseif ($line -notmatch '<!--\s*Status:\s*(TODO|DOING|DONE|BLOCKED)\s*-->') {
+        # IN-PROGRESS is accepted as a synonym for DOING: an older STORIES template shipped it, real projects
+        # still carry it (cms3 did), and it is the natural English term - flagging it 'bad' is a false positive.
+        elseif ($line -notmatch '<!--\s*Status:\s*(TODO|DOING|IN-PROGRESS|DONE|BLOCKED)\s*-->') {
           $bad = [regex]::Match($line, '<!--\s*Status:\s*([^-]*)-->').Groups[1].Value.Trim()
-          $f.Add("[scribe] story $sid Status marker is '$bad' - use TODO / DOING / DONE / BLOCKED")
+          $f.Add("[scribe] story $sid Status marker is '$bad' - use TODO / DOING / IN-PROGRESS / DONE / BLOCKED")
         }
       }
     }

@@ -2,6 +2,15 @@
 
 All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.29.1 - 2026-08-28
+
+### Fixed - doc-stats accepts IN-PROGRESS as a story status
+An older STORIES template shipped `<!-- Status: IN-PROGRESS -->`, and real projects still carry it (cms3,
+scaffolded on kit 0.22.0, had it on every story). `doc-stats -Findings` only accepted TODO/DOING/DONE/BLOCKED,
+so it read IN-PROGRESS as an empty marker and would flag an honest story as malformed. It now accepts
+IN-PROGRESS as a synonym for DOING, with a test that locks the vocabulary. Found while resetting cms3's
+fabricated story status to an honest state - a real remediation surfaced the false positive.
+
 ## 0.29.0 - 2026-08-27
 
 The cms3 run went "through all 5 stories" and the project root came out full of junk. Both are now computed

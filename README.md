@@ -1,6 +1,6 @@
 # DAD-kit - Design Document Aligned Development
 
-**Version 0.29.0** - local, offline, agentic software development on your own GPU.
+**Version 0.29.1** - local, offline, agentic software development on your own GPU.
 
 DAD-kit runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
