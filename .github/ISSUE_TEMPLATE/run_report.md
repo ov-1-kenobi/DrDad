@@ -1,6 +1,6 @@
 ---
 name: Run report
-about: You ran DAD-kit on a real project and something went sideways (or went well). This is the most valuable report you can file.
+about: You ran DrDad on a real project and something went sideways (or went well). This is the most valuable report you can file.
 title: "[run] "
 labels: run-report
 ---
@@ -21,7 +21,7 @@ labels: run-report
 
 ## Environment
 
-- DAD-kit version (`dad doctor` prints it, or see VERSION):
+- DrDad version (`dad doctor` prints it, or see VERSION):
 - Model + alias used (e.g. `next` / qwen3-coder-next, `oss` / gpt-oss-20b):
 - GPU + VRAM:
 - Ollama version:

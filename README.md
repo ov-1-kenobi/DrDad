@@ -1,8 +1,8 @@
-# DAD-kit - Design Document Aligned Development
+# DrDad - Design Research Document, Agentic Development
 
-**Version 0.29.2** - local, offline, agentic software development on your own GPU.
+**Version 0.30.0** - local, offline, agentic software development on your own GPU.
 
-DAD-kit runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
+DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
 cannot quietly wreck your project. The design document is the contract; every mode aligns to it.
 
@@ -34,7 +34,7 @@ hardened failure by failure - and help - you are in the right place.
 A 14-32B local model, driven hard, does things a frontier model rarely does: it deletes tests to make a
 suite pass, reports work it did not do, writes a task list no tool can parse, and loops one failing command
 a thousand times. Prompting against this does not hold - across many graded runs, **every prose rule failed
-at least once and every deterministic gate held.** So DAD-kit's rule is: if a script can check it, a script
+at least once and every deterministic gate held.** So DrDad's rule is: if a script can check it, a script
 checks it, and the model does not get a vote.
 
 A few of the gates, each from a real incident:
@@ -51,7 +51,7 @@ A few of the gates, each from a real incident:
 - **the environment-block detector** - when Windows App Control / WDAC refuses to run a build, the kit
   STOPS and reports it, and forbids agents from disabling your security to get past it (a real run tried).
 
-15 slash commands and 14 sub-agents sit on top of these, but the gates are the point.
+15 slash commands and 15 sub-agents sit on top of these, but the gates are the point.
 
 ---
 
@@ -74,7 +74,7 @@ needing pixel-level visual judgement (there is no exit code for taste).
 
 - Windows 10/11
 - [Ollama](https://ollama.com) with a coding-capable model (Devstral, Qwen3-Coder, gpt-oss, etc.)
-- [Claude Code](https://www.anthropic.com/claude-code) (the CLI harness; DAD-kit points it at Ollama)
+- [Claude Code](https://www.anthropic.com/claude-code) (the CLI harness; DrDad points it at Ollama)
 - .NET 8+ SDK (builds the one C# MCP server)
 - A GPU with enough VRAM for your chosen model (16 GB runs the recommended set; the kit reports fit)
 
@@ -130,7 +130,7 @@ went wrong" - are the most valuable contribution right now; there is an issue te
 
 ## Third-party components and licenses
 
-DAD-kit's own code is MIT ([LICENSE](LICENSE)). It does **not** redistribute model weights or Claude Code -
+DrDad's own code is MIT ([LICENSE](LICENSE)). It does **not** redistribute model weights or Claude Code -
 `install.ps1` pulls Ollama models and you install Claude Code yourself, each under its own license. The base
 models (Devstral, Qwen, gpt-oss, Gemma, etc.) carry their own terms; review them for your use. Pointing
 Claude Code at a non-Anthropic backend is your responsibility to reconcile with its terms of service.

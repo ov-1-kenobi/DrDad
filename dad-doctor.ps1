@@ -36,7 +36,7 @@ function Get-Ver([string]$n, [string]$arg = "--version") {
 
 $kitVersion = if (Test-Path (Join-Path $kit "VERSION")) { (Get-Content (Join-Path $kit "VERSION") -Raw).Trim() } else { "unknown" }
 Write-Host ""
-Write-Host "== DAD-kit doctor ==" -ForegroundColor Cyan
+Write-Host "== DrDad doctor ==" -ForegroundColor Cyan
 Write-Host "kit: $kit  (version $kitVersion)"
 
 # ---------------------------------------------------------------- prerequisites

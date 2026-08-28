@@ -1,4 +1,4 @@
-# Technical Design Document - DAD (Design Document Aligned Development)
+# Technical Design Document - DrDad (Design Research Document, Agentic Development)
 
 Status: LOCKED
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
@@ -273,7 +273,7 @@ mode system, and one-command model switching. No Anthropic account; offline afte
       properly closed unit clears it automatically. Deliberately a NAG WITH TEETH, not a wall: the harness
       sets `stop_hook_active` on the retry and the guard allows that pass, so it can never deadlock a
       session - what it guarantees is that the failure is LOUD instead of discovered in a transcript days
-      later. FAILS OPEN on anything unexpected (not a DAD project, no git, docs-only edits, its own
+      later. FAILS OPEN on anything unexpected (not a DrDad project, no git, docs-only edits, its own
       errors); a guard that blocks on its own bugs is worse than the problem. Supporting gates from the
       same run: `/build` STOPS on a DRAFT design instead of silently degrading to PROTO (R7 always said it
       gates on LOCKED) and proves the shell works by running `doc-stats.ps1` before its first edit;

@@ -3,7 +3,7 @@ description: Scaffold a new project deterministically (runs new-project.ps1 - re
 argument-hint: <general|experience>  (general software vs an interactive/game/XR experience)
 ---
 Scaffold this project by RUNNING the kit's deterministic script. Do NOT hand-copy files - the script lays
-down the DAD structure AND creates the right design doc as `Status: DRAFT`.
+down the DrDad structure AND creates the right design doc as `Status: DRAFT`.
 
 Kit path: `C:\Projects\Claude\MCP\DAD-kit`   (install rewrites this to the real location)
 

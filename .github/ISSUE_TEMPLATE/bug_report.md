@@ -27,7 +27,7 @@ labels: bug
 
 ## Environment
 
-- DAD-kit version:
+- DrDad version:
 - `dad doctor` summary line:
 - Windows + PowerShell version (`$PSVersionTable.PSVersion`):
 - .NET SDK version (`dotnet --version`), if the C# server is involved:

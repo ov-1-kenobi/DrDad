@@ -1,11 +1,11 @@
-# DAD - Design Document Aligned Development
+# DrDad - Design Research Document, Agentic Development
 
-**DAD-kit reference guide.** The public front door is [../README.md](../README.md); this is the full manual.
+**DrDad reference guide.** The public front door is [../README.md](../README.md); this is the full manual.
 until a full `/design -> /taskmap -> /build` run is verified end to end on real hardware.
 Check your install any time with `dad-doctor.cmd`.
 
 *Local, offline Claude Code on your own GPU. The design document is the contract and every
-mode aligns to it. Start with **DAD**; add **BMAD on top** when you need the full agile pipeline.*
+mode aligns to it. Start with **DrDad**; add **BMAD on top** when you need the full agile pipeline.*
 
 Run the real Claude Code agentic loop **inside VS Code**, driven by your local models via
 Ollama. No Anthropic account, no API key, no internet after first setup. The loop is
@@ -46,7 +46,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 - Run `install.ps1` **once**. It installs the commands/agents/`settings.json` into `%USERPROFILE%\.claude\`
   (global) and points them at this folder. After that, `/scaffold` `/design` `/spec` `/proto` `/build` `/assets`
   work in **every** project - no per-project install.
-- **Per project:** run `new-project.cmd` (or `/scaffold`) - **stack-agnostic** DAD init. The design doc
+- **Per project:** run `new-project.cmd` (or `/scaffold`) - **stack-agnostic** DrDad init. The design doc
   (DESIGN.md vs TEDD.md) and the stack are decided in `/design` - the stack FIRST. (Use this, not `/init`.)
 - **Don't move or delete this folder** - the global config and every project's `.mcp.json` reference
   it by absolute path. If you must move it, re-run `install.ps1` from the new location.
@@ -156,7 +156,7 @@ WSL2 only pays off if your work is Linux-centric *and* your project files live i
   test-kit.cmd                                  # must be 0 failed
   # bump VERSION + add a CHANGELOG entry, then:
   git add -A && git commit -m "release: v<x.y.z>"
-  git tag -a v<x.y.z> -m "DAD-kit v<x.y.z>"
+  git tag -a v<x.y.z> -m "DrDad v<x.y.z>"
   git remote add origin <your repo url>         # first time only
   git push -u origin main --tags                # CI runs test-kit.ps1 on windows-latest
   ```
@@ -177,10 +177,10 @@ this before you install it on a machine you use for other work:
 | Per project: `CLAUDE.md`, `.mcp.json`, `docs/`, `.gitignore`, `.git/hooks/pre-commit` | that project | delete / `git` |
 
 **The one to think about:** because `ANTHROPIC_BASE_URL` is set globally, *every* Claude Code session on
-that machine goes to local Ollama - including projects that have nothing to do with DAD. That is the point
+that machine goes to local Ollama - including projects that have nothing to do with DrDad. That is the point
 on a dedicated offline box, but if you also want to use cloud Claude there, scope it instead: move the
-`env` block into a **project-level** `.claude/settings.json` inside your DAD projects and remove it from the
-global file. Claude Code reads project settings over global ones, so DAD projects go local while everything
+`env` block into a **project-level** `.claude/settings.json` inside your DrDad projects and remove it from the
+global file. Claude Code reads project settings over global ones, so DrDad projects go local while everything
 else stays normal.
 
 **No name collisions** (the test suite enforces this):
@@ -189,7 +189,7 @@ else stays normal.
 - No agent name matches a built-in agent type (`Explore`, `Plan`, `general-purpose`, ...). Ours all carry an
   `-agent` suffix; `taskmap-agent` is deliberately distinct from the built-in `Plan`.
 - MCP tools are namespaced by the protocol (`mcp__local-tools__*`), so they cannot collide.
-- **BMAD** namespaces its commands under `/bmad-*`, so BMAD and DAD-kit can be installed side by side.
+- **BMAD** namespaces its commands under `/bmad-*`, so BMAD and DrDad can be installed side by side.
 
 **Intentional divergences**, so they don't surprise anyone:
 - The kit tells agents to use `local-tools`' `web_search` / `ingest_url` instead of built-in
@@ -199,7 +199,7 @@ else stays normal.
   `trufflehog:ignore`, `nosec`) as well as `DAD-ALLOW-SECRET`.
 - `install-hooks.ps1` refuses to touch a project that already uses **husky**, **pre-commit**, or
   **lefthook**, and prints the one line to add to that tool's own config instead.
-- The doc layout (`DESIGN`/`STORIES`/`TASKS`/`STATUS`/`COMMANDS` + `grades/`) is DAD's own convention, not an
+- The doc layout (`DESIGN`/`STORIES`/`TASKS`/`STATUS`/`COMMANDS` + `grades/`) is DrDad's own convention, not an
   industry standard - each project's `CLAUDE.md` explains it, which is what makes a project self-describing
   to a developer (or model) who has never seen the kit.
 

@@ -1,7 +1,7 @@
-# Project: DAD - Design Document Aligned Development (kit maintenance)
+# Project: DrDad - Design Research Document, Agentic Development (kit maintenance)
 
-This folder IS the **DAD** kit (local, offline Claude Code). Editing it here maintains the kit itself.
-(DAD = the lightweight local runtime + design-doc loop; **BMAD on DAD** = BMAD running on top of it.)
+This folder IS the **DrDad** kit (local, offline Claude Code). Editing it here maintains the kit itself.
+(DrDad = the lightweight local runtime + design-doc loop; **BMAD on DrDad** = BMAD running on top of it.)
 
 ## Stack
 - C# / .NET 8 (`RollForward=LatestMajor`, so it builds on .NET 8+ SDK and runs on .NET 8+ runtime)

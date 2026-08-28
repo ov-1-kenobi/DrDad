@@ -1,4 +1,4 @@
-# DAD Cheatsheet - Design Document Aligned Development (RTX 5080 + Ollama)
+# DrDad Cheatsheet - Design Research Document, Agentic Development (RTX 5080 + Ollama)
 > The design document is the contract; every mode aligns to it.
 
 ## Models
@@ -43,7 +43,7 @@ model-load time; `OLLAMA_KEEP_ALIVE=30m` keeps it warm after.
 ## Modes / commands
 | Command            | Does                                                        | Model           | When                          |
 |--------------------|-------------------------------------------------------------|-----------------|-------------------------------|
-| `/scaffold <kind>` | **Stack-agnostic** DAD init: CLAUDE.md/.mcp.json/docs + the design doc as **DRAFT**. `kind` = general (`DESIGN.md`) or experience (`TEDD.md`); no stack chosen. `new-project.cmd <kind>` is the same. | either | starting a project |
+| `/scaffold <kind>` | **Stack-agnostic** DrDad init: CLAUDE.md/.mcp.json/docs + the design doc as **DRAFT**. `kind` = general (`DESIGN.md`) or experience (`TEDD.md`); no stack chosen. `new-project.cmd <kind>` is the same. | either | starting a project |
 | `/research [topic]` | **ONLINE**: decompose into questions -> web_search -> ingest_url -> `docs/sources/` + `SOURCES.md` ledger (YOU tier each source); gate = `source-stats.cmd` | **oss**/quality | before /design, when the design needs evidence |
 | `/design [topic]`   | **Design-first**: stack FIRST, then requirements + epics + **contracts** (architect-agent pins formats/semantics with worked examples; `contracts` arg = just that step); NO stories/code; offers to LOCK | **oss**; **quality**/cloud for contracts | plan before building |
 | `/stories [arg]`    | Manage **STORIES.md**: expand epics into stories, normalize/dedupe, `migrate` old in-doc stories out | **oss**/quality | build the story backlog |

@@ -3,7 +3,7 @@ description: BROWNFIELD mode - reverse-engineer an EXISTING codebase into a desi
 argument-hint: [area to focus on; empty = the whole solution]
 ---
 Turn a codebase that already exists into a design doc and a story backlog, so the rest of the kit can work
-on it. This is the entry point for a project DAD did not scaffold.
+on it. This is the entry point for a project DrDad did not scaffold.
 
 Scope: **$ARGUMENTS**  (empty = the whole solution)
 

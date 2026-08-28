@@ -1,6 +1,21 @@
 # Changelog
 
-All notable changes to DAD-kit. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
+All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
+
+## 0.30.0 - 2026-08-28
+
+### Changed - the kit is now DrDad (Design Research Document, Agentic Development)
+A vision refresh, not a teardown. The new name front-loads what the kit already does: research feeds the
+design doc before a line of code (`/research` runs before `/design`), and "Agentic Development" names the
+loop. "-kit" is dropped - BMAD uses "-METHOD", not "-kit"; the initialism stands on its own.
+
+This is a BRAND-TEXT change only. The docs (README, GUIDE, CHEATSHEET, the design doc, CONTRIBUTING,
+SECURITY, the issue templates, the generic project CLAUDE.md) now read DrDad, and `dad doctor`'s banner with
+them. The machinery is deliberately untouched, so nothing a script depends on moves: the `dad` command stays
+(dad doctor is, fittingly, Dr Dad), and so do the `dad-*` scripts, `DAD_HOME`, the `Bash(dad:*)` allowlist,
+the dev-path placeholder, the `~/.bashrc` block markers, and the `DAD-kit-v<x>.zip` package name (the
+distribution artifact keeps its name). The rebrand sweep protected every one of those tokens, and the gate's
+placeholder / bashrc / package / old-brand tests confirm none of them moved.
 
 ## 0.29.2 - 2026-08-28
 

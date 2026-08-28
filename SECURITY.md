@@ -1,6 +1,6 @@
 # Security
 
-DAD-kit is a local, offline development harness. Its security posture is a design goal, not an afterthought.
+DrDad is a local, offline development harness. Its security posture is a design goal, not an afterthought.
 
 ## What the kit does for you
 
@@ -18,7 +18,7 @@ DAD-kit is a local, offline development harness. Its security posture is a desig
 
 ## Reporting a vulnerability
 
-If you find a security issue in DAD-kit's own code (the scripts, the C# MCP server, the installer, or the
+If you find a security issue in DrDad's own code (the scripts, the C# MCP server, the installer, or the
 templates), please report it privately rather than opening a public issue:
 
 - Open a GitHub **security advisory** on the repository (Security tab -> Report a vulnerability), or

@@ -1,7 +1,7 @@
 # Project: <name>
 
 ## Stack
-<!-- Left blank on purpose - DAD does NOT lock a platform at scaffold. /design decides the stack LATE,
+<!-- Left blank on purpose - DrDad does NOT lock a platform at scaffold. /design decides the stack LATE,
      once the stories are implementable, and fills this in (cribbed from templates/<stack>). -->
 - Language / runtime: <decided in /design's architecture step>
 - Key tools / libraries: <decided then>

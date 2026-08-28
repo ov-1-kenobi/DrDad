@@ -1,4 +1,4 @@
-# Contributing to DAD-kit
+# Contributing to DrDad
 
 The whole project is one idea: **never accept an assertion a script can settle.** Contributions are held to
 the same standard as the kit itself.
@@ -59,5 +59,5 @@ No Ollama, GPU, or network is required to run the suite.
 - A behavior change with no test.
 - A workaround that weakens security (disabling a service, adding a Defender exclusion, forcing past a WDAC
   block). The kit refuses these on purpose; so do we.
-- Redistributed model weights or a bundled copy of Claude Code. DAD-kit orchestrates those; it never ships
+- Redistributed model weights or a bundled copy of Claude Code. DrDad orchestrates those; it never ships
   them.

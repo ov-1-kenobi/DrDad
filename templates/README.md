@@ -42,7 +42,7 @@ tell you to detect the installed one instead). Both properties are enforced by `
   `docs/TEDD.md`. Omitting the kind prints the usage and exits 1 - it is not optional.
 - **In Claude Code:** `/scaffold`.
 
-Either way you get a generic, stack-agnostic DAD project. Then run `/design`, which decides the stack as
+Either way you get a generic, stack-agnostic DrDad project. Then run `/design`, which decides the stack as
 its second step.
 
 ## By hand
