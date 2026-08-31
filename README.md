@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.33.0** - local, offline, agentic software development on your own GPU.
+**Version 0.33.1** - local, offline, agentic software development on your own GPU.
 
 DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
@@ -15,14 +15,16 @@ Built for one specific person: the developer with a capable-but-not-frontier GPU
 
 This is **pre-1.0 and candid about it.**
 
-- The gates are real, tested (100+ cases, green), and each one was earned from a **measured failure** on a
+- The gates are real, tested (130+ cases, green), and each one was earned from a **measured failure** on a
   real run - see [CHANGELOG.md](CHANGELOG.md), which reads as a field log of every way a local model
   sabotaged itself and the deterministic check that stopped it.
 - **A full `/design -> /build -> close` has not yet completed on a local model without human repair.** The
   best run to date produced a real ASP.NET Core app - controllers, EF Core migrations, integration tests,
   15 of 44 tasks closed - before an external Windows policy blocked test execution. Getting one clean,
   reproducible end-to-end run is the current goal, in the open.
-- **Windows-first.** The scripts are PowerShell + `.cmd`. A cross-platform port is not done.
+- **Windows-only, by design.** Built for a Windows + Ollama box: PowerShell + `.cmd` scripts, a
+  Windows-native installer and hooks. Cross-platform is a deliberate post-1.0 question (the C# server is
+  already portable; the plumbing is not), not a near-term goal.
 
 If you want a polished product, this is not it yet. If you want to watch a local-first agentic harness get
 hardened failure by failure - and help - you are in the right place.
@@ -85,13 +87,17 @@ Everything after first install runs offline.
 ## Quickstart
 
 ```
-git clone <your-fork-url> dad-kit
-cd dad-kit
+git clone <your-fork-url> drdad
+cd drdad
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 `install.ps1` detects its own location, reconciles Ollama with `models.json`, builds the C# server,
 installs the global commands/agents and `settings.json` (paths auto-fixed), and puts `dad` on your PATH.
+
+(Prefer not to clone? A zipped release installs the same way - extract it and run `install.cmd`. The release
+asset is named `DAD-kit-v<x>.zip` for historical reasons; it is DrDad inside - the `dad` command and all.)
+
 Then, in a new shell:
 
 ```

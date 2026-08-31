@@ -2,6 +2,18 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.33.1 - 2026-08-28
+
+### Docs - public-release readiness
+Polish ahead of a public GitHub push (no functional change):
+- README: the case count is current (130+), Windows is framed as a deliberate target rather than a gap, the
+  Quickstart clones to `drdad`, and a note explains the release asset keeps its historical
+  `DAD-kit-v<x>.zip` name (it is DrDad inside).
+- Added `docs/PUBLISHING.md` - a clean-slate release runbook: rotate any real creds + report them, build an
+  audited copy with `package-kit -Folder`, scan with `scan-secrets` + `gitleaks`, push a fresh single-commit
+  repo that keeps the CHANGELOG (dropping history that would need auditing), then tag + cut a Release.
+  Windows-only stays the intended platform.
+
 ## 0.33.0 - 2026-08-28
 
 ### Changed - the stop guard resists reflexive -Ack, and [integrity] names manufactured green state
