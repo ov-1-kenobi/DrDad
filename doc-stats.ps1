@@ -500,16 +500,30 @@ if ($Findings) {
     }
   }
 
-  # a done unit with no commit mentioning it - a missed checkpoint
+  # Done units with no commit mentioning them: a missed checkpoint one at a time, and IN BULK the fabrication
+  # signature. A real run ticked 36 tasks DONE while HEAD never moved - it -Ack'd the stop guard and never
+  # ran close-unit. 36 separate [dev] lines is noise that reads like a to-do list; one loud [integrity] line
+  # (with the frozen HEAD and the -Ack override count) is the signal that the green state is manufactured.
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $uncommittedDone = New-Object System.Collections.Generic.List[string]
+    $headSha = ""
     try {
       Push-Location $proj
       $log = (git log --oneline | Out-String)
+      $headSha = (git rev-parse --short HEAD 2>$null | Out-String).Trim()
       foreach ($u in (@($storiesDone) + @($tasksDone | ForEach-Object { $_.Id }) | Select-Object -Unique)) {
-        if ($log -notmatch [regex]::Escape($u)) { $f.Add("[dev] $u is done but no commit mentions it - missed checkpoint") }
+        if ($log -notmatch [regex]::Escape($u)) { [void]$uncommittedDone.Add($u) }
       }
     } catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }
+    if ($uncommittedDone.Count -ge 5) {
+      $ackNote = ""
+      $ackLog = Join-Path $proj ".claude\.dad-ack-log"
+      if (Test-Path $ackLog) { $ackNote = " The stop guard was overridden (-Ack) $(@(Get-Content $ackLog).Count) time(s)." }
+      $f.Add("[integrity] $($uncommittedDone.Count) unit(s) are ticked DONE but NO commit mentions them (HEAD $headSha) - the run manufactured green state: hand-ticked, never closed via close-unit.$ackNote Bank each with 'dad close-unit -Id <id>', or revert the ticks. e.g. $(($uncommittedDone | Select-Object -First 8) -join ', ')")
+    } else {
+      foreach ($u in $uncommittedDone) { $f.Add("[dev] $u is done but no commit mentions it - missed checkpoint") }
+    }
   }
 
   Write-Host "== STATE FACTS (computed - do NOT contradict these) ==" -ForegroundColor Cyan

@@ -2,6 +2,28 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.33.0 - 2026-08-28
+
+### Changed - the stop guard resists reflexive -Ack, and [integrity] names manufactured green state
+The ceiling under the UI divergence: a run did all the work inline, hand-ticked the tasks, `-Ack`'d dad-guard
+twice, and ended with HEAD never moving - nothing committed, five stories "done." A Stop hook cannot stop a
+shell command (fail-open is the design and stays), so the override is now AUDITED and ESCALATING rather than
+silent:
+- `dad-guard -Ack` records every override to `.claude/.dad-ack-log` (timestamp, git HEAD, optional
+  `-Reason`), and a REPEAT ack while HEAD has not moved (no commit since the last ack) escalates loudly and
+  names the fabrication pattern instead of quietly clearing.
+- `doc-stats -Findings` consolidates the hand-tick gap: instead of 36 `[dev] ... no commit mentions it` lines
+  that read like a to-do list, ONE loud `[integrity]` finding names the count, the frozen HEAD, and how many
+  times the guard was `-Ack`'d - the signal that the green state is manufactured, and it costs the grade.
+  Below 5 uncommitted-done units it stays the per-unit `[dev]` lines.
+
+Honest scope: this cannot FORCE a commit - nothing can force a model to run close-unit - but it makes the
+bypass loud, recorded, and graded, which is the kit's answer to what it cannot hard-block.
+
+### Tests
+New: `-Ack` logs the override and a frozen-HEAD repeat escalates; doc-stats emits one `[integrity]` line (not
+per-task `[dev]` spam) and surfaces the `-Ack` count.
+
 ## 0.32.0 - 2026-08-28
 
 ### Added - STYLE.md, the visual contract (why "complete UI" kept diverging)

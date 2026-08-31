@@ -30,6 +30,7 @@
 param(
   [switch]$Check,
   [switch]$Ack,
+  [string]$Reason = "",
   [string]$ProjectDir = ""
 )
 
@@ -85,9 +86,30 @@ $proj = (Resolve-Path -LiteralPath $proj).Path
 if ($Ack) {
   $dir = Join-Path $proj ".claude"
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+  # -Ack is the HUMAN's escape hatch ("I know, this is deliberate"). A run that reflexively acks its own
+  # uncommitted code is the one fabrication we CANNOT hard-block - a Stop hook cannot stop a shell command,
+  # and fail-open is the design. So the override is AUDITED and ESCALATING instead: every ack is logged with
+  # the git HEAD, and a repeat ack while HEAD has NOT moved (no commit since the last ack) is the fabrication
+  # signature - turn after turn ended on unverified code, nothing ever banked. doc-stats [integrity] reads it.
+  $head = ""
+  $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try { Push-Location $proj; $head = (git rev-parse --short HEAD 2>$null | Out-String).Trim(); Pop-Location } catch { }
+  $ErrorActionPreference = $prevEap
+  $logPath = Join-Path $proj ".claude\.dad-ack-log"
+  $prior = @(); if (Test-Path $logPath) { $prior = @(Get-Content $logPath) }
+  $frozen = ($prior.Count -gt 0 -and $head -and ($prior[-1] -match [regex]::Escape("head:$head")))
+  $why = if ($Reason) { $Reason } else { "(no reason given)" }
+  Add-Content -Path $logPath -Value "$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ss')  head:$head  ack#$($prior.Count + 1)  $why"
   [System.IO.File]::WriteAllText((Join-Path $proj $STAMP),
     "verified-by: dad-guard -Ack`r`n", (New-Object System.Text.UTF8Encoding($false)))
-  Write-Host "dad-guard: acknowledged - the next stop is allowed." -ForegroundColor Yellow
+  if ($frozen) {
+    Write-Host "dad-guard: ACKNOWLEDGED - but this is ack #$($prior.Count + 1) with HEAD still $head (no commit since the last ack)." -ForegroundColor Red
+    Write-Host "  That is the FABRICATION PATTERN: ending turns on unverified code without ever banking it (a real run" -ForegroundColor Red
+    Write-Host "  did exactly this and left 36 ticked-but-uncommitted files). Run close-unit to actually COMMIT, or you" -ForegroundColor Red
+    Write-Host "  are manufacturing green state - doc-stats -Findings will flag it as [integrity], and it costs the grade." -ForegroundColor Red
+  } else {
+    Write-Host "dad-guard: acknowledged - the next stop is allowed (recorded to .claude\.dad-ack-log)." -ForegroundColor Yellow
+  }
   exit 0
 }
 

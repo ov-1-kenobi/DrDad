@@ -1954,6 +1954,45 @@ Test-Case "STYLE.md is the visual contract: scaffolded, wired, and doc-stats fla
   } finally { Remove-Sandbox $sbB }
 }
 
+Test-Case "the stop guard AUDITS -Ack and escalates on a frozen HEAD; doc-stats consolidates the gap as [integrity]" {
+  # The measured ceiling: a run did all work inline, hand-ticked the tasks, -Ack'd dad-guard TWICE, and ended
+  # with HEAD never moving - nothing committed. A Stop hook cannot stop a shell command (fail-open is the
+  # design), so the override is now AUDITED + ESCALATING, and the hand-tick gap is one loud [integrity]
+  # finding (with the frozen HEAD + the -Ack count) instead of 36 [dev] lines that read like a to-do list.
+  if (-not $haveGit) { return }
+  $guard = Join-Path $kit "dad-guard.ps1"
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\src" | Out-Null
+    "# Design`n`nStatus: LOCKED`n`n## Contracts`n### C1`nx" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: one   <!-- Status: DOING -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    $tl = @("# Tasks","","## Build order","")
+    1..6 | ForEach-Object { $tl += "### [x] T1.$_ - task $_   (Story S1)"; $tl += "- **Goal:** x"; $tl += "" }
+    $tl | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "class A {}" | Set-Content "$p\src\a.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m "scaffold - no task ids here"
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # 6 ticked-but-uncommitted units -> ONE [integrity] line, not 6 [dev] lines
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out -match '\[integrity\]') "doc-stats did not consolidate the hand-tick gap into an [integrity] finding"
+    Assert ((@($out -split "`n" | Where-Object { $_ -match '\[dev\]\s*T1\.' })).Count -eq 0) "doc-stats still emitted per-task [dev] spam instead of the [integrity] headline"
+
+    # -Ack records the override; a repeat ack with HEAD unchanged ESCALATES
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Ack -Reason "spike" -ProjectDir $p | Out-Null
+    Assert (Test-Path "$p\.claude\.dad-ack-log") "-Ack did not record the override to .claude\.dad-ack-log"
+    $ack2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Ack -ProjectDir $p 2>&1 | Out-String
+    Assert ($ack2 -match '(?i)fabrication pattern|ack #2') "a repeat -Ack with a frozen HEAD did not escalate"
+
+    # and [integrity] now surfaces the override count
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out2 -match '(?i)overridden \(-Ack\)') "[integrity] did not surface the -Ack override count"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "only close-unit may close a story: it stamps, a hand-tick is flagged, dad tidy cleans" {
   # Measured, cms3: 5/5 stories marked DONE with 21 tasks still open and 4 commits - the DONE markers were
   # written by hand, not by close-unit. Now close-unit stamps 'closed:close-unit' when it rolls a story up,
