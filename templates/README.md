@@ -33,7 +33,8 @@ tell you to detect the installed one instead). Both properties are enforced by `
 | `unity/`    | Unity experiences (PROFILE.md + BuildScript.cs to copy; TEDD from _common; playtest-agent) | Unity CLI batchmode |
 
 `_common/` holds the shared `.mcp.json` and the doc templates: `docs/DESIGN.md`, `docs/TEDD.md`,
-`docs/STORIES.md`, `docs/TASKS.md`, `docs/STATUS.md`, `docs/SOURCES.md`, `docs/RECIPES.md`.
+`docs/STORIES.md`, `docs/TASKS.md`, `docs/STATUS.md`, `docs/SOURCES.md`, `docs/RECIPES.md`, `docs/STYLE.md`
+(the visual contract - palette / type / tone / branding for a UI project).
 
 ## Scaffold a project
 

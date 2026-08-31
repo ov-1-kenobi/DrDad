@@ -97,3 +97,27 @@ zero integration tests, having never once served a request. Every part worked; t
 
 A walking skeleton makes every later story an extension of something that RUNS, and it makes close-unit's
 test gate mean INTEGRATION from the very first close instead of mocks.
+
+## UI COMPLETENESS IS TASKS, NOT AN AFTERTHOUGHT
+
+Measured: a real CMS run built five feature stories (rich text, uploads, modals) and shipped a `_Layout`
+linking to NONE of its four controllers - a set of pages with no way to move between them. The feature
+stories never mentioned navigation, so no task owned it, so it never got built. UI completeness is the
+connective tissue a feature backlog skips.
+
+So when a story has a **visible surface** (a page, screen, or component):
+- **Tag each surface task `[ui]`** in its title line, e.g.
+  `### [ ] T3.4 - Pages list view [ui]   (Story S3)`. `/build` routes `[ui]` tasks to `ui-agent` ->
+  `ux-agent` (behaviour + accessibility + design review) instead of to a generic `dev-agent`; the grade and
+  `doc-stats` watch for them. (Put `[ui]` before the `(Story ...)` tag; the id and story still parse.)
+- **Write the acceptance in UX language, not just function** - "reachable from the shared nav; the primary
+  action is prominent; a scannable list; EMPTY / LOADING / ERROR states; conforms to `docs/STYLE.md`", not
+  merely "renders the pages." *Minimal to use, and readable* is the bar.
+- **Emit the connective tasks the stories forgot** - at least a **navigation / shell** task (every
+  controller/page reachable from one place, with an active-state indicator) and, wherever a view shows data,
+  its **empty / loading / error** states. Each is its own `[ui]` task with its own acceptance - because if
+  they are not tasks, they are not built.
+
+Cite `docs/STYLE.md` (the visual contract: palette / type / tone / branding) in a surface task's acceptance
+so the model builds toward a defined look instead of reinventing it each run. If `STYLE.md` is still
+unfilled, say so - that is a `/design` gap to raise, not something to guess.

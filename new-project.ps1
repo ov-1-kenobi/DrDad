@@ -70,6 +70,10 @@ Copy-Item (Join-Path $templates "_common\docs\SOURCES.md") (Join-Path $proj "doc
 # The schema ledger for data the project charts - the counterpart to SOURCES.md. `dad data-stats`
 # checks real files against it; a column that vanishes or a unit that changes is otherwise invisible.
 Copy-Item (Join-Path $templates "_common\docs\DATASETS.md") (Join-Path $proj "docs\DATASETS.md") -Force
+# The VISUAL contract: palette / type / tone / branding. Human-owned; /design fills it for a surface
+# project. ux-agent reviews against it and doc-stats checks the palette is actually used - so "complete UI"
+# has a defined target instead of being reinvented (or skipped) every run.
+Copy-Item (Join-Path $templates "_common\docs\STYLE.md") (Join-Path $proj "docs\STYLE.md") -Force
 New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 
 # Shared MCP config (RAG over this project's docs).

@@ -16,8 +16,9 @@ with *no empty state* are not opinions; "the hero should feel calmer" is, and yo
 reporting.
 
 ## What you read
-The files `ui-agent` just wrote for this unit (the page/screen/component), the shared layout/nav, and the
-contracts (`search_datasheets` for the design doc - do not re-invent what it already pins). If a screenshot
+The files `ui-agent` just wrote for this unit (the page/screen/component), the shared layout/nav, the
+**visual contract `docs/STYLE.md`** (palette / type / tone / branding - the look this surface must match),
+and the contracts (`search_datasheets` for the design doc - do not re-invent what it already pins). If a screenshot
 was provided you may `describe_image` it to catch the gross cases (blank page, overlapping text); that is a
 smoke check, not an aesthetic verdict.
 
@@ -37,6 +38,10 @@ smoke check, not an aesthetic verdict.
 7. **Content.** Real labels, not lorem/placeholder; link text that says where it goes ("Download report",
    not "click here").
 8. **Narrow viewport.** Relative units, a `viewport` meta tag, no fixed-pixel layout that breaks at 360px.
+9. **Style conformance (`docs/STYLE.md`).** Colors come from the palette (not one-off hexes), type + spacing
+   follow the scale, and the tone/branding match. A surface that ignores the visual contract is a P2 even if
+   it "works" - consistency is most of what makes an app feel finished. (doc-stats flags palette drift; you
+   catch the type, spacing, tone, and component divergence it cannot.)
 
 ## What you do NOT do
 Do not re-run axe/pa11y - `ui-agent` already gates accessibility, and duplicating it just adds noise. Do not

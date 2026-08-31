@@ -2,6 +2,34 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.32.0 - 2026-08-28
+
+### Added - STYLE.md, the visual contract (why "complete UI" kept diverging)
+A real cms3 run built five feature stories and shipped a UI with no design TARGET: Tailwind named in
+CLAUDE.md but hand-rolled ad-hoc CSS in the build, and a `_Layout` linking to NONE of its four controllers -
+a set of pages with no way to navigate between them. Three causes, now addressed:
+- **No visual target.** New `docs/STYLE.md` is the visual contract - palette (named hexes), type scale,
+  spacing, tone, component conventions, branding - human-owned. `/design` fills it for a UI project (2-3
+  aesthetic directions, you pick; it does NOT lock, so you can retune the vibe anytime). Scaffolded by
+  new-project; added to existing projects by upgrade-project.
+- **UI completeness owned no task.** `/taskmap` now tags visible-surface tasks `[ui]`, writes their
+  acceptance in UX language (reachable from the nav, primary action prominent, empty/loading/error states,
+  conforms to STYLE.md), and EMITS the connective tasks a feature backlog skips - a navigation/shell task and
+  per-view states - because if they are not tasks they are not built. `/build` routes `[ui]` tasks to
+  ui-agent -> ux-agent instead of a generic dev-agent.
+- **The look was never checked.** `doc-stats -Findings` reads the STYLE.md palette hexes and WARNs `[style]`
+  when the project CSS uses colors outside them (an unfilled template palette is ignored; vendor/min CSS
+  excluded). ux-agent now reviews every surface against STYLE.md (palette, type, tone, branding). WARN, not a
+  hard block - the aesthetic is yours; the kit computes the mechanical half and routes the rest to review.
+
+The measured cause underneath all of it: the run sent UI work to `dev-agent` (ui-agent/ux-agent spawned ZERO
+times) and overrode dad-guard without committing. The `[ui]` tag makes routing a property of the task rather
+than a prose decision the orchestrator skips.
+
+### Tests
+New: STYLE.md is scaffolded and wired into /design + /taskmap + ux-agent; doc-stats `[style]` flags
+off-palette CSS and stays quiet on an on-palette or an unfilled-template palette.
+
 ## 0.31.0 - 2026-08-28
 
 ### Added - playtest-agent, a feel pass for experiences (the game analog to ux-agent)

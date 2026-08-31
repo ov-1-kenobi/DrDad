@@ -30,6 +30,8 @@ plan mode to run these commands - execute their steps directly; if you land in p
 ## Design docs
 - Contract: __DESIGN_DOC__ (created by `/scaffold`; Status starts DRAFT) - requirements, epics, stack.
 - Stories: `docs/STORIES.md` (created by `/stories`).  Tasks: `docs/TASKS.md` (created by `/taskmap`).
+- Visual contract: `docs/STYLE.md` - palette / type / tone / branding for a UI project (`/design` fills it;
+  ux-agent reviews surfaces against it; `doc-stats` WARNs when CSS drifts off the palette).
 - Dashboard: `docs/STATUS.md` - done / next ready / blockers at a glance. READ IT FIRST when starting or
   resuming work. DERIVED (librarian-agent is its only writer; TASKS/STORIES/grades win on conflict) -
   refresh with `/audit status`; never hand-edit it or treat it as the source of truth.

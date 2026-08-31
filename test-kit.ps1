@@ -1909,6 +1909,51 @@ Test-Case "an experience unit is playtested (playtest-agent -> human), and close
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "STYLE.md is the visual contract: scaffolded, wired, and doc-stats flags CSS off the palette" {
+  # cms3 shipped a UI with no design TARGET - Tailwind named in CLAUDE.md, hand-rolled ad-hoc CSS in the
+  # build, a nav linking to nothing. STYLE.md pins the LOOK (palette/type/tone/branding), human-owned;
+  # ux-agent reviews against it and doc-stats reads the palette hexes and WARNs when the CSS drifts off them.
+
+  # scaffolded by new-project
+  $sbA = New-Sandbox
+  try {
+    $pj = Join-Path $sbA "np"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $pj 2>&1 | Out-Null
+    Assert (Test-Path (Join-Path $pj "docs\STYLE.md")) "scaffold did not create docs\STYLE.md"
+  } finally { Remove-Sandbox $sbA }
+
+  # wired: /design fills it, taskmap tags [ui] + emits nav + cites it, ux-agent reviews against it
+  Assert ((Get-Content (Join-Path $kit "global\commands\design.md") -Raw) -match 'STYLE\.md') "/design does not set up docs/STYLE.md"
+  $tm = Get-Content (Join-Path $kit "global\commands\taskmap.md") -Raw
+  Assert ($tm -match '\[ui\]' -and $tm -match 'STYLE\.md') "/taskmap does not tag [ui] tasks or cite STYLE.md"
+  Assert ($tm -match '(?i)navigation') "/taskmap does not tell it to emit the navigation/shell task"
+  Assert ((Get-Content (Join-Path $kit "global\agents\ux-agent.md") -Raw) -match 'STYLE\.md') "ux-agent does not review against STYLE.md"
+
+  # doc-stats [style]: filled palette + off-palette CSS -> WARN; on-palette -> quiet; unfilled -> quiet
+  $sbB = New-Sandbox
+  try {
+    $p = Join-Path $sbB "web"; New-Item -ItemType Directory -Force "$p\docs","$p\src\css" | Out-Null
+    "# Design`n`nStatus: LOCKED`n`n## Contracts`n### C1`nx" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: one   <!-- Status: DOING -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Tasks`n`n## Build order`n`n### [ ] T1.1 - a [ui]   (Story S1)`n- **Goal:** x" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Style`n`n## Palette`n| Token | Hex | Use |`n|---|---|---|`n| bg | #2b2b2b | background |`n| text | #e8e0d0 | text |`n| primary | #7a8450 | actions |" | Set-Content "$p\docs\STYLE.md" -Encoding UTF8
+
+    ".a{color:#ff0000}.b{background:#00ff00}.c{border-color:#0000ff}.d{color:#123456}" | Set-Content "$p\src\css\site.css" -Encoding UTF8
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out -match '\[style\]') "doc-stats did not flag CSS that drifts off the STYLE.md palette"
+
+    ".a{color:#e8e0d0;background:#2b2b2b}.b{color:#7a8450}" | Set-Content "$p\src\css\site.css" -Encoding UTF8
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out2 -notmatch '\[style\]') "doc-stats flagged [style] even though the CSS uses only palette colors"
+
+    # the shipped template palette is UNFILLED (<hex> placeholders) - it must NOT produce a false finding
+    Copy-Item (Join-Path $kit "templates\_common\docs\STYLE.md") "$p\docs\STYLE.md" -Force
+    ".a{color:#ff0000}.b{background:#00ff00}.c{border-color:#0000ff}.d{color:#123456}" | Set-Content "$p\src\css\site.css" -Encoding UTF8
+    $out3 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out3 -notmatch '\[style\]') "doc-stats flagged [style] on an UNFILLED palette template"
+  } finally { Remove-Sandbox $sbB }
+}
+
 Test-Case "only close-unit may close a story: it stamps, a hand-tick is flagged, dad tidy cleans" {
   # Measured, cms3: 5/5 stories marked DONE with 21 tasks still open and 4 commits - the DONE markers were
   # written by hand, not by close-unit. Now close-unit stamps 'closed:close-unit' when it rolls a story up,

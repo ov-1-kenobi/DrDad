@@ -78,6 +78,16 @@ vision model transcribes it to text - and use that as design input.)
    ```
    180 days, not the default year: security guidance ages faster than anything else here.
 
+2c. **VISUAL CONTRACT - fill `docs/STYLE.md` for a project with a UI** (skip for a headless service/library;
+   note "no UI" in the file and move on). This is where the LOOK is decided, so it stops being reinvented -
+   or skipped - every build. Propose defaults FROM THE DOMAIN: a small palette (name each color with a hex),
+   a type scale, spacing/density, tone, and any branding. But the aesthetic is MINE - give me 2-3 directions
+   with a one-line rationale ("earth-toned + naturalistic" vs "high-contrast + minimal"), recommend one, and
+   WAIT for my pick. Write the chosen palette + tone + component conventions into `docs/STYLE.md`. This is
+   what makes "complete UI" checkable: `ux-agent` reviews every surface against it, and `doc-stats` WARNs
+   `[style]` when the CSS drifts off the palette. Do not LOCK on it - STYLE.md stays editable so I can retune
+   the vibe (colors, branding) any time without unlocking DESIGN.
+
 3. **Capture requirements** under `## Requirements` (numbered, testable - WHAT, not HOW; the stack is now
    known, so name real types where it sharpens a requirement). For open questions, propose 2-3 options with
    tradeoffs, recommend one, WAIT for my choice. Reindex after edits.

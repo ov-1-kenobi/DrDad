@@ -476,6 +476,30 @@ if ($Findings) {
     }
   }
 
+  # --- STYLE conformance (surface projects with a FILLED STYLE.md palette, WARN) --------------------
+  # docs\STYLE.md is the VISUAL contract; its ## Palette pins the colors. Read those hexes and flag project
+  # CSS that uses colors OUTSIDE them - "complete UI" drifting from its target, computed rather than
+  # eyeballed. An UNFILLED palette (placeholders, <2 real hexes) is ignored; vendor/min/lib CSS is excluded.
+  $styleFile = Join-Path $docs "STYLE.md"
+  if (Test-Path $styleFile) {
+    $palette = @([regex]::Matches((Get-Content $styleFile -Raw), '#[0-9a-fA-F]{6}\b') | ForEach-Object { $_.Value.ToLower() } | Select-Object -Unique)
+    if ($palette.Count -ge 2) {
+      $cssFiles = @(Get-ChildItem $proj -Recurse -Filter *.css -ErrorAction SilentlyContinue |
+                    Where-Object { $_.FullName -notmatch '(?i)\\(bin|obj|node_modules|dist|lib|vendor)\\' -and $_.Name -notmatch '(?i)\.min\.css$' })
+      $offenders = New-Object System.Collections.Generic.List[string]
+      foreach ($cf in $cssFiles) {
+        foreach ($m in [regex]::Matches((Get-Content $cf.FullName -Raw), '#[0-9a-fA-F]{6}\b')) {
+          $h = $m.Value.ToLower()
+          if ($palette -notcontains $h) { [void]$offenders.Add($h) }
+        }
+      }
+      $off = @($offenders | Select-Object -Unique)
+      if ($off.Count -gt 3) {
+        $f.Add("[style] the project CSS uses $($off.Count) color(s) NOT in the STYLE.md palette (e.g. $(($off | Select-Object -First 5) -join ', ')) - the visual contract is drifting. Use the palette tokens, or update docs\STYLE.md if the palette changed (WARN).")
+      }
+    }
+  }
+
   # a done unit with no commit mentioning it - a missed checkpoint
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"

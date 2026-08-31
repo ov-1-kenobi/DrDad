@@ -66,12 +66,14 @@ its dependencies satisfied, STOP and report the blocked tasks.
    planner sharded it) - do NOT spawn requirements-agent for it and do NOT re-decompose it.
    *(No task map: spawn **requirements-agent** to select + flesh the next story from `docs/STORIES.md`.)*
 2. **dev-agent** -> implement per CLAUDE.md conventions; collect its summary + any manual steps.
-   *(If the unit has a VISIBLE SURFACE - a page, screen or component - spawn **ui-agent** instead. It is
-   held to behaviour + accessibility gates and hands visual judgement back to me, because there is no exit
-   code for taste. It will WAIT for my look; relay that and stop rather than closing the unit yourself.)*
+   *(If the task is tagged **`[ui]`** (taskmap marks visible surfaces) - or otherwise has a page / screen /
+   component - spawn **ui-agent** instead of dev-agent. It is held to behaviour + accessibility gates and
+   hands visual judgement back to me, because there is no exit code for taste. It will WAIT for my look;
+   relay that and stop rather than closing the unit yourself.)*
 2b. **UX review (visible surfaces ONLY).** After ui-agent builds the surface, spawn **ux-agent** to review
    it - reachability from the nav, hierarchy, affordances, form labels, empty/loading/error states,
-   consistency. It does NOT edit; it returns a prioritized list (P1 broken, P2 confusing, P3 polish). Relay
+   consistency, and conformance to `docs/STYLE.md` (palette / type / tone / branding). It does NOT edit; it
+   returns a prioritized list (P1 broken, P2 confusing, P3 polish). Relay
    its **P1 and P2** items to **ui-agent**, which applies them directly; note P3 for me. This is a BUILD-TIME
    pass on purpose: **nothing is written into DESIGN / STORIES / TASKS** - the fix lands in the code and
    `close-unit -UxReviewed` records it in the commit, so the code plus its history are the documentation.
