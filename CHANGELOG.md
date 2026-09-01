@@ -2,6 +2,13 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.33.3 - 2026-08-28
+
+### Docs - pre-push sanity check
+`docs/PUBLISHING.md` gains a single copy-paste go/no-go block to run right before a public push: it confirms
+no sensitive path is tracked (`git ls-files`), runs `scan-secrets` over the tree, and runs `gitleaks` if
+installed - printing `CLEAN - safe to push` or a red stop list.
+
 ## 0.33.2 - 2026-08-28
 
 ### Docs - attribution + copyright

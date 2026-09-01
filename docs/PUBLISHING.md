@@ -39,6 +39,26 @@ That folder is what becomes the public repo. (The `.zip` form is what you attach
       `AKIA...EXAMPLE` doc key, built by concatenation) - that is test data, not a secret. Allowlist it or
       confirm it by eye.
 
+## 2b. Pre-push sanity - one copy-paste, go / no-go
+Run this from the repo dir **after `git add -A`, right before `git push`** (works in the clean-slate repo or,
+if you kept history, in the working repo). It confirms nothing sensitive is tracked and no secret is present:
+```powershell
+$stop = @()
+$tracked = @(git ls-files)
+$leaky = @($tracked | Where-Object { $_ -match '(?i)_tempReference|(^|/)\.env($|\.)|\.pem$|\.pfx$|\.key$|id_rsa|(^|/)secrets?/|apikey' })
+if ($leaky) { $stop += "tracked sensitive path(s): $($leaky -join ', ')" }
+& powershell -NoProfile -ExecutionPolicy Bypass -File .\scan-secrets.ps1 -Path . | Out-Null
+if ($LASTEXITCODE -ne 0) { $stop += "scan-secrets flagged the working tree" }
+if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
+  gitleaks detect --redact --exit-code 1
+  if ($LASTEXITCODE -ne 0) { $stop += "gitleaks flagged something - INSPECT it (the concatenated AWS fixture in test-kit.ps1 does NOT trip a static scan; a real hit is a real leak)" }
+} else { Write-Host "gitleaks not installed - 'winget install gitleaks' for a second opinion; relying on scan-secrets" -ForegroundColor DarkGray }
+if ($stop) { Write-Host "`nDO NOT PUSH:" -ForegroundColor Red; $stop | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red } }
+else { Write-Host "`nCLEAN - safe to push." -ForegroundColor Green }
+```
+Green means go. Any red line is a stop - fix it (usually: it should not have been added; `git rm --cached`
+it and add a `.gitignore` rule) before the push.
+
 ## 3. Fresh repo -> push
 ```
 cd C:\src\drdad-release\DrDad-v<x>
