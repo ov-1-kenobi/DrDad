@@ -39,6 +39,15 @@ Write-Host ""
 Write-Host "== DrDad doctor ==" -ForegroundColor Cyan
 Write-Host "kit: $kit  (version $kitVersion)"
 
+# Mode: a cloud install (install.ps1 -Cloud) drops the Ollama base-URL. Read it back from the installed
+# settings so a cloud user is not told their (correctly) missing Ollama + local models are failures.
+$cloudMode = $false
+$modeSettings = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json"
+if (Test-Path $modeSettings) {
+  try { $bu = "$((Get-Content $modeSettings -Raw | ConvertFrom-Json).env.ANTHROPIC_BASE_URL)"; $cloudMode = -not ($bu -match '11434|localhost') } catch { }
+}
+if ($cloudMode) { Write-Host "mode: CLOUD (Anthropic API) - Ollama + local-model checks are skipped" -ForegroundColor Cyan }
+
 # ---------------------------------------------------------------- prerequisites
 Write-Host "`n-- prerequisites --" -ForegroundColor Cyan
 Say "OK" "PowerShell" "$($PSVersionTable.PSVersion) on $([Environment]::OSVersion.VersionString)"
@@ -77,7 +86,9 @@ if ($smi) {
 Write-Host "`n-- ollama --" -ForegroundColor Cyan
 $ollamaUp = $false
 $installedModels = ""
-if (-not (Get-Exe "ollama")) {
+if ($cloudMode -and -not (Get-Exe "ollama")) {
+  Say "OK" "ollama" "not installed - not needed in cloud mode (RAG falls back to a literal scan)"
+} elseif (-not (Get-Exe "ollama")) {
   Say "FAIL" "ollama" "not found" "winget install Ollama.Ollama"
 } else {
   Say "OK" "ollama" (Get-Ver "ollama")
@@ -97,7 +108,7 @@ if (-not (Test-Path $manifest)) {
 } else {
   $mf = Get-Content $manifest -Raw | ConvertFrom-Json
   Say "OK" "models.json" "$($mf.models.Count) model(s) declared, num_ctx $($mf.numCtx)"
-  if ($installedModels) {
+  if ($installedModels -and -not $cloudMode) {
     foreach ($s in @($mf.embedModel, $mf.visionModel) | Select-Object -Unique) {
       if ($installedModels -match [regex]::Escape($s)) { Say "OK" "support model" $s }
       else { Say "WARN" "support model" "$s missing" "ollama pull $s   (RAG embeddings / describe_image)" }
@@ -129,10 +140,12 @@ if (-not (Test-Path $manifest)) {
     }
     if ($built -eq 0) { Say "FAIL" "chat models" "none built" "sync-models.cmd   (builds every variant whose base is pulled)" }
   }
-  # Ollama tuning env vars
-  foreach ($v in @("OLLAMA_FLASH_ATTENTION","OLLAMA_KV_CACHE_TYPE","OLLAMA_KEEP_ALIVE")) {
-    $val = [Environment]::GetEnvironmentVariable($v, "User")
-    if ($val) { Say "OK" "tuning $v" $val } else { Say "WARN" "tuning $v" "unset" "run ollama-tuning.ps1, then restart Ollama" }
+  # Ollama tuning env vars (local only)
+  if (-not $cloudMode) {
+    foreach ($v in @("OLLAMA_FLASH_ATTENTION","OLLAMA_KV_CACHE_TYPE","OLLAMA_KEEP_ALIVE")) {
+      $val = [Environment]::GetEnvironmentVariable($v, "User")
+      if ($val) { Say "OK" "tuning $v" $val } else { Say "WARN" "tuning $v" "unset" "run ollama-tuning.ps1, then restart Ollama" }
+    }
   }
 }
 
@@ -180,11 +193,15 @@ if (-not (Test-Path $settings)) {
   try {
     $s = Get-Content $settings -Raw | ConvertFrom-Json
     Say "OK" "settings.json" "valid JSON"
-    if ($s.env.ANTHROPIC_BASE_URL -match '11434') { Say "OK" "ANTHROPIC_BASE_URL" $s.env.ANTHROPIC_BASE_URL }
-    else { Say "FAIL" "ANTHROPIC_BASE_URL" "not pointing at Ollama ('$($s.env.ANTHROPIC_BASE_URL)')" "re-run install.cmd" }
+    if ($cloudMode) { Say "OK" "backend" "CLOUD - no base-URL redirect (Claude Code uses your Anthropic login)" }
+    elseif ($s.env.ANTHROPIC_BASE_URL -match '11434') { Say "OK" "ANTHROPIC_BASE_URL" $s.env.ANTHROPIC_BASE_URL }
+    else { Say "FAIL" "ANTHROPIC_BASE_URL" "not pointing at Ollama ('$($s.env.ANTHROPIC_BASE_URL)')" "re-run install.cmd (or install.cmd -Cloud)" }
 
     $model = $s.env.ANTHROPIC_MODEL
-    if ($installedModels -and $model -and ($installedModels -match [regex]::Escape($model))) {
+    if ($cloudMode) {
+      if ($model -match '^claude-') { Say "OK" "ANTHROPIC_MODEL" "$model (Anthropic cloud)" }
+      else { Say "WARN" "ANTHROPIC_MODEL" "$model is not a claude-* id in cloud mode" "use-model.cmd <alias> (dev/coder/oss/quality/fast)" }
+    } elseif ($installedModels -and $model -and ($installedModels -match [regex]::Escape($model))) {
       Say "OK" "ANTHROPIC_MODEL" "$model (present in Ollama)"
     } elseif ($model) {
       Say "WARN" "ANTHROPIC_MODEL" "$model not found in ollama list" "use-model.cmd <alias>, or sync-models.cmd to build it"

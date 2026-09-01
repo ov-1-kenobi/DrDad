@@ -787,6 +787,45 @@ Test-Case "use-model resolves aliases from the manifest" {
   Assert ($src -notmatch '\$map\s*=\s*@\{\s*dev\s*=') "use-model.ps1 still has a hard-coded alias map"
 }
 
+Test-Case "cloud mode: -Cloud drops the Ollama redirect, and use-model resolves an alias to its cloud id" {
+  # DrDad's gates are model-agnostic; the ONLY coupling to 'local' is the Ollama base-URL redirect. -Cloud
+  # drops it (its ABSENCE is the mode - no marker file), and each alias maps to its models.json 'cloud' id.
+  # Same commands, agents, and gates, on Anthropic's frontier models.
+
+  # every alias carries a real claude-* cloud id
+  $mf = Get-Content (Join-Path $kit "models.json") -Raw | ConvertFrom-Json
+  foreach ($m in $mf.models) {
+    Assert ($m.cloud) "alias '$($m.alias)' has no cloud model id in models.json"
+    Assert ($m.cloud -match '^claude-') "alias '$($m.alias)' cloud id '$($m.cloud)' is not a claude-* id"
+  }
+  Assert ("$($mf.cloudSmallFast)" -match '^claude-') "models.json has no cloudSmallFast claude-* id"
+
+  # install.ps1 has the flag and drops the redirect
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  Assert ($inst -match '\[switch\]\$Cloud') "install.ps1 has no -Cloud switch"
+  Assert ($inst -match 'ANTHROPIC_BASE_URL' -and $inst -match 'Remove\(') "install.ps1 -Cloud does not drop the Ollama base-URL redirect"
+  # use-model + dad-doctor derive the mode from settings, not a marker file
+  Assert ((Get-Content (Join-Path $kit "use-model.ps1") -Raw) -match 'ANTHROPIC_BASE_URL' -and (Get-Content (Join-Path $kit "use-model.ps1") -Raw) -match '\.cloud') "use-model.ps1 is not mode-aware"
+  Assert ((Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw) -match '\$cloudMode') "dad-doctor.ps1 is not cloud-mode aware"
+
+  # functional: a CLOUD settings.json (no base-URL) -> use-model dev resolves to the cloud id; a LOCAL one -> the tag
+  $sb = New-Sandbox
+  try {
+    $h = Join-Path $sb "home"; New-Item -ItemType Directory -Force "$h\.claude" | Out-Null
+    $devCloud = (@($mf.models | Where-Object { $_.alias -eq 'dev' })[0]).cloud
+    $devLocal = (@($mf.models | Where-Object { $_.alias -eq 'dev' })[0]).name
+    $orig = $env:USERPROFILE
+    foreach ($case in @(@{ json = '{ "env": { "ANTHROPIC_MODEL": "seed" } }'; want = $devCloud; label = "cloud" },
+                        @{ json = '{ "env": { "ANTHROPIC_BASE_URL": "http://localhost:11434", "ANTHROPIC_MODEL": "seed" } }'; want = $devLocal; label = "local" })) {
+      [System.IO.File]::WriteAllText("$h\.claude\settings.json", $case.json, (New-Object System.Text.UTF8Encoding($false)))
+      try { $env:USERPROFILE = $h; & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "use-model.ps1") dev | Out-Null }
+      finally { $env:USERPROFILE = $orig }
+      $got = (Get-Content "$h\.claude\settings.json" -Raw | ConvertFrom-Json).env.ANTHROPIC_MODEL
+      Assert ($got -eq $case.want) "use-model dev in $($case.label) mode set '$got', expected '$($case.want)'"
+    }
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "install/uninstall drive models from the manifest" {
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match 'sync-models\.ps1') "install.ps1 does not call sync-models.ps1"

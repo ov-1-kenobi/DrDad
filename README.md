@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.33.3** - local, offline, agentic software development on your own GPU.
+**Version 0.34.0** - local, offline, agentic software development on your own GPU.
 
 DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
@@ -75,7 +75,8 @@ needing pixel-level visual judgement (there is no exit code for taste).
 ## Requirements
 
 - Windows 10/11
-- [Ollama](https://ollama.com) with a coding-capable model (Devstral, Qwen3-Coder, gpt-oss, etc.)
+- [Ollama](https://ollama.com) with a coding-capable model (Devstral, Qwen3-Coder, gpt-oss, etc.) - **local
+  mode only**; with `install.ps1 -Cloud` you use Anthropic's API instead and Ollama is optional
 - [Claude Code](https://www.anthropic.com/claude-code) (the CLI harness; DrDad points it at Ollama)
 - .NET 8+ SDK (builds the one C# MCP server)
 - A GPU with enough VRAM for your chosen model (16 GB runs the recommended set; the kit reports fit)
@@ -90,6 +91,8 @@ Everything after first install runs offline.
 git clone <your-fork-url> drdad
 cd drdad
 powershell -ExecutionPolicy Bypass -File .\install.ps1
+# ...or add -Cloud to run the SAME loop against Anthropic's API instead of local Ollama:
+#    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud
 ```
 
 `install.ps1` detects its own location, reconciles Ollama with `models.json`, builds the C# server,
@@ -118,11 +121,18 @@ Full manual: **[docs/GUIDE.md](docs/GUIDE.md)**. Every subcommand: run `dad` wit
 
 ---
 
-## How it reaches Ollama
+## How it reaches the model
 
-There is no proxy. `settings.json` sets `ANTHROPIC_BASE_URL` to Ollama's local port and Claude Code talks
-to it directly, so this depends on your Ollama version serving an Anthropic-compatible endpoint. Telemetry,
-error reporting, and the auto-updater are disabled; after install you can unplug the network.
+**Local (default):** there is no proxy. `settings.json` sets `ANTHROPIC_BASE_URL` to Ollama's local port and
+Claude Code talks to it directly, so this depends on your Ollama version serving an Anthropic-compatible
+endpoint. Telemetry, error reporting, and the auto-updater are disabled; after install you can unplug the
+network.
+
+**Cloud (`install.ps1 -Cloud`):** the base-URL redirect is dropped, so Claude Code uses its normal Anthropic
+auth. The commands, agents, and every gate are identical - only the backend changes. Aliases map to Anthropic
+models (`fast` -> Haiku 4.5, `dev`/`coder`/`oss`/`gemma` -> Sonnet 5, `quality` -> Opus 5); switch tiers with
+`dad use-model <alias>`. This trades the offline/private/free properties for a model strong enough to clear
+the local-model hurdles - use cloud for delivery, local for private discovery. `dad doctor` reports the mode.
 
 ---
 

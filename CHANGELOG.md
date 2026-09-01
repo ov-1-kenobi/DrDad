@@ -2,6 +2,31 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.34.0 - 2026-08-28
+
+### Added - cloud mode (`install.ps1 -Cloud`): run the whole loop on Anthropic's API
+DrDad's gates are model-agnostic - the only thing coupling it to "local" was the Ollama base-URL redirect in
+settings.json. `install.ps1 -Cloud` drops that redirect (its ABSENCE is the mode - no marker file), skips the
+Ollama reconcile + GPU tuning, and points the model aliases at Anthropic ids. Same commands, agents, and
+gates, on frontier models - which clears most of the fabrication/spiral/instruction-following hurdles that
+are really symptoms of a weak local model.
+- **Mapping** (cost-tiered, a per-alias `cloud` id in models.json): `fast` -> Haiku 4.5 ($1/$5, bulk),
+  `dev`/`coder`/`oss`/`gemma` -> Sonnet 5 ($2/$10, everyday), `quality` -> Opus 5 ($5/$25, hard). The six
+  local aliases collapse onto Anthropic's three tiers; they still resolve, so command guidance is unchanged.
+- **`use-model` and `dad-doctor` are mode-aware** - both derive local-vs-cloud from the settings' base-URL,
+  so an alias resolves to its Ollama tag or its cloud id automatically, and the doctor stops flagging a cloud
+  user's (correctly) absent Ollama + local models as failures.
+- **Cost:** run bulk on a cheaper alias, `use-model quality` for the hard parts; prompt caching is automatic.
+  The tradeoff is real - cloud gives up offline/private/free for reliability. Local stays for private
+  discovery and free tinkering.
+
+This is a Claude-Code layer, not an SDK app, so it needs Claude Code either way; RAG embeddings use Ollama if
+present, else fall back to a literal scan.
+
+### Tests
+Cloud: every alias has a real `claude-*` cloud id; `-Cloud` drops the redirect; `use-model` resolves an alias
+to its cloud id under cloud settings and to its Ollama tag under local settings.
+
 ## 0.33.3 - 2026-08-28
 
 ### Docs - pre-push sanity check

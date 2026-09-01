@@ -2,7 +2,13 @@
 # Copy this whole folder anywhere on a Windows machine, then run from inside it:
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1
 # Safe to re-run. It detects its own location, so the folder can live anywhere.
-
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud    CLOUD mode (Anthropic API), not Ollama.
+# -Cloud: same commands, agents, and gates, on Anthropic's frontier models. Each alias resolves to its
+# models.json 'cloud' id (dev/coder/oss/gemma -> Sonnet 5, fast -> Haiku 4.5, quality -> Opus 5); no Ollama
+# needed (RAG embeddings fall back to a literal scan). The Ollama base-URL redirect is dropped - and its
+# ABSENCE is what use-model and dad-doctor read back as "cloud" mode (no separate marker file).
+[CmdletBinding()]
+param([switch]$Cloud)
 $ErrorActionPreference = "Stop"
 $root   = $PSScriptRoot
 $old    = 'C:\Projects\Claude\MCP\DAD-kit'            # dev-path placeholder baked into the markdown command files
@@ -28,9 +34,11 @@ if (-not $haveDotnet){ Write-Host "  [stop] .NET 8+ SDK required to build the se
 $kitVersion = if (Test-Path (Join-Path $root "VERSION")) { (Get-Content (Join-Path $root "VERSION") -Raw).Trim() } else { "unknown" }
 Write-Host "`n== DAD-kit $kitVersion ==" -ForegroundColor Green
 
-Write-Host "`n== 1) Models: reconcile Ollama with models.json ==" -ForegroundColor Cyan
-# One manifest drives everything (aliases, -cc variants, support models). Add a model = one JSON entry.
-if ($haveOllama) {
+Write-Host "`n== 1) Models ==" -ForegroundColor Cyan
+# One manifest drives everything (aliases, -cc variants, cloud ids). Add a model = one JSON entry.
+if ($Cloud) {
+  Write-Host "  cloud mode - no Ollama models to build; aliases resolve to Anthropic ids via models.json 'cloud'." -ForegroundColor Green
+} elseif ($haveOllama) {
   try { & (Join-Path $root "sync-models.ps1") }
   catch { Write-Host "  (sync-models failed: $($_.Exception.Message) - run sync-models.cmd manually)" -ForegroundColor Yellow }
 } else { Write-Host "  skipped (need ollama)" -ForegroundColor Yellow }
@@ -86,7 +94,8 @@ Get-ChildItem (Join-Path $root "global\agents") -File | ForEach-Object {
 }
 Write-Host "  commands: /scaffold /research /document /design /taskmap /proto /spec /build /assets /tidy /stories /diagram /audit /grade /retro   agents: requirements/architect/taskmap/dev/ui/ux/playtest/grade/scribe/hygiene/qa/doc-researcher/research/survey/security/librarian"
 
-Write-Host "`n== 7) Install settings.json (Ollama redirect + offline flags) ==" -ForegroundColor Cyan
+$mode7 = if ($Cloud) { "CLOUD: Anthropic API" } else { "Ollama redirect + offline flags" }
+Write-Host "`n== 7) Install settings.json ($mode7) ==" -ForegroundColor Cyan
 $dst = Join-Path $claude "settings.json"
 if (Test-Path $dst) { Copy-Item $dst "$dst.bak" -Force; Write-Host "  existing settings.json -> settings.json.bak (MERGE if you had custom settings)" -ForegroundColor Yellow }
 $s = Get-Content (Join-Path $root "settings.json") -Raw | ConvertFrom-Json
@@ -103,6 +112,20 @@ try {
     }
   }
 } catch { }
+# CLOUD mode: drop the Ollama redirect + token so Claude Code uses its NORMAL Anthropic auth (subscription
+# or `ant auth login`), and point the model + small-fast at their cloud ids from models.json. Removing
+# ANTHROPIC_BASE_URL is the whole tell - use-model and dad-doctor read its absence back as "cloud".
+if ($Cloud) {
+  $mfc = Get-Content (Join-Path $root "models.json") -Raw | ConvertFrom-Json
+  $defModel = @($mfc.models | Where-Object { $_.default }) | Select-Object -First 1
+  $defCloud = if ($defModel -and $defModel.cloud) { $defModel.cloud } else { "claude-sonnet-5" }
+  foreach ($k in @("ANTHROPIC_BASE_URL","ANTHROPIC_AUTH_TOKEN","ANTHROPIC_API_KEY")) {
+    if ($s.env.PSObject.Properties.Name -contains $k) { $s.env.PSObject.Properties.Remove($k) }
+  }
+  $s.env.ANTHROPIC_MODEL = $defCloud
+  $s.env.ANTHROPIC_SMALL_FAST_MODEL = if ($mfc.cloudSmallFast) { $mfc.cloudSmallFast } else { "claude-haiku-4-5" }
+  Write-Host "  cloud: base-URL redirect dropped; ANTHROPIC_MODEL=$defCloud (uses your normal Anthropic login)" -ForegroundColor Green
+}
 # (apiKeyHelper intentionally NOT set: ANTHROPIC_AUTH_TOKEN alone skips login; setting both
 #  triggers Claude Code's "auth may not work as expected" warning every session.)
 Write-NoBom $dst ($s | ConvertTo-Json -Depth 10)
@@ -171,12 +194,23 @@ try {
   Write-Host "  updated $bashrc (DAD-kit block: exports DAD_HOME + adds it to PATH for interactive Git Bash)" -ForegroundColor Green
 } catch { Write-Host "  could not update ~/.bashrc (Git Bash): $($_.Exception.Message) - not fatal; the Windows PATH already covers the Bash tool" -ForegroundColor Yellow }
 
-Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
-& (Join-Path $root "ollama-tuning.ps1")
+if (-not $Cloud) {
+  Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
+  & (Join-Path $root "ollama-tuning.ps1")
+}
 
 Write-Host "`n== DONE ==" -ForegroundColor Green
-Write-Host "DEFAULT model = devstral-cc (Devstral). Switch with use-model.cmd: dev / coder / oss / fast / quality." -ForegroundColor Green
-Write-Host "Next: 1) RESTART Ollama (quit from tray, reopen) so tuning + the new models are live." -ForegroundColor Green
-Write-Host "      2) RESTART Claude Code - hooks (the dad-guard stop guard) load at startup." -ForegroundColor Green
-Write-Host "      3) Open a project folder in VS Code, run /scaffold then index_datasheets." -ForegroundColor Green
-Write-Host "      Optional pulls, then re-run: 'ollama pull gemma4' (optional dense generalist), 'ollama pull qwen3-coder-next:q4_K_M' (escalation)." -ForegroundColor Cyan
+if ($Cloud) {
+  Write-Host "MODE = CLOUD (Anthropic API). DEFAULT = claude-sonnet-5 (alias 'dev')." -ForegroundColor Green
+  Write-Host "Switch tiers with use-model:  fast -> Haiku 4.5 (cheap/bulk) | dev|coder|oss|gemma -> Sonnet 5 | quality -> Opus 5 (hard)." -ForegroundColor Green
+  Write-Host "Cost: run bulk on a cheaper alias, 'use-model quality' for the hard parts; prompt caching is automatic." -ForegroundColor Cyan
+  Write-Host "Next: 1) make sure Claude Code is logged in - it uses your normal Anthropic auth (run 'claude' once if unsure)." -ForegroundColor Green
+  Write-Host "      2) RESTART Claude Code - hooks (the dad-guard stop guard) load at startup." -ForegroundColor Green
+  Write-Host "      3) Open a project in VS Code, run /scaffold then index_datasheets (RAG uses Ollama if present, else a literal scan)." -ForegroundColor Green
+} else {
+  Write-Host "DEFAULT model = devstral-cc (Devstral). Switch with use-model.cmd: dev / coder / oss / fast / quality." -ForegroundColor Green
+  Write-Host "Next: 1) RESTART Ollama (quit from tray, reopen) so tuning + the new models are live." -ForegroundColor Green
+  Write-Host "      2) RESTART Claude Code - hooks (the dad-guard stop guard) load at startup." -ForegroundColor Green
+  Write-Host "      3) Open a project folder in VS Code, run /scaffold then index_datasheets." -ForegroundColor Green
+  Write-Host "      Optional pulls, then re-run: 'ollama pull gemma4' (optional dense generalist), 'ollama pull qwen3-coder-next:q4_K_M' (escalation)." -ForegroundColor Cyan
+}
