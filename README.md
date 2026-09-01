@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.33.1** - local, offline, agentic software development on your own GPU.
+**Version 0.33.2** - local, offline, agentic software development on your own GPU.
 
 DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
@@ -140,6 +140,16 @@ DrDad's own code is MIT ([LICENSE](LICENSE)). It does **not** redistribute model
 `install.ps1` pulls Ollama models and you install Claude Code yourself, each under its own license. The base
 models (Devstral, Qwen, gpt-oss, Gemma, etc.) carry their own terms; review them for your use. Pointing
 Claude Code at a non-Anthropic backend is your responsibility to reconcile with its terms of service.
+
+---
+
+## Credits
+
+DrDad was **designed and directed by Kristen Overmyer** - the thesis ("never accept an assertion a script
+can settle"), every design decision, and the real local-model runs each gate was earned from. The
+**implementation was done with Claude Code** (Anthropic); per-change attribution is in the `Co-Authored-By`
+commit trailers. That a project about honest engineering under AI assistance was itself AI-assisted is the
+point, not a caveat.
 
 ---
 

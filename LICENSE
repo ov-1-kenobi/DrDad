@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 the DAD-kit authors
+Copyright (c) 2026 Kristen Overmyer
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,12 +24,12 @@ SOFTWARE.
 
 NOTE ON THIRD-PARTY COMPONENTS
 
-This license covers DAD-kit's own source (the scripts, the C# MCP server, the
-commands/agents, and the templates). It does NOT cover, and DAD-kit does not
+This license covers DrDad's own source (the scripts, the C# MCP server, the
+commands/agents, and the templates). It does NOT cover, and DrDad does not
 redistribute:
 
   - Claude Code (Anthropic) - install it yourself, under its own terms.
   - Ollama and the model weights it pulls (Devstral, Qwen, gpt-oss, Gemma,
     and others) - each carries its own license; review it for your use.
 
-DAD-kit orchestrates these tools; it does not include them.
+DrDad orchestrates these tools; it does not include them.

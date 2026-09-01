@@ -2,6 +2,16 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.33.2 - 2026-08-28
+
+### Docs - attribution + copyright
+- `LICENSE`: copyright is now Kristen Overmyer (was a placeholder "the DAD-kit authors"), and the
+  third-party note reads DrDad - the LICENSE file has no extension, so the rebrand sweep had skipped it.
+- `README`: a Credits section - designed and directed by Kristen Overmyer, implemented with Claude Code,
+  with per-change attribution in the `Co-Authored-By` commit trailers.
+- `PUBLISHING.md`: the initial public commit carries the `Co-Authored-By` trailer and uses a personal (not
+  work) git identity.
+
 ## 0.33.1 - 2026-08-28
 
 ### Docs - public-release readiness

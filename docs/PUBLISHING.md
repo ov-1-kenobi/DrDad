@@ -44,11 +44,14 @@ That folder is what becomes the public repo. (The `.zip` form is what you attach
 cd C:\src\drdad-release\DrDad-v<x>
 git init -b main
 git add -A
-git -c user.name="<you>" -c user.email="<you>" commit -m "Initial public release: DrDad v<x>"
+git -c user.name="Kristen Overmyer" -c user.email="<your-personal-email>" commit -m "Initial public release: DrDad v<x>" -m "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 git remote add origin https://github.com/<you>/drdad.git
 git push -u origin main
 ```
-You get a clean, one-commit history and the full CHANGELOG intact. (If you ever WANT the real 57-commit
+You get a clean, one-commit history and the full CHANGELOG intact. Use a **personal** git identity (name +
+a personal email), NOT a work address - this is a personal project, and the initial commit's authorship is
+the first thing anyone reads in `git log`. The `Co-Authored-By` trailer keeps the AI assistance disclosed
+in-history from commit one. (If you ever WANT the real 57-commit
 history for its field-log value, do NOT shortcut it: run `gitleaks detect` over the FULL history of the
 working repo first and resolve every hit, then push that instead. Clean-slate is the recommended default.)
 
