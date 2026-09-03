@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.35.0** - local, offline, agentic software development on your own GPU.
+**Version 0.36.0** - local, offline, agentic software development on your own GPU.
 
 DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model

@@ -469,6 +469,43 @@ Test-Case "scaffold stamps the project with the kit version" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "the signature bank names the .cs file each type lives in, and lookup surfaces it" {
+  # Reflection over the DLLs gives signatures but NOT source paths - the exact fact a model kept re-guessing
+  # (file name vs class name, editing the wrong file and walking it back). api-surface -AnnotateFiles greps
+  # the source and stamps each solution type heading with its .cs file; -Lookup (what close-unit runs on a
+  # build error) then hands over the FILE + the signature, so no search is needed.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"
+    New-Item -ItemType Directory -Force (Join-Path $p "docs") | Out-Null
+    New-Item -ItemType Directory -Force (Join-Path $p "src\Controllers") | Out-Null
+    Set-Content (Join-Path $p "src\Controllers\AccountController.cs") -Encoding UTF8 @(
+      'namespace X;', 'public class AccountController { public void Login() {} }')
+    Set-Content (Join-Path $p "src\Widget.cs") -Encoding UTF8 @(
+      'namespace X;', 'public interface IWidget { }')
+    # an UNannotated bank, as the C# reflector writes it (backtick-fenced type headings + member lines)
+    Set-Content (Join-Path $p "docs\API-SURFACE.md") -Encoding UTF8 @(
+      '# API surface', '', '## This solution', '', '### X', '',
+      '`class AccountController`', '  - `void Login()`', '',
+      '`interface IWidget`')
+
+    $api = Join-Path $kit "api-surface.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $api -AnnotateFiles -ProjectDir $p -Quiet | Out-Null
+    $bank = Get-Content (Join-Path $p "docs\API-SURFACE.md") -Raw
+    Assert ($bank -match 'class AccountController.*AccountController\.cs') "the class heading was not stamped with its source file"
+    Assert ($bank -match 'interface IWidget.*Widget\.cs') "the interface heading was not stamped with its source file"
+
+    # -Lookup surfaces the file too (this is what close-unit's Show-Signatures prints on a build error)
+    $look = & powershell -NoProfile -ExecutionPolicy Bypass -File $api -Lookup AccountController -ProjectDir $p 2>&1 | Out-String
+    Assert ($look -match 'AccountController\.cs') "api-surface -Lookup does not surface the type's source file"
+
+    # idempotent: a second annotate must not append the file twice
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $api -AnnotateFiles -ProjectDir $p -Quiet | Out-Null
+    $bank2 = Get-Content (Join-Path $p "docs\API-SURFACE.md") -Raw
+    Assert ((@([regex]::Matches($bank2, 'AccountController\.cs')).Count) -eq 1) "annotation is not idempotent - the file was stamped twice"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "stack profiles are FRAGMENTS (no kit-owned sections to go stale)" {
   # They used to be full CLAUDE.md files and drifted badly behind templates/generic (old Modes wording,
   # no Secrets, no Task-tool rule). Keeping them fragments makes that impossible.

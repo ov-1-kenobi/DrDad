@@ -21,15 +21,20 @@ and placeholder convention are in CLAUDE.md.
   as "it does not exist", and the orchestrator will check your claim with
   `doc-stats.ps1 -Contract <Cn>` before acting on it. If you cannot find a contract you expect, say
   "cannot LOCATE contract <Cn>" - not that it is absent.
-- **LOOK UP EVERY SIGNATURE YOU ARE NOT SURE OF - do not reconstruct it from memory.**
+- **LOOK UP EVERY SIGNATURE - AND WHICH FILE A TYPE LIVES IN - do not reconstruct either from memory.**
   `docs/API-SURFACE.md` carries the EXACT public signatures of this solution AND of every NuGet package it
-  references, generated from the compiled assemblies after each successful build, so it cannot be stale:
+  references, generated from the compiled assemblies after each successful build, so it cannot be stale. Each
+  solution type heading also names the `.cs` file it is declared in, so you open and edit the RIGHT file
+  instead of guessing it from the class name:
   ```
   dad api-surface -Lookup <TypeOrMember>
   ```
-  or `search_datasheets "<type> signature"` - it is in the index like every other doc. Guessing overloads
-  is how one project shipped 16 compile errors from invented Magick.NET calls, and how a single task spent
-  4h25m rediscovering Azure Table generics that were sitting in the DLL the whole time.
+  It prints just that type (its file + signatures) - "only the keys you need", not the whole bank - or use
+  `search_datasheets "<type> signature"`; it is in the index like every other doc. Guessing overloads is how
+  one project shipped 16 compile errors from invented Magick.NET calls, and how a single task spent 4h25m
+  rediscovering Azure Table generics sitting in the DLL the whole time; guessing file-vs-class is how a run
+  kept editing the wrong file and walking it back. On a build error close-unit runs this lookup FOR you and
+  prints the real signature + file, so there is never a reason to guess and re-guess.
 - Implement in the project's language/stack. Follow the placeholder/stub convention from CLAUDE.md  (interface mocks, dependency stubs, mocked HAL/bus, greybox primitives) with `// TODO` markers.
 - Prefer several SMALL Edits over one big replacement. If an edit leaves a file mangled (methods spliced,
   will not compile) STOP - do NOT hand-reconstruct it from memory; report it so the orchestrator restores

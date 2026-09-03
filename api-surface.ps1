@@ -24,12 +24,52 @@
 param(
   [string]$ProjectDir = ".",
   [string]$Lookup = "",
+  [switch]$AnnotateFiles,
   [switch]$Quiet
 )
 $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 $surface = Join-Path $proj "docs\API-SURFACE.md"
+
+# Annotate each SOLUTION type heading with the .cs file it is declared in - the one fact reflection over the
+# DLLs cannot give (a compiled assembly carries no source paths), and the exact thing a model kept re-guessing
+# (file name vs class name, editing the wrong file and walking it back). A grep of the source settles it; a
+# partial/duplicate type lists both files. Idempotent - a heading already carrying "(in ...)" is left alone.
+function Add-SourceFiles([string]$projDir, [string]$surfaceFile) {
+  if (-not (Test-Path $surfaceFile)) { return }
+  $srcRoot = Join-Path $projDir "src"
+  if (-not (Test-Path $srcRoot)) { $srcRoot = $projDir }
+  $decl = '(?m)^\s*(?:(?:public|private|internal|protected|sealed|abstract|static|partial|file)\s+)*(?:class|interface|record|struct|enum)\s+([A-Za-z_]\w*)'
+  $typeToFile = @{}
+  foreach ($cf in @(Get-ChildItem $srcRoot -Recurse -Filter *.cs -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' })) {
+    $rel = $cf.FullName.Substring($projDir.Length).TrimStart('\')
+    foreach ($m in [regex]::Matches((Get-Content $cf.FullName -Raw), $decl)) {
+      $t = $m.Groups[1].Value
+      if (-not $typeToFile.ContainsKey($t)) { $typeToFile[$t] = New-Object System.Collections.Generic.List[string] }
+      if (-not $typeToFile[$t].Contains($rel)) { [void]$typeToFile[$t].Add($rel) }
+    }
+  }
+  $hdr = '^' + [char]96 + '(?:class|struct|interface|enum|record) ([A-Za-z_]\w*)'
+  $lines = Get-Content $surfaceFile -Encoding UTF8
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    $hm = [regex]::Match($lines[$i], $hdr)
+    if ($hm.Success -and $lines[$i] -notmatch '\(in ') {
+      $tn = $hm.Groups[1].Value
+      if ($typeToFile.ContainsKey($tn)) {
+        $lines[$i] = $lines[$i].TrimEnd() + "   (in " + (($typeToFile[$tn] | Select-Object -First 2) -join ', ') + ")"
+      }
+    }
+  }
+  [System.IO.File]::WriteAllText($surfaceFile, (($lines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# --- annotate-only mode: (re)add source files to an existing bank without a rebuild ----------------
+if ($AnnotateFiles) {
+  Add-SourceFiles $proj $surface
+  if (-not $Quiet) { Write-Host "annotated docs\API-SURFACE.md type headings with their source files" -ForegroundColor Green }
+  exit 0
+}
 
 # --- lookup mode: answer one question from the existing file, cheaply -----------------------------
 if ($Lookup) {
@@ -70,6 +110,10 @@ $out = & $exe --api-surface $proj 2>&1 | Out-String
 $code = $LASTEXITCODE
 if (-not $Quiet) { Write-Host $out.Trim() }
 if ($code -ne 0) { exit $code }
+
+# Reflection cannot know which .cs file a type lives in - add it BEFORE the reindex so the indexed copy
+# carries "class Foo   (in Foo.cs)" too, and every -Lookup (including close-unit's on a build error) shows it.
+Add-SourceFiles $proj $surface
 
 # It lives in docs\, so it belongs to the index. Refresh so the next search sees it.
 if (Test-Path (Join-Path $proj "docs")) {
