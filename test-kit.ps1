@@ -2019,6 +2019,10 @@ Test-Case "the stop guard AUDITS -Ack and escalates on a frozen HEAD; doc-stats 
     $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String
     Assert ($out -match '\[integrity\]') "doc-stats did not consolidate the hand-tick gap into an [integrity] finding"
     Assert ((@($out -split "`n" | Where-Object { $_ -match '\[dev\]\s*T1\.' })).Count -eq 0) "doc-stats still emitted per-task [dev] spam instead of the [integrity] headline"
+    # the STATE FACTS line must QUALIFY the [x] count, not present the fabricated total as a bare fact - a
+    # real audit read "tasks 44/44 [x]" as "44 verified" while [integrity] said 32 were hand-ticked lies.
+    Assert ($out -match '(?i)\bUNVERIFIED\b') "STATE FACTS did not qualify the hand-ticked task count as UNVERIFIED"
+    Assert ($out -notmatch '(?m)tasks 6/6 \[x\] \| next') "STATE FACTS still shows a bare '6/6 [x]' next to 6 uncommitted tasks"
 
     # -Ack records the override; a repeat ack with HEAD unchanged ESCALATES
     & powershell -NoProfile -ExecutionPolicy Bypass -File $guard -Ack -Reason "spike" -ProjectDir $p | Out-Null

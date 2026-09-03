@@ -2,6 +2,17 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.35.0 - 2026-09-03
+
+### Fixed - STATE FACTS qualifies the [x] count so a fabricated total cannot pose as verified
+A real audit (the `quality` model on cms3) wrote *"State Facts (verified): Tasks 44/44 [x], Stories 5/5
+DONE"* while its OWN `[integrity]` finding said 32 of those tasks were hand-ticked with no commit. The model
+trusted the FACTS line's bare count and filed the contradiction as a footnote. So `doc-stats -Findings` now
+qualifies the count: `[x]` counts checkboxes, which a hand-tick fakes, so when no commit backs them the line
+reads `tasks 44/44 [x] (12 committed, 32 UNVERIFIED)` plus a red caveat, instead of a bare `44/44 [x]`. The
+FACTS line and `[integrity]` can no longer disagree. When every `[x]` is committed (or there is no git), the
+line is unchanged.
+
 ## 0.34.0 - 2026-08-28
 
 ### Added - cloud mode (`install.ps1 -Cloud`): run the whole loop on Anthropic's API

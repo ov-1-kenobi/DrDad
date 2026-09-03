@@ -504,6 +504,10 @@ if ($Findings) {
   # signature. A real run ticked 36 tasks DONE while HEAD never moved - it -Ack'd the stop guard and never
   # ran close-unit. 36 separate [dev] lines is noise that reads like a to-do list; one loud [integrity] line
   # (with the frozen HEAD and the -Ack override count) is the signal that the green state is manufactured.
+  # $uncommittedTaskCount feeds the STATE FACTS line below: how many of the [x] TASKS no commit mentions. A
+  # real audit read "tasks 44/44 [x]" off the FACTS line as "44 verified" while [integrity] said 32 were
+  # fake - so the FACTS line now qualifies the count instead of presenting the fabricated total as a fact.
+  $uncommittedTaskCount = $null
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     $uncommittedDone = New-Object System.Collections.Generic.List[string]
@@ -515,6 +519,7 @@ if ($Findings) {
       foreach ($u in (@($storiesDone) + @($tasksDone | ForEach-Object { $_.Id }) | Select-Object -Unique)) {
         if ($log -notmatch [regex]::Escape($u)) { [void]$uncommittedDone.Add($u) }
       }
+      $uncommittedTaskCount = @($tasksDone | Where-Object { $log -notmatch [regex]::Escape($_.Id) }).Count
     } catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }
     if ($uncommittedDone.Count -ge 5) {
       $ackNote = ""
@@ -527,9 +532,18 @@ if ($Findings) {
   }
 
   Write-Host "== STATE FACTS (computed - do NOT contradict these) ==" -ForegroundColor Cyan
-  Write-Host ("  design {0}: Status {1} | stories {2}/{3} DONE | tasks {4}/{5} [x] | next {6}" -f `
-    $designName, $designStatus, $storiesDone.Count, $storyIds.Count, $tasksDone.Count, $tasks.Count,
-    $(if ($next) { $next.Id } else { "none" }))
+  # [x] counts CHECKBOXES, which a hand-tick fakes. When no commit backs them, say so ON THE FACTS LINE so
+  # "44/44 [x]" cannot be read as "44 verified" - a real audit wrote exactly that over 32 fabricated ticks.
+  $taskFacts = "$($tasksDone.Count)/$($tasks.Count) [x]"
+  if ($null -ne $uncommittedTaskCount -and $uncommittedTaskCount -gt 0) {
+    $verifiedTasks = $tasksDone.Count - $uncommittedTaskCount
+    $taskFacts = "$($tasksDone.Count)/$($tasks.Count) [x] ($verifiedTasks committed, $uncommittedTaskCount UNVERIFIED)"
+  }
+  $nextId = if ($next) { $next.Id } else { "none" }
+  Write-Host "  design ${designName}: Status $designStatus | stories $($storiesDone.Count)/$($storyIds.Count) DONE | tasks $taskFacts | next $nextId"
+  if ($null -ne $uncommittedTaskCount -and $uncommittedTaskCount -gt 0) {
+    Write-Host "  ^ $uncommittedTaskCount of the [x] tasks are hand-ticked with NO commit - a green [x] is not 'verified'. See [integrity]." -ForegroundColor Red
+  }
   Write-Host ""
   Write-Host "== STATE FINDINGS (generated; the librarian must not author this category) ==" -ForegroundColor Cyan
   if ($f.Count -eq 0) { Write-Host "  none - document state is consistent." -ForegroundColor Green }
