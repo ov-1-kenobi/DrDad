@@ -2073,6 +2073,46 @@ Test-Case "the stop guard AUDITS -Ack and escalates on a frozen HEAD; doc-stats 
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "[domain] flags a pinned-but-unbuilt entity, honors the None escape, and stays silent when built" {
+  # The structural gap behind "dev invents its own entity shape per story": the design pins the shared nouns
+  # in ## Domain model, but nothing checked them against what got built. This COARSE check (entity-NAME
+  # existence vs API-SURFACE) turns a pinned-but-unbuilt entity into an informative WARN that hands over the
+  # pinned list to build toward - and stays silent when there is no model or no drift, so it never nags.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $designWithModel = @(
+      '# Design', '', 'Status: LOCKED', '', '## Contracts', '### C1: x', '- **Worked example:** x', '',
+      '## Domain model', '### Page', '- **Fields:** Id: int, Slug: string', '### User', '- **Fields:** Id: int', '',
+      '## Out of scope')
+    Set-Content "$p\docs\DESIGN.md" -Encoding UTF8 $designWithModel
+    Set-Content "$p\docs\STORIES.md" -Encoding UTF8 @('# Stories', '', '### Story S1: one   <!-- Status: DOING -->')
+    Set-Content "$p\docs\TASKS.md" -Encoding UTF8 @('# Tasks', '', '## Build order', '', '### [ ] T1.1 - x   (Story S1)', '- **Goal:** x')
+    # API-SURFACE has Page but NOT User -> User is pinned-but-unbuilt
+    Set-Content "$p\docs\API-SURFACE.md" -Encoding UTF8 @('# API surface', '', '## This solution', '', '### App', '', '`class Page`', '  - `int Id`')
+    $ds = Join-Path $kit "doc-stats.ps1"
+
+    # 1) drift: User pinned but not built -> [domain] fires, NAMES User, and lists the pinned set as the target
+    $flat = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) -replace '\s+',' ')
+    Assert ($flat -match '\[domain\]') "doc-stats did not flag the pinned-but-unbuilt entity"
+    Assert ($flat -match 'surface: User') "[domain] did not name the unbuilt entity (User)"
+    Assert ($flat -match 'Pinned: Page, User') "[domain] did not list the pinned entities to build toward"
+
+    # 2) 'None (no persisted domain).' suppresses it even though User is still unbuilt (the stateless escape)
+    Set-Content "$p\docs\DESIGN.md" -Encoding UTF8 @(
+      '# Design', '', 'Status: LOCKED', '', '## Contracts', '### C1: x', '- **Worked example:** x', '',
+      '## Domain model', 'None (no persisted domain).', '', '## Out of scope')
+    $none = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($none -notmatch '\[domain\]') "[domain] fired on a project that declared None (no persisted domain)"
+
+    # 3) restore the model and build User too -> no drift -> silent (a finding on good input is noise)
+    Set-Content "$p\docs\DESIGN.md" -Encoding UTF8 $designWithModel
+    Add-Content "$p\docs\API-SURFACE.md" -Encoding UTF8 -Value '`class User`'
+    $built = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($built -notmatch '\[domain\]') "[domain] still fired after every pinned entity was built"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "only close-unit may close a story: it stamps, a hand-tick is flagged, dad tidy cleans" {
   # Measured, cms3: 5/5 stories marked DONE with 21 tasks still open and 4 commits - the DONE markers were
   # written by hand, not by close-unit. Now close-unit stamps 'closed:close-unit' when it rolls a story up,

@@ -234,6 +234,23 @@ if ($Findings) {
         $f.Add("[design] $designName is LOCKED and its '## Contracts' section is EMPTY - /design step 5 (architect-agent) never landed anything. /build will start dev-agents against a design with no pinned semantics, which is exactly what LOCKED is supposed to prevent.")
       }
     }
+    # [domain] COARSE + informative (WARN): the design's '## Domain model' pins the shared nouns; API-SURFACE
+    # reflects what got BUILT. A pinned entity that no built type matches is the "dev invented its own shape
+    # per story" signal - surfaced WITH the full pinned list so the model has the target to build toward. NOT
+    # forced: names only (no field-level match yet), and SILENT when there is no model, no surface, or no
+    # drift - a finding that fires on good or early input is noise, and noise is how findings stop being read.
+    $dmSection = [regex]::Match($designRaw, '(?ms)^##\s*Domain model\b.*?(?=^##\s|\z)')
+    if ($dmSection.Success -and $dmSection.Value -notmatch '(?im)^\s*None\b') {
+      $pinnedEntities = @([regex]::Matches($dmSection.Value, '(?m)^###\s+([A-Za-z_]\w*)') | ForEach-Object { $_.Groups[1].Value })
+      $apiSurface = Join-Path $docs "API-SURFACE.md"
+      if ($pinnedEntities.Count -gt 0 -and (Test-Path -LiteralPath $apiSurface)) {
+        $builtTypes = @([regex]::Matches((Get-Content -LiteralPath $apiSurface -Raw), ('(?m)^' + [char]96 + '(?:class|struct|interface|enum|record) ([A-Za-z_]\w*)')) | ForEach-Object { $_.Groups[1].Value }) | Select-Object -Unique
+        $unbuilt = @($pinnedEntities | Where-Object { $builtTypes -notcontains $_ })
+        if ($unbuilt.Count -gt 0) {
+          $f.Add("[domain] $($unbuilt.Count) of $($pinnedEntities.Count) entit(ies) pinned in '## Domain model' are NOT in the built surface: $($unbuilt -join ', ') - build them, or reconcile the name with DESIGN so dev builds against the pinned model, not a per-story invention. Pinned: $($pinnedEntities -join ', ') (coarse/WARN - names only).")
+        }
+      }
+    }
     $sr = [regex]::Match($designRaw, '(?im)^\s*Security review:\s*(.+?)\s*$')
     if (-not $sr.Success) {
       $f.Add("[design] no 'Security review:' header in $designName - scaffolded before this existed; add REQUIRED or NOT-REQUIRED (<why>)")

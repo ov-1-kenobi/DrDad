@@ -98,6 +98,12 @@ zero integration tests, having never once served a request. Every part worked; t
 A walking skeleton makes every later story an extension of something that RUNS, and it makes close-unit's
 test gate mean INTEGRATION from the very first close instead of mocks.
 
+The skeleton's FIRST tasks DEFINE the core entities from DESIGN's `## Domain model` (the persisted types +
+their migration), so the shared shape exists in the codebase - and in context - before any later story
+extends it. Then every later task builds against the pinned model instead of re-deriving "Page" its own way.
+If `## Domain model` is filled, front-load one task per core entity (or one grouped "domain model" task) at
+the top of the build order; `doc-stats -Findings` reports `[domain]` when a pinned entity never gets built.
+
 ## UI COMPLETENESS IS TASKS, NOT AN AFTERTHOUGHT
 
 Measured: a real CMS run built five feature stories (rich text, uploads, modals) and shipped a `_Layout`

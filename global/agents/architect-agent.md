@@ -47,6 +47,14 @@ For each decided contract, a compact block (small Edit calls; never reprint the 
 Then **reindex** (`index_datasheets`), and tell the orchestrator which stories/tasks reference the newly
 pinned contract so they can be re-checked (tag: `[scribe]`/`[taskmap]`).
 
+## 3b. PIN THE DOMAIN MODEL - the shared nouns
+If the project persists or passes structured state (entities, records, tables), fill DESIGN's
+`## Domain model` in the same pass: one `### <Entity>` per core noun with its fields, invariants and states
+(the section template shows the shape). This is coarser than a contract - it is the shared vocabulary every
+story reuses, so "Page" is one shape everywhere, not one per dev-agent. A pure CLI / stateless algorithm:
+write `None (no persisted domain).` and move on. doc-stats' `[domain]` check reads these `### <Name>`
+headings and reports any that never get built - names only, informative, not a blocker.
+
 Rules:
 - **Number contracts `C1`, `C2`, ... ** - stories, tasks and grades cite them by id ("per C1"). A named
   heading with no id cannot be cited and is not a pinned contract.

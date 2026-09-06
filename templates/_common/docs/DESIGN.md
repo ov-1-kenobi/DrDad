@@ -50,6 +50,20 @@ Security review: REQUIRED
 - **Worked example:** <concrete input values -> operation -> exact expected output>
 - **Out of scope:** <what this deliberately does not cover>
 
+## Domain model (the shared nouns - pin BEFORE locking, the architect-agent writes these)
+<!-- The entities the WHOLE system shares, pinned ONCE so every story builds the SAME shape instead of a
+     dev-agent re-inventing "Page" per task. dev-agent builds against this; doc-stats -Findings cross-checks
+     each pinned entity against what actually got built (the [domain] finding - COARSE and informative: a
+     WARN, names only for now, so the detail is here to be USED, not forced). Keep it lean: the core
+     entities, their fields, and the rules that must hold. Give each a `### <Name>` heading (that name is what
+     the check looks for in the built surface). A pure CLI / algorithm with no persisted state: replace the
+     entity below with exactly `None (no persisted domain).` and move on. -->
+### <Entity>   (e.g. Page)
+- **Fields:** <name: type, ...>   (e.g. Id: int, Slug: string, Title: string, Content: string, Status: Draft|Published)
+- **Invariants:** <what must always hold>   (e.g. Slug is unique + lowercase + URL-safe; Content is sanitized HTML)
+- **States:** <lifecycle, if any>   (e.g. Draft -> Published -> Archived)
+- **Relates to:** <other entities>   (e.g. authored by a User; has many Image)
+
 ## Solution architecture (decided FIRST - /design step 2, before requirements and contracts)
 <!-- Filled in /design STEP 2, before requirements and contracts. Not because early commitment is ideal,
      but because everything downstream needs it: CLAUDE.md has no Build/test command until a stack exists,

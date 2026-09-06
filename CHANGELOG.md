@@ -2,6 +2,21 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.37.0 - 2026-09-03
+
+### Added - a pinned domain model (## Domain model) + a coarse, informative [domain] drift check
+Watching real runs, dev-agents improvise entity shapes per story because the shared nouns were never pinned:
+`DESIGN.md` had `## Contracts` but no domain model, so there was no INTENDED shape for `API-SURFACE.md` (which
+reflects what was BUILT) to be checked against. Now the design phase pins one - `## Domain model` (entities,
+fields, invariants, states), written by the architect-agent before lock; `/taskmap` front-loads a task per
+core entity in the walking skeleton so the shared shape exists from task 1; `dev-agent` is told to build
+against it, not invent fields per task; and `doc-stats -Findings` adds a **coarse, informative `[domain]`
+WARN** - it compares each pinned `### <Entity>` against the types in `API-SURFACE.md` and names any that were
+never built, handing over the pinned list to build toward. Deliberately not forced: **names only** (no
+field-level match yet), **silent** when there is no model, no surface, or no drift, and `None (no persisted
+domain).` opts a stateless project out. The detail is there to be *used* - the models get a chance to pick it
+up before anything is hard-gated. Existing projects without the section are untouched (no nag).
+
 ## 0.36.0 - 2026-09-03
 
 ### Added - the signature bank now names the .cs file each type lives in

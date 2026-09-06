@@ -35,6 +35,10 @@ and placeholder convention are in CLAUDE.md.
   rediscovering Azure Table generics sitting in the DLL the whole time; guessing file-vs-class is how a run
   kept editing the wrong file and walking it back. On a build error close-unit runs this lookup FOR you and
   prints the real signature + file, so there is never a reason to guess and re-guess.
+- **For an ENTITY's shape, read DESIGN's `## Domain model` - do not invent fields per task.** It pins the
+  shared nouns (fields, invariants, states) so the same entity is the same in every story. Build to it. If
+  your task needs a field the model does not have, that is a QUESTION for the design (return it), not a field
+  you add quietly - a per-task invention is exactly the drift `doc-stats` flags as `[domain]`.
 - Implement in the project's language/stack. Follow the placeholder/stub convention from CLAUDE.md  (interface mocks, dependency stubs, mocked HAL/bus, greybox primitives) with `// TODO` markers.
 - Prefer several SMALL Edits over one big replacement. If an edit leaves a file mangled (methods spliced,
   will not compile) STOP - do NOT hand-reconstruct it from memory; report it so the orchestrator restores
