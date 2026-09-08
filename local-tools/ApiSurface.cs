@@ -89,7 +89,29 @@ public static class ApiSurface
         foreach (var k in dlls.Keys.Where(k => !Wanted(k)).ToList()) dlls.Remove(k);
         if (dlls.Count == 0) return "no relevant assemblies (no .csproj PackageReferences matched bin\\ output)";
         // Runtime assemblies must be resolvable or member signatures fail to load.
-        resolverPaths.AddRange(Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll"));
+        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        resolverPaths.AddRange(Directory.GetFiles(runtimeDir, "*.dll"));
+        // ...and the ASP.NET Core shared framework. runtimeDir is ...\shared\Microsoft.NETCore.App\<ver>, so
+        // its grandparent is ...\shared, where Microsoft.AspNetCore.App\<ver> lives. Without it a type whose
+        // BASE is in that framework - ApplicationUser : IdentityUser, a Controller, a PageModel - cannot
+        // resolve its base, so Describe() yields nothing and the type is SILENTLY dropped (measured:
+        // ApplicationUser vanished while every same-assembly POCO survived; dev-agent -Lookup'd it and got
+        // nothing, then re-invented it). Resolver-only - it is NOT added to the emitted set.
+        var sharedRoot = Path.GetDirectoryName(Path.GetDirectoryName(runtimeDir));
+        var aspNetApp = sharedRoot is null ? null : Path.Combine(sharedRoot, "Microsoft.AspNetCore.App");
+        if (aspNetApp != null && Directory.Exists(aspNetApp))
+        {
+            var major = Path.GetFileName(runtimeDir).Split('.').FirstOrDefault() ?? "";
+            var verDir = Directory.GetDirectories(aspNetApp)
+                .Where(d => Path.GetFileName(d).StartsWith(major + ".", StringComparison.Ordinal))
+                .OrderBy(Path.GetFileName, StringComparer.Ordinal).LastOrDefault()
+                ?? Directory.GetDirectories(aspNetApp).OrderBy(Path.GetFileName, StringComparer.Ordinal).LastOrDefault();
+            if (verDir != null) resolverPaths.AddRange(Directory.GetFiles(verDir, "*.dll"));
+        }
+        // A shared-framework copy must not collide with a bin/runtime copy of the same simple name.
+        resolverPaths = resolverPaths
+            .GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First()).ToList();
 
         var sb = new StringBuilder();
         sb.AppendLine("# API surface (generated - do not edit)");

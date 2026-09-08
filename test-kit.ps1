@@ -506,6 +506,36 @@ Test-Case "the signature bank names the .cs file each type lives in, and lookup 
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "api-surface resolves a type deriving from an ASP.NET framework base (ApplicationUser : IdentityUser)" {
+  # The measured bug: the reflector resolved types against bin + the .NET runtime but NOT the ASP.NET Core
+  # shared framework, so a type whose BASE lives there (ApplicationUser : IdentityUser) could not resolve and
+  # was SILENTLY dropped - dev-agent -Lookup'd it, got nothing, and re-invented it. This builds a tiny
+  # FrameworkReference lib with such a type and asserts it now appears. Skips (does not fail) when the SDK or
+  # the ASP.NET Core shared framework is unavailable.
+  $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+  if (-not (Test-Path $exe)) { return }
+  if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "app"; New-Item -ItemType Directory -Force $p | Out-Null
+    Set-Content (Join-Path $p "app.csproj") -Encoding UTF8 @(
+      '<Project Sdk="Microsoft.NET.Sdk">',
+      '  <PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup>',
+      '  <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>',
+      '</Project>')
+    Set-Content (Join-Path $p "User.cs") -Encoding UTF8 @(
+      'using Microsoft.AspNetCore.Identity;',
+      'namespace App;',
+      'public class ApplicationUser : IdentityUser { public string? FullName { get; set; } }')
+    & dotnet build $p -c Release --nologo -v q *> $null
+    if ($LASTEXITCODE -ne 0) { return }   # no ASP.NET Core shared framework here -> skip, do not fail
+    & $exe --api-surface $p *> $null
+    $surfaceFile = Join-Path $p "docs\API-SURFACE.md"
+    Assert (Test-Path $surfaceFile) "api-surface wrote no surface for the ASP.NET fixture"
+    Assert ((Get-Content $surfaceFile -Raw) -match 'class ApplicationUser') "api-surface dropped ApplicationUser : IdentityUser - the ASP.NET Core shared framework is not in the reflector's resolver paths"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "stack profiles are FRAGMENTS (no kit-owned sections to go stale)" {
   # They used to be full CLAUDE.md files and drifted badly behind templates/generic (old Modes wording,
   # no Secrets, no Task-tool rule). Keeping them fragments makes that impossible.

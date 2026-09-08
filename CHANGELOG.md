@@ -2,6 +2,20 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.38.0 - 2026-09-07
+
+### Fixed - the signature bank silently dropped types deriving from an ASP.NET framework base
+Drafting a `## Domain model` for cms3 tripped the new `[domain]` check on `ApplicationUser` - which turned out
+to be a real hole in the signature bank, not a false alarm. `ApplicationUser` (public, built, `: IdentityUser`)
+was **absent** from `API-SURFACE.md`, so `dad api-surface -Lookup ApplicationUser` returned nothing and a dev
+building the user entity got no signature - a direct meandering cause. The reflector (`ApiSurface.cs`) resolved
+types against bin + the .NET runtime but **never the ASP.NET Core shared framework**, where `IdentityUser`
+lives, so a type whose base is there could not be described and was dropped while same-assembly POCOs survived.
+Fix: add the `Microsoft.AspNetCore.App` shared framework to the reflector's resolver paths (resolver-only, so
+the emitted surface does not bloat), then de-dup by assembly name. Verified on cms3 - `ApplicationUser` now
+appears (with its file), and `[domain]` goes correctly silent. Regression test builds a `FrameworkReference`
+lib with a `: IdentityUser` type and asserts it survives (skips where the ASP.NET framework is absent).
+
 ## 0.37.0 - 2026-09-03
 
 ### Added - a pinned domain model (## Domain model) + a coarse, informative [domain] drift check
