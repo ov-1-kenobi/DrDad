@@ -2143,6 +2143,38 @@ Test-Case "[domain] flags a pinned-but-unbuilt entity, honors the None escape, a
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "[research] flags an opinion-heavy or [research]-tagged task with no pinned Refs, silent when grounded" {
+  # run9 measured the cost: a small model spiralled 26h reinventing antiforgery-in-tests that NO task pinned.
+  # An opinion-heavy task (oauth/antiforgery/jwt/payments/migrations/identity) - or one tagged [research] -
+  # must carry a `Refs:` line pointing at the contract/SOURCE/RECIPE that decides the how. doc-stats WARNs
+  # when it does not, names those tasks, and stays silent for a plain task or once Refs is filled.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    Set-Content "$p\docs\DESIGN.md" -Encoding UTF8 @('# Design', '', 'Status: LOCKED', '', '## Contracts', '### C1: x', '- **Worked example:** x')
+    Set-Content "$p\docs\STORIES.md" -Encoding UTF8 @('# Stories', '', '### Story S1: one   <!-- Status: DOING -->')
+    Set-Content "$p\docs\TASKS.md" -Encoding UTF8 @(
+      '# Tasks', '', '## Build order', '', '## Tasks', '',
+      '### [ ] T1.1 - Home page list   (Story S1)', '- **Goal:** show pages', '',
+      '### [ ] T1.2 - Antiforgery on admin forms   (Story S1)', '- **Goal:** protect POSTs', '',
+      '### [ ] T1.3 - OAuth login [research]   (Story S1)', '- **Goal:** external sign-in')
+    $ds = Join-Path $kit "doc-stats.ps1"
+
+    # T1.2 (keyword) + T1.3 (tag) ungrounded; T1.1 plain must NOT flag
+    $flat = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) -replace '\s+',' ')
+    Assert ($flat -match '\[research\] 2 opinion-heavy') "[research] did not flag exactly the two ungrounded opinion-heavy tasks (T1.1 must be excluded)"
+    Assert ($flat -match '\[research\][^\[]*T1\.2') "[research] did not name the antiforgery task (keyword match)"
+    Assert ($flat -match '\[research\][^\[]*T1\.3') "[research] did not name the [research]-tagged OAuth task"
+
+    # ground with a Refs line -> silent (a finding on grounded input is noise)
+    Set-Content "$p\docs\TASKS.md" -Encoding UTF8 @(
+      '# Tasks', '', '## Build order', '', '## Tasks', '',
+      '### [ ] T1.2 - Antiforgery on admin forms   (Story S1)', '- **Goal:** protect POSTs', '- **Refs:** C1, R3', '')
+    $flat2 = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) -replace '\s+',' ')
+    Assert ($flat2 -notmatch '\[research\]') "[research] still fired after the opinion-heavy task was given a Refs line"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "only close-unit may close a story: it stamps, a hand-tick is flagged, dad tidy cleans" {
   # Measured, cms3: 5/5 stories marked DONE with 21 tasks still open and 4 commits - the DONE markers were
   # written by hand, not by close-unit. Now close-unit stamps 'closed:close-unit' when it rolls a story up,

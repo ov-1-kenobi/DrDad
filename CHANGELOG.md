@@ -2,6 +2,21 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.39.0 - 2026-09-10
+
+### Added - pin the decided "how" to opinion-heavy tasks (Refs + [research]) so dev stops inventing it
+run9 measured the cost: the local model spiralled **26 hours** reinventing antiforgery-in-integration-tests
+that no task pinned - the C3 contract covered the production code, not the test harness. Phase 1 of the fix
+puts the decided approach where dev already reads it. `/taskmap` tags opinion-heavy / boilerplate work (OAuth,
+antiforgery, JWT, SAML/SSO, payments, EF migrations, ASP.NET Identity) `[research]` and pins the how in `Do:`
+- **including the test approach** - plus a new `- **Refs:**` line of index keys (contract / SOURCE / RECIPE
+ids) the dev pulls BEFORE implementing. `dev-agent` follows `Refs` instead of deriving mechanics, and returns
+a QUESTION when a `[research]` task has none. `doc-stats -Findings` adds a coarse `[research]` WARN when a
+`[research]`-tagged or keyword-matched task carries no `Refs` (the how is ungrounded) - it names the tasks,
+and stays silent for a plain task or once `Refs` is filled. Phase 2 (a curated playbook, then an online
+grounding step that verifies the pinned how against the project's actual framework / DLL / host versions)
+builds on these same fields.
+
 ## 0.38.0 - 2026-09-07
 
 ### Fixed - the signature bank silently dropped types deriving from an ASP.NET framework base

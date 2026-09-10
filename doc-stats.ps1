@@ -517,6 +517,34 @@ if ($Findings) {
     }
   }
 
+  # [research] COARSE + informative (WARN): opinion-heavy / boilerplate tasks - OAuth, antiforgery, JWT,
+  # SAML/SSO, payments, EF migrations, ASP.NET Identity - must carry a pinned APPROACH and `Refs:` (contract
+  # / SOURCE / RECIPE ids) so dev implements a DECIDED how instead of inventing the mechanics. A real run
+  # spiralled 26h reinventing antiforgery-in-integration-tests that NO task pinned (the C3 contract covered
+  # production code, not the test harness). Fires on a [research]-tagged OR keyword-matched task that has no
+  # `- **Refs:**` line. Names only, not forced - phase 2 will ground the Refs against the real versions.
+  if (Test-Path $tasksFile) {
+    # Leading \b only (prefix match): a trailing \b would miss "antiforgeR-Y", "migratioN-S", "identitiE-S".
+    $opinionKw = '(?i)\b(oauth|antiforger|anti-forger|csrf|jwt|saml|sso|payment|stripe|webhook|migrat|identit)'
+    $ungrounded = New-Object System.Collections.Generic.List[string]
+    $curTask = ""; $curOpinion = $false; $curRefs = $false
+    foreach ($ln in (Get-Content $tasksFile -Encoding UTF8)) {
+      if ($ln -match '^###\s*\[( |x)\]\s*([A-Za-z0-9._-]+)') {
+        if ($curTask -and $curOpinion -and -not $curRefs) { [void]$ungrounded.Add($curTask) }
+        $curTask = $Matches[2]
+        $curOpinion = (($ln -match '\[research\]') -or ($ln -match $opinionKw))
+        $curRefs = $false
+      } elseif ($curTask) {
+        if ($ln -match '^\s*[-*]\s*\*\*Refs:\*\*\s*\S') { $curRefs = $true }
+        elseif ($ln -match $opinionKw) { $curOpinion = $true }
+      }
+    }
+    if ($curTask -and $curOpinion -and -not $curRefs) { [void]$ungrounded.Add($curTask) }
+    if ($ungrounded.Count -gt 0) {
+      $f.Add("[research] $($ungrounded.Count) opinion-heavy task(s) have NO pinned Refs (approach ungrounded): $(($ungrounded | Select-Object -First 8) -join ', ') - dev will INVENT the how (a run spiralled 26h reinventing antiforgery-in-tests). Add '- **Refs:** C<n>, S<n>, R<n>' pointing at the contract / SOURCE / RECIPE that decides it - including the TEST approach - or research it before /build (WARN).")
+    }
+  }
+
   # Done units with no commit mentioning them: a missed checkpoint one at a time, and IN BULK the fabrication
   # signature. A real run ticked 36 tasks DONE while HEAD never moved - it -Ack'd the stop guard and never
   # ran close-unit. 36 separate [dev] lines is noise that reads like a to-do list; one loud [integrity] line

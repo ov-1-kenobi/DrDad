@@ -39,6 +39,13 @@ and placeholder convention are in CLAUDE.md.
   shared nouns (fields, invariants, states) so the same entity is the same in every story. Build to it. If
   your task needs a field the model does not have, that is a QUESTION for the design (return it), not a field
   you add quietly - a per-task invention is exactly the drift `doc-stats` flags as `[domain]`.
+- **Follow the task's `Refs:` and `Do:` - do NOT reinvent a DECIDED how.** For a task tagged `[research]`
+  (OAuth, antiforgery, JWT, payments, EF migrations, Identity), the approach was decided in taskmap and
+  pinned: pull EVERY `Refs:` key first (`dad api-surface -Lookup`, `search_datasheets "<SOURCE / RECIPE>"`,
+  the cited contract) and implement THAT pattern - including its test approach - rather than deriving the
+  mechanics yourself. If a `[research]` task has no `Refs:` or the pinned approach is missing, that is a
+  QUESTION for taskmap / the design, not boilerplate to reinvent - a run once spiralled 26 hours reinventing
+  antiforgery-in-integration-tests that no task had pinned. `doc-stats` flags such a task as `[research]`.
 - Implement in the project's language/stack. Follow the placeholder/stub convention from CLAUDE.md  (interface mocks, dependency stubs, mocked HAL/bus, greybox primitives) with `// TODO` markers.
 - Prefer several SMALL Edits over one big replacement. If an edit leaves a file mangled (methods spliced,
   will not compile) STOP - do NOT hand-reconstruct it from memory; report it so the orchestrator restores

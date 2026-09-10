@@ -16,3 +16,8 @@
 - **Acceptance:** <one observable/testable check>
 - **Depends on:** <task ids, or "none">
 - **Context:** <the minimal facts the dev needs inline - so nothing else must be read>
+- **Refs:** <index keys the dev pulls BEFORE implementing: contract ids (C1), SOURCE ids (S3), RECIPE ids
+  (R2). REQUIRED on a `[research]` task - tag opinion-heavy / boilerplate work (OAuth, antiforgery, JWT,
+  payments, EF migrations, ASP.NET Identity) `[research]` in the title and pin here the DECIDED how,
+  INCLUDING the test approach, so dev follows a researched pattern instead of inventing it. doc-stats WARNs
+  `[research]` when such a task carries no Refs. Omit on a plain task.>

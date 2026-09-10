@@ -127,3 +127,19 @@ So when a story has a **visible surface** (a page, screen, or component):
 Cite `docs/STYLE.md` (the visual contract: palette / type / tone / branding) in a surface task's acceptance
 so the model builds toward a defined look instead of reinventing it each run. If `STYLE.md` is still
 unfilled, say so - that is a `/design` gap to raise, not something to guess.
+
+## OPINION-HEAVY WORK IS RESEARCHED, NOT INVENTED
+
+Some work is all decided boilerplate + framework opinion - OAuth, antiforgery, JWT, SAML / SSO, payments, EF
+migrations, ASP.NET Identity, file uploads. A small model does NOT reliably reinvent these correctly: a real
+run spiralled 26 hours reinventing antiforgery-in-integration-tests that no task pinned (the contract covered
+the production code, not the test harness). So for such a task:
+- **Tag it `[research]`** in the title line, e.g. `### [ ] T4.2 - Antiforgery on admin forms [research]   (Story S4)`
+  (before the `(Story ...)` tag, exactly like `[ui]`; the id and story still parse).
+- **Pin the DECIDED how in `Do:` - INCLUDING the test approach.** Not "add antiforgery" but the concrete
+  pattern for production AND how an integration test exercises it (shared client, cookie container, token
+  read from the GET). If you cannot state it from the contracts + design, say so - that is a research gap.
+- **Fill `Refs:` with the index keys that decide it** - contract ids (`C3`), `SOURCE` ids (framework /
+  security guidance in SOURCES.md), `RECIPE` ids (syntax that worked here). dev pulls these BEFORE writing.
+- `doc-stats -Findings` reports `[research]` when an opinion-heavy or `[research]`-tagged task carries no
+  `Refs:` - the how is ungrounded and dev will invent it. Do not let such a task reach `/build`.
