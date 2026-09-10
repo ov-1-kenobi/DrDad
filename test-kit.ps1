@@ -2026,6 +2026,7 @@ Test-Case "STYLE.md is the visual contract: scaffolded, wired, and doc-stats fla
     $pj = Join-Path $sbA "np"
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $pj 2>&1 | Out-Null
     Assert (Test-Path (Join-Path $pj "docs\STYLE.md")) "scaffold did not create docs\STYLE.md"
+    Assert (Test-Path (Join-Path $pj "docs\UI-TOOLING.md")) "scaffold did not create docs\UI-TOOLING.md"
   } finally { Remove-Sandbox $sbA }
 
   # wired: /design fills it, taskmap tags [ui] + emits nav + cites it, ux-agent reviews against it
@@ -2033,7 +2034,15 @@ Test-Case "STYLE.md is the visual contract: scaffolded, wired, and doc-stats fla
   $tm = Get-Content (Join-Path $kit "global\commands\taskmap.md") -Raw
   Assert ($tm -match '\[ui\]' -and $tm -match 'STYLE\.md') "/taskmap does not tag [ui] tasks or cite STYLE.md"
   Assert ($tm -match '(?i)navigation') "/taskmap does not tell it to emit the navigation/shell task"
-  Assert ((Get-Content (Join-Path $kit "global\agents\ux-agent.md") -Raw) -match 'STYLE\.md') "ux-agent does not review against STYLE.md"
+  $ux = Get-Content (Join-Path $kit "global\agents\ux-agent.md") -Raw
+  Assert ($ux -match 'STYLE\.md') "ux-agent does not review against STYLE.md"
+  # the offline see->adjust loop: ux-agent reviews the RENDERED screenshot (a picture beats prose), and the
+  # STYLE template carries reference images - this is what would have caught cms3's unstyled-render failure.
+  Assert ($ux -match '(?i)describe_image' -and $ux -match '(?i)screenshot') "ux-agent does not make the rendered screenshot a first-class review input"
+  Assert ((Get-Content (Join-Path $kit "global\commands\build.md") -Raw) -match '(?i)screenshot') "/build [ui] step does not capture a screenshot for the UX review"
+  Assert ((Get-Content (Join-Path $kit "templates\_common\docs\STYLE.md") -Raw) -match '(?m)^## Reference') "STYLE.md template has no ## Reference section for reference images"
+  $uiDoc = Get-Content (Join-Path $kit "templates\_common\docs\UI-TOOLING.md") -Raw
+  Assert ($uiDoc -match 'superdesign' -and $uiDoc -match 'shadcn' -and $uiDoc -match '(?i)installs NONE') "UI-TOOLING.md is missing the verified tools or the 'kit installs none' framing"
 
   # doc-stats [style]: filled palette + off-palette CSS -> WARN; on-palette -> quiet; unfilled -> quiet
   $sbB = New-Sandbox

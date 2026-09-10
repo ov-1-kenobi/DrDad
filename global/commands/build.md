@@ -70,11 +70,16 @@ its dependencies satisfied, STOP and report the blocked tasks.
    component - spawn **ui-agent** instead of dev-agent. It is held to behaviour + accessibility gates and
    hands visual judgement back to me, because there is no exit code for taste. It will WAIT for my look;
    relay that and stop rather than closing the unit yourself.)*
-2b. **UX review (visible surfaces ONLY).** After ui-agent builds the surface, spawn **ux-agent** to review
-   it - reachability from the nav, hierarchy, affordances, form labels, empty/loading/error states,
-   consistency, and conformance to `docs/STYLE.md` (palette / type / tone / branding). It does NOT edit; it
-   returns a prioritized list (P1 broken, P2 confusing, P3 polish). Relay
-   its **P1 and P2** items to **ui-agent**, which applies them directly; note P3 for me. This is a BUILD-TIME
+2b. **UX review (visible surfaces ONLY).** After ui-agent builds the surface, RENDER IT AND CAPTURE A
+   SCREENSHOT for the review: run the app (CLAUDE.md's run command / a preview) and screenshot the surface,
+   or ask me to run it and paste one. Then spawn **ux-agent** WITH that screenshot - it `describe_image`s the
+   RENDERED surface against `docs/STYLE.md` (palette + `## Reference` images) and reviews reachability,
+   hierarchy, affordances, form labels, empty/loading/error states, and consistency. A surface that renders
+   UNSTYLED or broken (cms3's Bootstrap-never-linked failure - it compiles and the tests pass, yet no one can
+   use it) is a P1 the markup review misses. It does NOT edit; it returns a prioritized list (P1 broken, P2
+   confusing, P3 polish). Relay its **P1 and P2** to **ui-agent**, which applies them; note P3 for me; then
+   re-screenshot and look again (the see->adjust loop). If you could not get a screenshot, say the visual half
+   is UNVERIFIED rather than implying it passed. This is a BUILD-TIME
    pass on purpose: **nothing is written into DESIGN / STORIES / TASKS** - the fix lands in the code and
    `close-unit -UxReviewed` records it in the commit, so the code plus its history are the documentation.
    ux-agent still hands the aesthetic call to me (no exit code for taste); it settles the mechanical half -

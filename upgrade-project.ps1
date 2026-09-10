@@ -78,7 +78,7 @@ if (Test-Path $mcpPath) {
 }
 
 # --- 1) Missing docs from templates (never overwrite existing) ---
-foreach ($doc in @("STATUS.md","RECIPES.md","SOURCES.md","DATASETS.md","STYLE.md")) {
+foreach ($doc in @("STATUS.md","RECIPES.md","SOURCES.md","DATASETS.md","STYLE.md","UI-TOOLING.md")) {
   $dst = Join-Path $proj "docs\$doc"
   if (-not (Test-Path $dst)) {
     Copy-Item (Join-Path $templates "_common\docs\$doc") $dst

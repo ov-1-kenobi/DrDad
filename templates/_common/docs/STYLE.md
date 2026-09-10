@@ -11,6 +11,16 @@
 - Audience + context: <who uses this, and where>
 - Reference: <a site/app whose feel you want, or "none">
 
+## Reference (a picture beats prose)
+<!-- Drop 1-3 reference screenshots (target designs, or a site whose feel you want) into docs/references/ and
+     list them here. ux-agent describe_image's the BUILT surface and compares it to these - rendered pixels
+     catch what a markup review cannot: an unstyled page because the CSS / framework never linked, a broken
+     layout, off-palette colors as they actually paint. Offline: local files, no external tool. Optional but
+     high-leverage for a UI-heavy project; the external UI tools (superdesign / shadcn) are listed in
+     docs/UI-TOOLING.md and are NOT installed by the kit. -->
+- <docs/references/target-home.png> - <what to emulate: layout, spacing, hierarchy>
+- <or "none - the palette + type below are the whole contract">
+
 ## Palette
 <!-- Name each color and give a 6-digit HEX. doc-stats extracts these and WARNs when project CSS uses colors
      outside this set. Keep it small - a real palette is ~6-10 colors, not a rainbow. -->

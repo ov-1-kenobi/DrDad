@@ -74,6 +74,8 @@ Copy-Item (Join-Path $templates "_common\docs\DATASETS.md") (Join-Path $proj "do
 # project. ux-agent reviews against it and doc-stats checks the palette is actually used - so "complete UI"
 # has a defined target instead of being reinvented (or skipped) every run.
 Copy-Item (Join-Path $templates "_common\docs\STYLE.md") (Join-Path $proj "docs\STYLE.md") -Force
+# Optional UI tooling reference: the offline see->adjust loop + the external tools the kit does NOT install.
+Copy-Item (Join-Path $templates "_common\docs\UI-TOOLING.md") (Join-Path $proj "docs\UI-TOOLING.md") -Force
 New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 
 # Shared MCP config (RAG over this project's docs).

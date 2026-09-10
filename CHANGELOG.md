@@ -2,6 +2,26 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.40.0 - 2026-09-10
+
+### Added - an offline see->adjust UI loop + honest advisories for the external UI tools
+DrDad's UI weakness is structural: it verifies with tests, not pixels, so cms3 shipped Bootstrap markup with
+**no Bootstrap linked** - every page rendered unstyled, the build and tests passed, and no markup review saw
+it. The field's answer is three levers - component grounding, reference-image grounding, and a see->adjust
+loop where the model SEES its output. Two are offline and now ship in the kit; the third (component grounding
+via shadcn) and the design-judgment tool (superdesign) are online / account / JS-only, so - per the "one C#
+server, offline, multi-stack" design - the kit does **not** install them, it advises.
+- **Reference images:** STYLE.md gains a `## Reference` section - drop target screenshots in `docs/references/`
+  and ux-agent compares the built surface to them.
+- **See->adjust:** `/build`'s `[ui]` step now RENDERS the surface, captures a screenshot, and `ux-agent`
+  `describe_image`s the RENDERED pixels against STYLE.md - a P1 when it renders unstyled or broken. The
+  screenshot is ux-agent's primary input now, not an optional smoke check.
+- **Advisories:** a new scaffolded `docs/UI-TOOLING.md` carries the VERIFIED setup for superdesign (a Claude
+  Code plugin + account) and the shadcn MCP (JS/React + Tailwind only), clearly marked optional / online /
+  not-installed. `dad doctor` detects a UI project and points at it, tailoring the shadcn note to JS stacks.
+The offline loop works on every stack, including cms3's Razor/HTMX where shadcn does not apply. The external
+commands were verified against their own docs (superdesign-skill repo, shadcn MCP docs), 2026-09.
+
 ## 0.39.0 - 2026-09-10
 
 ### Added - pin the decided "how" to opinion-heavy tasks (Refs + [research]) so dev stops inventing it

@@ -341,6 +341,17 @@ if ($ProjectDir) {
       if ($cm -match '<set in|<decided in') { Say "WARN" "CLAUDE.md" "Stack/Build/test still placeholders" "finish /design's architecture step" }
     } else { Say "FAIL" "CLAUDE.md" "missing" "new-project.cmd <general|experience>" }
 
+    # UI advisory (informational - the kit installs NO UI tooling; it points at the offline loop + the doc).
+    $hasUi = @(Get-ChildItem $p -Recurse -Include *.cshtml,*.razor,*.tsx,*.jsx,*.vue,*.svelte -File -ErrorAction SilentlyContinue |
+               Where-Object { $_.FullName -notmatch '\\(bin|obj|node_modules|dist)\\' } | Select-Object -First 1).Count -gt 0
+    if ($hasUi) {
+      $isJs = (Test-Path (Join-Path $p "components.json")) -or
+              @(Get-ChildItem $p -Recurse -Include *.tsx,*.jsx -File -ErrorAction SilentlyContinue | Select-Object -First 1).Count -gt 0
+      $optTools = if ($isJs) { "superdesign + shadcn MCP" } else { "superdesign (shadcn is React/Vue only)" }
+      Write-Host "  UI surfaces detected -> the offline see->adjust loop is built in (STYLE.md '## Reference' + /build [ui] screenshot review)." -ForegroundColor DarkGray
+      Write-Host "    optional external tools: $optTools - see docs/UI-TOOLING.md; the kit installs NONE." -ForegroundColor DarkGray
+    }
+
     $mcp = Join-Path $p ".mcp.json"
     if (Test-Path $mcp) {
       try {
