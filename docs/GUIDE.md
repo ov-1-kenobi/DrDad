@@ -171,7 +171,7 @@ this before you install it on a machine you use for other work:
 | What it changes | Scope | Reversible by |
 |---|---|---|
 | `%USERPROFILE%\.claude\settings.json` - **redirects Claude Code to Ollama** | **GLOBAL - every project on the machine** | `uninstall.cmd` (restores `settings.json.bak`) |
-| `%USERPROFILE%\.claude\commands\*.md`, `agents\*.md` | GLOBAL - the 15 commands / 16 agents appear everywhere | `uninstall.cmd` |
+| `%USERPROFILE%\.claude\commands\*.md`, `agents\*.md` | GLOBAL - the 16 commands / 17 agents appear everywhere | `uninstall.cmd` |
 | `OLLAMA_FLASH_ATTENTION` / `KV_CACHE_TYPE` / `KEEP_ALIVE` User env vars | machine | `uninstall.cmd -Full` |
 | Ollama `-cc` model variants | machine | `uninstall.cmd -Full` |
 | Per project: `CLAUDE.md`, `.mcp.json`, `docs/`, `.gitignore`, `.git/hooks/pre-commit` | that project | delete / `git` |
@@ -184,7 +184,7 @@ global file. Claude Code reads project settings over global ones, so DrDad proje
 else stays normal.
 
 **No name collisions** (the test suite enforces this):
-- None of the 15 commands match a Claude Code built-in - important because a colliding custom command is
+- None of the 16 commands match a Claude Code built-in - important because a colliding custom command is
   **silently shadowed** (it simply never loads).
 - No agent name matches a built-in agent type (`Explore`, `Plan`, `general-purpose`, ...). Ours all carry an
   `-agent` suffix; `taskmap-agent` is deliberately distinct from the built-in `Plan`.

@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.42.0** - local, offline, agentic software development on your own GPU.
+**Version 0.43.0** - local, offline, agentic software development on your own GPU.
 
 DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
@@ -53,7 +53,7 @@ A few of the gates, each from a real incident:
 - **the environment-block detector** - when Windows App Control / WDAC refuses to run a build, the kit
   STOPS and reports it, and forbids agents from disabling your security to get past it (a real run tried).
 
-15 slash commands and 16 sub-agents sit on top of these, but the gates are the point.
+16 slash commands and 17 sub-agents sit on top of these, but the gates are the point.
 
 ---
 

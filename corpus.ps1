@@ -90,5 +90,31 @@ switch ($Action.ToLower()) {
     if (-not $Quiet) { Write-Host "restored corpus '$cname' into '$Environment' from $Name" -ForegroundColor Green }
     exit 0
   }
-  default { Write-Host "dad corpus: unknown action '$Action' (list | new | build | search | remove | restore)" -ForegroundColor Yellow; exit 1 }
+  "check" {
+    # Deterministic manifest/corpus validation - the honesty gate /corpus runs BEFORE any dialogue, so the
+    # agent starts from facts. A '## X' section still holding a <lowercase...> placeholder is UNFILLED.
+    if (-not $Name -or -not (Test-Path $corpusDir)) { Write-Host "no such corpus '$Name' in '$Environment'" -ForegroundColor Yellow; exit 1 }
+    $manifest = Join-Path $corpusDir "CORPUS.md"
+    $text = if (Test-Path $manifest) { Get-Content $manifest -Raw -Encoding UTF8 } else { "" }
+    $findings = New-Object System.Collections.Generic.List[string]
+    Write-Host "== corpus '$Name' (env '$Environment') =="
+    foreach ($sec in @("Goal","Scope","Sources","Build & refresh")) {
+      $m = [regex]::Match($text, "(?ms)^##\s*$([regex]::Escape($sec))\b(.*?)(?=^##\s|\z)")
+      if (-not $m.Success) { $findings.Add("[corpus] no '## $sec' section in CORPUS.md"); continue }
+      $body = ($m.Groups[1].Value -replace '(?s)<!--.*?-->','').Trim()
+      if ($body -eq "" -or $body -match '<[a-z][^>]{0,60}>') { $findings.Add("[corpus] '## $sec' is unfilled (still a <...> placeholder)") }
+    }
+    $urls = @([regex]::Matches($text, '(?m)^\s*-\s*https?://[^\s>]+')).Count   # a real URL, not the <https://...> placeholder
+    $srcFiles = @(Get-ChildItem (Join-Path $corpusDir "sources") -File -Recurse -ErrorAction SilentlyContinue).Count
+    if ($urls -eq 0) { $findings.Add("[corpus] no source URLs in '## Sources' - the agent has nothing authoritative to ingest") }
+    $idx = Join-Path $corpusDir ".index"
+    $idxState = if (Test-Path $idx) { (Get-Item $idx).LastWriteTime.ToString('yyyy-MM-dd') } else { "not built" }
+    if (-not (Test-Path $idx)) { $findings.Add("[corpus] index not built - run: dad corpus build $Name -Env $Environment") }
+    Write-Host ("  sources: {0} url(s) in manifest, {1} file(s) in sources\ | index: {2}" -f $urls, $srcFiles, $idxState)
+    Write-Host "findings:"
+    if ($findings.Count -eq 0) { Write-Host "  none - the corpus is filled, sourced, and indexed." -ForegroundColor Green }
+    else { foreach ($f in $findings) { Write-Host "  $f" -ForegroundColor Yellow } }
+    exit 0
+  }
+  default { Write-Host "dad corpus: unknown action '$Action' (list | new | check | build | search | remove | restore)" -ForegroundColor Yellow; exit 1 }
 }

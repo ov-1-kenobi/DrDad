@@ -2,6 +2,19 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.43.0 - 2026-09-14
+
+### Added - /corpus command + corpus-agent: set a corpus's directive and run refresh cycles
+0.42 shipped the corpus SCHEME (`dad corpus new` scaffolds a folder + `CORPUS.md`; you edit it). This adds the
+CONVERSATIONAL half - the `/design` analog for a knowledge bank. **`/corpus <name> -env <e>`**: (1) pulls the
+corpus's current state, (2) validates it deterministically with a new **`dad corpus check`** (flags unfilled
+`<...>` manifest sections, missing source URLs, an unbuilt index), (3) spawns **`corpus-agent`** to turn those
+gaps into questions and PROPOSE `CORPUS.md` fills - the directive stays human-owned, so it applies edits on
+your OK and never widens the scope on its own - and (4) runs the grab -> cite -> index cycle on your go
+(`ingest_url` each source into `sources\`, cite it DATED in `SOURCES.md`, `dad corpus build`, then
+`dad corpus search` to prove it answers). `corpus-agent` cites every claim and hands any contested "take"
+back to you. `dad corpus check` is the honesty gate under it. (16 commands, 17 agents now.)
+
 ## 0.42.0 - 2026-09-14
 
 ### Added - knowledge corpora: persistent, cited banks projects consult instead of re-researching (pilot)

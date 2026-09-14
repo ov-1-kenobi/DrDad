@@ -2163,6 +2163,17 @@ Test-Case "dad env + dad corpus: create, list, SAFE-archive on remove, restore (
     Assert (Test-Path (Join-Path $cdir "CORPUS.md")) "dad corpus new did not scaffold CORPUS.md"
     Assert (Test-Path (Join-Path $cdir "sources")) "dad corpus new did not create sources\"
 
+    # dad corpus check: a freshly-scaffolded corpus is the TEMPLATE (unfilled) -> [corpus] findings; a filled,
+    # sourced, indexed one is clean. This is the honesty gate /corpus validates with before any dialogue.
+    $chk = & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs check security -Env dotnet-web 2>&1 | Out-String
+    Assert ($chk -match '\[corpus\]') "dad corpus check did not flag the unfilled template"
+    Assert ($chk -match "(?i)'## Goal' is unfilled") "dad corpus check did not flag the empty Goal"
+    $filled = "# Corpus: security`r`n`r`n## Goal`r`nCurrent cited ASP.NET security practice.`r`n`r`n## Scope`r`n- In: web security`r`n- Out: native apps`r`n`r`n## Sources`r`n- https://learn.microsoft.com/aspnet - official docs`r`n`r`n## Build & refresh`r`n- Ingest monthly`r`n"
+    [System.IO.File]::WriteAllText((Join-Path $cdir "CORPUS.md"), $filled, (New-Object System.Text.UTF8Encoding($false)))
+    New-Item -ItemType Directory -Force (Join-Path $cdir ".index") | Out-Null
+    $chk2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs check security -Env dotnet-web 2>&1 | Out-String
+    Assert ($chk2 -match '(?i)none - the corpus is filled') "dad corpus check flagged a filled, sourced, indexed corpus"
+
     # SAFE remove: archives to a dated zip, removes the live folder
     & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs remove security -Env dotnet-web -Quiet | Out-Null
     Assert (-not (Test-Path $cdir)) "dad corpus remove did not remove the live folder"
