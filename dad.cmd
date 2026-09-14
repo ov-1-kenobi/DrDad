@@ -90,6 +90,13 @@ echo     dad reindex "<dir>\docs"      rebuild the RAG index
 echo     dad publish-run -Transcript <f> -ProjectDir <p>   secret-scan + record a run in runs\ (commits, never pushes)
 echo     dad scan-secrets              credential scan
 echo.
+echo   Knowledge corpora (cited banks projects consult instead of re-researching the web):
+echo     dad env                       list knowledge environments (isolated trees under your profile)
+echo     dad env new ^<name^>            create one; dad env remove archives to a dated zip (safe)
+echo     dad corpus new ^<name^> -Env ^<e^>    scaffold a corpus + its CORPUS.md manifest
+echo     dad corpus build ^<name^>       ingest per the manifest, then index
+echo     dad corpus search ^<name^> "q"  semantic search of the corpus
+echo.
 echo   Kit maintenance:
 echo     dad test-kit                  the validation gate; must print 0 failed
 echo     dad sync-models -Report       reconcile Ollama with models.json

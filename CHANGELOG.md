@@ -2,6 +2,23 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.42.0 - 2026-09-14
+
+### Added - knowledge corpora: persistent, cited banks projects consult instead of re-researching (pilot)
+The `[research]` grounding (0.39) needed somewhere durable for the *decided technique* to live, so opinion-
+heavy work (antiforgery-in-tests, OAuth) stops being re-invented every project. This is that store, as files:
+a **corpus** is a folder (`CORPUS.md` manifest + `sources\` + `SOURCES.md` + a `.index\`) under an
+**environment** - an isolated tree (the data-governance wall between personal and work/client, and portable).
+Two CLIs drive it, **no new server** - build/search reuse the existing `local-tools` engine
+(`--reindex` / `--search`):
+- `dad env list | new <name> | remove <name> | restore <zip> | where` - environments live under
+  `%USERPROFILE%\.drdad\environments` (override `DRDAD_ENV_ROOT`).
+- `dad corpus [list] | new <name> | build <name> | search <name> "<q>" | remove <name> | restore <zip>`,
+  all with `-Env <env>`.
+**Remove is SAFE** on both: it `Compress-Archive`s to `_archive\<name>_<date>.zip` and only then deletes the
+live tree - `restore` brings it back. A `CORPUS.md` template ships. Pilot scope: the scheme + CLIs; the
+synthesis agents and refresh routines build on these folders next.
+
 ## 0.41.0 - 2026-09-12
 
 ### Added - dad watch alarms on a BUSY-but-no-progress spiral (git HEAD frozen), not just silence

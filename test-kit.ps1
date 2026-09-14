@@ -243,7 +243,7 @@ Test-Case "every kit file the docs tell you to RUN actually exists" {
       $name = $m.Groups[1].Value
       # only judge names that LOOK like kit scripts: the kit is flat, so a real one sits at its root
       if ($name -match '(?i)^(setup|build|run|deploy|foo|bar|example|script|my)') { continue }
-      $isKitish = ($name -match '(?i)^(dad-|close-|doc-|docs-|api-|new-|upgrade-|use-|sync-|install|uninstall|package-|scan-|test-|reindex|recover-|ratchet|source-|grade-|ollama-)')
+      $isKitish = ($name -match '(?i)^(dad-|close-|doc-|docs-|api-|new-|upgrade-|use-|sync-|install|uninstall|package-|scan-|test-|reindex|recover-|ratchet|source-|grade-|ollama-|corpus\.|env\.)')
       if (-not $isKitish) { continue }
       $checked++
       if (-not (Test-Path (Join-Path $kit $name))) {
@@ -2141,6 +2141,46 @@ Test-Case "dad watch alarms when the session is BUSY but git HEAD is frozen (the
     $out = if (Test-Path $outFile) { Get-Content $outFile -Raw } else { "" }
     Assert ($out -match '(?i)NO PROGRESS') "dad watch did not alarm on busy-but-HEAD-frozen (no-progress spiral)"
   } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad env + dad corpus: create, list, SAFE-archive on remove, restore (knowledge corpora pilot)" {
+  # Persistent, cited knowledge banks projects consult instead of re-researching. An environment is an
+  # isolated tree; a corpus is a folder + CORPUS.md manifest under it. REMOVE must be SAFE (zip archive, not
+  # a hard delete). Point the root at a sandbox so the real user profile is untouched.
+  $sb = New-Sandbox
+  $prevRoot = $env:DRDAD_ENV_ROOT
+  try {
+    $env:DRDAD_ENV_ROOT = Join-Path $sb "envs"
+    $envPs = Join-Path $kit "env.ps1"; $corpusPs = Join-Path $kit "corpus.ps1"
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $envPs new dotnet-web -Quiet | Out-Null
+    Assert (Test-Path (Join-Path $env:DRDAD_ENV_ROOT "dotnet-web\corpora")) "dad env new did not create the environment"
+    $list = & powershell -NoProfile -ExecutionPolicy Bypass -File $envPs list 2>&1 | Out-String
+    Assert ($list -match 'dotnet-web') "dad env list did not show the new environment"
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs new security -Env dotnet-web -Quiet | Out-Null
+    $cdir = Join-Path $env:DRDAD_ENV_ROOT "dotnet-web\corpora\security"
+    Assert (Test-Path (Join-Path $cdir "CORPUS.md")) "dad corpus new did not scaffold CORPUS.md"
+    Assert (Test-Path (Join-Path $cdir "sources")) "dad corpus new did not create sources\"
+
+    # SAFE remove: archives to a dated zip, removes the live folder
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs remove security -Env dotnet-web -Quiet | Out-Null
+    Assert (-not (Test-Path $cdir)) "dad corpus remove did not remove the live folder"
+    $zip = @(Get-ChildItem (Join-Path $env:DRDAD_ENV_ROOT "dotnet-web\corpora\_archive") -Filter "security_*.zip" -ErrorAction SilentlyContinue)
+    Assert ($zip.Count -eq 1) "dad corpus remove did not archive to a dated zip (found $($zip.Count))"
+
+    # restore brings it back from the zip
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs restore $zip[0].FullName -Env dotnet-web -Quiet | Out-Null
+    Assert (Test-Path (Join-Path $cdir "CORPUS.md")) "dad corpus restore did not bring the corpus back"
+
+    # env remove is also safe-archive
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $envPs remove dotnet-web -Quiet | Out-Null
+    Assert (-not (Test-Path (Join-Path $env:DRDAD_ENV_ROOT "dotnet-web"))) "dad env remove did not remove the live env"
+    Assert (@(Get-ChildItem (Join-Path $env:DRDAD_ENV_ROOT "_archive") -Filter "dotnet-web_*.zip" -ErrorAction SilentlyContinue).Count -eq 1) "dad env remove did not archive the env"
+  } finally {
+    if ($null -ne $prevRoot) { $env:DRDAD_ENV_ROOT = $prevRoot } else { Remove-Item Env:\DRDAD_ENV_ROOT -ErrorAction SilentlyContinue }
+    Remove-Sandbox $sb
+  }
 }
 
 Test-Case "[domain] flags a pinned-but-unbuilt entity, honors the None escape, and stays silent when built" {

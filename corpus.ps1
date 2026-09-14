@@ -1,0 +1,94 @@
+# corpus.ps1 - manage DrDad knowledge CORPORA: named, persistent, cited knowledge banks that projects
+# consult (via a [research] Ref) instead of re-researching the web each time. A corpus is a FOLDER - a
+# CORPUS.md manifest + sources\ + SOURCES.md + a .index\ - under an environment's corpora\ dir (see env.ps1).
+# build/search drive the EXISTING local-tools engine (no new server). REMOVE is SAFE: it archives to a dated
+# zip, never a hard delete.
+#
+#   dad corpus [-Env <env>]                      list corpora in the environment (default: 'default')
+#   dad corpus new <name> [-Env <env>]           scaffold the folder + CORPUS.md manifest
+#   dad corpus build <name> [-Env <env>]         index the corpus (local-tools --reindex)
+#   dad corpus search <name> "<query>" [-Env <env>]   semantic search of the corpus's index
+#   dad corpus remove <name> [-Env <env>]        archive to _archive\<name>_<date>.zip, then remove
+#   dad corpus restore <archive.zip> [-Env <env>]
+[CmdletBinding()]
+param(
+  [Parameter(Position=0)][string]$Action = "list",
+  [Parameter(Position=1)][string]$Name = "",
+  [Parameter(Position=2)][string]$Query = "",
+  [Alias('Env')][string]$Environment = "default",
+  [switch]$Quiet
+)
+$ErrorActionPreference = "Stop"
+$kit = $PSScriptRoot
+
+$root = if ($env:DRDAD_ENV_ROOT) { $env:DRDAD_ENV_ROOT } else { Join-Path $env:USERPROFILE ".drdad\environments" }
+$corporaDir = Join-Path (Join-Path $root $Environment) "corpora"
+$archiveDir = Join-Path $corporaDir "_archive"
+$corpusDir  = if ($Name) { Join-Path $corporaDir $Name } else { "" }
+
+function Get-Exe {
+  $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+  if (-not (Test-Path $exe)) { Write-Host "local-tools.exe not built - run: dotnet build `"$kit\local-tools\local-tools.csproj`" -c Release" -ForegroundColor Yellow; return "" }
+  return $exe
+}
+
+switch ($Action.ToLower()) {
+  "list" {
+    $cs = if (Test-Path $corporaDir) { @(Get-ChildItem $corporaDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '^_' }) } else { @() }
+    if ($cs.Count -eq 0) { Write-Host "environment '$Environment' has no corpora yet (dad corpus new <name> -Env $Environment)"; exit 0 }
+    Write-Host "corpora in '$Environment' (root: $root):"
+    foreach ($c in $cs) {
+      $idx = Join-Path $c.FullName ".index"
+      $built = if (Test-Path $idx) { (Get-Item $idx).LastWriteTime.ToString('yyyy-MM-dd') } else { "not built" }
+      Write-Host ("  {0,-24} indexed: {1}" -f $c.Name, $built)
+    }
+    exit 0
+  }
+  "new" {
+    if (-not $Name) { Write-Host "usage: dad corpus new <name> [-Env <env>]" -ForegroundColor Yellow; exit 1 }
+    if (Test-Path $corpusDir) { Write-Host "corpus '$Name' already exists in '$Environment': $corpusDir" -ForegroundColor Yellow; exit 1 }
+    New-Item -ItemType Directory -Force (Join-Path $corpusDir "sources") | Out-Null
+    $tmpl = Join-Path $kit "templates\_common\CORPUS.md"
+    $body = if (Test-Path $tmpl) { (Get-Content $tmpl -Raw -Encoding UTF8).Replace("<name>", $Name) } else { "# Corpus: $Name`r`n" }
+    [System.IO.File]::WriteAllText((Join-Path $corpusDir "CORPUS.md"), $body, (New-Object System.Text.UTF8Encoding($false)))
+    $srcTmpl = Join-Path $kit "templates\_common\docs\SOURCES.md"
+    if (Test-Path $srcTmpl) { Copy-Item $srcTmpl (Join-Path $corpusDir "SOURCES.md") -Force }
+    if (-not $Quiet) { Write-Host "created corpus '$Name' at $corpusDir - fill CORPUS.md, add sources\, then: dad corpus build $Name -Env $Environment" -ForegroundColor Green }
+    exit 0
+  }
+  "build" {
+    if (-not $Name -or -not (Test-Path $corpusDir)) { Write-Host "no such corpus '$Name' in '$Environment'" -ForegroundColor Yellow; exit 1 }
+    $exe = Get-Exe; if (-not $exe) { exit 1 }
+    & $exe --reindex $corpusDir
+    exit $LASTEXITCODE
+  }
+  "search" {
+    if (-not $Name -or -not (Test-Path $corpusDir)) { Write-Host "no such corpus '$Name' in '$Environment'" -ForegroundColor Yellow; exit 1 }
+    if (-not $Query) { Write-Host "usage: dad corpus search <name> `"<query>`" [-Env <env>]" -ForegroundColor Yellow; exit 1 }
+    $exe = Get-Exe; if (-not $exe) { exit 1 }
+    $prev = $env:LOCALTOOLS_DOCS_DIR
+    $env:LOCALTOOLS_DOCS_DIR = $corpusDir
+    try { & $exe --search $Query } finally { $env:LOCALTOOLS_DOCS_DIR = $prev }
+    exit $LASTEXITCODE
+  }
+  "remove" {
+    if (-not $Name -or -not (Test-Path $corpusDir)) { Write-Host "no such corpus '$Name' in '$Environment'" -ForegroundColor Yellow; exit 1 }
+    New-Item -ItemType Directory -Force $archiveDir | Out-Null
+    $zip = Join-Path $archiveDir ("{0}_{1}.zip" -f $Name, (Get-Date -Format 'yyyy-MM-dd_HHmmss'))
+    Compress-Archive -Path (Join-Path $corpusDir "*") -DestinationPath $zip -Force
+    Remove-Item -Recurse -Force $corpusDir
+    if (-not $Quiet) { Write-Host "archived corpus '$Name' -> $zip, removed the live folder (restore: dad corpus restore `"$zip`" -Env $Environment)" -ForegroundColor Green }
+    exit 0
+  }
+  "restore" {
+    if (-not $Name -or -not (Test-Path -LiteralPath $Name)) { Write-Host "usage: dad corpus restore <archive.zip> [-Env <env>]" -ForegroundColor Yellow; exit 1 }
+    $cname = [System.IO.Path]::GetFileNameWithoutExtension($Name) -replace '_\d{4}-\d{2}-\d{2}_\d{6}$',''
+    $dest = Join-Path $corporaDir $cname
+    if (Test-Path $dest) { Write-Host "corpus '$cname' already exists in '$Environment' - remove it first" -ForegroundColor Yellow; exit 1 }
+    New-Item -ItemType Directory -Force $dest | Out-Null
+    Expand-Archive -Path $Name -DestinationPath $dest -Force
+    if (-not $Quiet) { Write-Host "restored corpus '$cname' into '$Environment' from $Name" -ForegroundColor Green }
+    exit 0
+  }
+  default { Write-Host "dad corpus: unknown action '$Action' (list | new | build | search | remove | restore)" -ForegroundColor Yellow; exit 1 }
+}
