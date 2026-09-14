@@ -2,6 +2,20 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.44.0 - 2026-09-14
+
+### Added - /assess + codebase-analyst: reverse-engineer a brownfield codebase into a grounded assessment
+The kit could design and build greenfield; it could not ONBOARD an existing project. `/assess` does - it
+reverse-engineers ANY codebase (not just DrDad projects) into `docs/ASSESSMENT.md`: an architecture map, a
+security assessment, implementation notes, and a **prioritized top-N issues list** (severity x effort), every
+finding cited to a `file:line` and, where a rule applies, to a SME source from a security / architecture
+corpus. `codebase-analyst` establishes the real surface first (build + `dad api-surface`, not names), cites
+every claim or drops it, and HANDS the strategic call (keep rolling / re-host / rewrite) to the human with
+options + tradeoffs. The assessment feeds forward: the top issues -> `/taskmap` -> `/build` (fix), or the
+whole thing seeds `/design` DRAFT (propose a migration or rewrite). This is the **assess -> propose -> build**
+front-end for brownfield work - the discovery/scoping engine - and it is honest that a deep reverse-engineer
+is a cloud-strength task. (17 commands, 18 agents.)
+
 ## 0.43.0 - 2026-09-14
 
 ### Added - /corpus command + corpus-agent: set a corpus's directive and run refresh cycles

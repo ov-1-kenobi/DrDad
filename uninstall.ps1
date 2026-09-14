@@ -22,8 +22,8 @@ $ErrorActionPreference = "Stop"
 $claude = if ($ClaudeDir) { $ClaudeDir } else { Join-Path $env:USERPROFILE ".claude" }
 
 # Keep these lists in sync with install.ps1 (global\commands and global\agents).
-$commands = @("scaffold","research","document","design","taskmap","proto","spec","build","assets","tidy","stories","diagram","audit","grade","retro","corpus")
-$agents   = @("requirements-agent","architect-agent","taskmap-agent","dev-agent","grade-agent","qa-agent","doc-researcher","research-agent","survey-agent","ui-agent","ux-agent","playtest-agent","security-agent","hygiene-agent","scribe-agent","librarian-agent","corpus-agent")
+$commands = @("scaffold","research","document","design","taskmap","proto","spec","build","assets","tidy","stories","diagram","audit","grade","retro","corpus","assess")
+$agents   = @("requirements-agent","architect-agent","taskmap-agent","dev-agent","grade-agent","qa-agent","doc-researcher","research-agent","survey-agent","ui-agent","ux-agent","playtest-agent","security-agent","hygiene-agent","scribe-agent","librarian-agent","corpus-agent","codebase-analyst")
 # Retired names, so a teardown also clears anything an older kit installed. Append-only.
 $commands += @("forge","scribe","blueprint","librarian","plan")
 $agents   += @("planner-agent")

@@ -92,7 +92,7 @@ Get-ChildItem (Join-Path $root "global\commands") -File | ForEach-Object {
 Get-ChildItem (Join-Path $root "global\agents") -File | ForEach-Object {
   Write-NoBom (Join-Path $claude "agents\$($_.Name)") ((Get-Content $_.FullName -Raw -Encoding UTF8).Replace($old, $root))
 }
-Write-Host "  commands: /scaffold /research /document /design /taskmap /proto /spec /build /assets /tidy /stories /diagram /audit /grade /retro /corpus   agents: requirements/architect/taskmap/dev/ui/ux/playtest/grade/scribe/hygiene/qa/doc-researcher/research/survey/security/librarian/corpus"
+Write-Host "  commands: /scaffold /research /document /design /taskmap /proto /spec /build /assets /tidy /stories /diagram /audit /grade /retro /corpus /assess   agents: requirements/architect/taskmap/dev/ui/ux/playtest/grade/scribe/hygiene/qa/doc-researcher/research/survey/security/librarian/corpus/codebase-analyst"
 
 $mode7 = if ($Cloud) { "CLOUD: Anthropic API" } else { "Ollama redirect + offline flags" }
 Write-Host "`n== 7) Install settings.json ($mode7) ==" -ForegroundColor Cyan
