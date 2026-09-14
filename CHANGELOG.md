@@ -2,6 +2,19 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.41.0 - 2026-09-12
+
+### Added - dad watch alarms on a BUSY-but-no-progress spiral (git HEAD frozen), not just silence
+The watchdog assumed *"a spiral produces NO FILE WRITES"* - true for a hung subagent, **false** for the
+failure that keeps actually happening: run9 and run11 each churned **~24 hours** editing constantly with git
+HEAD frozen and zero commits, until the request timed out - and the idle check never fired because the disk
+was busy the whole time. `dad watch` now also tracks git HEAD: when files keep changing but HEAD has not
+moved for `-NoProgressMinutes` (**default 20**), it raises a distinct **NO-PROGRESS** alarm (lower beep
+pitch) - the session is busy but nothing is landing, go look and stop it if it is flailing (`close-unit`
+will not bank failing work, so it cannot self-resolve). This is the safety valve an *unattended* worker
+needs, and Agent-Ops contract C4. A real commit (HEAD advancing) re-arms it; `0` disables it; no git =
+silence-only, as before.
+
 ## 0.40.0 - 2026-09-10
 
 ### Added - an offline see->adjust UI loop + honest advisories for the external UI tools

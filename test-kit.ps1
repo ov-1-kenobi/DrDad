@@ -2112,6 +2112,37 @@ Test-Case "the stop guard AUDITS -Ack and escalates on a frozen HEAD; doc-stats 
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "dad watch alarms when the session is BUSY but git HEAD is frozen (the run11 no-progress spiral)" {
+  # run9 + run11 each churned ~24h editing constantly with HEAD frozen and 0 commits, until a timeout - and
+  # the idle check (keyed on file SILENCE) can never see it. Run the watcher against a repo where the disk
+  # stays busy but nothing commits, and assert the NO-PROGRESS alarm fires. Skips without git.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force $p | Out-Null
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    "x" | Set-Content "$p\a.txt"; git add -A; git -c user.name=t -c user.email=t@t commit -q -m init
+    $ErrorActionPreference = $prev; Pop-Location
+
+    # tiny no-progress threshold (~1.8s); never idle (IdleMinutes huge); we keep WRITING without committing
+    $outFile = Join-Path $sb "watch.out"
+    $proc = Start-Process powershell -PassThru -WindowStyle Hidden -RedirectStandardOutput $outFile -ArgumentList @(
+      "-NoProfile","-ExecutionPolicy","Bypass","-File",(Join-Path $kit "dad-watch.ps1"),
+      "-ProjectDir",$p,"-PollSeconds","1","-IdleMinutes","999","-NoProgressMinutes","0.03","-NoBeep")
+    try {
+      foreach ($i in 1..12) { Start-Sleep -Milliseconds 600; "tick $i" | Set-Content "$p\a.txt" }
+      Start-Sleep -Seconds 1
+    } finally {
+      try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
+      Start-Sleep -Milliseconds 300
+    }
+    $out = if (Test-Path $outFile) { Get-Content $outFile -Raw } else { "" }
+    Assert ($out -match '(?i)NO PROGRESS') "dad watch did not alarm on busy-but-HEAD-frozen (no-progress spiral)"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "[domain] flags a pinned-but-unbuilt entity, honors the None escape, and stays silent when built" {
   # The structural gap behind "dev invents its own entity shape per story": the design pins the shared nouns
   # in ## Domain model, but nothing checked them against what got built. This COARSE check (entity-NAME
