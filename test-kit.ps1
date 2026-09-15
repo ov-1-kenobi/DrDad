@@ -2179,6 +2179,11 @@ Test-Case "dad env + dad corpus: create, list, SAFE-archive on remove, restore (
     $rf = & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs refresh nope -Env dotnet-web 2>&1 | Out-String
     Assert ($rf -notmatch '(?i)unknown action') "dad corpus refresh is not a recognized action"
 
+    # dad corpus ingest is a recognized action (corpus-scoped web fetch, the fix for ingest landing in a
+    # project). On a missing corpus it says 'no such corpus', NOT 'unknown action' - proving it is wired.
+    $ig = & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs ingest nope "http://x.invalid/y" -Env dotnet-web 2>&1 | Out-String
+    Assert ($ig -notmatch '(?i)unknown action') "dad corpus ingest is not a recognized action"
+
     # SAFE remove: archives to a dated zip, removes the live folder
     & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs remove security -Env dotnet-web -Quiet | Out-Null
     Assert (-not (Test-Path $cdir)) "dad corpus remove did not remove the live folder"
@@ -3859,6 +3864,32 @@ if (-not $SkipBuild) {
       & (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe") --reindex $sb | Out-Null
       Assert ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
     } finally { Remove-Sandbox $sb }
+  }
+
+  Test-Case "CLI --ingest targets the GIVEN root, not the open project (corpus scope)" {
+    # The bug: the ingest_url MCP tool writes to whatever root the server STARTED in (a project's docs\web\),
+    # because WebDir is fixed from LOCALTOOLS_DOCS_DIR at startup and a per-call env change cannot move it - so
+    # a /corpus refresh landed its fetches in whatever project was open, not the corpus. --ingest <url> <root>
+    # is the shell door 'dad corpus ingest' uses to route the fetch (and reindex) to the CHOSEN root. Proof
+    # without a network: IngestUrlAsync creates <root>\web BEFORE fetching, so an offline .invalid URL shows
+    # web\ appearing under the corpus even while LOCALTOOLS_DOCS_DIR points at a 'project'.
+    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    if (-not (Test-Path $exe)) { return }
+    & $exe --ingest 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "--ingest with no url should print usage and exit non-zero"
+    $sb = New-Sandbox
+    $prev = $env:LOCALTOOLS_DOCS_DIR
+    try {
+      $project = Join-Path $sb "project-docs"; $corpus = Join-Path $sb "corpus"
+      New-Item -ItemType Directory -Force $project, $corpus | Out-Null
+      $env:LOCALTOOLS_DOCS_DIR = $project           # stand in for the project the MCP server started in
+      & $exe --ingest "http://drdad-nonexistent.invalid/page" $corpus | Out-Null
+      Assert (Test-Path (Join-Path $corpus "web")) "--ingest did not route the fetch into the GIVEN corpus root"
+      Assert (-not (Test-Path (Join-Path $project "web"))) "--ingest wrote into the open PROJECT, not the corpus (the bug)"
+    } finally {
+      if ($null -ne $prev) { $env:LOCALTOOLS_DOCS_DIR = $prev } else { Remove-Item Env:\LOCALTOOLS_DOCS_DIR -ErrorAction SilentlyContinue }
+      Remove-Sandbox $sb
+    }
   }
 
   Test-Case "this suite's expected tool list matches Tools.cs" {

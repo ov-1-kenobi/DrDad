@@ -14,6 +14,22 @@ if (args.Length > 0 && args[0] == "--reindex")
     return;
 }
 
+// One-off CLI web INGEST into a chosen root, does NOT start the MCP server:
+//   local-tools.exe --ingest "https://example.com/page" ["C:\path\to\corpus"]
+// The ingest_url MCP tool always writes to the RUNNING server's root - the current project's docs\web\ -
+// because WebDir is fixed from LOCALTOOLS_DOCS_DIR at server start and a per-call env change cannot move it.
+// So a /corpus refresh could not fetch into its OWN folder; it landed in whatever project was open. This
+// shell door fetches into the GIVEN root's web\ and reindexes THAT root, so 'dad corpus ingest' targets the
+// corpus, not the project. Falls back to LOCALTOOLS_DOCS_DIR when no root arg is given. Exit code 0 = success.
+if (args.Length > 0 && args[0] == "--ingest")
+{
+    if (args.Length < 2) { Console.Error.WriteLine("usage: local-tools.exe --ingest \"url\" [docsDir]"); Environment.Exit(1); return; }
+    if (args.Length > 2) Environment.SetEnvironmentVariable("LOCALTOOLS_DOCS_DIR", args[2]);
+    try { Console.WriteLine(await Rag.IngestUrlAsync(args[1])); }
+    catch (Exception e) { Console.Error.WriteLine("ingest failed: " + e.Message); Environment.Exit(1); }
+    return;
+}
+
 // One-off CLI corpus SEARCH, does NOT start the MCP server:
 //   local-tools.exe --search "what does C9 say about tile sizes" [topK]
 // The same semantic search as the search_datasheets MCP tool, reachable from a SHELL. Across nine graded

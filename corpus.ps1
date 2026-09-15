@@ -7,6 +7,7 @@
 #   dad corpus [-Env <env>]                      list corpora in the environment (default: 'default')
 #   dad corpus new <name> [-Env <env>]           scaffold the folder + CORPUS.md manifest
 #   dad corpus build <name> [-Env <env>]         index the corpus (local-tools --reindex)
+#   dad corpus ingest <name> <url> [-Env <env>]  fetch <url> into THIS corpus's web\ + reindex (not a project)
 #   dad corpus refresh <name> [-Env <env>]       re-index; for the full grab-latest cycle use /corpus refresh
 #   dad corpus search <name> "<query>" [-Env <env>]   semantic search of the corpus's index
 #   dad corpus remove <name> [-Env <env>]        archive to _archive\<name>_<date>.zip, then remove
@@ -63,6 +64,16 @@ switch ($Action.ToLower()) {
     & $exe --reindex $corpusDir
     exit $LASTEXITCODE
   }
+  "ingest" {
+    # Corpus-scoped web fetch: grabs <url> into THIS corpus's web\ and reindexes the corpus - NOT the running
+    # project. The MCP ingest_url tool writes to whatever root the server started with (a project's docs), so a
+    # /corpus refresh could not target its own folder; this shell door can, and is what corpus-agent uses.
+    if (-not $Name -or -not (Test-Path $corpusDir)) { Write-Host "no such corpus '$Name' in '$Environment'" -ForegroundColor Yellow; exit 1 }
+    if (-not $Query) { Write-Host "usage: dad corpus ingest <name> <url> [-Env <env>]" -ForegroundColor Yellow; exit 1 }
+    $exe = Get-Exe; if (-not $exe) { exit 1 }
+    & $exe --ingest $Query $corpusDir
+    exit $LASTEXITCODE
+  }
   "refresh" {
     # CLI refresh = re-index only. Grabbing the LATEST from the pinned sources is a WEB fetch (ingest_url),
     # which is agent-driven - so the full grab -> cite -> reindex cycle lives in /corpus <name> refresh.
@@ -117,7 +128,8 @@ switch ($Action.ToLower()) {
       if ($body -eq "" -or $body -match '<[a-z][^>]{0,60}>') { $findings.Add("[corpus] '## $sec' is unfilled (still a <...> placeholder)") }
     }
     $urls = @([regex]::Matches($text, '(?m)^\s*-\s*https?://[^\s>]+')).Count   # a real URL, not the <https://...> placeholder
-    $srcFiles = @(Get-ChildItem (Join-Path $corpusDir "sources") -File -Recurse -ErrorAction SilentlyContinue).Count
+    # Count material in BOTH sources\ (hand-placed) and web\ (fetched by 'dad corpus ingest') - either is indexed.
+    $srcFiles = @(Get-ChildItem (Join-Path $corpusDir "sources"), (Join-Path $corpusDir "web") -File -Recurse -ErrorAction SilentlyContinue).Count
     if ($urls -eq 0) { $findings.Add("[corpus] no source URLs in '## Sources' - the agent has nothing authoritative to ingest") }
     $idx = Join-Path $corpusDir ".index"
     $idxState = if (Test-Path $idx) { (Get-Item $idx).LastWriteTime.ToString('yyyy-MM-dd') } else { "not built" }
@@ -128,5 +140,5 @@ switch ($Action.ToLower()) {
     else { foreach ($f in $findings) { Write-Host "  $f" -ForegroundColor Yellow } }
     exit 0
   }
-  default { Write-Host "dad corpus: unknown action '$Action' (list | new | check | build | refresh | search | remove | restore)" -ForegroundColor Yellow; exit 1 }
+  default { Write-Host "dad corpus: unknown action '$Action' (list | new | check | build | ingest | refresh | search | remove | restore)" -ForegroundColor Yellow; exit 1 }
 }

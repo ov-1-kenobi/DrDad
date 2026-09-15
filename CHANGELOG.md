@@ -2,6 +2,29 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.47.0 - 2026-09-15
+
+### Fixed - corpus ingest wrote into the open PROJECT, not the corpus
+A `/corpus <name> refresh` fetched its sources with the `ingest_url` MCP tool, which writes to `<root>\web\`
+where `<root>` is the FIRST `LOCALTOOLS_DOCS_DIR` root - and that root is fixed when the MCP server starts, to
+the current project's `docs\`. A per-call env change cannot move it. So a razor-htmx-ui corpus refresh, run
+from inside cms3, landed all eight fetched pages in **cms3's** `docs\web\` and rebuilt cms3's index;
+corpus-agent had to relocate the files by hand and repair cms3's index every time. It would recur on every
+refresh. Closed deterministically:
+- **`local-tools --ingest <url> [docsDir]`** - a shell door (like `--reindex` / `--search`) that sets the
+  root FROM the arg before `Rag` initializes, so the fetch and its reindex land in the GIVEN root's `web\`.
+- **`dad corpus ingest <name> <url> [-Env <env>]`** - passes the corpus folder as that root, so a corpus
+  fetch hits the corpus, in a fresh process, never the running project.
+- **corpus-agent no longer holds `ingest_url` / `index_datasheets`.** The door that caused the bug is
+  removed from its toolset (not just discouraged in prose) - it must use `dad corpus ingest`. Its build/refresh
+  instructions now call the corpus-scoped verb.
+- **`dad corpus check`** now counts material in `web\` as well as `sources\`, so a refreshed corpus reports its
+  fetched content instead of "0 files".
+
+Regression test: with `LOCALTOOLS_DOCS_DIR` pointed at a "project", `--ingest <url> <corpus>` must create
+`<corpus>\web\` and leave the project's `web\` untouched (proved offline via a `.invalid` URL, since
+`IngestUrlAsync` creates the target `web\` before it fetches).
+
 ## 0.46.0 - 2026-09-15
 
 ### Added - entry-point UI coverage + stack "skins" for ui-agent / ux-agent
