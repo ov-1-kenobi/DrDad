@@ -76,9 +76,13 @@ if (args.Length > 0 && args[0] == "--api-surface")
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
-builder.Services
+// Register each tool TYPE explicitly (rather than scanning the whole assembly) so the HYBRID tool set can be
+// gated: the base tools are always present; HybridTools (local_generate) is added ONLY when LOCALTOOLS_HYBRID=1,
+// so in local/cloud mode that tool does not exist in the advertised list at all.
+var mcp = builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithToolsFromAssembly();   // discovers [McpServerToolType] classes + [McpServerTool] methods
+    .WithTools<Tools>();
+if (Rag.HybridEnabled) mcp.WithTools<HybridTools>();
 
 await builder.Build().RunAsync();

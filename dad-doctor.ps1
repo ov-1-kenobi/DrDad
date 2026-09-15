@@ -42,11 +42,18 @@ Write-Host "kit: $kit  (version $kitVersion)"
 # Mode: a cloud install (install.ps1 -Cloud) drops the Ollama base-URL. Read it back from the installed
 # settings so a cloud user is not told their (correctly) missing Ollama + local models are failures.
 $cloudMode = $false
+$hybridMode = $false
 $modeSettings = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json"
 if (Test-Path $modeSettings) {
-  try { $bu = "$((Get-Content $modeSettings -Raw | ConvertFrom-Json).env.ANTHROPIC_BASE_URL)"; $cloudMode = -not ($bu -match '11434|localhost') } catch { }
+  try {
+    $me = (Get-Content $modeSettings -Raw | ConvertFrom-Json).env
+    $bu = "$($me.ANTHROPIC_BASE_URL)"; $cloudMode = -not ($bu -match '11434|localhost')
+    # HYBRID = cloud agent loop (base-URL dropped) PLUS LOCALTOOLS_HYBRID=1 (local_generate on the 5080).
+    $hybridMode = $cloudMode -and ("$($me.LOCALTOOLS_HYBRID)" -match '^(1|true|yes)$')
+  } catch { }
 }
-if ($cloudMode) { Write-Host "mode: CLOUD (Anthropic API) - Ollama + local-model checks are skipped" -ForegroundColor Cyan }
+if ($hybridMode) { Write-Host "mode: HYBRID (Anthropic API agent loop + local 5080 tools) - the GPU runs RAG, describe_image, AND local_generate" -ForegroundColor Cyan }
+elseif ($cloudMode) { Write-Host "mode: CLOUD (Anthropic API) - the local agent loop + chat-model checks are skipped; the GPU still runs local-tools RAG if Ollama is up" -ForegroundColor Cyan }
 
 # ---------------------------------------------------------------- prerequisites
 Write-Host "`n-- prerequisites --" -ForegroundColor Cyan
@@ -86,8 +93,10 @@ if ($smi) {
 Write-Host "`n-- ollama --" -ForegroundColor Cyan
 $ollamaUp = $false
 $installedModels = ""
-if ($cloudMode -and -not (Get-Exe "ollama")) {
-  Say "OK" "ollama" "not installed - not needed in cloud mode (RAG falls back to a literal scan)"
+if ($hybridMode -and -not (Get-Exe "ollama")) {
+  Say "FAIL" "ollama" "not found - HYBRID mode needs it for local_generate + GPU RAG" "winget install Ollama.Ollama, then re-run install.cmd -Hybrid"
+} elseif ($cloudMode -and -not (Get-Exe "ollama")) {
+  Say "OK" "ollama" "not installed - optional in cloud mode (RAG falls back to a literal scan; -Hybrid would need it)"
 } elseif (-not (Get-Exe "ollama")) {
   Say "FAIL" "ollama" "not found" "winget install Ollama.Ollama"
 } else {
@@ -108,11 +117,24 @@ if (-not (Test-Path $manifest)) {
 } else {
   $mf = Get-Content $manifest -Raw | ConvertFrom-Json
   Say "OK" "models.json" "$($mf.models.Count) model(s) declared, num_ctx $($mf.numCtx)"
-  if ($installedModels -and -not $cloudMode) {
-    foreach ($s in @($mf.embedModel, $mf.visionModel) | Select-Object -Unique) {
-      if ($installedModels -match [regex]::Escape($s)) { Say "OK" "support model" $s }
-      else { Say "WARN" "support model" "$s missing" "ollama pull $s   (RAG embeddings / describe_image)" }
+  # Support models power local-tools RAG in EVERY mode (embeddings for search/corpus, vision for describe_image),
+  # so they are checked even in cloud/hybrid - the GPU is not idle. Hybrid also needs the draft model for
+  # local_generate. Missing here is why "cloud mode" RAG quietly degrades to a literal scan.
+  if ($installedModels) {
+    $support = @($mf.embedModel, $mf.visionModel)
+    if ($hybridMode) {
+      $draftTag = $mf.models | Where-Object { $_.default } | Select-Object -First 1 -ExpandProperty from
+      if ($draftTag) { $support += $draftTag }
     }
+    foreach ($s in ($support | Select-Object -Unique)) {
+      if ($installedModels -match [regex]::Escape($s)) { Say "OK" "support model" $s }
+      else {
+        $for = if ($s -eq $mf.embedModel) { "semantic RAG - search/corpus" } elseif ($s -eq $mf.visionModel) { "describe_image / UI review" } else { "local_generate (hybrid)" }
+        Say "WARN" "support model" "$s missing" "ollama pull $s   ($for)"
+      }
+    }
+  }
+  if ($installedModels -and -not $cloudMode) {
     $built = 0
     # Fit must include the KV cache: at numCtx 64K it adds a few GB, which is what pushes several
     # "14 GB" models over a 16 GB card. Weights-only numbers read as comfortable when they are not.
@@ -154,7 +176,10 @@ Write-Host "`n-- kit --" -ForegroundColor Cyan
 $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
 if (Test-Path $exe) {
   Say "OK" "local-tools.exe" "built"
-  # does it actually speak MCP?
+  # does it actually speak MCP? In HYBRID, set the flag the child inherits so the probe SEES the extra tool -
+  # this is the deterministic check that hybrid actually exposes local_generate, not just that the marker is set.
+  $prevHybrid = $env:LOCALTOOLS_HYBRID
+  if ($hybridMode) { $env:LOCALTOOLS_HYBRID = "1" }
   $tools = @()
   try {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -173,8 +198,16 @@ if (Test-Path $exe) {
     }
     try { $p.Kill() } catch {}
   } catch {}
+  if ($null -ne $prevHybrid) { $env:LOCALTOOLS_HYBRID = $prevHybrid } else { Remove-Item Env:\LOCALTOOLS_HYBRID -ErrorAction SilentlyContinue }
   if ($tools.Count -gt 0) { Say "OK" "MCP server" "$($tools.Count) tools: $(($tools | Sort-Object) -join ', ')" }
   else { Say "FAIL" "MCP server" "did not answer tools/list" "rebuild: dotnet build local-tools\local-tools.csproj -c Release" }
+  # The hybrid co-processor: local_generate must appear when hybrid is on, and must NOT leak into cloud/local.
+  if ($hybridMode) {
+    if ($tools -contains 'local_generate') { Say "OK" "local co-processor" "local_generate exposed - the 5080 is a drudge tool for the cloud model" }
+    else { Say "FAIL" "local co-processor" "hybrid is set but local_generate is not exposed" "rebuild local-tools, then RESTART Claude Code" }
+  } elseif ($tools -contains 'local_generate') {
+    Say "WARN" "local co-processor" "local_generate is exposed but mode is not hybrid" "re-run install.cmd (or install.cmd -Cloud) to clear LOCALTOOLS_HYBRID"
+  }
 } else {
   Say "FAIL" "local-tools.exe" "not built" "run install.cmd (or: dotnet build local-tools\local-tools.csproj -c Release)"
 }
@@ -193,7 +226,8 @@ if (-not (Test-Path $settings)) {
   try {
     $s = Get-Content $settings -Raw | ConvertFrom-Json
     Say "OK" "settings.json" "valid JSON"
-    if ($cloudMode) { Say "OK" "backend" "CLOUD - no base-URL redirect (Claude Code uses your Anthropic login)" }
+    if ($hybridMode) { Say "OK" "backend" "HYBRID - Anthropic agent loop (LOCALTOOLS_HYBRID=1 lights up local_generate on the 5080)" }
+    elseif ($cloudMode) { Say "OK" "backend" "CLOUD - no base-URL redirect (Claude Code uses your Anthropic login)" }
     elseif ($s.env.ANTHROPIC_BASE_URL -match '11434') { Say "OK" "ANTHROPIC_BASE_URL" $s.env.ANTHROPIC_BASE_URL }
     else { Say "FAIL" "ANTHROPIC_BASE_URL" "not pointing at Ollama ('$($s.env.ANTHROPIC_BASE_URL)')" "re-run install.cmd (or install.cmd -Cloud)" }
 

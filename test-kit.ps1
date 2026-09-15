@@ -3822,6 +3822,36 @@ T1.1 -> T1.2 -> T2.1
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "the hybrid local_generate tool is GATED on LOCALTOOLS_HYBRID (Program.cs), and labels its output a draft" {
+  # The whole point of hybrid: the local drudge tool exists ONLY when the flag is on. If Program.cs ever went
+  # back to assembly scanning, HybridTools would be exposed unconditionally - handing the weak local model a job
+  # that local/cloud mode deliberately keeps on the cloud brain. Guard that statically (no build needed).
+  $prog = Get-Content (Join-Path $kit "local-tools\Program.cs") -Raw
+  Assert ($prog -match 'Rag\.HybridEnabled') "Program.cs does not gate registration on Rag.HybridEnabled"
+  Assert ($prog -match 'WithTools<HybridTools>') "Program.cs does not conditionally register HybridTools"
+  Assert ($prog -notmatch 'WithToolsFromAssembly') "Program.cs uses assembly scanning - that would expose HybridTools UNconditionally"
+  $hy = Get-Content (Join-Path $kit "local-tools\HybridTools.cs") -Raw
+  Assert ($hy -match '(?i)DRAFT') "HybridTools.cs does not label local_generate output a DRAFT (the honesty fence)"
+  $rag = Get-Content (Join-Path $kit "local-tools\Rag.cs") -Raw
+  Assert ($rag -match 'LOCALTOOLS_HYBRID') "Rag.cs does not read LOCALTOOLS_HYBRID for HybridEnabled"
+}
+
+Test-Case "install + doctor wire three modes (local / cloud / hybrid) and toggle LOCALTOOLS_HYBRID cleanly" {
+  # local = Ollama redirect; cloud = Anthropic loop, GPU still runs RAG (support models VERIFIED); hybrid = cloud
+  # loop PLUS LOCALTOOLS_HYBRID=1 (local_generate). The flag must be SET for hybrid and CLEARED otherwise, so
+  # re-installing as cloud/local turns the local tool off instead of leaving a stale marker.
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  Assert ($inst -match '\[switch\]\$Hybrid') "install.ps1 has no -Hybrid switch"
+  Assert ($inst -match '\$cloudLoop\s*=\s*\$Cloud\s*-or\s*\$Hybrid') "install.ps1 does not run the cloud agent loop for -Hybrid"
+  Assert ($inst -match 'LOCALTOOLS_HYBRID\s*=\s*"1"') "install.ps1 -Hybrid does not SET LOCALTOOLS_HYBRID=1"
+  Assert ($inst -match 'Remove\("LOCALTOOLS_HYBRID"\)') "install.ps1 does not CLEAR a stale LOCALTOOLS_HYBRID for cloud/local"
+  Assert ($inst -match 'Ensure-OllamaModel') "install.ps1 cloud/hybrid does not verify the Ollama support models are pulled"
+  $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
+  Assert ($doc -match '\$hybridMode') "dad-doctor does not detect hybrid mode"
+  Assert ($doc -match 'local_generate') "dad-doctor does not report / verify the local_generate co-processor"
+  Assert ($doc -match '\$env:LOCALTOOLS_HYBRID\s*=\s*"1"') "dad-doctor does not set the flag to VERIFY the tool is exposed (not just that the marker is set)"
+}
+
 # ---------------------------------------------------------------- server
 if (-not $SkipBuild) {
   Write-Host "-- server --" -ForegroundColor Cyan
@@ -3831,14 +3861,15 @@ if (-not $SkipBuild) {
     Assert ($out -match "Build succeeded") "build failed: $($out.Trim())"
   }
 
-  Test-Case "MCP server advertises the expected tools" {
-    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
-    Assert (Test-Path $exe) "exe not found"
-    $expected = @("describe_image","detect_objects","index_datasheets","ingest_url","list_datasheets",
-                  "search_datasheets","transcribe_audio","web_search")
+  # Launch the MCP server, ask tools/list, return the tool-name array. `$childEnv` overrides go to the CHILD
+  # only (via ProcessStartInfo), and LOCALTOOLS_HYBRID is cleared unless the caller sets it - so the base tool
+  # list is deterministic even when the suite runs in a hybrid shell.
+  function Get-McpToolList([string]$exe, [hashtable]$childEnv = @{}) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $exe; $psi.UseShellExecute = $false
     $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $psi.EnvironmentVariables.Remove("LOCALTOOLS_HYBRID") | Out-Null
+    foreach ($k in $childEnv.Keys) { $psi.EnvironmentVariables[$k] = [string]$childEnv[$k] }
     $proc = [System.Diagnostics.Process]::Start($psi)
     try {
       $proc.StandardInput.WriteLine('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}')
@@ -3853,9 +3884,32 @@ if (-not $SkipBuild) {
         $line = $t.Result; if ($null -eq $line) { break }
         if ($line -match '"id":2') { $tools = @(($line | ConvertFrom-Json).result.tools | ForEach-Object { $_.name }) }
       }
-      $diff = Compare-Object ($tools | Sort-Object) $expected
-      Assert (-not $diff) "tools mismatch. got: $($tools -join ', ')"
+      return ,$tools
     } finally { try { $proc.Kill() } catch {} }
+  }
+
+  Test-Case "MCP server advertises the expected tools" {
+    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    Assert (Test-Path $exe) "exe not found"
+    $expected = @("describe_image","detect_objects","index_datasheets","ingest_url","list_datasheets",
+                  "search_datasheets","transcribe_audio","web_search")
+    $tools = Get-McpToolList $exe                    # hybrid OFF (helper clears LOCALTOOLS_HYBRID)
+    $diff = Compare-Object ($tools | Sort-Object) $expected
+    Assert (-not $diff) "tools mismatch. got: $($tools -join ', ')"
+  }
+
+  Test-Case "HYBRID mode exposes local_generate; it is ABSENT in local/cloud" {
+    # The 5080-as-a-drudge-tool for the cloud model. It must appear ONLY when LOCALTOOLS_HYBRID is set (which
+    # install.ps1 -Hybrid does), and must NOT leak into the default tool set - so a local/cloud install cannot
+    # accidentally hand the weak local model a job the mode exists to keep on the cloud brain.
+    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    Assert (Test-Path $exe) "exe not found"
+    $off = Get-McpToolList $exe
+    Assert ($off -notcontains 'local_generate') "local_generate leaked into the default (non-hybrid) tool set: $($off -join ', ')"
+    Assert ($off.Count -eq 8) "expected 8 base tools without hybrid, got $($off.Count)"
+    $on = Get-McpToolList $exe @{ LOCALTOOLS_HYBRID = "1" }
+    Assert ($on -contains 'local_generate') "LOCALTOOLS_HYBRID=1 did not expose local_generate. got: $($on -join ', ')"
+    Assert ($on.Count -eq 9) "expected 9 tools with hybrid on, got $($on.Count)"
   }
 
   Test-Case "CLI --reindex on an empty folder exits 0" {
@@ -3900,6 +3954,11 @@ if (-not $SkipBuild) {
                   "search_datasheets","transcribe_audio","web_search") | Sort-Object
     $diff = Compare-Object $declared $expected
     Assert (-not $diff) "Tools.cs declares: $($declared -join ', ')"
+    # The hybrid drudge tool lives in its OWN file (HybridTools.cs), so the base list above stays clean and the
+    # gated tool cannot silently join it. That file must declare exactly local_generate.
+    $hy = ([regex]::Matches((Get-Content (Join-Path $kit "local-tools\HybridTools.cs") -Raw),
+                 'McpServerTool\(Name\s*=\s*"([^"]+)"')).ForEach({ $_.Groups[1].Value }) | Sort-Object
+    Assert (-not (Compare-Object $hy @("local_generate"))) "HybridTools.cs declares: $($hy -join ', ')"
   }
 
   Test-Case "kit CLAUDE.md points its validation gate at this suite" {

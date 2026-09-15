@@ -3,13 +3,21 @@
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1
 # Safe to re-run. It detects its own location, so the folder can live anywhere.
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud    CLOUD mode (Anthropic API), not Ollama.
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Hybrid   HYBRID: cloud agent + local 5080 tools.
 # -Cloud: same commands, agents, and gates, on Anthropic's frontier models. Each alias resolves to its
-# models.json 'cloud' id (dev/coder/oss/gemma -> Sonnet 5, fast -> Haiku 4.5, quality -> Opus 5); no Ollama
-# needed (RAG embeddings fall back to a literal scan). The Ollama base-URL redirect is dropped - and its
-# ABSENCE is what use-model and dad-doctor read back as "cloud" mode (no separate marker file).
+# models.json 'cloud' id (dev/coder/oss/gemma -> Sonnet 5, fast -> Haiku 4.5, quality -> Opus 5). The Ollama
+# base-URL redirect is dropped - and its ABSENCE is what use-model and dad-doctor read back as "cloud" mode
+# (no separate marker file). The local-tools RAG still uses Ollama on the GPU if present, so cloud mode
+# VERIFIES the embed/vision models are pulled (else RAG degrades to a literal keyword scan).
+# -Hybrid: the cloud agent loop of -Cloud PLUS the 5080 offered to the cloud model as a drudge co-processor -
+# it sets LOCALTOOLS_HYBRID=1, which turns on the local_generate MCP tool (implementation guesses, test data)
+# and pulls a local generation model. The presence of LOCALTOOLS_HYBRID is what dad-doctor reads as "hybrid".
 [CmdletBinding()]
-param([switch]$Cloud)
+param([switch]$Cloud, [switch]$Hybrid)
 $ErrorActionPreference = "Stop"
+# -Hybrid runs the cloud AGENT LOOP (base-URL dropped) like -Cloud, and additionally lights up the local GPU
+# tools. $cloudLoop = "the agent talks to Anthropic, not Ollama" and drives the settings.json edit + labels.
+$cloudLoop = $Cloud -or $Hybrid
 $root   = $PSScriptRoot
 $old    = 'C:\Projects\Claude\MCP\DAD-kit'            # dev-path placeholder baked into the markdown command files
 $claude = Join-Path $env:USERPROFILE ".claude"
@@ -17,6 +25,15 @@ $claude = Join-Path $env:USERPROFILE ".claude"
 function Have($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }
 function Write-NoBom($path, $content) {
   [System.IO.File]::WriteAllText($path, $content, (New-Object System.Text.UTF8Encoding($false)))
+}
+# Pull an Ollama model only if it is not already present (idempotent). Used by cloud/hybrid to guarantee the
+# local-tools RAG (and, in hybrid, local_generate) actually run on the GPU instead of silently degrading.
+function Ensure-OllamaModel($tag, $why) {
+  if (-not $tag) { return }
+  if ($script:models -match [regex]::Escape($tag)) { Write-Host "  [ok]  $tag present ($why)" -ForegroundColor Green; return }
+  Write-Host "  pulling $tag ($why)..." -ForegroundColor Cyan
+  try { ollama pull $tag; Write-Host "  [ok]  $tag pulled" -ForegroundColor Green }
+  catch { Write-Host "  [warn] could not pull $tag ($($_.Exception.Message)) - '$why' will not work until it is pulled" -ForegroundColor Yellow }
 }
 
 Write-Host "== Prerequisites ==" -ForegroundColor Cyan
@@ -36,8 +53,23 @@ Write-Host "`n== DAD-kit $kitVersion ==" -ForegroundColor Green
 
 Write-Host "`n== 1) Models ==" -ForegroundColor Cyan
 # One manifest drives everything (aliases, -cc variants, cloud ids). Add a model = one JSON entry.
-if ($Cloud) {
-  Write-Host "  cloud mode - no Ollama models to build; aliases resolve to Anthropic ids via models.json 'cloud'." -ForegroundColor Green
+if ($cloudLoop) {
+  # Cloud/hybrid: the AGENT LOOP is Anthropic (aliases resolve to models.json 'cloud'), so we do NOT build the
+  # local chat zoo. But the local-tools RAG still runs on Ollama if it is up - so verify the support models are
+  # pulled (else search/describe_image quietly degrade to a literal scan). Hybrid also needs a generation model
+  # for local_generate. This is the "your 5080 is not idle in cloud mode" guarantee, made explicit.
+  $mf1 = Get-Content (Join-Path $root "models.json") -Raw | ConvertFrom-Json
+  $draftTag = $mf1.models | Where-Object { $_.default } | Select-Object -First 1 -ExpandProperty from
+  if (-not $draftTag) { $draftTag = "devstral" }
+  if ($haveOllama) {
+    Ensure-OllamaModel $mf1.embedModel  "semantic RAG - search_datasheets / corpus"
+    Ensure-OllamaModel $mf1.visionModel "describe_image - the offline UI screenshot review"
+    if ($Hybrid) { Ensure-OllamaModel $draftTag "local_generate - the 5080 drudge co-processor" }
+    else { Write-Host "  aliases resolve to Anthropic ids via models.json 'cloud' (add -Hybrid to also run local_generate)." -ForegroundColor Green }
+  } else {
+    Write-Host "  [warn] ollama not found - RAG will fall back to a LITERAL keyword scan (no GPU semantics)." -ForegroundColor Yellow
+    if ($Hybrid) { Write-Host "  [warn] hybrid needs Ollama for local_generate; install Ollama.Ollama, then re-run install.cmd -Hybrid." -ForegroundColor Yellow }
+  }
 } elseif ($haveOllama) {
   try { & (Join-Path $root "sync-models.ps1") }
   catch { Write-Host "  (sync-models failed: $($_.Exception.Message) - run sync-models.cmd manually)" -ForegroundColor Yellow }
@@ -94,7 +126,7 @@ Get-ChildItem (Join-Path $root "global\agents") -File | ForEach-Object {
 }
 Write-Host "  commands: /scaffold /research /document /design /taskmap /proto /spec /build /assets /tidy /stories /diagram /audit /grade /retro /corpus /assess   agents: requirements/architect/taskmap/dev/ui/ux/playtest/grade/scribe/hygiene/qa/doc-researcher/research/survey/security/librarian/corpus/codebase-analyst"
 
-$mode7 = if ($Cloud) { "CLOUD: Anthropic API" } else { "Ollama redirect + offline flags" }
+$mode7 = if ($Hybrid) { "HYBRID: Anthropic API + local 5080 tools" } elseif ($Cloud) { "CLOUD: Anthropic API" } else { "Ollama redirect + offline flags" }
 Write-Host "`n== 7) Install settings.json ($mode7) ==" -ForegroundColor Cyan
 $dst = Join-Path $claude "settings.json"
 if (Test-Path $dst) { Copy-Item $dst "$dst.bak" -Force; Write-Host "  existing settings.json -> settings.json.bak (MERGE if you had custom settings)" -ForegroundColor Yellow }
@@ -115,7 +147,7 @@ try {
 # CLOUD mode: drop the Ollama redirect + token so Claude Code uses its NORMAL Anthropic auth (subscription
 # or `ant auth login`), and point the model + small-fast at their cloud ids from models.json. Removing
 # ANTHROPIC_BASE_URL is the whole tell - use-model and dad-doctor read its absence back as "cloud".
-if ($Cloud) {
+if ($cloudLoop) {
   $mfc = Get-Content (Join-Path $root "models.json") -Raw | ConvertFrom-Json
   $defModel = @($mfc.models | Where-Object { $_.default }) | Select-Object -First 1
   $defCloud = if ($defModel -and $defModel.cloud) { $defModel.cloud } else { "claude-sonnet-5" }
@@ -125,6 +157,15 @@ if ($Cloud) {
   $s.env.ANTHROPIC_MODEL = $defCloud
   $s.env.ANTHROPIC_SMALL_FAST_MODEL = if ($mfc.cloudSmallFast) { $mfc.cloudSmallFast } else { "claude-haiku-4-5" }
   Write-Host "  cloud: base-URL redirect dropped; ANTHROPIC_MODEL=$defCloud (uses your normal Anthropic login)" -ForegroundColor Green
+}
+# HYBRID mode marker: LOCALTOOLS_HYBRID=1 in settings.json env is inherited by the local-tools MCP server
+# (turning on the local_generate tool) AND is what dad-doctor reads back as "hybrid". Set it for -Hybrid,
+# and REMOVE any stale copy otherwise, so re-installing as cloud or local cleanly turns the local tools off.
+if ($Hybrid) {
+  $s.env.LOCALTOOLS_HYBRID = "1"
+  Write-Host "  hybrid: LOCALTOOLS_HYBRID=1 (the 5080 is offered to the cloud model via the local_generate tool)" -ForegroundColor Green
+} elseif ($s.env.PSObject.Properties.Name -contains "LOCALTOOLS_HYBRID") {
+  $s.env.PSObject.Properties.Remove("LOCALTOOLS_HYBRID")
 }
 # (apiKeyHelper intentionally NOT set: ANTHROPIC_AUTH_TOKEN alone skips login; setting both
 #  triggers Claude Code's "auth may not work as expected" warning every session.)
@@ -200,10 +241,20 @@ if (-not $Cloud) {
 }
 
 Write-Host "`n== DONE ==" -ForegroundColor Green
-if ($Cloud) {
+if ($Hybrid) {
+  Write-Host "MODE = HYBRID (Anthropic API agent loop + local 5080 tools). DEFAULT = claude-sonnet-5 (alias 'dev')." -ForegroundColor Green
+  Write-Host "The 5080 runs: semantic RAG (search/corpus), describe_image (UI review), AND local_generate - the" -ForegroundColor Green
+  Write-Host "cloud model's drudge co-processor for implementation guesses + test data (LOCALTOOLS_HYBRID=1)." -ForegroundColor Green
+  Write-Host "Switch cloud tiers with use-model: fast -> Haiku 4.5 | dev|coder|oss|gemma -> Sonnet 5 | quality -> Opus 5." -ForegroundColor Green
+  Write-Host "Next: 1) make sure Claude Code is logged in (run 'claude' once if unsure) and Ollama is running." -ForegroundColor Green
+  Write-Host "      2) RESTART Claude Code - hooks load at startup, and the MCP server picks up LOCALTOOLS_HYBRID." -ForegroundColor Green
+  Write-Host "      3) Open a project in VS Code; the cloud model can now call local_generate for drafts + test data." -ForegroundColor Green
+  Write-Host "      Verify with 'dad doctor' - it reports the local co-processor and lists local_generate." -ForegroundColor Cyan
+} elseif ($Cloud) {
   Write-Host "MODE = CLOUD (Anthropic API). DEFAULT = claude-sonnet-5 (alias 'dev')." -ForegroundColor Green
   Write-Host "Switch tiers with use-model:  fast -> Haiku 4.5 (cheap/bulk) | dev|coder|oss|gemma -> Sonnet 5 | quality -> Opus 5 (hard)." -ForegroundColor Green
   Write-Host "Cost: run bulk on a cheaper alias, 'use-model quality' for the hard parts; prompt caching is automatic." -ForegroundColor Cyan
+  Write-Host "Your GPU is still used: local-tools RAG (search/corpus/describe_image) runs on Ollama if present." -ForegroundColor Cyan
   Write-Host "Next: 1) make sure Claude Code is logged in - it uses your normal Anthropic auth (run 'claude' once if unsure)." -ForegroundColor Green
   Write-Host "      2) RESTART Claude Code - hooks (the dad-guard stop guard) load at startup." -ForegroundColor Green
   Write-Host "      3) Open a project in VS Code, run /scaffold then index_datasheets (RAG uses Ollama if present, else a literal scan)." -ForegroundColor Green

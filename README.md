@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.47.0** - local, offline, agentic software development on your own GPU.
+**Version 0.48.0** - local, offline, agentic software development on your own GPU.
 
 DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
@@ -93,6 +93,8 @@ cd drdad
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 # ...or add -Cloud to run the SAME loop against Anthropic's API instead of local Ollama:
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud
+# ...or -Hybrid: the cloud loop PLUS your GPU as a drudge co-processor (the local_generate tool):
+#    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Hybrid
 ```
 
 `install.ps1` detects its own location, reconciles Ollama with `models.json`, builds the C# server,
@@ -132,7 +134,17 @@ network.
 auth. The commands, agents, and every gate are identical - only the backend changes. Aliases map to Anthropic
 models (`fast` -> Haiku 4.5, `dev`/`coder`/`oss`/`gemma` -> Sonnet 5, `quality` -> Opus 5); switch tiers with
 `dad use-model <alias>`. This trades the offline/private/free properties for a model strong enough to clear
-the local-model hurdles - use cloud for delivery, local for private discovery. `dad doctor` reports the mode.
+the local-model hurdles - use cloud for delivery, local for private discovery. Your GPU is **not** idle here:
+the `local-tools` RAG (semantic search, corpus, `describe_image` UI review) still runs on Ollama if it is up,
+so cloud mode VERIFIES the embed/vision models are pulled (otherwise search quietly degrades to a literal scan).
+
+**Hybrid (`install.ps1 -Hybrid`):** the cloud agent loop of `-Cloud`, **plus** your GPU offered to the cloud
+model as a drudge co-processor. It sets `LOCALTOOLS_HYBRID=1`, which turns on one extra MCP tool,
+`local_generate`: the cloud model delegates BOUNDED, low-stakes generation to the local model - a first-pass
+implementation guess it will review, synthetic test data, boilerplate - and keeps that work off the cloud
+budget. The output is always a DRAFT the cloud model verifies; it is never banked or shipped raw. Division of
+labor: cloud = the brain, the local GPU = senses (embeddings, vision) and drudge-work. `dad doctor` reports
+the mode and confirms `local_generate` is actually exposed.
 
 ---
 

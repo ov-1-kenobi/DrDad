@@ -6,7 +6,7 @@ namespace LocalTools;
 // Every public method here becomes an MCP tool. In Claude Code they appear as
 // mcp__local-tools__<Name>. Keep these thin - the real work lives in Rag.cs.
 [McpServerToolType]
-public static class Tools
+public class Tools   // non-static: WithTools<T> needs a real type arg; the methods stay static
 {
     [McpServerTool(Name = "index_datasheets"), Description(
         "(Re)build the search index over the project's docs folder - design docs, stories, the task map, " +

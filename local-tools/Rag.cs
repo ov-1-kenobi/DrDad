@@ -95,6 +95,14 @@ public static class Rag
 
     static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(120) };
 
+    // HYBRID mode: install.ps1 -Hybrid sets LOCALTOOLS_HYBRID=1. Program.cs registers HybridTools (the
+    // local_generate drudge tool) ONLY when this is on, so in local/cloud mode the tool does not exist.
+    public static bool HybridEnabled => IsOn(Environment.GetEnvironmentVariable("LOCALTOOLS_HYBRID"));
+    // The LOCAL generation model behind local_generate. Defaults to the models.json default 'from' (devstral);
+    // override per project with LOCALTOOLS_DRAFT_MODEL in .mcp.json.
+    static readonly string DraftModel =
+        Environment.GetEnvironmentVariable("LOCALTOOLS_DRAFT_MODEL") ?? "devstral";
+
     // ---------- embeddings (Ollama). We store RAW vectors; cosine is computed at search time by
     //            TensorPrimitives.CosineSimilarity (SIMD), so no manual normalize/dot needed. ----------
     static float[] ParseVector(JsonElement arr)
@@ -580,6 +588,38 @@ public static class Rag
             return $"describe_image failed: {e.Message}. Is Ollama running, and is '{VisionModel}' a pulled " +
                    "VISION-capable model? Set LOCALTOOLS_VISION_MODEL in the project's .mcp.json env to " +
                    "override (e.g. gemma3:4b, qwen2.5vl, llama3.2-vision, minicpm-v).";
+        }
+    }
+
+    // ---------- local generation (HYBRID mode; the 5080 as a drudge co-processor) ----------
+    // The cloud model runs the agent loop and delegates BOUNDED, low-stakes generation here to keep it off the
+    // cloud budget: an implementation GUESS it will review, synthetic TEST DATA, boilerplate. The output is a
+    // DRAFT - it is prefixed so the caller (and its logs) can never mistake it for a verified result.
+    public static async Task<string> LocalGenerateAsync(string prompt, string? system)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return "local_generate: empty prompt.";
+        try
+        {
+            var messages = new List<object>();
+            if (!string.IsNullOrWhiteSpace(system)) messages.Add(new { role = "system", content = system });
+            messages.Add(new { role = "user", content = prompt });
+            var resp = await Http.PostAsJsonAsync(OllamaHost + "/api/chat", new
+            {
+                model = DraftModel,
+                stream = false,
+                messages = messages.ToArray()
+            });
+            resp.EnsureSuccessStatusCode();
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            var text = doc.RootElement.GetProperty("message").GetProperty("content").GetString();
+            return string.IsNullOrWhiteSpace(text)
+                ? "(the local model returned no text)"
+                : $"[LOCAL DRAFT from {DraftModel} - verify before use]\n\n{text}";
+        }
+        catch (Exception e)
+        {
+            return $"local_generate failed: {e.Message}. Is Ollama running and '{DraftModel}' pulled? " +
+                   $"(ollama pull {DraftModel}); override the model with LOCALTOOLS_DRAFT_MODEL in .mcp.json.";
         }
     }
 }

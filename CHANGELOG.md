@@ -2,6 +2,35 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.48.0 - 2026-09-15
+
+### Added - HYBRID mode: the GPU as a co-processor for the cloud model, and cloud mode stops wasting it
+In cloud mode the GPU looked idle, but it never was: `local-tools` talks to Ollama independent of the agent
+loop, so embeddings (search / corpus) and `describe_image` already ran on it - unless Ollama happened to be
+down, in which case RAG silently degraded to a literal keyword scan and nobody was told. Two changes:
+
+- **Cloud mode now VERIFIES the co-processor.** `install.ps1 -Cloud` pulls / confirms the embed and vision
+  models (instead of "no Ollama models to build"), and `dad doctor` reports the local co-processor - so the
+  semantic RAG that makes the kit worth using actually runs on the 5080, and a literal-scan fallback is loud,
+  not silent.
+- **`install.ps1 -Hybrid` - a third mode.** The cloud agent loop of `-Cloud`, PLUS the GPU offered to the
+  cloud model as a drudge co-processor. It sets `LOCALTOOLS_HYBRID=1`, which registers ONE extra MCP tool,
+  `local_generate`: the cloud model delegates bounded, low-stakes generation to the local model - a first-pass
+  implementation guess it will review, synthetic test data, boilerplate - keeping that off the cloud budget.
+  Division of labor: cloud = the brain; the local GPU = senses (embeddings, vision) and drudge-work.
+
+The honesty fence is built in, not merely asked for: `local_generate` is a SEPARATE tool type registered ONLY
+when the flag is on (Program.cs uses explicit `WithTools<T>()`, not assembly scanning), so in local/cloud mode
+the tool does not exist at all - the weak local model can't be handed a job the mode exists to keep on the
+cloud brain. Its output is prefixed `[LOCAL DRAFT - verify before use]`. `dad doctor` sets the flag and probes
+the running server to CONFIRM the tool is exposed (not just that the marker is set), and warns if it leaks into
+a non-hybrid install. The mode lives in one place (`settings.json` env), so re-installing as cloud/local clears
+it. `local_generate` uses the models.json default model (devstral); override with `LOCALTOOLS_DRAFT_MODEL`.
+
+Tests: the server advertises 8 tools with the flag off and 9 (with `local_generate`) on; Program.cs must gate
+on `Rag.HybridEnabled` and must not use assembly scanning; install sets/clears the flag across the three modes;
+doctor detects hybrid and verifies exposure.
+
 ## 0.47.0 - 2026-09-15
 
 ### Fixed - corpus ingest wrote into the open PROJECT, not the corpus
