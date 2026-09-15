@@ -7,6 +7,7 @@
 #   dad corpus [-Env <env>]                      list corpora in the environment (default: 'default')
 #   dad corpus new <name> [-Env <env>]           scaffold the folder + CORPUS.md manifest
 #   dad corpus build <name> [-Env <env>]         index the corpus (local-tools --reindex)
+#   dad corpus refresh <name> [-Env <env>]       re-index; for the full grab-latest cycle use /corpus refresh
 #   dad corpus search <name> "<query>" [-Env <env>]   semantic search of the corpus's index
 #   dad corpus remove <name> [-Env <env>]        archive to _archive\<name>_<date>.zip, then remove
 #   dad corpus restore <archive.zip> [-Env <env>]
@@ -62,6 +63,17 @@ switch ($Action.ToLower()) {
     & $exe --reindex $corpusDir
     exit $LASTEXITCODE
   }
+  "refresh" {
+    # CLI refresh = re-index only. Grabbing the LATEST from the pinned sources is a WEB fetch (ingest_url),
+    # which is agent-driven - so the full grab -> cite -> reindex cycle lives in /corpus <name> refresh.
+    if (-not $Name -or -not (Test-Path $corpusDir)) { Write-Host "no such corpus '$Name' in '$Environment'" -ForegroundColor Yellow; exit 1 }
+    $exe = Get-Exe; if (-not $exe) { exit 1 }
+    & $exe --reindex $corpusDir
+    $rc = $LASTEXITCODE
+    Write-Host "  re-indexed. To also GRAB the latest from your pinned sources (agent-driven web fetch), run:" -ForegroundColor DarkGray
+    Write-Host "    /corpus $Name refresh -env $Environment    (loopable: /loop 24h /corpus $Name refresh -env $Environment)" -ForegroundColor DarkGray
+    exit $rc
+  }
   "search" {
     if (-not $Name -or -not (Test-Path $corpusDir)) { Write-Host "no such corpus '$Name' in '$Environment'" -ForegroundColor Yellow; exit 1 }
     if (-not $Query) { Write-Host "usage: dad corpus search <name> `"<query>`" [-Env <env>]" -ForegroundColor Yellow; exit 1 }
@@ -116,5 +128,5 @@ switch ($Action.ToLower()) {
     else { foreach ($f in $findings) { Write-Host "  $f" -ForegroundColor Yellow } }
     exit 0
   }
-  default { Write-Host "dad corpus: unknown action '$Action' (list | new | check | build | search | remove | restore)" -ForegroundColor Yellow; exit 1 }
+  default { Write-Host "dad corpus: unknown action '$Action' (list | new | check | build | refresh | search | remove | restore)" -ForegroundColor Yellow; exit 1 }
 }

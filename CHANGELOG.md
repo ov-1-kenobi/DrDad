@@ -2,6 +2,18 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.45.0 - 2026-09-14
+
+### Added - corpus REFRESH mode: a dialogue-free grab -> cite -> reindex cycle /loop and routines can drive
+0.43's `/corpus` starts with a human directive dialogue, so `/loop /corpus` stalls at the approvals. This adds
+the refresh half - the autonomous re-grounding. **`/corpus <name> refresh -env <e>`** skips the dialogue: it
+gates on `dad corpus check` (refuses to refresh a half-set directive), then `corpus-agent` re-ingests ONLY the
+pinned sources (cited, DATED), re-indexes, and reports, with **no wait points** - so `/loop 24h /corpus <name>
+refresh` or a scheduled routine keeps a corpus current on the latest grounded data. It never widens scope on
+autopilot and never banks an uncited claim - it refreshes DATA, and leaves any contested "take" to a
+human-run `/corpus`. `dad corpus refresh` is the reindex-only CLI verb (the web fetch is agent-driven, hence
+the slash-command form for the full cycle).
+
 ## 0.44.0 - 2026-09-14
 
 ### Added - /assess + codebase-analyst: reverse-engineer a brownfield codebase into a grounded assessment

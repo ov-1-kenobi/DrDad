@@ -8,6 +8,13 @@ sets its DIRECTIVE and refreshes it. Spawn the specialist with the **Task tool**
 
 Scope: **$ARGUMENTS**  (a corpus name, optionally `-env <env>`; default env is `default`).
 
+**REFRESH mode** - if `$ARGUMENTS` contains `refresh` (e.g. `/corpus security refresh -env dotnet-web`), this
+is an AUTONOMOUS re-grounding, not a directive dialogue: run `dad corpus check <name> -Env <env>` (if the
+directive is INCOMPLETE, STOP and say to run `/corpus <name>` first), then spawn **corpus-agent** in REFRESH
+mode - it re-ingests ONLY the pinned sources (cited, DATED), re-indexes, and reports, with NO wait points.
+This is what `/loop 24h /corpus <name> refresh -env <e>` and scheduled routines drive. Skip steps 3-4 (the
+dialogue); go straight to the cycle and report. Otherwise run the full flow below.
+
 1. **Resolve + orient.** If no corpus name was given, run `dad corpus list -Env <env>` (and `dad env list`)
    and ask which corpus. If the named corpus does not exist, offer `dad corpus new <name> -Env <env>` and STOP.
 2. **Validate FIRST - a script settles completeness, not your eyes:**

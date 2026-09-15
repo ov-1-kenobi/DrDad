@@ -41,6 +41,19 @@ dad corpus search <name> "<a real question this corpus should answer>" -Env <env
 A stale corpus is WORSE than none - outdated security advice is dangerous. Honor `## Build & refresh`: flag
 sources past its freshness window for re-verify or drop, and say plainly when the corpus is stale.
 
+## REFRESH mode (autonomous - no dialogue, for /loop and routines)
+When run in REFRESH mode the directive is already SET - do NOT re-open the dialogue. Instead:
+- **Gate first:** `dad corpus check <name> -Env <env>`. If it reports the directive is INCOMPLETE (unfilled
+  sections, no sources), STOP and report that a human must run `/corpus <name>` to set it - do NOT refresh a
+  half-directive on autopilot.
+- **Run ONLY the cycle on the already-pinned sources:** `ingest_url` each (persist to `sources\`), cite it
+  DATED in `SOURCES.md`, dedup, then `dad corpus build`. NEVER add a source the manifest does not list -
+  widening scope is a directive change, and the human owns that.
+- Refresh the DATA; do NOT synthesize a new "take" on contested material unattended - leave judgment to a
+  human-run `/corpus`.
+- **Report + no WAIT points:** sources refreshed, what changed, new index freshness, and flag any source now
+  past its freshness window. This must complete unattended so `/loop` and routines can drive it.
+
 ## What you do NOT do
 Bank an uncited claim. Present a contested "take" as fact - mark it and hand it to the human. Widen the scope
 without the human. Touch any PROJECT's docs - you work ONLY this corpus folder, under its environment.

@@ -2174,6 +2174,11 @@ Test-Case "dad env + dad corpus: create, list, SAFE-archive on remove, restore (
     $chk2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs check security -Env dotnet-web 2>&1 | Out-String
     Assert ($chk2 -match '(?i)none - the corpus is filled') "dad corpus check flagged a filled, sourced, indexed corpus"
 
+    # dad corpus refresh is a recognized action (reindex verb; the full grab-latest cycle is /corpus refresh).
+    # On a missing corpus it reports 'no such corpus', NOT 'unknown action' - proving it is wired (no Ollama).
+    $rf = & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs refresh nope -Env dotnet-web 2>&1 | Out-String
+    Assert ($rf -notmatch '(?i)unknown action') "dad corpus refresh is not a recognized action"
+
     # SAFE remove: archives to a dated zip, removes the live folder
     & powershell -NoProfile -ExecutionPolicy Bypass -File $corpusPs remove security -Env dotnet-web -Quiet | Out-Null
     Assert (-not (Test-Path $cdir)) "dad corpus remove did not remove the live folder"
