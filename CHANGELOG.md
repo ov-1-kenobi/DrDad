@@ -2,6 +2,26 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.46.0 - 2026-09-15
+
+### Added - entry-point UI coverage + stack "skins" for ui-agent / ux-agent
+cms3's home page shipped as the stock "Welcome / Learn about ASP.NET Core" scaffold with ALL navigation hidden
+behind auth - a first (anonymous) visitor lands on a dead end. It fell through every UI check: the entry point
+was never a `[ui]` task, so ux-agent never reviewed it, and the nav-links check passed (links existed, just
+auth-gated). Closed from three sides:
+- **taskmap** always emits an **ENTRY-POINT `[ui]` task** - the home / landing as a real start for the actual
+  first, often anonymous, visitor (path to the main functions + public content; not scaffold; not
+  all-nav-behind-auth).
+- **doc-stats** adds a `[ui]` WARN when the entry point is still the **default scaffold** (stock ASP.NET / CRA
+  / Next / Vite markers) - a greppable "bare front door" signal.
+- **ux-agent** reviews the entry point in the **logged-out state** (all-nav-behind-auth = a P1 dead door).
+
+Plus **stack "skins":** ui-agent and ux-agent now ADOPT the project's UI stack (from `CLAUDE.md`) and
+build / review in that stack's idioms - React + shadcn vs Go / .NET + HTMX vs Blazor - consulting `STYLE.md`
+(look), a **`<stack>-ui` corpus** if one exists (the authoritative technique), and `UI-TOOLING.md`
+(shadcn / superdesign). A wrong-stack idiom is a defect even when it "works". So the authoritative per-stack
+UI expertise is a **corpus you build once and every project's ui-agent wears as its skin**.
+
 ## 0.45.0 - 2026-09-14
 
 ### Added - corpus REFRESH mode: a dialogue-free grab -> cite -> reindex cycle /loop and routines can drive

@@ -474,6 +474,19 @@ if ($Findings) {
     }
   }
 
+  # Default-scaffold ENTRY POINT = a bare front door. cms3 shipped Views/Home/Index.cshtml as the stock
+  # "Welcome / Learn about ASP.NET Core" template - a real first visitor lands on nothing. The entry point
+  # owns no [ui] task and no review touches it, so it silently stays scaffold. Stock markers are greppable.
+  if ($surfaces.Count -ge 1) {
+    $scaffoldRe = '(?i)(building Web apps with ASP\.NET Core|Edit\s+.{0,3}src[\\/]App|Get started by editing|Vite \+ React|create-next-app)'   # stock ASP.NET link text is split by an <a>, so match the contiguous half
+    $scaffolded = @($surfaces |
+      Where-Object { $_.Name -match '(?i)^(Index|Home|App)\.' -or $_.FullName -match '(?i)[\\/]Home[\\/]' } |
+      Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match $scaffoldRe })
+    if ($scaffolded.Count -gt 0) {
+      $f.Add("[ui] the entry point is still the DEFAULT SCAFFOLD ($($scaffolded[0].Name)) - a first visitor lands on stock template content with no path into the app. Make the home page a real entry point (a [ui] task): links to the main functions + public content, usable by an ANONYMOUS visitor (WARN).")
+    }
+  }
+
   # --- PLAYTEST (experience projects, WARN) --------------------------------------------------------
   # An experience (the design doc is TEDD.md) is mostly FEEL, which no test can score - and for a game that
   # is most of the point. The kit routes feel to the human, but "hand me a checklist" is prose and gets

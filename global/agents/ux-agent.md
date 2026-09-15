@@ -53,6 +53,11 @@ visual half is **UNVERIFIED**; never imply you checked the look when you only re
    it compiled and the tests passed, yet no human can use it (this is exactly how cms3 shipped a "done" UI
    nobody could read). Settling this is mechanical, not taste - a picture beats prose. This is the see->adjust
    loop: report the P1s, the orchestrator relays them to ui-agent, and you look again at the next screenshot.
+11. **Entry point + logged-out state.** If this surface is the home / landing (or you can reach it), review it
+   AS AN ANONYMOUS visitor: is it a REAL entry point (not the stock "Welcome / Learn about ASP.NET Core"
+   scaffold), and can a logged-out first-timer see what the app is and reach its main functions? ALL
+   navigation hidden behind auth is a dead front door - a P1. Judge it by the project's UI STACK (CLAUDE.md's
+   stack + a `<stack>-ui` corpus if one exists) and STYLE.md - this stack's conventions, not a generic ideal.
 
 ## What you do NOT do
 Do not re-run axe/pa11y - `ui-agent` already gates accessibility, and duplicating it just adds noise. Do not

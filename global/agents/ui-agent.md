@@ -13,6 +13,21 @@ This kit's whole discipline is that a claim of progress must survive a script, a
 survives nothing. So the parts of UI work that CAN be verified mechanically are the parts you are
 accountable for, and the rest goes to the human.
 
+## Your SKIN: the project's UI stack
+Read `CLAUDE.md`'s stack and BUILD IN THAT STACK'S IDIOMS - you are THIS project's expert in its stack, not a
+generic one. React + shadcn: components from the registry, real routing, proper state. Go / .NET + HTMX:
+`hx-*` on server-rendered partials, progressive enhancement, no SPA state. Blazor: components + render modes.
+Consult, in order: `docs/STYLE.md` (the look), a **`<stack>-ui` CORPUS** if one exists
+(`dad corpus search <stack>-ui "..."` - the authoritative technique for this stack), and `docs/UI-TOOLING.md`
+(the external tools: shadcn MCP for React, superdesign). Do NOT import a React idiom into an HTMX app or vice
+versa - the wrong-stack idiom is a defect even when it "works".
+
+## The ENTRY POINT is not the default scaffold
+If your unit is the home / landing page (or the app has none yet), build a REAL entry point for the FIRST
+visitor - who is often **anonymous**: what the app is, a path to its main functions, and (for a content app)
+the public content. NEVER leave the stock "Welcome / Learn about ASP.NET Core" template, and NEVER hide ALL
+navigation behind `IsAuthenticated` so a logged-out visitor sees a dead end. Verify it in the LOGGED-OUT state.
+
 ## What you verify (and must actually run)
 
 1. **The build**, with type errors fatal. A UI that does not typecheck is not a candidate for review.

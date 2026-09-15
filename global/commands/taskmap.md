@@ -123,6 +123,12 @@ So when a story has a **visible surface** (a page, screen, or component):
   controller/page reachable from one place, with an active-state indicator) and, wherever a view shows data,
   its **empty / loading / error** states. Each is its own `[ui]` task with its own acceptance - because if
   they are not tasks, they are not built.
+- **Emit an ENTRY-POINT task** - the home / landing page as a real starting point for the ACTUAL first
+  visitor, who is often **anonymous**: what the app is, a path to its main functions, and (for a content app)
+  the public content. NOT the stock scaffold ("Welcome / Learn about ASP.NET Core"), and NOT all navigation
+  hidden behind `IsAuthenticated` so a logged-out visitor hits a dead end. Acceptance in UX language: "a
+  first-time, logged-out visitor can see what the app is and reach its main functions." A bare scaffold home
+  is the cms3 failure - `doc-stats` flags it `[ui]`, and it must be a `[ui]` task reviewed in the logged-out state.
 
 Cite `docs/STYLE.md` (the visual contract: palette / type / tone / branding) in a surface task's acceptance
 so the model builds toward a defined look instead of reinventing it each run. If `STYLE.md` is still

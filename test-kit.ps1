@@ -2271,6 +2271,28 @@ Test-Case "[research] flags an opinion-heavy or [research]-tagged task with no p
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "doc-stats flags a default-scaffold entry point (the bare home page cms3 shipped)" {
+  # The front door fell through every UI check: the home view was never a [ui] task, so ux-agent never looked,
+  # and the nav-links check passed because links existed (just auth-gated). A stock-scaffold home is greppable.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "web"; New-Item -ItemType Directory -Force "$p\docs","$p\src\CMS\Views\Home" | Out-Null
+    "# Design`n`nStatus: LOCKED`n`n## Contracts`n### C1`nx" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: one   <!-- Status: DOING -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Tasks`n`n## Build order`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    ('@{ ViewData["Title"] = "Home Page"; }' + "`n<h1>Welcome</h1>`n<p>Learn about building Web apps with ASP.NET Core.</p>") | Set-Content "$p\src\CMS\Views\Home\Index.cshtml" -Encoding UTF8
+
+    $ds = Join-Path $kit "doc-stats.ps1"
+    $flat = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) -replace '\s+',' ')
+    Assert ($flat -match '(?i)\[ui\].*DEFAULT SCAFFOLD') "doc-stats did not flag the default-scaffold entry point"
+
+    # a real home view -> silent
+    ('@{ ViewData["Title"] = "Home"; }' + "`n<h1>My CMS</h1>`n<a asp-controller='Pages' asp-action='Index'>Browse pages</a>") | Set-Content "$p\src\CMS\Views\Home\Index.cshtml" -Encoding UTF8
+    $flat2 = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) -replace '\s+',' ')
+    Assert ($flat2 -notmatch '(?i)DEFAULT SCAFFOLD') "doc-stats flagged a real home view as scaffold"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "only close-unit may close a story: it stamps, a hand-tick is flagged, dad tidy cleans" {
   # Measured, cms3: 5/5 stories marked DONE with 21 tasks still open and 4 commits - the DONE markers were
   # written by hand, not by close-unit. Now close-unit stamps 'closed:close-unit' when it rolls a story up,
