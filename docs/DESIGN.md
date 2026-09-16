@@ -7,13 +7,42 @@ Status: LOCKED
 ## Goal
 Run the real Claude Code agentic loop **fully offline** on Windows + an NVIDIA GPU, driven by local
 Ollama models, with a single C# MCP server for document RAG, per-project corpora, a design/proto/spec/build
-mode system, and one-command model switching. No Anthropic account; offline after first setup.
+mode system, and one-command model switching. No Anthropic account; offline after first setup. Offline is the
+DEFAULT and the thesis; the same loop can opt into a cloud or hybrid backend (R34) for delivery or to clear a
+local-model ceiling, but every command, agent, and gate is identical across all three.
 
 ## Requirements
 - [x] R1: Point Claude Code at local Ollama via `settings.json` `env` (`ANTHROPIC_BASE_URL=http://localhost:11434`,
       dummy `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`) to skip the login screen, plus offline flags
       (telemetry/autoupdater off). apiKeyHelper is deliberately NOT set - having both caused a per-session
       Claude Code auth warning; the token alone suffices (apikey.cmd kept only as a fallback).
+- [x] R34: **Three backend modes, one loop - and the GPU is never idle.** Offline-first (R1) is the DEFAULT
+      and the thesis; two opt-in alternate backends share every command, agent, and gate - only where the
+      AGENT LOOP runs changes:
+      (a) **Local** (`install.ps1`): R1 - Claude Code -> Ollama; the whole loop on the GPU.
+      (b) **Cloud** (`install.ps1 -Cloud`): the `ANTHROPIC_BASE_URL` redirect is DROPPED, so Claude Code uses
+          its normal Anthropic auth; aliases resolve to each model's `cloud` id in `models.json`
+          (dev/coder/oss/gemma -> Sonnet, fast -> Haiku, quality -> Opus). The ABSENCE of the base-URL is the
+          mode tell - `use-model` and `dad-doctor` read it back; no marker file. **The GPU is NOT idle in cloud
+          mode:** `local-tools` reaches Ollama independent of the agent loop, so semantic RAG and
+          `describe_image` still run on it - and cloud install VERIFIES the embed/vision models are pulled, so a
+          literal-scan degrade is LOUD, not silent.
+      (c) **Hybrid** (`install.ps1 -Hybrid`): the cloud agent loop of (b) PLUS the GPU offered to the cloud
+          model as a drudge co-processor. `install` sets `LOCALTOOLS_HYBRID=1` in `settings.json` env (the
+          single mode tell; cleared on a cloud/local re-install), which registers ONE extra MCP tool,
+          `local_generate`: the cloud model delegates BOUNDED, low-stakes generation to the local model (an
+          implementation guess it will review, synthetic test data, boilerplate). Its output is a DRAFT the
+          cloud model verifies, prefixed `[LOCAL DRAFT - verify before use]`; never banked or shipped raw, and
+          never used for reasoning that must be right or anything a test cannot check.
+      Division of labor: **cloud = the brain; the local GPU = senses (embeddings, vision) and drudge-work.**
+      The fence is DETERMINISTIC, not prose (the R-thesis): `local_generate` is a SEPARATE tool type
+      (`HybridTools`) registered ONLY when `Rag.HybridEnabled` is true - `Program.cs` uses explicit
+      `WithTools<T>()`, not assembly scanning - so in local/cloud mode the tool does not exist in the advertised
+      list at all, and the weak local model cannot be handed a job the mode exists to keep on the cloud brain.
+      `dad-doctor` reports the mode, and in hybrid it sets the flag and PROBES the running server to confirm
+      `local_generate` is actually exposed (not merely that the marker is set), warning if it leaks into a
+      non-hybrid install. Draft model defaults to `models.json`'s default (`devstral`); override with
+      `LOCALTOOLS_DRAFT_MODEL`.
 - [x] R2: One C# MCP server (`local-tools`, stdio, `net8.0` + `RollForward=LatestMajor`) exposing
       `index_datasheets`, `search_datasheets`, `list_datasheets`, `ingest_url`, `web_search`,
       `describe_image` (local vision model via Ollama, default `gemma3:4b`, override `LOCALTOOLS_VISION_MODEL`),
@@ -426,5 +455,6 @@ commands/agents/server; one C# MCP server only.
 
 ## Out of scope
 - WSL2 / Linux / macOS ports (Windows-native by design).
-- Cloud models (offline-first).
+- Cloud models as the DEFAULT. Offline-first is the default and the thesis; cloud and hybrid are opt-in
+  alternate backends (R34), used for delivery or to clear a local-model ceiling, never the out-of-the-box path.
 - Additional Node/Python MCP servers (the single C# server is the design).

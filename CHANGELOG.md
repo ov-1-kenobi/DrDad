@@ -2,6 +2,16 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.48.1 - 2026-09-15
+
+### Docs - record the three backend modes in the design doc (it was silent on cloud, and stale)
+The LOCKED design doc predated cloud mode: it had no requirement for it, and its "Out of scope" list still
+said "Cloud models (offline-first)" - directly contradicting a mode that had already shipped. Flipped to DRAFT,
+added **R34** (the three backend modes - local / cloud / hybrid - with the "GPU is never idle" guarantee and
+the deterministic gating of `local_generate`), reconciled the Goal and the Out-of-scope line so offline-first
+is stated as the DEFAULT and thesis while cloud/hybrid are opt-in alternate backends, then re-LOCKED. No code
+change - this makes the design record match the kit as built through 0.48.0.
+
 ## 0.48.0 - 2026-09-15
 
 ### Added - HYBRID mode: the GPU as a co-processor for the cloud model, and cloud mode stops wasting it
