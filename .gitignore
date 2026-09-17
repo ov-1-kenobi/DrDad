@@ -8,6 +8,15 @@ docs/.index/
 # dropped reference projects / scratch (not kit source)
 _tempReference/
 
+# examples/cms3 ships a BUILD ARTIFACT (dotnet publish output) from a separate, private project - see its
+# README. The compiled output is regenerated, not authored here, so it stays OUT of git history: committing
+# ~57MB of DLLs would bloat history permanently and every republish would add another full copy (hard to
+# undo later; staying gitignored is trivially reversible the other way). package-kit.ps1 still ships it
+# correctly - it copies from the live filesystem, not from git. Only the README (real, authored content)
+# is tracked.
+examples/cms3/*
+!examples/cms3/README.md
+
 # session + tooling state
 .claude/
 __pycache__/

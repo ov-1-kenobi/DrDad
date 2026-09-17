@@ -2,6 +2,42 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.49.1 - 2026-09-17
+
+### Added - examples/cms3: a real, runnable build artifact, not a description of one
+DrDad now ships a working example: a `dotnet publish` of cms3 (21 stories, 82 tasks, every one built and
+tested through `close-unit`) copied into `examples/cms3`, with a README covering how to run it
+(`dotnet CMS.dll`) and why the admin login is opt-in (`CMS_SEED_ADMIN_PASSWORD`, no baked-in credential).
+It is a compiled artifact, not source - Razor views precompile into `CMS.dll`, so distributing it is
+genuinely more opaque than handing over the project tree, not just nominally so.
+
+Getting here surfaced a real fix in cms3 itself first: `CMS.csproj` (and its test project) referenced
+`Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation` with no `.AddRazorRuntimeCompilation()` call anywhere -
+dead weight pulling the full Roslyn compiler into every publish. Verified independently (by a separate
+session working cms3 directly, per a hand-off prompt, not assumed): removing it dropped the publish output
+from **85 MB / 499 files to 57 MB / 166 files**, with `dotnet build`/`dotnet test` (61/61) and a real
+standalone HTTP smoke-test unaffected. Filed and closed as cms3's own Story S21, matching its established
+hygiene-story pattern (S15) rather than a silent edit - `STORIES.md`/`STATUS.md` stayed in sync.
+
+Packaging choice, deliberately: the compiled binaries in `examples/cms3` are **gitignored**, not committed -
+committing ~57MB of DLLs would bloat this repo's history permanently and every republish would duplicate
+another full copy (hard to undo later; staying gitignored is trivially reversible the other way). Only the
+README is tracked. `package-kit.ps1` still ships the artifact correctly regardless, since it copies the
+live filesystem, not git - distribution does not depend on the binaries being tracked at all.
+
+Before any of this shipped, the copied-over cms3 source was independently sanity-checked end to end: a full
+`scan-secrets.ps1` pass (171 files, clean), the package-reference removal confirmed directly (not just
+trusted from the hand-off session's report), git history checked against its claimed commits (matched, not
+fabricated), and build + test (61/61) re-run independently before treating any of it as verified.
+
+Tests: `examples\cms3` must carry a README but never the compiled binaries in git history (gitignore
+shape asserted, and `git check-ignore` confirms the README is the one exception); if a build artifact
+happens to be present, it must not contain a runtime `cms.db` or any Roslyn DLL (the exact regression this
+change fixed). The kit's own ASCII/line-ending hygiene checks (`Get-KitFiles` and the line-ending test) now
+exclude `examples\` - its vendored third-party files (e.g. jquery-validation's own LICENSE.md) and
+publish-generated JSON are not kit-authored text and were never meant to be held to the kit's own
+authorship conventions, the same reasoning `_tempReference`/`bin`/`obj` already get.
+
 ## 0.49.0 - 2026-09-17
 
 ### Added - local_generate actually gets used now: wired into CLAUDE.md, dev-agent, and qa-agent

@@ -49,8 +49,12 @@ function Remove-Sandbox([string]$p) {
 function Get-KitFiles([string[]]$include) {
   Get-ChildItem $kit -Recurse -File -Include $include | Where-Object {
     $parts = $_.FullName.Split([char]92)
+    # 'examples' excludes examples\cms3: a dotnet-publish BUILD ARTIFACT from a separate project, containing
+    # vendored third-party files (e.g. jquery-validation's own LICENSE.md, real non-ASCII license text) and
+    # generated JSON (CMS.deps.json etc.) - not kit-authored text, same reasoning as bin/obj/_tempReference.
     ($parts -notcontains 'bin') -and ($parts -notcontains 'obj') -and ($parts -notcontains '__pycache__') -and
-    ($parts -notcontains '_tempReference') -and ($parts -notcontains '.claude') -and ($parts -notcontains '.git')
+    ($parts -notcontains '_tempReference') -and ($parts -notcontains '.claude') -and ($parts -notcontains '.git') -and
+    ($parts -notcontains 'examples')
   }
 }
 
@@ -391,7 +395,7 @@ Test-Case "line endings are consistent per file (LF, CRLF for batch)" {
   # .gitattributes states the rule; this asserts the working tree obeys it.
   $mixed = @(); $wrongEol = @()
   $files = Get-ChildItem $kit -Recurse -File -Include *.ps1,*.cmd,*.md,*.json,*.cs |
-           Where-Object { $_.FullName -notmatch '\\(_tempReference|bin|obj|\.git|node_modules)\\' }
+           Where-Object { $_.FullName -notmatch '\\(_tempReference|bin|obj|\.git|node_modules|examples)\\' }
   foreach ($f in $files) {
     $t = [System.IO.File]::ReadAllText($f.FullName)
     $crlf = ([regex]::Matches($t, "`r`n")).Count
@@ -4032,6 +4036,31 @@ if (-not $SkipBuild) {
     # .html file under docs\ is always a foreign artifact that does not belong in version control here.
     $strayHtml = @(Get-ChildItem (Join-Path $kit "docs") -Recurse -Filter "*.html" -ErrorAction SilentlyContinue)
     Assert ($strayHtml.Count -eq 0) "stray .html file(s) under docs\: $($strayHtml.FullName -join ', ') - these do not belong in the kit's own docs (markdown only); move them out and re-commit"
+  }
+
+  Test-Case "examples\cms3 ships a README but NOT the compiled binaries into git history" {
+    # examples/cms3 is a dotnet-publish BUILD ARTIFACT from a separate, private project (cms3) - copied onto
+    # this machine, never authored here. Committing ~57MB of DLLs would bloat git history permanently and
+    # every republish would duplicate another full copy - staying gitignored is trivially reversible the
+    # other way, committing it is not. package-kit.ps1 still ships it correctly (it copies the live
+    # filesystem, not git), so distribution does not depend on git tracking it at all.
+    $gi = Get-Content (Join-Path $kit ".gitignore") -Raw
+    Assert ($gi -match '(?m)^examples/cms3/\*\s*$') ".gitignore does not blanket-ignore examples/cms3/* - a future publish could accidentally commit binaries"
+    Assert ($gi -match '(?m)^!examples/cms3/README\.md\s*$') ".gitignore does not carve out an exception for examples/cms3/README.md - the one file that SHOULD be tracked"
+    $readme = Join-Path $kit "examples\cms3\README.md"
+    if (Test-Path $readme) {
+      $ignored = $true
+      try { & git -C $kit check-ignore -q "examples/cms3/README.md" 2>$null; $ignored = ($LASTEXITCODE -eq 0) } catch { }
+      Assert (-not $ignored) "examples/cms3/README.md IS matched by gitignore - the exception rule is not working"
+    }
+    # If a build artifact happens to be present on THIS machine (it will not be on a fresh clone or CI -
+    # that is the whole point), sanity-check its shape rather than requiring it.
+    $dll = Join-Path $kit "examples\cms3\CMS.dll"
+    if (Test-Path $dll) {
+      Assert (-not (Test-Path (Join-Path $kit "examples\cms3\cms.db"))) "a runtime cms.db is sitting in examples\cms3 - clean up before shipping (it would be gitignored anyway, but package-kit.ps1 would still stage it into the distributable zip)"
+      $roslyn = @(Get-ChildItem (Join-Path $kit "examples\cms3") -Filter "Microsoft.CodeAnalysis*.dll" -ErrorAction SilentlyContinue)
+      Assert ($roslyn.Count -eq 0) "examples\cms3 contains Roslyn DLLs - the RuntimeCompilation bloat fix (S21) regressed, or this was republished from an unfixed cms3"
+    }
   }
 }
 
