@@ -3992,6 +3992,18 @@ if (-not $SkipBuild) {
     $claude = Get-Content (Join-Path $kit "CLAUDE.md") -Raw
     Assert ($claude -match 'test-kit\.ps1') "CLAUDE.md's validation gate does not reference test-kit.ps1"
   }
+
+  Test-Case "docs\ holds no stray HTML - it is markdown, and local-tools indexes it PLAINTEXT" {
+    # 0.48.2 accidentally shipped docs/index.html and docs/series.html (36KB + 23KB) - standalone exports
+    # of the Field Manual / Video Series artifacts, written there by a working-directory mixup during an
+    # unrelated task, then swept into the commit by `git add -A` without being scrutinized. Two real costs:
+    # they would have bloated/polluted the kit's OWN RAG corpus (search_datasheets chunks docs/ as plain
+    # text - a 36KB marketing page is pure noise there), and they shipped inside the distributable package
+    # kit source (docs\ is never excluded by package-kit.ps1). The kit's docs are markdown by design; an
+    # .html file under docs\ is always a foreign artifact that does not belong in version control here.
+    $strayHtml = @(Get-ChildItem (Join-Path $kit "docs") -Recurse -Filter "*.html" -ErrorAction SilentlyContinue)
+    Assert ($strayHtml.Count -eq 0) "stray .html file(s) under docs\: $($strayHtml.FullName -join ', ') - these do not belong in the kit's own docs (markdown only); move them out and re-commit"
+  }
 }
 
 # ---------------------------------------------------------------- summary

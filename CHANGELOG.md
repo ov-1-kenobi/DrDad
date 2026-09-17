@@ -2,6 +2,19 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.48.3 - 2026-09-17
+
+### Fixed - two stray marketing HTML files shipped inside the kit's own docs\ (a maintainer mistake, not a user bug)
+0.48.2 accidentally committed `docs/index.html` and `docs/series.html` - standalone exports of the DrDad
+Field Manual and Video Series artifacts, unrelated to the kit itself. A working-directory mixup during an
+export wrote them into the kit's `docs\` instead of the intended destination, and `git add -A` swept them
+into the 0.48.2 commit without being scrutinized closely enough before it shipped. Real cost, not just
+clutter: `docs\` is indexed PLAINTEXT by local-tools' own RAG (`search_datasheets`), so a 36KB + 23KB
+marketing page would have polluted the kit's own corpus with unrelated chunks, and `package-kit.ps1` never
+excludes `docs\`, so both files were already staged into the distributable `DAD-kit-v0.48.2.zip`. Removed;
+regression test added (`docs\` is markdown by design - any `.html` file there is now a hard failure).
+Same standard this project holds every other bug to: a script catches it, not a promise to be more careful.
+
 ## 0.48.2 - 2026-09-16
 
 ### Fixed - `install.ps1 -Hybrid` failed with "the property 'LOCALTOOLS_HYBRID' cannot be found on this object"
