@@ -3843,13 +3843,40 @@ Test-Case "install + doctor wire three modes (local / cloud / hybrid) and toggle
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match '\[switch\]\$Hybrid') "install.ps1 has no -Hybrid switch"
   Assert ($inst -match '\$cloudLoop\s*=\s*\$Cloud\s*-or\s*\$Hybrid') "install.ps1 does not run the cloud agent loop for -Hybrid"
-  Assert ($inst -match 'LOCALTOOLS_HYBRID\s*=\s*"1"') "install.ps1 -Hybrid does not SET LOCALTOOLS_HYBRID=1"
+  Assert ($inst -match 'Add-Member\s+-NotePropertyName\s+"LOCALTOOLS_HYBRID"\s+-NotePropertyValue\s+"1"') "install.ps1 -Hybrid does not SET LOCALTOOLS_HYBRID=1 via Add-Member"
+  Assert ($inst -notmatch '\$s\.env\.LOCALTOOLS_HYBRID\s*=\s*"1"') "install.ps1 uses plain dot-assignment to CREATE LOCALTOOLS_HYBRID - throws on a fresh settings.json (0.48.0's actual shipped bug); use Add-Member -Force"
   Assert ($inst -match 'Remove\("LOCALTOOLS_HYBRID"\)') "install.ps1 does not CLEAR a stale LOCALTOOLS_HYBRID for cloud/local"
   Assert ($inst -match 'Ensure-OllamaModel') "install.ps1 cloud/hybrid does not verify the Ollama support models are pulled"
   $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
   Assert ($doc -match '\$hybridMode') "dad-doctor does not detect hybrid mode"
   Assert ($doc -match 'local_generate') "dad-doctor does not report / verify the local_generate co-processor"
   Assert ($doc -match '\$env:LOCALTOOLS_HYBRID\s*=\s*"1"') "dad-doctor does not set the flag to VERIFY the tool is exposed (not just that the marker is set)"
+}
+
+Test-Case "settings.json env can gain LOCALTOOLS_HYBRID (a NEW key) without throwing - 0.48.0's real install bug" {
+  # 0.48.0 shipped `$s.env.LOCALTOOLS_HYBRID = "1"`. Plain dot-assignment on a ConvertFrom-Json PSCustomObject
+  # can only OVERWRITE an EXISTING property - it cannot CREATE one, and throws "The property 'X' cannot be
+  # found on this object. Verify that the property exists and can be set." settings.json's env block has no
+  # LOCALTOOLS_HYBRID key by default (by design - -Hybrid is what adds it), so every real -Hybrid install hit
+  # this. A text-match test ('LOCALTOOLS_HYBRID\s*=\s*"1"') PASSED anyway, because the broken line matched its
+  # own regex - a grep cannot catch a runtime exception. This test actually RUNS the mutation, against the
+  # REAL settings.json (not a hand-built fixture, which could accidentally include the key and hide the bug).
+  $settingsPath = Join-Path $kit "settings.json"
+  Assert (Test-Path $settingsPath) "settings.json is missing"
+  $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+  Assert (-not ($s.env.PSObject.Properties.Name -contains "LOCALTOOLS_HYBRID")) `
+    "settings.json already has a LOCALTOOLS_HYBRID key - this test needs a key that does NOT exist yet to prove the fix path"
+
+  $threw = $false; $errMsg = ""
+  try { $s.env | Add-Member -NotePropertyName "LOCALTOOLS_HYBRID" -NotePropertyValue "1" -Force -ErrorAction Stop }
+  catch { $threw = $true; $errMsg = $_.Exception.Message }
+  Assert (-not $threw) "Add-Member threw creating a new property on the real settings.json env object: $errMsg"
+  Assert ($s.env.LOCALTOOLS_HYBRID -eq "1") "the property was added but is not readable back as '1'"
+
+  # Round-trip through JSON too - Add-Member's NoteProperty must actually serialize (it does; ConvertTo-Json
+  # walks NoteProperties same as any other), so a future refactor that swaps in a non-serializing trick is caught.
+  $rt = ($s | ConvertTo-Json -Depth 10 | ConvertFrom-Json)
+  Assert ($rt.env.LOCALTOOLS_HYBRID -eq "1") "LOCALTOOLS_HYBRID did not survive a ConvertTo-Json/ConvertFrom-Json round-trip"
 }
 
 # ---------------------------------------------------------------- server

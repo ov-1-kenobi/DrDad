@@ -162,7 +162,11 @@ if ($cloudLoop) {
 # (turning on the local_generate tool) AND is what dad-doctor reads back as "hybrid". Set it for -Hybrid,
 # and REMOVE any stale copy otherwise, so re-installing as cloud or local cleanly turns the local tools off.
 if ($Hybrid) {
-  $s.env.LOCALTOOLS_HYBRID = "1"
+  # settings.json's env block has NO LOCALTOOLS_HYBRID key by default - this is a NEW property, and plain
+  # dot-assignment to set it can only OVERWRITE an existing PSCustomObject property, never CREATE one; it
+  # throws "the property ... cannot be found on this object" when the key does not already exist. Every
+  # -Hybrid install hit this. Add-Member -Force both creates it (first install) and overwrites it (re-install).
+  $s.env | Add-Member -NotePropertyName "LOCALTOOLS_HYBRID" -NotePropertyValue "1" -Force
   Write-Host "  hybrid: LOCALTOOLS_HYBRID=1 (the 5080 is offered to the cloud model via the local_generate tool)" -ForegroundColor Green
 } elseif ($s.env.PSObject.Properties.Name -contains "LOCALTOOLS_HYBRID") {
   $s.env.PSObject.Properties.Remove("LOCALTOOLS_HYBRID")

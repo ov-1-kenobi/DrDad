@@ -2,6 +2,22 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.48.2 - 2026-09-16
+
+### Fixed - `install.ps1 -Hybrid` failed with "the property 'LOCALTOOLS_HYBRID' cannot be found on this object"
+Reported live on a real install. `settings.json`'s `env` block has no `LOCALTOOLS_HYBRID` key by default -
+it is a brand-new property `-Hybrid` is meant to add. `$s.env.LOCALTOOLS_HYBRID = "1"` is plain dot-assignment
+on a `ConvertFrom-Json` `PSCustomObject`, which can only OVERWRITE an EXISTING property, never CREATE one - it
+throws exactly that error the first time a key doesn't already exist. Every `-Hybrid` install hit this;
+`ANTHROPIC_MODEL`/`ANTHROPIC_SMALL_FAST_MODEL` on the same lines were fine only because those keys already
+exist in the template. Fixed with `Add-Member -Force` (creates on first install, overwrites on a re-install).
+
+The regression test that was supposed to catch this only grepped the source text
+(`LOCALTOOLS_HYBRID\s*=\s*"1"`) - which the broken line itself matched, so it shipped green. Replaced with a
+test that actually RUNS the mutation against the real `settings.json` (not a hand-built fixture, which could
+accidentally include the key and hide the same bug) and confirms it doesn't throw, the value reads back, and
+it survives a JSON round-trip. A second assertion forbids the old plain-assignment pattern from returning.
+
 ## 0.48.1 - 2026-09-15
 
 ### Docs - record the three backend modes in the design doc (it was silent on cloud, and stale)

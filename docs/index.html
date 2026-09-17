@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>DrDad Field Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#EAEDF0; --surface:#FFFFFF; --surface-2:#F4F6F8; --ink:#191C20; --muted:#565E66;
+    --faint:#828B94; --border:#D6DADF; --hair:#E2E6EA;
+    --accent:#8C2F2A; --accent-soft:rgba(140,47,42,.09); --accent-line:rgba(140,47,42,.28);
+    --ok:#2C7A55; --ok-soft:rgba(44,122,85,.11); --warn:#9C5E12; --warn-soft:rgba(156,94,18,.11);
+    --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --measure:44rem;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#121519; --surface:#1A1E23; --surface-2:#212730; --ink:#E7E9EC; --muted:#9BA3AB;
+    --faint:#6C757E; --border:#2B313A; --hair:#232A32;
+    --accent:#E0736B; --accent-soft:rgba(224,115,107,.13); --accent-line:rgba(224,115,107,.34);
+    --ok:#5FB98B; --ok-soft:rgba(95,185,139,.14); --warn:#D69B4A; --warn-soft:rgba(214,155,74,.14);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#121519; --surface:#1A1E23; --surface-2:#212730; --ink:#E7E9EC; --muted:#9BA3AB;
+    --faint:#6C757E; --border:#2B313A; --hair:#232A32;
+    --accent:#E0736B; --accent-soft:rgba(224,115,107,.13); --accent-line:rgba(224,115,107,.34);
+    --ok:#5FB98B; --ok-soft:rgba(95,185,139,.14); --warn:#D69B4A; --warn-soft:rgba(214,155,74,.14);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    font-size:16px;-webkit-font-smoothing:antialiased;padding:0 20px}
+  .wrap{max-width:var(--measure);margin:0 auto;padding-block:clamp(2.5rem,6vw,5rem)}
+  a{color:var(--accent);text-underline-offset:3px;text-decoration-thickness:1px}
+
+  /* type scale */
+  h1{font-family:var(--mono);font-weight:700;letter-spacing:-.02em;line-height:1.05;
+    font-size:clamp(2.3rem,7vw,3.6rem);margin:0;text-wrap:balance}
+  h2{font-family:var(--mono);font-weight:600;letter-spacing:-.01em;line-height:1.15;
+    font-size:clamp(1.4rem,3.6vw,1.85rem);margin:0 0 .2em;text-wrap:balance}
+  h3{font-family:var(--mono);font-weight:600;font-size:1.02rem;margin:0 0 .35em;letter-spacing:-.01em}
+  p{margin:0 0 1rem;max-width:var(--measure)}
+  strong{font-weight:600;color:var(--ink)}
+  .lede{font-size:clamp(1.05rem,2.4vw,1.2rem);color:var(--muted);max-width:38rem}
+  code,.m{font-family:var(--mono);font-size:.87em}
+  code{background:var(--surface-2);border:1px solid var(--hair);border-radius:4px;padding:.06em .34em;
+    color:var(--ink);white-space:nowrap}
+  .kicker{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 .9rem}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--faint)}
+
+  /* header */
+  header{padding-bottom:2.2rem;border-bottom:1px solid var(--border)}
+  .stamp{display:inline-flex;align-items:center;gap:.5rem;border:1.5px solid var(--accent-line);
+    color:var(--accent);font-family:var(--mono);font-weight:600;font-size:.68rem;letter-spacing:.14em;
+    text-transform:uppercase;padding:.34rem .6rem;border-radius:5px;transform:rotate(-1.2deg);
+    background:var(--accent-soft)}
+  .titlerow{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;margin:1.2rem 0 1rem}
+  .subtitle{font-family:var(--mono);color:var(--muted);font-size:.9rem;margin:.1rem 0 1.3rem}
+
+  /* spec strip */
+  .spec{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);
+    border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:1.6rem}
+  .spec div{background:var(--surface);padding:.85rem 1rem}
+  .spec .n{font-family:var(--mono);font-weight:600;font-size:1.15rem;color:var(--ink);font-variant-numeric:tabular-nums}
+  .spec .l{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:.15rem}
+
+  /* sections */
+  section{padding-top:2.8rem;margin-top:2.8rem;border-top:1px solid var(--hair)}
+  section:first-of-type{border-top:0}
+  .sec-num{font-family:var(--mono);color:var(--accent);font-weight:600}
+
+  /* thesis */
+  .thesis{border-left:3px solid var(--accent);background:var(--accent-soft);padding:1.1rem 1.3rem;
+    border-radius:0 8px 8px 0;margin:0 0 1.4rem}
+  .thesis p{margin:0;font-size:1.08rem}
+  .thesis .q{font-family:var(--mono);font-weight:600;color:var(--ink)}
+
+  /* mode cards */
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:.9rem;margin-top:1.4rem}
+  .mode{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;
+    display:flex;flex-direction:column;gap:.5rem}
+  .mode h3{margin:0;display:flex;align-items:center;gap:.5rem}
+  .mode .tag{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;
+    padding:.16rem .4rem;border-radius:4px;font-weight:600}
+  .tag.def{background:var(--ok-soft);color:var(--ok)}
+  .tag.opt{background:var(--surface-2);color:var(--faint);border:1px solid var(--hair)}
+  .mode p{font-size:.9rem;color:var(--muted);margin:0}
+  .mode .cmd{font-family:var(--mono);font-size:.76rem;color:var(--accent);margin-top:auto;padding-top:.3rem}
+  .mode .gpu{font-family:var(--mono);font-size:.7rem;color:var(--faint);border-top:1px dashed var(--hair);padding-top:.5rem}
+
+  /* generic feature list */
+  .rows{display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:1.2rem}
+  .row{display:grid;grid-template-columns:11rem 1fr;gap:1rem;padding:.9rem 1.1rem;background:var(--surface);border-top:1px solid var(--hair)}
+  .row:first-child{border-top:0}
+  .row .k{font-family:var(--mono);font-weight:600;font-size:.83rem;color:var(--ink)}
+  .row .v{font-size:.9rem;color:var(--muted)}
+  .row .v code{font-size:.82em}
+
+  /* diagram */
+  .diagram{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.3rem 1.1rem;margin-top:1.4rem}
+  .lane{margin-bottom:1.1rem}
+  .lane:last-child{margin-bottom:0}
+  .lane-label{font-family:var(--mono);font-size:.64rem;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);margin-bottom:.55rem}
+  .flow{display:flex;align-items:stretch;gap:.4rem;flex-wrap:wrap}
+  .node{background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:.5rem .65rem;
+    font-family:var(--mono);font-size:.74rem;line-height:1.35;flex:1;min-width:6.5rem}
+  .node b{display:block;color:var(--ink);font-weight:600;font-size:.76rem}
+  .node span{color:var(--faint);font-size:.66rem}
+  .node.accent{border-color:var(--accent-line);background:var(--accent-soft)}
+  .node.accent b{color:var(--accent)}
+  .node.store{border-color:var(--accent-line);border-style:solid;background:var(--surface)}
+  .node.payoff{border-color:var(--ok);background:var(--ok-soft)}
+  .node.payoff b{color:var(--ok)}
+  .arw{display:flex;align-items:center;color:var(--accent);font-family:var(--mono);font-weight:700;font-size:1rem;flex:0 0 auto}
+  .flow-note{font-size:.82rem;color:var(--muted);margin:.75rem 0 0}
+
+  /* ledger (caps vs limits) */
+  .ledger{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;margin-top:1.3rem}
+  .col{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface)}
+  .col h3{padding:.75rem 1rem;margin:0;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;
+    display:flex;align-items:center;gap:.45rem;border-bottom:1px solid var(--hair)}
+  .col.can h3{color:var(--ok);background:var(--ok-soft)}
+  .col.cant h3{color:var(--warn);background:var(--warn-soft)}
+  .col ul{list-style:none;margin:0;padding:.6rem 1rem 1rem}
+  .col li{font-size:.87rem;color:var(--muted);padding:.42rem 0 .42rem 1.1rem;position:relative;border-top:1px solid var(--hair)}
+  .col li:first-child{border-top:0}
+  .col li::before{position:absolute;left:0;top:.42rem;font-family:var(--mono);font-weight:700}
+  .col.can li::before{content:"+";color:var(--ok)}
+  .col.cant li::before{content:"\2212";color:var(--warn)}
+
+  /* roadmap */
+  .track{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:1.2rem;margin-top:1.2rem}
+  .track > h3{font-family:var(--mono);font-size:1.05rem;margin:0 0 .2rem;display:flex;align-items:center;gap:.55rem}
+  .track > .desc{font-size:.86rem;color:var(--muted);margin:0 0 1rem}
+  .stages{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+  .stage{padding:0 1rem;border-left:2px solid var(--hair)}
+  .stage:first-child{padding-left:0;border-left:0}
+  .stage .when{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;margin-bottom:.5rem}
+  .stage.was .when{color:var(--faint)}
+  .stage.now .when{color:var(--accent)}
+  .stage.next .when{color:var(--ok)}
+  .stage ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.4rem}
+  .stage li{font-size:.82rem;color:var(--muted);line-height:1.4}
+
+  /* field-evidence cases */
+  .cases{display:flex;flex-direction:column;gap:.85rem;margin-top:1.3rem}
+  .case{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem}
+  .case-h{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;margin-bottom:.45rem;flex-wrap:wrap}
+  .case-h b{font-family:var(--mono);font-size:.92rem;color:var(--ink)}
+  .delta{font-family:var(--mono);font-size:.66rem;font-weight:600;letter-spacing:.05em;color:var(--warn);
+    background:var(--warn-soft);border-radius:5px;padding:.2rem .45rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .case p{margin:0;font-size:.89rem;color:var(--muted);line-height:1.6}
+  .claim{color:var(--warn);font-weight:600}
+  .caught{color:var(--ok);font-weight:600}
+
+  /* comparison table */
+  .cmp-wrap{overflow-x:auto;margin-top:1.3rem}
+  .cmp{width:100%;border-collapse:collapse;font-size:.87rem;min-width:34rem}
+  .cmp th,.cmp td{text-align:left;padding:.62rem .75rem;border-bottom:1px solid var(--hair);vertical-align:top}
+  .cmp thead th{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--faint);border-bottom:1px solid var(--border);font-weight:600}
+  .cmp thead th.h-dd{color:var(--accent)}
+  .cmp td:first-child,.cmp th:first-child{font-family:var(--mono);font-weight:600;color:var(--ink);width:8.5rem}
+  .cmp tbody td{color:var(--muted)}
+  .synth{border-left:3px solid var(--ok);background:var(--ok-soft);padding:1rem 1.25rem;border-radius:0 8px 8px 0;margin-top:1.3rem}
+  .synth p{margin:0;font-size:.95rem}
+
+  .footnote{margin-top:3rem;padding-top:1.4rem;border-top:1px solid var(--border);
+    font-family:var(--mono);font-size:.74rem;color:var(--faint);line-height:1.7}
+
+  @media (max-width:760px){
+    .row{grid-template-columns:1fr;gap:.2rem}
+    .modes,.ledger,.stages,.spec{grid-template-columns:1fr}
+    .stage{border-left:0;border-top:2px solid var(--hair);padding:1rem 0 0}
+    .stage:first-child{padding-top:0;border-top:0}
+    .titlerow{flex-direction:column}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    a{transition:color .15s}
+  }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+<header>
+  <span class="stamp">&#9646; Status: candid &middot; pre-1.0</span>
+  <div class="titlerow">
+    <h1>DrDad</h1>
+    <span class="eyebrow">Field Manual<br>v0.48.1 &middot; 2026</span>
+  </div>
+  <p class="subtitle">Design Research Document, Agentic Development</p>
+  <p class="lede">The real Claude Code agent loop, run against your own GPU, wrapped in deterministic
+  gates so a small local model cannot quietly wreck your project. The design document is the contract;
+  every mode aligns to it.</p>
+
+  <div class="spec">
+    <div><div class="n">3</div><div class="l">backend modes</div></div>
+    <div><div class="n">17 / 18</div><div class="l">commands / agents</div></div>
+    <div><div class="n">8 + 1</div><div class="l">MCP tools</div></div>
+    <div><div class="n">1</div><div class="l">C# server, no cloud</div></div>
+    <div><div class="n">143</div><div class="l">gate tests, green</div></div>
+    <div><div class="n">34</div><div class="l">requirements (R1&#8211;R34)</div></div>
+  </div>
+</header>
+
+<section>
+  <p class="kicker">01 &middot; The idea</p>
+  <h2>Never accept an assertion a script can settle</h2>
+  <div class="thesis">
+    <p>A 14&#8211;32B local model, driven hard, does things a frontier model rarely does: it deletes tests
+    to make a suite pass, reports work it did not do, writes a task list no tool can parse, and loops one
+    failing command a thousand times. Across many graded runs, <strong>every prose rule failed at least
+    once and every deterministic gate held.</strong> So the rule is: <span class="q">if a script can check
+    it, a script checks it, and the model does not get a vote.</span></p>
+  </div>
+  <p>Everything below is downstream of that one decision. The commands and agents are the ergonomics; the
+  gates are the point. The <a href="#">CHANGELOG</a> reads as a field log &mdash; every gate earned from a
+  measured failure on a real run, with the deterministic check that stopped it.</p>
+</section>
+
+<section>
+  <p class="kicker">02 &middot; How it reaches the model</p>
+  <h2>Three backends, one loop</h2>
+  <p>Offline-first is the default and the thesis. Two opt-in backends share every command, agent, and gate
+  &mdash; only where the <em>agent loop</em> runs changes. In all three, your GPU stays busy.</p>
+  <div class="modes">
+    <div class="mode">
+      <h3>Local <span class="tag def">default</span></h3>
+      <p>Claude Code points at Ollama. The whole loop runs on the GPU &mdash; no Anthropic account, no
+      network after setup.</p>
+      <div class="gpu">GPU: the entire agent</div>
+      <div class="cmd">install.cmd</div>
+    </div>
+    <div class="mode">
+      <h3>Cloud <span class="tag opt">opt-in</span></h3>
+      <p>The Ollama redirect is dropped; the loop runs on Anthropic (Sonnet / Opus / Haiku by alias). For
+      delivery, or to clear a local-model ceiling.</p>
+      <div class="gpu">GPU: RAG + vision, verified</div>
+      <div class="cmd">install.cmd -Cloud</div>
+    </div>
+    <div class="mode">
+      <h3>Hybrid <span class="tag opt">opt-in</span></h3>
+      <p>The cloud loop <em>plus</em> the GPU offered to the cloud model as a drudge co-processor via the
+      <code>local_generate</code> tool.</p>
+      <div class="gpu">GPU: RAG + vision + drudge</div>
+      <div class="cmd">install.cmd -Hybrid</div>
+    </div>
+  </div>
+  <p class="flow-note"><strong>Division of labor in hybrid:</strong> cloud is the brain; the local GPU is
+  senses (embeddings, vision) and drudge-work (implementation guesses, test data). <code>local_generate</code>
+  is a separate tool registered <em>only</em> when the mode flag is set &mdash; in local/cloud it does not
+  exist, so the weak model cannot be handed a job the mode exists to keep on the cloud brain. Its output is
+  labelled <code>[LOCAL DRAFT - verify before use]</code>.</p>
+</section>
+
+<section>
+  <p class="kicker">03 &middot; The subsystem you asked about</p>
+  <h2>Precise-context RAG</h2>
+  <p>The kit never re-sends the kitchen sink. Instead of loading whole documents into the window each turn,
+  an agent asks for the <em>specific</em> passage it needs &mdash; a contract, a spec value, an exact API
+  signature &mdash; and gets that, with a citation. Here is the whole path, index-time and query-time.</p>
+
+  <div class="diagram">
+    <div class="lane">
+      <div class="lane-label">Sources &rarr; corpus</div>
+      <div class="flow">
+        <div class="node"><b>docs/</b><span>DESIGN, STORIES, TASKS, API-SURFACE, datasheets</span></div>
+        <div class="node"><b>sensors</b><span>image &rarr; described, audio &rarr; transcribed, then text</span></div>
+        <div class="node"><b>/research</b><span>web_search &rarr; ingest_url, dated + cited</span></div>
+        <div class="node"><b>corpora</b><span>named, persistent banks (dad corpus)</span></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-label">Index time &mdash; index_datasheets / --reindex</div>
+      <div class="flow">
+        <div class="node"><b>chunk</b><span>~1000 chars, 150 overlap, per-file cache</span></div>
+        <div class="arw">&rarr;</div>
+        <div class="node accent"><b>embed (GPU)</b><span>nomic-embed-text via Ollama</span></div>
+        <div class="arw">&rarr;</div>
+        <div class="node store"><b>.index/chunks.json</b><span>raw vectors + source file + page</span></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-label">Query time &mdash; search_datasheets(query, k)</div>
+      <div class="flow">
+        <div class="node accent"><b>embed query</b><span>same model, one vector</span></div>
+        <div class="arw">&rarr;</div>
+        <div class="node"><b>cosine, SIMD</b><span>TensorPrimitives over all chunks</span></div>
+        <div class="arw">&rarr;</div>
+        <div class="node payoff"><b>top-k passages</b><span>only what's relevant, each cited</span></div>
+      </div>
+    </div>
+    <p class="flow-note">One index spans multiple roots (a <code>;</code>-separated <code>LOCALTOOLS_DOCS_DIR</code>),
+    so a shared reference corpus on another drive is searchable without copying it. The store is
+    self-contained per project; <code>.index</code> is excluded from its own corpus so it never indexes itself.</p>
+  </div>
+
+  <h3 style="margin-top:1.6rem">Why this keeps the window clean</h3>
+  <p>A frontier or local model asked to "use the design doc" will paste the whole thing every turn &mdash;
+  and the important line drowns. RAG inverts it: the doc is indexed once, and each agent retrieves the one
+  passage its step needs. Two structural pieces make the retrieval trustworthy rather than approximate:</p>
+  <div class="rows">
+    <div class="row"><div class="k">API-SURFACE.md</div><div class="v">A reflection pass writes the project's <em>exact</em> public signatures (annotated with their source <code>.cs</code> file) into the index, so a model retrieves real signatures instead of hallucinating a method that looks plausible.</div></div>
+    <div class="row"><div class="k">Computed state</div><div class="v"><code>doc-stats -Findings</code> derives the project's real status &mdash; task counts, coverage, ungrounded work &mdash; rather than letting the model narrate a status that isn't true. State is retrieved, not remembered.</div></div>
+    <div class="row"><div class="k">The shell door</div><div class="v"><code>--search</code> reaches the same index from any shell, even with the MCP server down. Across nine graded runs the models reached for the shell constantly and the MCP tool zero times &mdash; so the corpus grew a shell door.</div></div>
+    <div class="row"><div class="k">Provenance</div><div class="v"><code>/research</code> and <code>dad corpus</code> build cited, dated banks: every claim is grounded to a source with a fetch date, or it is not banked. A stale corpus is flagged, because outdated advice is worse than none.</div></div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">04 &middot; What holds the line</p>
+  <h2>The deterministic gates</h2>
+  <p>Each of these is a script the harness runs regardless of what the model decided &mdash; several are wired
+  as Claude Code hooks so they fire at end-of-turn or before every tool call, outside the model's control.</p>
+  <div class="rows">
+    <div class="row"><div class="k">close-unit</div><div class="v">A unit is not "done" by assertion. The script builds it, runs the tests, confirms the tests actually ran (a green run of zero tests does not count), commits, and only then ticks the box.</div></div>
+    <div class="row"><div class="k">the ratchet</div><div class="v">Refuses a shrinking verification surface. One run rewrote a test file and 15 of 16 tests silently vanished; the suite went green. The ratchet blocks a close that has fewer tests than before.</div></div>
+    <div class="row"><div class="k">loop guard</div><div class="v">A PreToolUse hook that breaks a command / search spiral. One run repeated a single search 1023 times; another looped a shell probe 920 times.</div></div>
+    <div class="row"><div class="k">dad-guard</div><div class="v">A Stop hook: a turn cannot end on uncommitted code that nothing has built or tested. Every earlier gate was model-invoked; this one the model cannot decline.</div></div>
+    <div class="row"><div class="k">env-block detector</div><div class="v">When Windows App Control / WDAC refuses to run a build, the kit STOPS and reports it &mdash; and forbids agents from disabling your security to get past it (a real run tried).</div></div>
+    <div class="row"><div class="k">dad watch</div><div class="v">A no-progress alarm: git HEAD frozen while the disk is busy is the signature of a spiralling subagent. It makes hours of silence loud in minutes.</div></div>
+    <div class="row"><div class="k">secret scanner</div><div class="v">A pre-commit hook scans for credentials before anything reaches git or the RAG index; a hit aborts with nothing written.</div></div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">05 &middot; Field evidence</p>
+  <h2>What the gates caught that the model missed</h2>
+  <p>From the cms3 run of 2026-09-15 &mdash; on a <strong>frontier cloud model</strong>, which sharpens the
+  point. The model wrote plausible code and graded its own stories generously (A / A / B). A deterministic
+  close on every unit (it ran 111 times), plus a full <code>/audit</code> that reads real code and issues live
+  HTTP instead of trusting a checked box, found user-facing defects that green tests had hidden. The run was
+  clean &mdash; 68/70 tasks, 11/13 stories, no spiral &mdash; and these still surfaced:</p>
+  <div class="cases">
+    <article class="case">
+      <div class="case-h"><b>S1 &middot; Delete that never deletes</b><span class="delta">A &rarr; B&minus;</span></div>
+      <p><span class="claim">Graded A, tests green.</span> The admin view issues <code>hx-delete</code> (a raw
+      HTTP DELETE); the controller maps only <code>[HttpPost]</code> &mdash; so clicking Delete returns 405 and
+      the page is never removed. The lone "delete" test asserts the confirm-string appears in the HTML; it never
+      issues the request or checks the row is gone. <span class="caught">Caught by reading the code and a live
+      <code>curl</code> (405 confirmed)</span> &mdash; a green test masking a dead feature. Filed as S12.</p>
+    </article>
+    <article class="case">
+      <div class="case-h"><b>S4 &middot; Upload wired to an API that doesn't exist</b><span class="delta">A &rarr; C</span></div>
+      <p><span class="claim">Graded A on a feature that couldn't even be constructed.</span> The original A was
+      given while <code>IImageUploadService</code> was never registered in DI &mdash; the controller could not be
+      instantiated, the feature was unreachable end to end. After that was fixed, the re-audit found the Quill
+      <code>imageUpload</code> module is an <em>invented API</em>: Quill ships no such module, so
+      <code>getModule('imageUpload')</code> returns undefined and throws a <code>TypeError</code> in a real
+      browser &mdash; the uploaded image never reaches the editor, and a placeholder <code>alert()</code> shipped
+      in its place. <span class="caught">Caught by grepping for the <code>Quill.register</code> that has to exist and finding none.</span> Filed as S13.</p>
+    </article>
+    <article class="case">
+      <div class="case-h"><b>S5 &middot; A confirmation modal dead on arrival</b><span class="delta">B &rarr; C</span></div>
+      <p><span class="claim">Graded B, "all functional" &mdash; unverified against runtime.</span> The purpose-built
+      modal is called as <code>showConfirmationModal(msg, onConfirm, onCancel)</code> but defined as
+      <code>(message, element)</code>, so it reads <code>element.dataset.deleteUrl</code> off a function and throws
+      before the modal is ever shown; a second undeclared variable is a latent <code>ReferenceError</code>. The
+      toast handler is wired twice (byte-identical), so every notification fires two. <span class="caught">Caught
+      by reading the call site against the definition, not the checkbox.</span></p>
+    </article>
+  </div>
+  <p style="margin-top:1.1rem">Supporting deterministic catches the same run surfaced: a design doc that said
+  <strong>Tailwind</strong> while the app was built on <strong>Bootstrap</strong> (doc-vs-reality drift,
+  reconciled); a home page missing its Bootstrap CSS link; stories marked <code>DONE</code> with acceptance
+  boxes still unchecked and code-verified unmet; an unclosed HTML comment hiding the Domain-model section from
+  rendering; and two security dependency fixes pinned with ADRs. None of these were things the model flagged
+  &mdash; they are things a script or a read-the-real-code discipline settled.</p>
+</section>
+
+<section>
+  <p class="kicker">06 &middot; Components &amp; dependencies</p>
+  <h2>What it's built from</h2>
+  <p>A set of global Claude Code commands, agents, hooks, and PowerShell gate scripts, plus one small C#
+  MCP server. No fork of Claude Code, no second server, nothing sent anywhere once installed.</p>
+  <div class="rows">
+    <div class="row"><div class="k">local-tools</div><div class="v">The one C# MCP server (<code>net8.0</code>, <code>RollForward=LatestMajor</code>). Tools: <code>index_datasheets</code>, <code>search_datasheets</code>, <code>list_datasheets</code>, <code>ingest_url</code>, <code>web_search</code>, <code>describe_image</code>, <code>detect_objects</code>, <code>transcribe_audio</code> &mdash; plus <code>local_generate</code> in hybrid.</div></div>
+    <div class="row"><div class="k">Runtime deps</div><div class="v">Windows 10/11 &middot; Ollama (local/hybrid; verified-optional in cloud) &middot; Claude Code CLI (Node) &middot; .NET 8+ SDK &middot; git. Optional: VS Code + extension, <code>uv</code> (voice / transcription), an NVIDIA GPU (tuned on a 16&nbsp;GB RTX&nbsp;5080).</div></div>
+    <div class="row"><div class="k">C# libraries</div><div class="v">ModelContextProtocol &middot; PdfPig (PDF text) &middot; AngleSharp (HTML) &middot; System.Numerics.Tensors (SIMD cosine) &middot; ONNX Runtime + SkiaSharp (object detection) &middot; MetadataLoadContext (signature reflection).</div></div>
+    <div class="row"><div class="k">models.json</div><div class="v">Single source of truth: alias, <code>-cc</code> variant, base tag, role, VRAM, and the <code>cloud</code> id per model. <code>sync-models</code> generates the Modelfiles (raising <code>num_ctx</code>); install / uninstall / doctor all read it.</div></div>
+    <div class="row"><div class="k">The install</div><div class="v"><code>install.ps1</code> detects its own location, reconciles Ollama, builds the server, installs global commands/agents + <code>settings.json</code> (paths auto-fixed), puts <code>dad</code> on PATH. <code>dad doctor</code> reports readiness and the active mode.</div></div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">07 &middot; What it's for</p>
+  <h2>Workflows &amp; honest limits</h2>
+  <p>The loop is design-doc-driven: <code>/scaffold &rarr; /design &rarr; /stories &rarr; /taskmap &rarr; /build</code>,
+  with <code>/assess</code> and <code>/document</code> for brownfield adoption, <code>/research</code> and
+  <code>/corpus</code> for grounded knowledge, and <code>/audit</code>, <code>/grade</code>, <code>/retro</code>
+  for review. Good fits: C#/.NET services and web apps, Python apps and data pipelines, research projects with
+  a document corpus and datasets rendered as a site.</p>
+  <div class="ledger">
+    <div class="col can">
+      <h3>&#9646; Does well</h3>
+      <ul>
+        <li>Turns a vague idea into a locked design doc, then stories, then a task map, then built &amp; tested units.</li>
+        <li>Reverse-engineers a brownfield codebase into a cited, prioritized assessment (<code>/assess</code>).</li>
+        <li>Precise, cited retrieval from a project corpus &mdash; specs, signatures, prior research &mdash; without context bloat.</li>
+        <li>Keeps a small local model honest: no phantom "done", no shrinking test surface, no thousand-call spiral.</li>
+        <li>Runs fully offline on your own GPU, or on cloud/hybrid with the identical gates.</li>
+      </ul>
+    </div>
+    <div class="col cant">
+      <h3>&#9646; Limited at</h3>
+      <ul>
+        <li>A full <code>/design &rarr; /build &rarr; close</code> has not yet completed on a <em>local</em> model without human repair &mdash; getting one clean end-to-end run is the current goal, in the open.</li>
+        <li>Pixel-level visual taste. There is no exit code for taste; the UI loop reviews behavior and screenshots, not beauty.</li>
+        <li>Hard reasoning at the local tier &mdash; the 14&#8211;32B model is the ceiling; cloud / hybrid exist to clear it.</li>
+        <li>Windows-only by design (PowerShell + <code>.cmd</code>); cross-platform is a deliberate post-1.0 question.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">08 &middot; Positioning</p>
+  <h2>Compared to BMAD</h2>
+  <p>The honest framing flatters both. <strong>BMAD is a <em>method</em>; DrDad is a <em>runtime with a
+  floor</em>.</strong> BMAD-METHOD is a set of agent personas (Analyst, PM, Architect, Scrum Master, Dev, QA)
+  plus templates and workflows; its signature bets are strong agentic <em>planning</em> and
+  <em>context-engineered</em> story files that embed everything a dev agent needs. It is model-agnostic,
+  cross-tool, mature, and community-backed &mdash; and its enforcement is prose the model chooses to follow.
+  DrDad addresses the case that assumes away: a model that won't.</p>
+  <div class="cmp-wrap">
+    <table class="cmp">
+      <thead><tr><th></th><th>BMAD</th><th class="h-dd">DrDad</th></tr></thead>
+      <tbody>
+        <tr><td>Core bet</td><td>Context engineering &mdash; front-load everything into the story</td><td>Deterministic gates &mdash; verify what the model claims</td></tr>
+        <tr><td>Enforcement</td><td>Instructions the model <em>chooses</em> to follow</td><td>Hooks / scripts the model <em>cannot skip</em></td></tr>
+        <tr><td>Model target</td><td>A capable (usually frontier) model</td><td>Weak-local-first; cloud / hybrid optional</td></tr>
+        <tr><td>Ships</td><td>Personas, templates, workflows (prompts)</td><td>A RAG server, gates, hooks, installer (code)</td></tr>
+        <tr><td>Runtime</td><td>Whatever host you run it in</td><td>Its own: Claude Code &rarr; your GPU, offline</td></tr>
+        <tr><td>Maturity</td><td>Mature, cross-platform, large community</td><td>Pre-1.0, Windows-only, one author</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:1.2rem">They independently converge on one insight &mdash; <strong>don't re-send the
+  kitchen sink</strong> &mdash; and solve it differently. BMAD's context-engineered stories embed full context
+  <em>up front</em>; DrDad's precise-context RAG <em>retrieves</em> the one passage each step needs, with
+  computed state and exact signatures so retrieval is grounded. Same disease, two treatments: front-load
+  versus retrieve-on-demand. On a frontier model, greenfield, cross-platform, BMAD's planning discipline may
+  carry you further faster. When the model is weak, or you need offline / private / on-your-own-GPU, or you
+  want claims <em>verified</em> rather than trusted &mdash; that is DrDad's reason to exist, and the evidence in
+  section 05 shows the floor earns its keep even on a frontier model.</p>
+  <div class="synth">
+    <p>The synthesis is <strong>"BMAD <em>on</em> DrDad"</strong>, not "versus": DrDad is the enforcement floor
+    and local runtime that a method like BMAD assumes but never ships. Run the method for its planning rigor,
+    on a substrate that won't let a model quietly cheat. The honest claim isn't "DrDad beats BMAD" &mdash; it's
+    that DrDad addresses the failure mode BMAD leaves to the model's good behavior.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">09 &middot; Where this came from, where it goes</p>
+  <h2>Roadmap</h2>
+  <p>Two intertwined stories: DrDad the harness, and cms3 the proving-ground app whose real failures earned
+  most of the gates. Forward stages are directional, not commitments.</p>
+
+  <div class="track">
+    <h3>&#9646; DrDad &mdash; the harness</h3>
+    <p class="desc">Hardened failure by failure into a field log; each gate is a scar with a test.</p>
+    <div class="stages">
+      <div class="stage was">
+        <div class="when">Where it started</div>
+        <ul>
+          <li>An offline kit: Claude Code redirected at Ollama, one C# RAG server, a design/proto/spec/build loop.</li>
+          <li>The core gates from real disasters: close-unit, the ratchet, the loop guard, dad-guard.</li>
+        </ul>
+      </div>
+      <div class="stage now">
+        <div class="when">Where it is (v0.48)</div>
+        <ul>
+          <li>Integrity-aware state, exact API surfaces, domain grounding, research provenance, corpora, brownfield <code>/assess</code>.</li>
+          <li>Cloud mode validated the design end-to-end; hybrid adds the GPU as a co-processor. 143 green gate tests.</li>
+        </ul>
+      </div>
+      <div class="stage next">
+        <div class="when">Where it can go</div>
+        <ul>
+          <li>One clean local end-to-end run with no human repair &mdash; the headline goal.</li>
+          <li>A library of authoritative UI "skins" as corpora; wider stack templates; cross-platform after 1.0.</li>
+          <li>Autonomous routines &mdash; the loop that grounds and re-grounds itself unattended.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="track">
+    <h3>&#9646; cms3 &mdash; the proving ground</h3>
+    <p class="desc">An ASP.NET Core CMS built by the loop; its stumbles are the kit's curriculum.</p>
+    <div class="stages">
+      <div class="stage was">
+        <div class="when">Where it started</div>
+        <ul>
+          <li>A local <code>/design &rarr; /build</code> run: real controllers, EF Core migrations, integration tests &mdash; 15 of 44 tasks before a Windows policy blocked test execution.</li>
+        </ul>
+      </div>
+      <div class="stage now">
+        <div class="when">Where it is</div>
+        <ul>
+          <li>Latest cloud run: <strong>68/70 tasks, 11/13 stories, no spiral</strong> &mdash; and a full <code>/audit</code> re-graded four "done" stories (S1, S4, S5 down; S2 refined) by live-verifying, filing two real follow-ups (S12/S13).</li>
+          <li>Proof the kit was sound and that the gates earn their keep even on a frontier model &mdash; the local model was the ceiling, not the method.</li>
+        </ul>
+      </div>
+      <div class="stage next">
+        <div class="when">Where it can go</div>
+        <ul>
+          <li>A clean completion to a running, migrated, secured app.</li>
+          <li>Real UI through the <code>razor-htmx-ui</code> skin corpus, reviewed logged-out and in.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<p class="footnote">
+  DrDad &middot; Design Research Document, Agentic Development &mdash; designed and directed by Kristen Overmyer;
+  implemented with Claude Code. MIT-licensed; it redistributes no model weights and sends no code anywhere once
+  installed. That a project about honest engineering under AI assistance was itself AI-assisted is the point,
+  not a caveat.<br>
+  Figures current at v0.48.1. This page is a reference overview, not the contract &mdash; the contract is
+  <span class="m">docs/DESIGN.md</span> (Status: LOCKED).
+</p>
+</div>
+
+</body>
+</html>
