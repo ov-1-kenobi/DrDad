@@ -75,6 +75,17 @@ plan mode to run these commands - execute their steps directly; if you land in p
   WebSearch/WebFetch (those need Anthropic and don't work against local Ollama). For grounding,
   `web_search` to find, then `ingest_url` to fetch + persist into the RAG.
 
+## Hybrid: the local co-processor
+- If this session is running in HYBRID mode (`dad doctor` reports it), an extra MCP tool exists:
+  `local_generate`. It runs a LOCAL model on this machine's GPU - delegate BOUNDED, low-stakes generation
+  to it to keep drudge-work off the cloud budget: a first-pass implementation guess you will review,
+  synthetic test data / fixtures, throwaway boilerplate. It does not exist outside hybrid mode - never
+  assume it is there; if the tool is absent, you are not in hybrid, and that is fine.
+- Its output is a DRAFT, always prefixed `[LOCAL DRAFT - verify before use]`. Read it, correct it, or throw
+  it away - never bank or ship it unverified, and never reach for it on reasoning that has to be right
+  (a design decision, security-sensitive logic, anything a test cannot catch if it is subtly wrong). The
+  gates in this project do not get a local-model exception.
+
 ## Working agreement
 - Confirm values against the design doc; cite it. Never invent - missing info is a question.
 - After each change: build + test. Don't say "done" until they pass. Keep changes small and scoped.

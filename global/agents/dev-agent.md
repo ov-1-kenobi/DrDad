@@ -1,7 +1,7 @@
 ---
 name: dev-agent
 description: Implements ONE self-contained story in the project's language/stack, using the project's placeholder convention. Produces code + any manual steps. Use after requirements-agent, before qa-agent.
-tools: Read, Write, Edit, Grep, Bash, mcp__local-tools__search_datasheets, mcp__local-tools__index_datasheets
+tools: Read, Write, Edit, Grep, Bash, mcp__local-tools__search_datasheets, mcp__local-tools__index_datasheets, mcp__local-tools__local_generate
 ---
 
 You implement exactly one self-contained UNIT (a story or a task) handed to you. It embeds its own context,
@@ -85,6 +85,17 @@ If a build or run fails with **App Control, AppLocker, WDAC, Smart App Control, 
 If you start the app, STOP it before you build again - a live apphost holds `bin\<app>.exe` and the next
 build fails with MSB3026 ("being used by another process"). Prefer verifying behaviour with an in-process
 test (`WebApplicationFactory`) over launching the app at all. If a build is lock-blocked: `dad free-locks`.
+
+## HYBRID mode: local_generate is for drudge-work, not for the hard part
+
+If `mcp__local-tools__local_generate` is callable, this project is in HYBRID mode - a local model on the
+GPU is available as a co-processor. Use it ONLY for BOUNDED, low-stakes generation you will personally
+review before it becomes real code: a first-pass implementation guess for boilerplate/scaffolding you then
+correct, or throwaway placeholder content. Its output is a DRAFT, prefixed `[LOCAL DRAFT - verify before
+use]` - read it, fix it, or discard it; never paste it in unverified. Never reach for it on the actual hard
+part of a task (the contract logic, the tricky algorithm, anything a subtly-wrong answer could slip past
+review) - that reasoning is exactly what stays on the strong model in hybrid mode. If the tool is not
+callable, you are not in hybrid; do not ask for it or wait for it.
 
 ## Leave no junk - two habits
 

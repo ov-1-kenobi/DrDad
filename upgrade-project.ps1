@@ -4,8 +4,9 @@
 #   - docs\STATUS.md + docs\RECIPES.md created from templates if missing
 #   - git init + .gitignore + baseline commit if the project has no repo
 #   - CLAUDE.md: KIT-OWNED sections refreshed from the current template; YOUR sections preserved
-#     (kit-owned: Modes / flow, Design doc(s), Proven recipes, Web / grounding, Working agreement;
-#      preserved: Project name, Stack, Placeholder convention, Build / test, Human-in-loop, anything custom)
+#     (kit-owned: Modes / flow, Design doc(s), Proven recipes, Web / grounding, Hybrid (local co-processor),
+#      Working agreement; preserved: Project name, Stack, Placeholder convention, Build / test, Human-in-loop,
+#      anything custom)
 #
 # Usage:  upgrade-project.ps1 [projectDir]     (default: current folder; safe to re-run)
 
@@ -165,7 +166,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 # --- 3) CLAUDE.md section refresh (kit-owned sections from the template; yours preserved) ---
 # Sections are blocks starting at a '## ' header. Kit-owned blocks are matched by header PREFIX so older
 # header wordings still match (e.g. '## Modes (forge / proto / spec)' -> '## Modes').
-$kitPrefixes = @("## Modes", "## Design doc", "## Proven recipes", "## Secrets", "## Web / grounding", "## Working agreement")
+$kitPrefixes = @("## Modes", "## Design doc", "## Proven recipes", "## Secrets", "## Web / grounding", "## Hybrid", "## Working agreement")
 
 function Split-Sections([string[]]$lines) {
   $sections = @(); $current = New-Object System.Collections.Generic.List[string]; $header = ""

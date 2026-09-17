@@ -2,6 +2,37 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.49.0 - 2026-09-17
+
+### Added - local_generate actually gets used now: wired into CLAUDE.md, dev-agent, and qa-agent
+0.48.0 shipped the `local_generate` tool, correctly gated to hybrid mode - but nothing anywhere told a
+model it existed. Checked two real cms3 runs after the tool had been live for two days: zero mentions of
+`local_generate` or hybrid in either transcript. This is the exact failure mode that once made
+`search_datasheets` get called ZERO times across nine graded runs before the kit grew a shell door for it -
+a correctly-built capability nobody reaches for is not a working feature.
+
+Closed at the two levels that actually matter:
+- **`CLAUDE.md` (every session's ambient orientation)** gets a new `## Hybrid: the local co-processor`
+  section - self-conditioning wording ("if this session is running in HYBRID mode"), so it is harmless
+  noise outside hybrid and real orientation inside it. `upgrade-project.ps1` now treats `## Hybrid` as a
+  kit-owned section, so existing projects (cms3 included) pick this up on their next upgrade, not just new
+  scaffolds.
+- **`dev-agent` and `qa-agent` are ACTUALLY wired, not just informed.** A subagent is restricted to only the
+  tools in its own frontmatter (R32 - "a subagent is an unguarded, unobservable region") - CLAUDE.md telling
+  a session the tool exists is not enough for a SUBAGENT to call it. Both agents now have
+  `mcp__local-tools__local_generate` granted, plus an explicit instruction section: dev-agent may delegate a
+  first-pass implementation guess or boilerplate it will review; qa-agent may delegate synthetic test data
+  it will inspect before it lands in an assertion. Both instructions repeat the honesty fence in the agent's
+  own words (never bank unverified, never delegate the hard/judgment part) rather than relying on the tool's
+  own description alone. `grade-agent`, `security-agent`, and `architect-agent` were deliberately left
+  UNwired - their job is judgment and citation, and delegating that to a weak local model is the opposite of
+  this kit's thesis, not an oversight.
+
+Tests: the CLAUDE.md/upgrade-project test now asserts the Hybrid section gets APPENDED to a project that
+never had it (not just grepped for text - the existing fixture already proves real section-splice behavior,
+extended rather than duplicated); a new test asserts both agents carry the tool grant AND the honesty-fence
+wording, and asserts the three judgment-role agents were NOT granted the tool.
+
 ## 0.48.3 - 2026-09-17
 
 ### Fixed - two stray marketing HTML files shipped inside the kit's own docs\ (a maintainer mistake, not a user bug)

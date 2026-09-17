@@ -3520,6 +3520,9 @@ Test-Case "upgrade-project refreshes kit sections, preserves user sections, idem
     Assert ($cm -match 'docs/STATUS.md') "Design docs section not refreshed"
     Assert ($cm -match '## Secrets') "Secrets section not added"
     Assert ($cm -match 'Task tool') "Modes section not refreshed (no Task-tool rule)"
+    Assert ($cm -match '## Hybrid') "Hybrid section not added to a project that never had it"
+    Assert ($cm -match 'local_generate') "Hybrid section does not mention local_generate"
+    Assert ($cm -match '(?i)\[LOCAL DRAFT') "Hybrid section drops the honesty-fence wording (the draft label)"
     Assert ($cm -notmatch '__DESIGN_DOC__') "token not resolved"
     Assert ($cm -notmatch 'old wording that must be replaced') "stale Modes body survived"
     foreach ($f in @("docs\STATUS.md", "docs\RECIPES.md")) { Assert (Test-Path (Join-Path $p $f)) "missing $f" }
@@ -3527,6 +3530,32 @@ Test-Case "upgrade-project refreshes kit sections, preserves user sections, idem
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") $p | Out-Null
     Assert ((Get-Content "$p\CLAUDE.md" -Raw) -eq $before) "not idempotent"
   } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dev-agent and qa-agent are ACTUALLY wired for hybrid, not just told about it in CLAUDE.md" {
+  # A subagent is restricted to only the tools in its OWN frontmatter (R32 in DESIGN.md - "a subagent is an
+  # unguarded, unobservable region"). CLAUDE.md telling every session local_generate exists is not enough for
+  # a SUBAGENT to actually call it - the grant has to be on the agent file itself, the same lesson that made
+  # corpus-agent need an explicit ingest_url/web_search grant, not just prose. Check both halves: the tool
+  # grant (frontmatter) and an explicit instruction (subagents do not discover capabilities from ambient
+  # context - search_datasheets was called ZERO times across nine graded runs until agents were told to use it).
+  foreach ($name in @("dev-agent", "qa-agent")) {
+    $path = Join-Path $kit "global\agents\$name.md"
+    Assert (Test-Path $path) "$name.md is missing"
+    $txt = Get-Content $path -Raw
+    $toolsLine = ([regex]::Match($txt, '(?m)^tools:\s*(.*)$')).Groups[1].Value
+    Assert ($toolsLine -match 'mcp__local-tools__local_generate') "$name.md's tools: frontmatter does not grant local_generate - it cannot call the tool even if it knows about it"
+    Assert ($txt -match '(?i)HYBRID') "$name.md has no explicit HYBRID-mode instruction - a subagent will not discover local_generate on its own"
+    Assert ($txt -match '(?i)\[LOCAL DRAFT') "$name.md does not carry the honesty-fence wording (draft label) - risks banking unverified local output"
+  }
+  # And the two agents this session deliberately did NOT wire (their job is judgment/citation, not drudge
+  # generation) should stay that way - delegating grading/analysis to a weak local model is the opposite of
+  # this kit's thesis. A future accidental wildcard grant would silently violate that; catch it here.
+  foreach ($name in @("grade-agent", "security-agent", "architect-agent")) {
+    $txt = Get-Content (Join-Path $kit "global\agents\$name.md") -Raw
+    $toolsLine = ([regex]::Match($txt, '(?m)^tools:\s*(.*)$')).Groups[1].Value
+    Assert ($toolsLine -notmatch 'local_generate') "$name.md was granted local_generate - this agent's job is judgment/citation, not drudge-work; delegating it to a local model is out of scope"
+  }
 }
 
 Test-Case "close-unit refuses a STORY close when tests run zero tests" {
