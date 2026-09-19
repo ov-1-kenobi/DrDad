@@ -34,7 +34,7 @@
 - **Dev notes:** ASCII-only (PS 5.1). Add `uninstall.ps1`/`.cmd` to the README files table + this DESIGN.md;
   add "uninstall.ps1 parses + ASCII" to the validation gate. Do a dry run first (print what would be removed).
 
-### Story S2: Steer web tools to local-tools (CLAUDE.md convention)   (R7)   <!-- Status: TODO -->
+### Story S2: Steer web tools to local-tools (CLAUDE.md convention)   (R7)   <!-- Status: DONE closed:close-unit -->
 <!-- Implemented: "## Web / grounding" line added to all 5 type templates (dotnet/python/embedded/generic/unity) + avalonia. -->
 - **Goal:** Make every project prefer the working local web tools over the inert built-ins.
 - **Context:** Claude Code's built-in WebSearch is Anthropic-server-side - pointed at Ollama it has no backend
