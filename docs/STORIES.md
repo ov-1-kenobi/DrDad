@@ -10,7 +10,17 @@
      closest DESIGN.md Requirement (R#) it implements, in place of an Epic tag. -->
 
 ### Story S1: Safe uninstall (uninstall.ps1 + uninstall.cmd)   (R8)   <!-- Status: DONE closed:close-unit -->
-<!-- Implemented: uninstall.ps1 + uninstall.cmd. AC3 verified (parses + ASCII); AC1/AC2/AC4 are behavioral - confirm on first run. -->
+<!-- Implemented: uninstall.ps1 + uninstall.cmd. Behaviorally verified 2026-09-19: AC1 run against a
+     sandboxed fake ~/.claude via -ClaudeDir (kit commands/agents removed by exact name, non-kit files
+     survive, settings.json restored byte-for-byte from settings.json.bak); real machine PATH/DAD_HOME/
+     ~/.bashrc confirmed untouched by the run. AC2 verified by code review only (per human decision, to
+     avoid actually `ollama rm`-ing real installed models / unsetting real env vars): models.json-driven
+     variant list, checked live against `ollama list` before removal, matches the 3 named OLLAMA_* env
+     vars. AC3 verified (parses + ASCII). AC4 verified both statically (no Remove-Item targets the kit
+     root/$PSScriptRoot/npm/VS Code) and behaviorally (the sandbox run never touched this kit folder).
+     Bug found + fixed during this verification: uninstall.ps1's PATH/DAD_HOME/~/.bashrc cleanup was NOT
+     scoped by -ClaudeDir, so it had real unscoped side effects on whatever machine ran it (including the
+     existing test-kit.ps1 sandbox test at the time) - now skipped when -ClaudeDir is set. -->
 - **Goal:** A teardown that reverses what install.ps1 did, with an optional `-Full` for models/env.
 - **Context (what install.ps1 does - reverse exactly this):**
   - Copies `global\commands\*.md` -> `%USERPROFILE%\.claude\commands\` (scaffold, design, taskmap, proto, spec, build, assets, tidy, stories, diagram, audit, grade).
@@ -27,15 +37,21 @@
 - **Data / interfaces:** `param([switch]$Full)`. Reuse install.ps1's `Have` helper pattern; keep the command/agent name lists in sync with install.ps1.
 - **Dependencies:** mirrors install.ps1's file lists + tuning vars.
 - **Acceptance (testable):**
-  - [ ] AC1: after `uninstall.ps1`, the 6 command + 4 agent files are gone from `~/.claude` and `settings.json` matches the restored `.bak`.
-  - [ ] AC2: `-Full` also removes the 4 model variants (`ollama list` no longer shows them) and the 3 `OLLAMA_*` env vars.
-  - [ ] AC3: `uninstall.ps1` parses (PS AST) and `uninstall.ps1`/`.cmd` are ASCII-only.
-  - [ ] AC4: it does NOT delete the kit folder, npm package, or extension.
+  - [x] AC1: after `uninstall.ps1`, the 6 command + 4 agent files are gone from `~/.claude` and `settings.json` matches the restored `.bak`. (Verified 2026-09-19 against a sandbox via `-ClaudeDir`; command/agent lists have since grown past the original "6+4" but the mechanism is confirmed correct.)
+  - [x] AC2: `-Full` also removes the 4 model variants (`ollama list` no longer shows them) and the 3 `OLLAMA_*` env vars. (Code-review verified 2026-09-19, not live-run - see implementation note above.)
+  - [x] AC3: `uninstall.ps1` parses (PS AST) and `uninstall.ps1`/`.cmd` are ASCII-only.
+  - [x] AC4: it does NOT delete the kit folder, npm package, or extension. (Verified statically + behaviorally 2026-09-19.)
 - **Dev notes:** ASCII-only (PS 5.1). Add `uninstall.ps1`/`.cmd` to the README files table + this DESIGN.md;
   add "uninstall.ps1 parses + ASCII" to the validation gate. Do a dry run first (print what would be removed).
 
 ### Story S2: Steer web tools to local-tools (CLAUDE.md convention)   (R7)   <!-- Status: DONE closed:close-unit -->
-<!-- Implemented: "## Web / grounding" line added to all 5 type templates (dotnet/python/embedded/generic/unity) + avalonia. -->
+<!-- SUPERSEDED-BY-R7 (2026-09-19): implemented at close as "## Web / grounding" duplicated into all 5 type
+     templates (dotnet/python/embedded/generic/unity) + avalonia. R7's later 0.13.0 stack-agnostic scaffold
+     + profile-fragment refactor (docs/DESIGN.md R7) replaced that 5-way duplication: the section now lives
+     ONCE, kit-owned, in templates\generic\CLAUDE.md, inherited by every scaffolded project regardless of
+     stack (non-generic dirs are PROFILE.md fragments that may not carry it - enforced by
+     test-kit.ps1:543-566). The story's GOAL is still met, more robustly than the original mechanism; AC1 /
+     Data-interfaces below are updated to describe the current architecture rather than the superseded one. -->
 - **Goal:** Make every project prefer the working local web tools over the inert built-ins.
 - **Context:** Claude Code's built-in WebSearch is Anthropic-server-side - pointed at Ollama it has no backend
   and won't run; WebFetch is likewise Anthropic-oriented. The working tools are local-tools' `web_search`
@@ -45,17 +61,29 @@
   > Web search / URL lookup: use the `local-tools` `web_search` / `ingest_url` tools, NOT the built-in
   > WebSearch/WebFetch (those need Anthropic and don't work against local Ollama). For grounding, `web_search`
   > to find, then `ingest_url` to fetch + persist into the RAG.
-- **Data / interfaces:** Edit the 5 template CLAUDE.md files: `templates\dotnet`, `python`, `embedded`,
-  `generic`, `unity`. Put the line under each file's "Working agreement" section.
+- **Data / interfaces (superseded 2026-09-19, see note above):** ~~Edit the 5 template CLAUDE.md files:
+  `templates\dotnet`, `python`, `embedded`, `generic`, `unity`. Put the line under each file's "Working
+  agreement" section.~~ Current: the line lives ONCE in `templates\generic\CLAUDE.md`'s kit-owned "## Web /
+  grounding" section; non-generic `templates\<stack>\PROFILE.md` fragments must NOT carry it
+  (`test-kit.ps1:543-566` gates this).
 - **Dependencies:** none.
 - **Acceptance (testable):**
-  - [ ] AC1: all 5 template CLAUDE.md files contain the web-tools convention line.
-  - [ ] AC2: the line names `web_search` + `ingest_url` and says NOT to use built-in WebSearch/WebFetch.
-  - [ ] AC3: the validation gate still passes (markdown only; no broken sections).
+  - [x] AC1 (superseded wording, verified against CURRENT architecture 2026-09-19): ~~all 5 template
+    CLAUDE.md files contain the web-tools convention line~~ -> `templates\generic\CLAUDE.md` contains it
+    and every scaffolded project inherits it regardless of stack (confirmed: `templates\generic\CLAUDE.md`
+    read directly; `test-kit.ps1` asserts no `PROFILE.md` duplicates it).
+  - [x] AC2: the line names `web_search` + `ingest_url` and says NOT to use built-in WebSearch/WebFetch. (Verified verbatim in `templates\generic\CLAUDE.md`.)
+  - [x] AC3: the validation gate still passes (markdown only; no broken sections).
 - **Dev notes:** Markdown only (no scripts). Optionally add the same note to the README's web section.
 
 ### Story S3: Avalonia project template (templates\avalonia)   (R7)   <!-- Status: DONE closed:close-unit -->
-<!-- Implemented: templates\avalonia\CLAUDE.md + Types row in templates\README.md + /scaffold example. AC4 (manual /scaffold avalonia) confirm on the 5080. -->
+<!-- SUPERSEDED-BY-R7 (2026-09-19): implemented at close as templates\avalonia\CLAUDE.md (a full file) +
+     Types row in templates\README.md + a stack-named /scaffold avalonia. R7's later 0.13.0 stack-agnostic
+     scaffold + profile-fragment refactor (docs/DESIGN.md R7) replaced this: templates\avalonia\CLAUDE.md
+     no longer exists, replaced by templates\avalonia\PROFILE.md (a fragment with no kit-owned sections -
+     enforced by test-kit.ps1:543-566), and the stack is now chosen inside /design step 2 (which lists
+     avalonia), not via a per-stack /scaffold argument. The story's GOAL is still met via this two-step
+     flow; AC1/AC4 below are updated to describe the current architecture rather than the superseded one. -->
 - **Goal:** Add an `avalonia` project type so `/scaffold avalonia` sets up a cross-platform .NET XAML desktop app.
 - **Context:**
   - Templates live in `templates\<type>\`, each with a `CLAUDE.md`; non-Unity types also use
@@ -80,12 +108,23 @@
   - **Human-in-loop (visual):** implement + write headless/logic tests, then hand me a "run `dotnet run` and
     check" + Visual Inspection checklist - I'm the eyes for look/feel.
   - Same Modes block + Working agreement as the other templates.
-- **Data / interfaces:** new file `templates\avalonia\CLAUDE.md`; add an `avalonia` row to the Types table in `templates\README.md`.
+- **Data / interfaces (superseded 2026-09-19, see note above):** ~~new file `templates\avalonia\CLAUDE.md`~~
+  -> `templates\avalonia\PROFILE.md` (a fragment: Stack/Placeholder/Build-test-run/Human-in-loop only, no
+  kit-owned sections); add an `avalonia` row to the Stack profiles table in `templates\README.md` (still
+  current, table renamed from "Types" in the 0.13.0 refactor).
 - **Dependencies:** none (uses existing `_common`).
 - **Acceptance (testable):**
-  - [ ] AC1: `templates\avalonia\CLAUDE.md` exists with the Modes block + dotnet build/test/run + MVVM placeholder + visual human-in-loop.
-  - [ ] AC2: `templates\README.md` Types table lists `avalonia`.
-  - [ ] AC3: files are ASCII; the validation gate still passes.
-  - [ ] AC4: (manual) `/scaffold avalonia` appears in the menu and scaffolds a project.
+  - [x] AC1 (superseded wording, verified against CURRENT architecture 2026-09-19): ~~`templates\avalonia\
+    CLAUDE.md` exists with the Modes block + dotnet build/test/run + MVVM placeholder + visual
+    human-in-loop~~ -> `templates\avalonia\PROFILE.md` exists with dotnet build/test/run + MVVM placeholder
+    + visual human-in-loop (Modes is kit-owned, inherited from `templates\generic\CLAUDE.md`, correctly
+    NOT duplicated here per `test-kit.ps1:543-566`).
+  - [x] AC2: `templates\README.md` Types table lists `avalonia`. (Table is now "Stack profiles"; row confirmed present.)
+  - [x] AC3: files are ASCII; the validation gate still passes.
+  - [ ] AC4 (superseded wording, STILL UNVERIFIED end-to-end): ~~(manual) `/scaffold avalonia` appears in
+    the menu and scaffolds a project~~ -> (manual) `/design` step 2 offers `avalonia` as a stack choice and
+    correctly copies CLAUDE.md's Stack/Build-test-run/Placeholder/Human-in-loop from
+    `templates\avalonia\PROFILE.md` with no leftover kit-owned duplication. This requires a live human run
+    of `/design`; left unticked per grade card S3 suggestion 3 (not something to fabricate a tick for).
 - **Dev notes:** ASCII only. Mirror the structure/wording of `templates\dotnet\CLAUDE.md`. Re-confirm current
   Avalonia template/test package names via `web_search` / docs.avaloniaui.net before finalizing.

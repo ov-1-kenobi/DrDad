@@ -1106,11 +1106,20 @@ Test-Case "settings.json wires dad-guard as a Stop hook, at a rewritable path" {
     $fake = Join-Path $sb2 ".claude"
     New-Item -ItemType Directory -Force $fake | Out-Null
     Copy-Item (Join-Path $kit "settings.json") (Join-Path $fake "settings.json") -Force
+    # -ClaudeDir means SANDBOXED: the cross-shell wiring (real User PATH / DAD_HOME / ~/.bashrc) must be
+    # SKIPPED, not just scoped-by-name - it used to run unconditionally regardless of -ClaudeDir, so every
+    # run of THIS test mutated whatever real machine executed it (dev box or CI). Snapshot + compare.
+    $pathBefore = [Environment]::GetEnvironmentVariable("Path", "User")
+    $homeBefore = [Environment]::GetEnvironmentVariable("DAD_HOME", "User")
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "uninstall.ps1") -ClaudeDir $fake 2>&1 | Out-Null
     $after = Get-Content (Join-Path $fake "settings.json") -Raw
     Assert ($after -notmatch 'dad-guard') "uninstall left the Stop hook behind - it would fail on every turn once the folder is gone"
     Assert ($after -notmatch 'dad-loopguard') "uninstall left the PreToolUse hook behind - it would fail on every TOOL CALL"
     Assert (($after | ConvertFrom-Json).env.ANTHROPIC_BASE_URL) "uninstall damaged the rest of settings.json"
+    Assert ($pathBefore -eq [Environment]::GetEnvironmentVariable("Path", "User")) "a -ClaudeDir (sandboxed) run mutated the REAL machine's User PATH"
+    Assert ($homeBefore -eq [Environment]::GetEnvironmentVariable("DAD_HOME", "User")) "a -ClaudeDir (sandboxed) run mutated the REAL machine's DAD_HOME"
+    $u = Get-Content (Join-Path $kit "uninstall.ps1") -Raw
+    Assert ($u -match '(?s)if\s*\(\s*\$ClaudeDir\s*\)\s*\{.*?Skipping cross-shell wiring') "uninstall.ps1 does not gate the cross-shell wiring behind -ClaudeDir"
   } finally { Remove-Sandbox $sb2 }
 }
 

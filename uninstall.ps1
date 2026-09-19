@@ -95,6 +95,14 @@ if ($Full) {
 
 # Reverse install's cross-shell wiring: the kit dir on PATH, DAD_HOME, and the ~/.bashrc block.
 # $PSScriptRoot is the kit dir being uninstalled.
+# SKIPPED when -ClaudeDir is set: that means we're being run against a SANDBOX (a test), and this section
+# touches the REAL machine's User PATH / DAD_HOME / ~/.bashrc regardless of -ClaudeDir - unlike the
+# commands/agents/settings.json section above, it has no per-target scope to sandbox. A test that wants
+# this behavior covered needs its own dedicated mechanism; silently mutating whichever real machine happens
+# to run the suite (dev box or CI) is not that.
+if ($ClaudeDir) {
+  Write-Host "== Skipping cross-shell wiring (PATH, DAD_HOME, ~/.bashrc): -ClaudeDir means this is a sandboxed run ==" -ForegroundColor DarkGray
+} else {
 Write-Host "== Removing cross-shell wiring (PATH, DAD_HOME, ~/.bashrc block) ==" -ForegroundColor Cyan
 $root = $PSScriptRoot
 try {
@@ -122,6 +130,7 @@ try {
     }
   }
 } catch { }
+}
 
 Write-Host "`n== DONE ==" -ForegroundColor Green
 Write-Host "Manual (not removed): the kit folder, npm '@anthropic-ai/claude-code', the VS Code extension." -ForegroundColor Green
