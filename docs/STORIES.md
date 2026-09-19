@@ -9,7 +9,7 @@
      content preserved verbatim. DESIGN.md has no separate "Epics" list, so each story is tagged with the
      closest DESIGN.md Requirement (R#) it implements, in place of an Epic tag. -->
 
-### Story S1: Safe uninstall (uninstall.ps1 + uninstall.cmd)   (R8)   <!-- Status: DONE -->
+### Story S1: Safe uninstall (uninstall.ps1 + uninstall.cmd)   (R8)   <!-- Status: DONE closed:close-unit -->
 <!-- Implemented: uninstall.ps1 + uninstall.cmd. AC3 verified (parses + ASCII); AC1/AC2/AC4 are behavioral - confirm on first run. -->
 - **Goal:** A teardown that reverses what install.ps1 did, with an optional `-Full` for models/env.
 - **Context (what install.ps1 does - reverse exactly this):**
@@ -34,7 +34,7 @@
 - **Dev notes:** ASCII-only (PS 5.1). Add `uninstall.ps1`/`.cmd` to the README files table + this DESIGN.md;
   add "uninstall.ps1 parses + ASCII" to the validation gate. Do a dry run first (print what would be removed).
 
-### Story S2: Steer web tools to local-tools (CLAUDE.md convention)   (R7)   <!-- Status: DONE -->
+### Story S2: Steer web tools to local-tools (CLAUDE.md convention)   (R7)   <!-- Status: TODO -->
 <!-- Implemented: "## Web / grounding" line added to all 5 type templates (dotnet/python/embedded/generic/unity) + avalonia. -->
 - **Goal:** Make every project prefer the working local web tools over the inert built-ins.
 - **Context:** Claude Code's built-in WebSearch is Anthropic-server-side - pointed at Ollama it has no backend
@@ -54,7 +54,7 @@
   - [ ] AC3: the validation gate still passes (markdown only; no broken sections).
 - **Dev notes:** Markdown only (no scripts). Optionally add the same note to the README's web section.
 
-### Story S3: Avalonia project template (templates\avalonia)   (R7)   <!-- Status: DONE -->
+### Story S3: Avalonia project template (templates\avalonia)   (R7)   <!-- Status: TODO -->
 <!-- Implemented: templates\avalonia\CLAUDE.md + Types row in templates\README.md + /scaffold example. AC4 (manual /scaffold avalonia) confirm on the 5080. -->
 - **Goal:** Add an `avalonia` project type so `/scaffold avalonia` sets up a cross-platform .NET XAML desktop app.
 - **Context:**
