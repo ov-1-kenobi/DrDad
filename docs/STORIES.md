@@ -54,7 +54,7 @@
   - [ ] AC3: the validation gate still passes (markdown only; no broken sections).
 - **Dev notes:** Markdown only (no scripts). Optionally add the same note to the README's web section.
 
-### Story S3: Avalonia project template (templates\avalonia)   (R7)   <!-- Status: TODO -->
+### Story S3: Avalonia project template (templates\avalonia)   (R7)   <!-- Status: DONE closed:close-unit -->
 <!-- Implemented: templates\avalonia\CLAUDE.md + Types row in templates\README.md + /scaffold example. AC4 (manual /scaffold avalonia) confirm on the 5080. -->
 - **Goal:** Add an `avalonia` project type so `/scaffold avalonia` sets up a cross-platform .NET XAML desktop app.
 - **Context:**
