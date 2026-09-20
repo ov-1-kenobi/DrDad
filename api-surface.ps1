@@ -61,7 +61,11 @@ function Add-SourceFiles([string]$projDir, [string]$surfaceFile) {
       }
     }
   }
-  [System.IO.File]::WriteAllText($surfaceFile, (($lines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+  # LF, not CRLF: docs\*.md is `* text=auto eol=lf` per .gitattributes. Same bug class as
+  # close-unit.ps1's Save-Text (fixed in commit 9be3aec) - a hardcoded `r`n here silently re-CRLFs
+  # API-SURFACE.md on every regeneration, invisible to git status/diff until test-kit.ps1's raw-byte
+  # line-ending check catches it. Found via self-hosting assessment, 2026-09-20.
+  [System.IO.File]::WriteAllText($surfaceFile, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 }
 
 # --- annotate-only mode: (re)add source files to an existing bank without a rebuild ----------------

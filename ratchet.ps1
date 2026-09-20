@@ -142,7 +142,12 @@ function Find-ShrunkFiles([string]$sha) {
 if ($Update) {
   $dir = Split-Path $baselineFile -Parent
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-  [System.IO.File]::WriteAllText($baselineFile, (($current | ConvertTo-Json)), (New-Object System.Text.UTF8Encoding($false)))
+  # ConvertTo-Json emits `r`n on Windows PowerShell; normalize to LF for consistency with the kit's
+  # text convention, even though .claude/ is gitignored and this file is never committed. (Named
+  # $baselineJsonText, not $json - the script already has a -Json SWITCH param, and PowerShell
+  # variable names are case-insensitive, so a local $json silently corrupted it.)
+  $baselineJsonText = (($current | ConvertTo-Json) -replace "`r`n", "`n")
+  [System.IO.File]::WriteAllText($baselineFile, $baselineJsonText, (New-Object System.Text.UTF8Encoding($false)))
   if (-not $Json) { Write-Host "ratchet baseline updated: $(($current.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', ')" -ForegroundColor Green }
   exit 0
 }

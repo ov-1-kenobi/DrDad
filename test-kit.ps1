@@ -394,8 +394,11 @@ Test-Case "line endings are consistent per file (LF, CRLF for batch)" {
   #     end of previous lines, where the ratchet could not count them.
   # .gitattributes states the rule; this asserts the working tree obeys it.
   $mixed = @(); $wrongEol = @()
+  # .claude\ excluded: it is gitignored runtime state (e.g. .dad-ratchet.json), not source - this kit
+  # dogfoods itself as a project, so close-unit/ratchet write there against the kit's own repo root.
+  # Scanning it made this a "does a runtime artifact happen to be LF" check, not a source-hygiene one.
   $files = Get-ChildItem $kit -Recurse -File -Include *.ps1,*.cmd,*.md,*.json,*.cs |
-           Where-Object { $_.FullName -notmatch '\\(_tempReference|bin|obj|\.git|node_modules|examples)\\' }
+           Where-Object { $_.FullName -notmatch '\\(_tempReference|bin|obj|\.git|\.claude|node_modules|examples)\\' }
   foreach ($f in $files) {
     $t = [System.IO.File]::ReadAllText($f.FullName)
     $crlf = ([regex]::Matches($t, "`r`n")).Count
@@ -444,6 +447,11 @@ Test-Case "kit text is ASCII-only" {
 
 Test-Case "python helpers compile" {
   if (-not (Get-Command python -ErrorAction SilentlyContinue)) { return }   # optional on CI
+  # Windows' app-execution-alias stub (WindowsApps\python.exe, installed by default on Windows 11) makes
+  # Get-Command find "a python" even with no real interpreter present - it prints a Store-install prompt
+  # and exits nonzero, which then read as "voice.py failed to compile" instead of "no python here".
+  python --version *> $null
+  if ($LASTEXITCODE -ne 0) { return }   # the Store stub, not a real interpreter - treat as "optional on CI"
   foreach ($f in @("voice.py", "transcribe.py")) {
     $p = Join-Path $kit $f
     if (Test-Path $p) { python -m py_compile $p; Assert ($LASTEXITCODE -eq 0) "$f failed to compile" }
@@ -495,9 +503,17 @@ Test-Case "the signature bank names the .cs file each type lives in, and lookup 
 
     $api = Join-Path $kit "api-surface.ps1"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $api -AnnotateFiles -ProjectDir $p -Quiet | Out-Null
-    $bank = Get-Content (Join-Path $p "docs\API-SURFACE.md") -Raw
+    $bankFile = Join-Path $p "docs\API-SURFACE.md"
+    $bank = Get-Content $bankFile -Raw
     Assert ($bank -match 'class AccountController.*AccountController\.cs') "the class heading was not stamped with its source file"
     Assert ($bank -match 'interface IWidget.*Widget\.cs') "the interface heading was not stamped with its source file"
+
+    # LF, not CRLF: docs\*.md is `* text=auto eol=lf` (.gitattributes). Add-SourceFiles used to hardcode
+    # `r`n, silently re-CRLFing API-SURFACE.md on every close-unit-triggered regeneration - the same bug
+    # class close-unit.ps1's Save-Text had (commit 9be3aec). Assert on raw bytes, not git's view.
+    $rawBank = [System.IO.File]::ReadAllText($bankFile)
+    Assert ((([regex]::Matches($rawBank, "`r`n")).Count) -eq 0) "API-SURFACE.md has CRLF line endings after Add-SourceFiles wrote it - regressed"
+    Assert ((([regex]::Matches($rawBank, "(?<!`r)`n")).Count) -gt 0) "API-SURFACE.md has no line endings at all after Add-SourceFiles wrote it"
 
     # -Lookup surfaces the file too (this is what close-unit's Show-Signatures prints on a build error)
     $look = & powershell -NoProfile -ExecutionPolicy Bypass -File $api -Lookup AccountController -ProjectDir $p 2>&1 | Out-String
@@ -4041,6 +4057,47 @@ T1.1 -> T1.2 -> T2.1
 
     & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T9.9 -ProjectDir $p -NoReindex 2>$null | Out-Null
     Assert ($LASTEXITCODE -ne 0) "bogus id did not fail"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "the KIT's OWN CLAUDE.md satisfies close-unit's Get-ClaudeCommand 'Build' parser" {
+  # All other close-unit fixtures use a synthetic CLAUDE.md shaped exactly right - none ever checked the
+  # KIT's own root CLAUDE.md, which is why its "- C# server: ..." bullet (not "- Build:") went undetected:
+  # every unit closed against this repo (T4.1-T5.1, S4, S5) silently skipped build verification. Copy the
+  # REAL file into a sandbox and assert Get-ClaudeCommand actually finds it - not a re-implementation of
+  # the regex, the real close-unit.ps1 run against the kit's real CLAUDE.md text.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    Copy-Item (Join-Path $kit "CLAUDE.md") (Join-Path $p "CLAUDE.md")
+    @"
+# Task map
+
+## Build order
+T1.1
+
+## Tasks
+
+### [ ] T1.1 - first   (Story S1)
+- **Goal:** a
+"@ | Set-Content "$p\docs\TASKS.md" -Encoding UTF8 -NoNewline
+    @"
+# Stories
+
+### Story S1: First story   (Epic E1)   <!-- Status: TODO -->
+- **Goal:** one
+"@ | Set-Content "$p\docs\STORIES.md" -Encoding UTF8 -NoNewline
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "first" -ProjectDir $p -NoReindex 2>&1 | Out-String
+    Assert ($out -notmatch 'no build command found') "close-unit still cannot find a Build command in the kit's own real CLAUDE.md"
+    Assert ($out -match '(?i)build:\s*dotnet build') "close-unit did not extract the real 'dotnet build ...' command from the kit's own CLAUDE.md"
   } finally { Remove-Sandbox $sb }
 }
 

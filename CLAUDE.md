@@ -19,8 +19,10 @@ This folder IS the **DrDad** kit (local, offline Claude Code). Editing it here m
 - Use `dev` (Devstral) for edits; `quality` (Next) for a genuinely hard change.
 
 ## Build
-- C# server: `dotnet build local-tools\local-tools.csproj -c Release`
-  -> produces `local-tools\bin\Release\net8.0\local-tools.exe` (what `.mcp.json` launches).
+- Build: `dotnet build local-tools\local-tools.csproj -c Release`
+  -> produces `local-tools\bin\Release\net8.0\local-tools.exe` (what `.mcp.json` launches). This is the
+  only compiled piece of the kit; `close-unit.ps1`'s `Get-ClaudeCommand 'Build'` parses this exact bullet
+  label to verify a build before ticking a unit - without it, close-unit closes WITHOUT verification.
 
 ## Validation gate (run after ANY change; don't say "done" until it passes)
 **Run the suite - that IS the gate:**
