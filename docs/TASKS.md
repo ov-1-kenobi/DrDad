@@ -175,7 +175,7 @@ dependency on any prior story.)
   environment; it is now guarded (`uninstall.ps1` lines ~96-133: `if ($ClaudeDir) { ... skip ... } else {
   ... real mutation ... }`), documented in Story S1's dev note. R35 is the rule extracted from that fix.
 
-### [ ] T4.2 - Add test-kit.ps1 Test-Case: guard-conditional check on state-mutating scripts   (Story S4)
+### [x] T4.2 - Add test-kit.ps1 Test-Case: guard-conditional check on state-mutating scripts   (Story S4)
 - **Goal:** A static, mechanical `Test-Case` that would have caught the `uninstall.ps1` bug S4 is
   generalizing from, and keeps catching it (or its recurrence) in any future state-mutating script.
 - **Touches:** `test-kit.ps1`

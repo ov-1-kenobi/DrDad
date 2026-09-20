@@ -650,6 +650,92 @@ Test-Case "uninstall.ps1 lists every agent (and no ghosts)" {
   Assert (-not $ghosts)  "listed but no file: $($ghosts -join ', ')"
 }
 
+Test-Case "state-mutating scripts confine real-machine writes behind a param guard" {
+  # R35's motivating bug: uninstall.ps1's PATH/DAD_HOME/~/.bashrc cleanup ran UNCONDITIONALLY, so a
+  # "sandboxed" test run (uninstall.ps1 -ClaudeDir <sandbox>) silently mutated the REAL machine anyway.
+  # This is a static, mechanical gate for that class of bug: find real-machine mutation call SHAPES, then
+  # require each one sit inside an `if ($SomeScriptParam) { ... } [else { ... }]` guard - not pinned to
+  # today's exact wording or line numbers (that broke last time - R28/R29), so a differently-worded future
+  # script still gets caught. Extendable: add more install/uninstall/teardown scripts to the list below.
+  $stateMutatingScripts = @("uninstall.ps1")
+
+  $dangerPatterns = @(
+    '\[Environment\]::(Set|Remove)EnvironmentVariable\([^)]*,\s*"(User|Machine)"\s*\)',
+    '\bollama\s+rm\b',
+    'Remove-Item[^\r\n]*\$(?:env:)?(USERPROFILE|HOME)\b',
+    '(Set|Remove|New)-ItemProperty\b[^\r\n]*(HKCU:|HKLM:)'
+  )
+
+  # A script's own declared parameters are the only things that count as a "guard" - being inside an
+  # if-block on ANY condition is not the shape to detect (that would accept any stray if-wrapper).
+  function Get-ScriptParamNames([string]$src) {
+    $m = [regex]::Match($src, '(?ms)^\s*param\s*\(')
+    if (-not $m.Success) { return @() }
+    $start = $m.Index + $m.Length - 1
+    $depth = 0; $end = -1
+    for ($i = $start; $i -lt $src.Length; $i++) {
+      if ($src[$i] -eq '(') { $depth++ }
+      elseif ($src[$i] -eq ')') { $depth--; if ($depth -eq 0) { $end = $i; break } }
+    }
+    if ($end -lt 0) { return @() }
+    $block = $src.Substring($start, $end - $start)
+    return [regex]::Matches($block, '\$(\w+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+  }
+
+  # Character ranges covered by `if ($param) { ... }` and, if present, its immediately-following
+  # `else { ... }` - the exact shape uninstall.ps1 uses today (skip message in the if, real mutation in
+  # the else), found via brace-depth counting so it is not line-number-fragile.
+  function Get-GuardedRegions([string]$src, [string[]]$paramNames) {
+    $regions = New-Object System.Collections.Generic.List[object]
+    foreach ($pn in $paramNames) {
+      foreach ($m in [regex]::Matches($src, "if\s*\(\s*\`$$pn\s*\)\s*\{")) {
+        $braceStart = $m.Index + $m.Length - 1
+        $depth = 0; $end = -1
+        for ($i = $braceStart; $i -lt $src.Length; $i++) {
+          if ($src[$i] -eq '{') { $depth++ }
+          elseif ($src[$i] -eq '}') { $depth--; if ($depth -eq 0) { $end = $i; break } }
+        }
+        if ($end -lt 0) { continue }
+        $regionEnd = $end
+        $rest = $src.Substring($end + 1)
+        $elseMatch = [regex]::Match($rest, '^\s*else\s*\{')
+        if ($elseMatch.Success) {
+          $elseBraceStart = $end + 1 + $elseMatch.Index + $elseMatch.Length - 1
+          $depth2 = 0
+          for ($j = $elseBraceStart; $j -lt $src.Length; $j++) {
+            if ($src[$j] -eq '{') { $depth2++ }
+            elseif ($src[$j] -eq '}') { $depth2--; if ($depth2 -eq 0) { $regionEnd = $j; break } }
+          }
+        }
+        $regions.Add([PSCustomObject]@{ Start = $m.Index; End = $regionEnd })
+      }
+    }
+    return $regions
+  }
+
+  function Find-UnguardedMutations([string]$src, [string]$label) {
+    $regions = Get-GuardedRegions $src (Get-ScriptParamNames $src)
+    $unguarded = @()
+    foreach ($pat in $dangerPatterns) {
+      foreach ($mm in [regex]::Matches($src, $pat)) {
+        $idx = $mm.Index
+        if (-not ($regions | Where-Object { $idx -ge $_.Start -and $idx -le $_.End })) {
+          $unguarded += "$label : '$($mm.Value)' (offset $idx) is not inside an if(<param>){...}[else{...}] guard"
+        }
+      }
+    }
+    return $unguarded
+  }
+
+  $violations = @()
+  foreach ($s in $stateMutatingScripts) {
+    $p = Join-Path $kit $s
+    Assert (Test-Path $p) "$s not found at kit root"
+    $violations += Find-UnguardedMutations (Get-Content $p -Raw) $s
+  }
+  Assert (-not $violations) ("real-machine mutation not confined behind a param guard:`n" + ($violations -join "`n"))
+}
+
 Test-Case "each agent's frontmatter name matches its filename" {
   foreach ($f in Get-ChildItem (Join-Path $kit "global\agents") -Filter *.md) {
     $head = (Get-Content $f.FullName -TotalCount 6) -join "`n"
