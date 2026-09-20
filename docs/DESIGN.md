@@ -354,6 +354,25 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       dev-agent STOPs instead of inventing formats/semantics; qa-agent turns each contract's worked example
       into the first unit test; grade-agent treats contract divergence as [dev]-critical; librarian audits
       contract coverage. Run this one step on the strongest model (Next/cloud); build offline after.
+- [x] R35: **Self-verification is SANDBOXED against real machine state; irreversible actions wait for
+      explicit consent.** A dogfood `/audit` + `/design` run on this kit's own S1 (`uninstall.ps1`) chose to
+      verify an unticked acceptance box for real instead of trusting the hand-tick, and ran the script
+      against a fake `~/.claude` via `-ClaudeDir` - which surfaced a real bug: the PATH/DAD_HOME/`~/.bashrc`
+      cleanup was NOT scoped by `-ClaudeDir` at all, so every "sandboxed" run (including the existing
+      `test-kit.ps1` suite) was silently mutating the REAL machine's environment. Separately, the same run
+      declined to execute `-Full` live (`ollama rm` on real installed models, unsetting real env vars)
+      without asking first, substituting a code-review-only verification. Two rules generalize from this,
+      binding on `dev-agent`/`qa-agent`/`close-unit` and any command/agent that scripts
+      install/uninstall/teardown/state-mutating behavior:
+      (a) verifying an acceptance criterion that WOULD touch real installed state (registry/env vars/PATH,
+      `~/.claude`, installed models, files outside the project) runs against an isolated, parameterized
+      target - a temp dir, a `-ClaudeDir`-style override - never the live system, and that isolation is
+      checked to actually cover every code path the real run touches, not just the happy-path ones a test
+      exercises;
+      (b) an action that is IRREVERSIBLE or reaches outside the project (deleting installed models,
+      unsetting real env vars, removing real files, force-pushing, etc.) requires the human's EXPLICIT
+      confirmation before it runs live - code-review-only verification is an acceptable substitute for the
+      live run when the human declines, and the story/grade card records which one happened and why.
 
 ## Components
 ### local-tools (C# MCP server)
