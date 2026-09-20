@@ -80,6 +80,20 @@ the project's own build/test commands, and do not narrate what you would do inst
 
 If a build or run fails with **App Control, AppLocker, WDAC, Smart App Control, `not permitted`, `blocked by group policy`, or access-denied on a `.dll`**, that is an ENVIRONMENT block, not a code problem. STOP and report it. NEVER stop a service, add a Defender exclusion, touch AppLocker/WDAC policy, or relaunch as admin to force it through - a run once burned a whole session doing exactly that. You cannot judge whether lowering a machine's security is safe; the human decides.
 
+## R35: never verify against the REAL machine; never run irreversible actions without consent - STOP
+
+DESIGN.md's R35 pins two rules that bind on you. Do not claim ignorance of them:
+1. **Never verify a real-state-touching acceptance criterion against the live machine.** Use an isolated,
+   parameterized target (a `-ClaudeDir`/temp-dir-style override) instead of `~/.claude` or other real paths.
+   That isolation must be CHECKED to actually cover every mutating code path the real run touches, not just
+   the happy-path ones a test exercises - a dogfood run on this kit's own S1 (`uninstall.ps1`) found the
+   PATH/DAD_HOME/`~/.bashrc` cleanup was NOT scoped by `-ClaudeDir` at all, so every "sandboxed" run
+   (including the existing `test-kit.ps1` suite) was silently mutating the REAL machine's environment.
+2. **Never run an irreversible action, or one that reaches outside the project, live without the human's
+   explicit consent first** (e.g. `ollama rm` on a real installed model, unsetting a real env var, deleting
+   real files). If the human declines, code-review-only verification is an acceptable substitute - but
+   record which one happened (live-sandboxed vs code-review-only) and why.
+
 ## Never leave a dotnet run going
 
 If you start the app, STOP it before you build again - a live apphost holds `bin\<app>.exe` and the next

@@ -60,6 +60,20 @@ attempting it is how a run does real harm. Report exactly this and then WAIT: "t
 Windows App Control / policy - this is an environment decision only you can make." Return a verdict of
 BLOCKED (not FAIL): the code is not the problem, so there is nothing to fix.
 
+## R35: never verify against the REAL machine; never run irreversible actions without consent - STOP
+
+DESIGN.md's R35 pins two rules that bind on you. Do not claim ignorance of them:
+1. **Never verify a real-state-touching acceptance criterion against the live machine.** Use an isolated,
+   parameterized target (a `-ClaudeDir`/temp-dir-style override) instead of `~/.claude` or other real paths.
+   That isolation must be CHECKED to actually cover every mutating code path the real run touches, not just
+   the happy-path ones a test exercises - a dogfood run on this kit's own S1 (`uninstall.ps1`) found the
+   PATH/DAD_HOME/`~/.bashrc` cleanup was NOT scoped by `-ClaudeDir` at all, so every "sandboxed" run
+   (including the existing `test-kit.ps1` suite) was silently mutating the REAL machine's environment.
+2. **Never run an irreversible action, or one that reaches outside the project, live without the human's
+   explicit consent first** (e.g. `ollama rm` on a real installed model, unsetting a real env var, deleting
+   real files). If the human declines, code-review-only verification is an acceptable substitute - but
+   record which one happened (live-sandboxed vs code-review-only) and why.
+
 ## HYBRID mode: local_generate drafts test data, it never judges correctness
 
 If `mcp__local-tools__local_generate` is callable, this project is in HYBRID mode. Use it to draft

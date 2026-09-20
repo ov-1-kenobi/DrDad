@@ -154,7 +154,7 @@ dependency on any prior story.)
 - **Context:** Same table already lists dotnet/python/embedded/generic/unity; this is a one-row addition,
   no structural change to the table.
 
-### [ ] T4.1 - Add R35 instruction block to dev-agent.md and qa-agent.md   (Story S4)
+### [x] T4.1 - Add R35 instruction block to dev-agent.md and qa-agent.md   (Story S4)
 - **Goal:** `dev-agent` and `qa-agent` each carry an explicit, STOP-block-styled instruction stating R35's
   two rules, so a future agent run cannot claim ignorance of them.
 - **Touches:** `global\agents\dev-agent.md`, `global\agents\qa-agent.md`
