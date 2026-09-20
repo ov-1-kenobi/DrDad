@@ -128,3 +128,57 @@
     of `/design`; left unticked per grade card S3 suggestion 3 (not something to fabricate a tick for).
 - **Dev notes:** ASCII only. Mirror the structure/wording of `templates\dotnet\CLAUDE.md`. Re-confirm current
   Avalonia template/test package names via `web_search` / docs.avaloniaui.net before finalizing.
+
+### Story S4: Sandbox-real-state / explicit-consent as a checkable convention   (R35)   <!-- Status: TODO -->
+- **Goal:** Turn the pattern behind R35 into a general, CHECKABLE convention - not the one-off fix already
+  in `uninstall.ps1` - so any future command/agent that scripts install/uninstall/teardown/state-mutating
+  behavior is required to (a) verify real-state-touching acceptance criteria against an isolated,
+  parameterized target, never the live machine, with that isolation checked to cover every mutating code
+  path, and (b) get explicit human consent before running an irreversible or outside-the-project action
+  live, recording which happened (live-sandboxed vs code-review-only) and why.
+- **Context:** The motivating incident is already fixed: `uninstall.ps1`'s PATH/`DAD_HOME`/`~/.bashrc`
+  cleanup section was not scoped by `-ClaudeDir`, so every "sandboxed" run - including the existing
+  `test-kit.ps1` suite - silently mutated the real machine's environment; it is now skipped with an
+  explicit guard (`uninstall.ps1` lines ~96-133: `if ($ClaudeDir) { ... skip ... } else { ... real
+  mutation ... }`) and documented in Story S1's dev note. What is MISSING is a mechanism that would catch
+  the *next* script that makes this mistake, and an explicit instruction surface telling `dev-agent`/
+  `qa-agent` to ask before running an irreversible action live. R28 is the model for how a convention
+  becomes an enforced gate here: `ratchet.ps1` is wired directly into `close-unit.ps1` (see
+  `close-unit.ps1` lines ~354-363 and ~566-569) rather than living only as prose in DESIGN.md.
+- **Behavior:**
+  - Add a short, explicit instruction block to `global\agents\dev-agent.md` and `global\agents\qa-agent.md`
+    (same shape as their existing "App Control / STOP" blocks) stating R35's two rules: never verify a
+    real-state-touching AC against the live machine (use a `-ClaudeDir`/temp-dir-style override instead),
+    and never run an irreversible/outside-the-project action live without asking the human first
+    (code-review-only is an acceptable substitute when they decline).
+  - Add a `Test-Case` to `test-kit.ps1` that greps known state-mutating scripts (starting with
+    `uninstall.ps1`, extendable to any future install/uninstall/teardown script) for a state-mutation
+    pattern (`SetEnvironmentVariable(...,"User")`, `ollama rm`, `Remove-Item` outside the project root,
+    registry edits) that is NOT enclosed in a param-guarded conditional (an `if ($ClaudeDir)`/override-style
+    guard). This should PASS today against the fixed `uninstall.ps1` and FAIL if that guard is ever removed
+    - i.e., it mechanically catches the exact class of bug the dogfood audit found by luck, per R24's rule
+      that a state fact should be computed, not rediscovered by chance.
+  - Record in grade-card convention (wherever `grade-agent`'s template/instructions describe what a card
+    must contain) that any unit whose acceptance criteria could touch real machine state must state which
+    verification mode happened (live-sandboxed vs code-review-only) and why - mirroring the format already
+    used in Story S1's dev note above.
+- **Data / interfaces:** New instruction text in `global\agents\dev-agent.md` and
+  `global\agents\qa-agent.md`; one new `Test-Case` block in `test-kit.ps1`; grade-agent's card-content
+  instructions (wherever they currently live, e.g. `global\agents\grade-agent.md`).
+- **Dependencies:** R28 (`ratchet.ps1` wired into `close-unit.ps1`) as the precedent pattern for turning a
+  prose convention into a script gate; the already-fixed `uninstall.ps1` as the canonical passing case.
+- **Acceptance (testable):**
+  - [ ] AC1: `global\agents\dev-agent.md` and `global\agents\qa-agent.md` each contain an explicit block
+    naming both R35 rules (isolated target for real-state ACs; explicit consent before irreversible/live
+    action), in the same instructional style as their existing STOP blocks.
+  - [ ] AC2: `test-kit.ps1` has a new `Test-Case` that statically checks `uninstall.ps1` (and any other
+    listed state-mutating script) for state-mutation calls unguarded by a param-conditional; it passes
+    against the current fixed file and is demonstrated to fail if the guard is removed.
+  - [ ] AC3: grade-agent's instructions/template require recording verification mode (live-sandboxed vs
+    code-review-only) + reason for any unit touching real machine state, matching the S1 dev-note format.
+  - [ ] AC4: the full validation gate (`test-kit.ps1`) still passes after the additions; new files/edits are
+    ASCII-only.
+- **Dev notes:** This is a generalization story, not a re-fix - `uninstall.ps1` itself needs no further
+  code change. Keep the new `Test-Case` pattern-based/language-agnostic-ish (grep on known dangerous calls)
+  rather than hard-coding `uninstall.ps1`'s exact line numbers, per R28/R29's own lesson about pinning
+  implementation details in a gate. ASCII only (PS 5.1).
