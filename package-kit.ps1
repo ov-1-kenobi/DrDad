@@ -40,7 +40,7 @@ $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("adkit-pkg-" + [guid]::New
 $dest = Join-Path $stage $name
 New-Item -ItemType Directory -Force $dest | Out-Null
 
-Write-Host "Packaging DAD-kit $version" -ForegroundColor Cyan
+Write-Host "Packaging DrDad $version" -ForegroundColor Cyan
 $copied = 0
 Get-ChildItem $kit -Recurse -File -Force | ForEach-Object {
   $rel = $_.FullName.Substring($kit.Length).TrimStart([char]92)
