@@ -182,3 +182,37 @@
   code change. Keep the new `Test-Case` pattern-based/language-agnostic-ish (grep on known dangerous calls)
   rather than hard-coding `uninstall.ps1`'s exact line numbers, per R28/R29's own lesson about pinning
   implementation details in a gate. ASCII only (PS 5.1).
+
+### Story S5: Rename the distribution package DAD-kit -> DrDad (cosmetic only)   (R8)   <!-- Status: TODO -->
+- **Goal:** `package-kit.ps1` produces `DrDad-v<version>.zip`/folder instead of `DAD-kit-v<version>`, so a
+  fresh distribution matches the product's actual name, without touching anything the installer relies on.
+- **Context:** "DAD-kit" is not just a display name - `install.ps1`'s dev-path placeholder
+  (`C:\Projects\Claude\MCP\DAD-kit`), the `.bashrc` managed-block markers (`# >>> DAD-kit >>>` /
+  `# <<< DAD-kit <<<`), and ~15 `test-kit.ps1` assertions all depend on that literal string. README.md
+  already documents the mismatch as deliberate: "asset is named `DAD-kit-v<x>.zip` for historical reasons;
+  it is DrDad inside." This story is scoped to ONLY the packaged output's name - explicitly NOT the
+  placeholder, NOT the bashrc markers, NOT any existing install's paths. A full rename (placeholder +
+  bashrc markers + every template `.mcp.json` + migration for existing installs) was considered and
+  deliberately deferred - out of scope here.
+- **Behavior:**
+  - `package-kit.ps1`: change `$name = "DAD-kit-v$version"` to `$name = "DrDad-v$version"` (and the two
+    header-comment examples at the top of the file that show the old name).
+  - `README.md`: update the naming note (currently says the zip "is named `DAD-kit-v<x>.zip` for historical
+    reasons") to reflect the new packaged name; keep the explanation that `DAD-kit` lives on internally as
+    the dev-path placeholder.
+  - Do NOT touch `install.ps1`'s `$old` placeholder, the `.bashrc` markers, or any `templates/*/.mcp.json`
+    placeholder string - all still say `DAD-kit` by design (see Context).
+- **Data / interfaces:** `package-kit.ps1` (the `$name` line + header comments), `README.md` (one note).
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [ ] AC1: `package-kit.ps1 -Folder` produces `DrDad-v<version>` (not `DAD-kit-v<version>`) in the output
+    dir; `package-kit.ps1` (zip mode) produces `DrDad-v<version>.zip`.
+  - [ ] AC2: the packaged output still passes the existing placeholder self-check (the dev-path placeholder
+    string inside `.mcp.json` etc. is untouched and still says `DAD-kit`, per Context).
+  - [ ] AC3: `test-kit.ps1`'s packaging assertion (currently `$out = Join-Path $sb "DAD-kit-v$v"`, around
+    line 614) is updated to expect `DrDad-v$v`, and the full validation gate still passes.
+  - [ ] AC4: README.md's naming note reflects the new packaged name and still explains why `DAD-kit`
+    persists internally.
+- **Dev notes:** Small, low-risk, single-file-plus-doc change. Do not let this drift into the full-rename
+  scope (placeholder/bashrc/`.mcp.json`) - that was explicitly deferred; file a separate story/requirement
+  if that is ever wanted.
