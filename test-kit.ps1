@@ -736,6 +736,98 @@ Test-Case "state-mutating scripts confine real-machine writes behind a param gua
   Assert (-not $violations) ("real-machine mutation not confined behind a param guard:`n" + ($violations -join "`n"))
 }
 
+Test-Case "the param-guard detector actually has teeth: an unguarded mutation IS flagged" {
+  # The previous Test-Case only proves uninstall.ps1 passes TODAY - a positive result. That alone does not
+  # prove the detector would catch a regression: it could pass vacuously (e.g. a typo'd regex that never
+  # matches anything). This proves the negative case on a throwaway scratch script - never the real
+  # uninstall.ps1 - that reconstructs its real shape (same param name, same danger call) but with the
+  # `if ($ClaudeDir) {...} else {...}` guard removed, so the mutation is unconditional. The detector must
+  # report at least one violation, or it has no teeth.
+  $dangerPatterns = @(
+    '\[Environment\]::(Set|Remove)EnvironmentVariable\([^)]*,\s*"(User|Machine)"\s*\)',
+    '\bollama\s+rm\b',
+    'Remove-Item[^\r\n]*\$(?:env:)?(USERPROFILE|HOME)\b',
+    '(Set|Remove|New)-ItemProperty\b[^\r\n]*(HKCU:|HKLM:)'
+  )
+
+  function Get-ScriptParamNames([string]$src) {
+    $m = [regex]::Match($src, '(?ms)^\s*param\s*\(')
+    if (-not $m.Success) { return @() }
+    $start = $m.Index + $m.Length - 1
+    $depth = 0; $end = -1
+    for ($i = $start; $i -lt $src.Length; $i++) {
+      if ($src[$i] -eq '(') { $depth++ }
+      elseif ($src[$i] -eq ')') { $depth--; if ($depth -eq 0) { $end = $i; break } }
+    }
+    if ($end -lt 0) { return @() }
+    $block = $src.Substring($start, $end - $start)
+    return [regex]::Matches($block, '\$(\w+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+  }
+
+  function Get-GuardedRegions([string]$src, [string[]]$paramNames) {
+    $regions = New-Object System.Collections.Generic.List[object]
+    foreach ($pn in $paramNames) {
+      foreach ($m in [regex]::Matches($src, "if\s*\(\s*\`$$pn\s*\)\s*\{")) {
+        $braceStart = $m.Index + $m.Length - 1
+        $depth = 0; $end = -1
+        for ($i = $braceStart; $i -lt $src.Length; $i++) {
+          if ($src[$i] -eq '{') { $depth++ }
+          elseif ($src[$i] -eq '}') { $depth--; if ($depth -eq 0) { $end = $i; break } }
+        }
+        if ($end -lt 0) { continue }
+        $regionEnd = $end
+        $rest = $src.Substring($end + 1)
+        $elseMatch = [regex]::Match($rest, '^\s*else\s*\{')
+        if ($elseMatch.Success) {
+          $elseBraceStart = $end + 1 + $elseMatch.Index + $elseMatch.Length - 1
+          $depth2 = 0
+          for ($j = $elseBraceStart; $j -lt $src.Length; $j++) {
+            if ($src[$j] -eq '{') { $depth2++ }
+            elseif ($src[$j] -eq '}') { $depth2--; if ($depth2 -eq 0) { $regionEnd = $j; break } }
+          }
+        }
+        $regions.Add([PSCustomObject]@{ Start = $m.Index; End = $regionEnd })
+      }
+    }
+    return $regions
+  }
+
+  function Find-UnguardedMutations([string]$src, [string]$label) {
+    $regions = Get-GuardedRegions $src (Get-ScriptParamNames $src)
+    $unguarded = @()
+    foreach ($pat in $dangerPatterns) {
+      foreach ($mm in [regex]::Matches($src, $pat)) {
+        $idx = $mm.Index
+        if (-not ($regions | Where-Object { $idx -ge $_.Start -and $idx -le $_.End })) {
+          $unguarded += "$label : '$($mm.Value)' (offset $idx) is not inside an if(<param>){...}[else{...}] guard"
+        }
+      }
+    }
+    return $unguarded
+  }
+
+  # Scratch reconstruction of uninstall.ps1's real shape (param name $ClaudeDir, same danger call), but
+  # with the if/else guard stripped out - the mutation now runs unconditionally.
+  $unguardedScratch = @'
+param(
+  [string]$ClaudeDir = ""
+)
+$claude = if ($ClaudeDir) { $ClaudeDir } else { Join-Path $env:USERPROFILE ".claude" }
+
+Write-Host "== Removing cross-shell wiring (PATH, DAD_HOME, ~/.bashrc block) =="
+$root = $PSScriptRoot
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath) {
+  $kept = ($userPath -split ';' | Where-Object { $_ -and ($_.TrimEnd('\') -ine $root.TrimEnd('\')) })
+  $new = ($kept -join ';')
+  if ($new -ne $userPath) { [Environment]::SetEnvironmentVariable("Path", $new, "User"); Write-Host "  removed $root from USER PATH" }
+}
+'@
+
+  $result = Find-UnguardedMutations $unguardedScratch "scratch-unguarded-uninstall.ps1"
+  Assert ($result.Count -gt 0) "detector found NO violations in a script whose guard was deliberately removed - it has no teeth"
+}
+
 Test-Case "each agent's frontmatter name matches its filename" {
   foreach ($f in Get-ChildItem (Join-Path $kit "global\agents") -Filter *.md) {
     $head = (Get-Content $f.FullName -TotalCount 6) -join "`n"
