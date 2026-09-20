@@ -43,15 +43,19 @@ if (Test-Path $mcp) {
 
 $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
 if (-not (Test-Path $exe)) {
+  # Not built is not the same as "give up" - the whole point of this tool (see header) is to still
+  # answer when the normal path is unavailable. Fall through to the literal-scan path below exactly as
+  # if the exe had run and failed, instead of hard-exiting before ever trying the fallback.
   Write-Host "local-tools.exe not built - run: dotnet build `"$kit\local-tools\local-tools.csproj`" -c Release" -ForegroundColor Yellow
-  exit 1
+  $out = "local-tools.exe not built"
+  $code = 1
+} else {
+  $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  $env:LOCALTOOLS_DOCS_DIR = $docs
+  $out = (& $exe --search $Query $Top 2>&1 | Out-String)
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prevEap
 }
-
-$prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-$env:LOCALTOOLS_DOCS_DIR = $docs
-$out = (& $exe --search $Query $Top 2>&1 | Out-String)
-$code = $LASTEXITCODE
-$ErrorActionPreference = $prevEap
 
 if ($code -eq 0 -and $out.Trim()) {
   Write-Host $out.Trim()
