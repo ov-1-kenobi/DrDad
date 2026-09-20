@@ -6,7 +6,9 @@
 > **Backfill note:** S1, S2, S3 in STORIES.md were already `<!-- Status: DONE -->` at the time this map was
 > generated (STORIES.md/TASKS.md split happened after the work shipped). Every task below is sharded from
 > that already-implemented, already-accepted work and is ticked `[x]` to match - this is a historical record
-> of what was done, not a backlog of ready work. STATE FACTS for this repo: 3/3 stories done, 7/7 tasks done.
+> of what was done, not a backlog of ready work. Current counts are COMPUTED, not hand-maintained here -
+> run `dad doc-stats -Findings` for the live story/task tally (a hardcoded count in this file would only
+> go stale, per R24).
 
 ## Build order (dependency-sorted)
 T1.1 -> T1.2 -> T1.3 -> T1.4
@@ -22,6 +24,11 @@ completed independently.)
 (T4.1, T4.2, T4.3 are each independent of one another and of the T1.x/T2.1/T3.x chains - per Story S4's
 Behavior they are three separate deliverables (agent instruction text, a test-kit.ps1 Test-Case, and a
 grade-agent template update) with no ordering constraint between them.)
+
+T5.1
+
+(T5.1 is a single self-contained task, independent of the T1.x/T2.1/T3.x/T4.x chains - Story S5 has no
+dependency on any prior story.)
 
 ## Tasks
 
@@ -208,6 +215,39 @@ grade-agent template update) with no ordering constraint between them.)
   mirror: it distinguishes AC1 ("Behaviorally verified 2026-09-19: ... via `-ClaudeDir`") from AC2
   ("Code-review verified 2026-09-19, not live-run - see implementation note above ... to avoid actually
   `ollama rm`-ing real installed models / unsetting real env vars").
+
+### [ ] T5.1 - Rename packaged output DAD-kit -> DrDad (package-kit.ps1 + its test assertion + README note)   (Story S5)
+- **Goal:** `package-kit.ps1` produces `DrDad-v<version>` (folder or zip) instead of `DAD-kit-v<version>`,
+  with the validation gate and README updated to match, while leaving the dev-path placeholder, `.bashrc`
+  markers, and every template `.mcp.json` placeholder string exactly as `DAD-kit` (unchanged, by design).
+- **Touches:** `package-kit.ps1`, `test-kit.ps1` (packaging assertion near line 614), `README.md`
+- **Do:**
+  1. In `package-kit.ps1`, change `$name = "DAD-kit-v$version"` to `$name = "DrDad-v$version"`, and update
+     the two header-comment examples near the top of the file that show the old `DAD-kit-v...` name to show
+     `DrDad-v...` instead.
+  2. In `test-kit.ps1`, update the packaging assertion currently reading
+     `$out = Join-Path $sb "DAD-kit-v$v"` (around line 614) to `$out = Join-Path $sb "DrDad-v$v"` so the
+     gate matches the renamed output.
+  3. In `README.md`, update the naming note that currently says the zip "is named `DAD-kit-v<x>.zip` for
+     historical reasons" to reflect the new packaged name (`DrDad-v<x>.zip`), while keeping the explanation
+     that `DAD-kit` persists internally as the dev-path placeholder (`install.ps1`'s
+     `C:\Projects\Claude\MCP\DAD-kit`).
+  4. Do NOT touch `install.ps1`'s `$old` placeholder, the `.bashrc` managed-block markers
+     (`# >>> DAD-kit >>>` / `# <<< DAD-kit <<<`), or any `templates\*\.mcp.json` placeholder string - all
+     of those must still say `DAD-kit` after this change (per S5's Context: this is a full-rename scope
+     that was explicitly deferred).
+- **Acceptance:** `package-kit.ps1 -Folder` produces a `DrDad-v<version>` folder (not `DAD-kit-v<version>`)
+  and `package-kit.ps1` (zip mode) produces `DrDad-v<version>.zip`; the dev-path placeholder inside the
+  packaged output's `.mcp.json` etc. is untouched and still reads `DAD-kit`; `test-kit.ps1`'s packaging
+  assertion expects `DrDad-v$v` and the full validation gate still passes (`0 failed`); `README.md`'s
+  naming note reflects `DrDad-v<x>` while still explaining why `DAD-kit` persists internally (S5 AC1-AC4).
+- **Depends on:** none
+- **Refs:** S5 (pins the exact old/new strings for every file this task touches; no external research needed)
+- **Context:** Per Story S5 (R8, cosmetic-only): "DAD-kit" is not just a display name - `install.ps1`'s
+  dev-path placeholder, the `.bashrc` managed-block markers, and ~15 `test-kit.ps1` assertions all depend
+  on that literal string, so this story is scoped to ONLY the packaged output's name. A full rename
+  (placeholder + bashrc markers + every template `.mcp.json` + migration for existing installs) was
+  considered and deliberately deferred - out of scope here; do not let this task drift into that scope.
 
 ## Open questions
 - Story S3's AC4 ("(manual) `/scaffold avalonia` appears in the menu and scaffolds a project") is a manual,
