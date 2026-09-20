@@ -2,6 +2,71 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.50.0 - 2026-09-20
+
+### Added - R35: self-verification is sandboxed against real machine state; irreversible actions wait for explicit consent
+Extracted from a real incident, not written speculatively: a self-hosting `/build` run doing S1's real
+behavioral verification of `uninstall.ps1` found that its PATH/`DAD_HOME`/`~/.bashrc` cleanup was NOT scoped
+by the `-ClaudeDir` sandbox parameter, so every "sandboxed" test run - including the existing `test-kit.ps1`
+suite - was silently mutating the REAL machine's environment. That was fixed in-session; R35 (`docs/DESIGN.md`)
+generalizes the lesson into a binding rule rather than a one-off patch: (a) verifying an acceptance criterion
+that would touch real installed state must run against an isolated, parameterized target, never the live
+system, with that isolation checked to cover every mutating code path the real run touches; (b) an
+irreversible or outside-the-project action requires the human's explicit consent before it runs live -
+code-review-only is an acceptable substitute when declined, recorded as which happened and why.
+
+Closed via Story S4 (three tasks): explicit R35 instruction blocks in `dev-agent.md`/`qa-agent.md` (matching
+their existing STOP-block style); a new `test-kit.ps1` `Test-Case` that statically parses a state-mutating
+script's own `param()` block and flags dangerous calls (env-var writes, `ollama rm`, unscoped `Remove-Item`,
+registry edits) sitting outside an `if ($param){...}[else{...}]` guard - verified against both the real,
+already-fixed `uninstall.ps1` (passes) and a guard-stripped scratch reconstruction (correctly flagged), with
+a permanent regression test for the negative case added after the story's own grade card caught that the
+first proof was one-time-manual, not durable; and a `grade-agent.md` requirement to record which verification
+mode (live-sandboxed vs. code-review-only) was used for any unit whose acceptance criteria touch real machine
+state, and why.
+
+### Changed - distribution package renamed DAD-kit -> DrDad (Story S5, cosmetic only)
+`package-kit.ps1` now produces `DrDad-v<version>` instead of `DAD-kit-v<version>`. Deliberately scoped to
+just the packaged output's name: the dev-path placeholder `install.ps1` rewrites
+(`C:\Projects\Claude\MCP\DAD-kit`), the `.bashrc` managed-block markers, and every template `.mcp.json`
+placeholder string all still read `DAD-kit` on purpose - that mechanism is load-bearing, not cosmetic, and a
+full rename was considered and explicitly deferred. Verified by actually running `package-kit.ps1 -Folder`
+against a scratch directory and confirming the placeholder survived untouched inside the real generated
+output, not just by reading the diff.
+
+### Fixed - the same CRLF-vs-.gitattributes bug found and fixed three times in one session, plus a self-hosting gate gap
+While closing S4, `close-unit.ps1`'s `Save-Text` helper was found hardcoding CRLF regardless of a target
+file's `.gitattributes` convention (`* text=auto eol=lf` for `STORIES.md`/`TASKS.md`) - invisible to `git
+status`/`diff` because the clean filter normalizes it away when computing the staged blob, so the commit
+looked fine while the working-tree copy was silently wrong. Fixed, with a regression test.
+
+A follow-up `/assess` pass (prompted by wanting to check the kit's own health right after S4/S5 closed) found
+the identical bug pattern twice more, still live: `api-surface.ps1`'s `Add-SourceFiles` was doing the exact
+same thing to `docs/API-SURFACE.md` - confirmed **actively failing the gate** at the time (regenerated after
+every build, so it re-broke on every `close-unit` run) - and `ratchet.ps1` was doing it to its own
+gitignored `.claude/.dad-ratchet.json` baseline (harmless to git, but caught by `test-kit.ps1`'s scan since
+it didn't exclude `.claude/` the way it excludes `.git/` - fixed at the root by adding that exclusion, since
+a gitignored runtime directory isn't source to begin with). Both writers fixed to join with LF; the
+`api-surface.ps1` fix got a new regression assertion. No shared "write LF text" helper exists across the
+~18 call sites doing this kind of write kit-wide - flagged as the root cause of the recurrence and deferred
+to a future `/retro` pass rather than refactored ad hoc (`docs/ASSESSMENT.md`).
+
+The same assessment also caught that this kit's own `CLAUDE.md` never matched what `close-unit.ps1`'s
+`Get-ClaudeCommand` parser expects (a literal `- Build:` bullet, not `- C# server:`) - every unit closed
+against this repo's own self-hosting (T4.1-T5.1, S4, S5) had silently skipped build verification as a
+result. Fixed the bullet; added a `Test-Case` that copies the kit's REAL `CLAUDE.md` into a sandbox and
+asserts `close-unit` actually finds the build command, since no existing fixture ever exercised the kit's
+own file (all were synthetic).
+
+Separately, GitHub's post-push CI run on `main` caught a real bug `test-kit.ps1` had never seen locally:
+`docs-find.ps1` (the "shell door" into the doc corpus, used because models call shell commands far more
+reliably than `search_datasheets`) hard-exited when `local-tools.exe` was simply missing, rather than
+falling back to its own literal-scan mode - defeating its own stated purpose of still answering when the
+normal path is unavailable. This only surfaced on a genuinely fresh checkout (CI), because any dev machine
+that has ever run a build already has the exe sitting there, masking the gap. Restructured so "not built" is
+treated the same as "search failed" and falls through to the same fallback path; verified directly by moving
+the exe aside and confirming the tool still answers via literal scan instead of exiting with nothing.
+
 ## 0.49.1 - 2026-09-17
 
 ### Added - examples/cms3: a real, runnable build artifact, not a description of one
