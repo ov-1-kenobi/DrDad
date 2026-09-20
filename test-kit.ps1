@@ -611,7 +611,7 @@ Test-Case "package-kit produces a clean, installable copy" {
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "package-kit.ps1") -OutDir $sb -Folder | Out-Null
     Assert ($LASTEXITCODE -eq 0) "package-kit exited $LASTEXITCODE"
     $v = (Get-Content (Join-Path $kit "VERSION") -Raw).Trim()
-    $out = Join-Path $sb "DAD-kit-v$v"
+    $out = Join-Path $sb "DrDad-v$v"
     Assert (Test-Path $out) "package folder not created"
     foreach ($f in @("VERSION","install.cmd","models.json","test-kit.ps1","local-tools\Tools.cs")) {
       Assert (Test-Path (Join-Path $out $f)) "package missing $f"

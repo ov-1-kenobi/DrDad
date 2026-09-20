@@ -216,7 +216,7 @@ dependency on any prior story.)
   ("Code-review verified 2026-09-19, not live-run - see implementation note above ... to avoid actually
   `ollama rm`-ing real installed models / unsetting real env vars").
 
-### [ ] T5.1 - Rename packaged output DAD-kit -> DrDad (package-kit.ps1 + its test assertion + README note)   (Story S5)
+### [x] T5.1 - Rename packaged output DAD-kit -> DrDad (package-kit.ps1 + its test assertion + README note)   (Story S5)
 - **Goal:** `package-kit.ps1` produces `DrDad-v<version>` (folder or zip) instead of `DAD-kit-v<version>`,
   with the validation gate and README updated to match, while leaving the dev-path placeholder, `.bashrc`
   markers, and every template `.mcp.json` placeholder string exactly as `DAD-kit` (unchanged, by design).

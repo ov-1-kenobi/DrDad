@@ -183,7 +183,7 @@
   rather than hard-coding `uninstall.ps1`'s exact line numbers, per R28/R29's own lesson about pinning
   implementation details in a gate. ASCII only (PS 5.1).
 
-### Story S5: Rename the distribution package DAD-kit -> DrDad (cosmetic only)   (R8)   <!-- Status: TODO -->
+### Story S5: Rename the distribution package DAD-kit -> DrDad (cosmetic only)   (R8)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `package-kit.ps1` produces `DrDad-v<version>.zip`/folder instead of `DAD-kit-v<version>`, so a
   fresh distribution matches the product's actual name, without touching anything the installer relies on.
 - **Context:** "DAD-kit" is not just a display name - `install.ps1`'s dev-path placeholder

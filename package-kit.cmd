@@ -1,6 +1,6 @@
 @echo off
 REM package-kit.cmd - build a clean, movable copy of the kit for the folder-copy install path.
-REM   package-kit.cmd                      -> ..\DAD-kit-v<version>.zip
+REM   package-kit.cmd                      -> ..\DrDad-v<version>.zip
 REM   package-kit.cmd -OutDir D:\transfer  -> into that folder
 REM   package-kit.cmd -Folder              -> unzipped folder instead of a zip
 REM Excludes bin/obj, _tempReference, docs\.index, .claude, .git; verifies the dev-path placeholder

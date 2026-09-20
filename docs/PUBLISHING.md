@@ -85,9 +85,9 @@ the artifact:
 ```
 powershell -ExecutionPolicy Bypass -File .\package-kit.ps1 -OutDir C:\src\drdad-release
 ```
-The asset is named **`DAD-kit-v<x>.zip`** - the distribution artifact keeps its historical name; the product
-inside is DrDad. Either note that in the Release description, or rename it in `package-kit.ps1` (`$name`) if
-you would rather the download read `DrDad-v<x>.zip`.
+The asset is named **`DrDad-v<x>.zip`** (`package-kit.ps1`'s `$name`). You will still see `DAD-kit` inside,
+in the dev-path placeholder (`C:\Projects\Claude\MCP\DAD-kit`) that `install.ps1` rewrites to the real
+install location - that is by design, not a leftover; see `CLAUDE.md`'s Conventions section.
 
 ## 5. Repo hygiene (once)
 - [ ] The clean copy already ships `.gitignore`, `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`, the

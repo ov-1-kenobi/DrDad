@@ -101,7 +101,9 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 installs the global commands/agents and `settings.json` (paths auto-fixed), and puts `dad` on your PATH.
 
 (Prefer not to clone? A zipped release installs the same way - extract it and run `install.cmd`. The release
-asset is named `DAD-kit-v<x>.zip` for historical reasons; it is DrDad inside - the `dad` command and all.)
+asset is named `DrDad-v<x>.zip`. You will still see `DAD-kit` inside, in the dev-path placeholder
+(`C:\Projects\Claude\MCP\DAD-kit`) that `install.ps1` rewrites to the real install location - that's by
+design, not a leftover.)
 
 Then, in a new shell:
 

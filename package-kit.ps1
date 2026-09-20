@@ -3,8 +3,8 @@
 # dev-path PLACEHOLDER is intact (install.ps1 rewrites it on the target, so a baked-in absolute path
 # would break the move); and refuses to ship if scan-secrets finds anything.
 #
-#   package-kit.ps1                       -> ..\DAD-kit-v<version>.zip
-#   package-kit.ps1 -OutDir D:\transfer   -> D:\transfer\DAD-kit-v<version>.zip
+#   package-kit.ps1                       -> ..\DrDad-v<version>.zip
+#   package-kit.ps1 -OutDir D:\transfer   -> D:\transfer\DrDad-v<version>.zip
 #   package-kit.ps1 -Folder               -> an unzipped folder instead of a .zip
 #   package-kit.ps1 -IncludeGit           -> keep .git (history + tags travel; two repos can then diverge)
 #
@@ -27,7 +27,7 @@ $version = if (Test-Path (Join-Path $kit "VERSION")) { (Get-Content (Join-Path $
 if (-not $OutDir) { $OutDir = Split-Path $kit -Parent }
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
-$name = "DAD-kit-v$version"
+$name = "DrDad-v$version"
 
 # --- refuse to package a tree with credentials in it ---
 & (Join-Path $kit "scan-secrets.ps1") -Path $kit -Quiet
