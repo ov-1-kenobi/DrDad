@@ -74,6 +74,10 @@ acceptance criterion. If you did not read the code, you cannot grade it - say so
 ## Assessment (this iteration)
 - Correctness: <one line>   Acceptance: <covered / gaps>   Design: <one line>
 - Quality: <one line>       Hygiene: <one line>
+- Verification mode (only if any AC could touch real machine state - env vars, installed
+  packages/models, files outside the project, registry, etc.): per such AC, state whether it was
+  verified live-sandboxed (e.g. via a `-ClaudeDir`/temp-dir-style override) or code-review-only, and
+  why - see Rules below for the exact format to mirror.
 
 ## Suggestions (prioritized; tag each so the team knows who acts)
 1. [mechanical] <safe, lint/format/import/dead-code/manifest/dep tidy - hygiene-agent applies these>
@@ -85,6 +89,19 @@ Rules:
 - **Tag every suggestion** `[mechanical]`, `[dev]`, or `[human]` - the orchestrator routes by tag
   (mechanical -> hygiene-agent, dev -> dev-agent, human -> me). Be honest about which is which; do not
   label a logic change `[mechanical]`.
+- **Record the verification mode for any AC touching real machine state.** If the unit's acceptance
+  criteria could touch real machine state (env vars, installed packages/models, files outside the
+  project, registry, etc.), the Assessment section must state, per such AC, whether it was verified
+  **live-sandboxed** (e.g. via a `-ClaudeDir`/temp-dir-style override that redirects the real target so
+  the run is safe) or **code-review-only**, and WHY - mirror the format in `docs/STORIES.md` Story S1's
+  implementation note (search `Behaviorally verified 2026-09-19`):
+  - AC1: Behaviorally verified <date>: ... via `-ClaudeDir` (sandboxed; real machine confirmed
+    untouched).
+  - AC2: Code-review verified <date>, not live-run - see implementation note above ... to avoid
+    actually `ollama rm`-ing real installed models / unsetting real env vars.
+  Do not assume a live run happened just because the unit's dev notes are silent - if you cannot tell
+  which mode was used, say so explicitly and raise it as a `[human]` suggestion (whether an untested
+  machine-state AC is acceptable is a judgment call, not something to rubber-stamp).
 - Be specific and cite `file:line`. No vague "improve quality."
 - Preserve the existing `## Grade history` rows; only ADD a row. Never delete history - the point is to
   see the trend across iterations.

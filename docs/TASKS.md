@@ -197,7 +197,7 @@ dependency on any prior story.)
   dangerous calls to grep for are the same ones the S1 dev-note fix addressed
   (`SetEnvironmentVariable(...,"User")`, `ollama rm`, unscoped `Remove-Item`, registry edits).
 
-### [ ] T4.3 - Require verification-mode recording in grade-agent's card template   (Story S4)
+### [x] T4.3 - Require verification-mode recording in grade-agent's card template   (Story S4)
 - **Goal:** `grade-agent`'s card-content instructions require noting, for any unit whose ACs could touch
   real machine state, which verification mode was used (live-sandboxed vs code-review-only) and why - so
   this becomes a checked convention rather than an incidental note like Story S1's.

@@ -129,7 +129,7 @@
 - **Dev notes:** ASCII only. Mirror the structure/wording of `templates\dotnet\CLAUDE.md`. Re-confirm current
   Avalonia template/test package names via `web_search` / docs.avaloniaui.net before finalizing.
 
-### Story S4: Sandbox-real-state / explicit-consent as a checkable convention   (R35)   <!-- Status: TODO -->
+### Story S4: Sandbox-real-state / explicit-consent as a checkable convention   (R35)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** Turn the pattern behind R35 into a general, CHECKABLE convention - not the one-off fix already
   in `uninstall.ps1` - so any future command/agent that scripts install/uninstall/teardown/state-mutating
   behavior is required to (a) verify real-state-touching acceptance criteria against an isolated,
