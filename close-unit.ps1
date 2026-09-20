@@ -161,7 +161,11 @@ function Test-GradeCard([string]$unitId) {
 }
 
 function Save-Text([string]$path, [string[]]$lines) {
-  [System.IO.File]::WriteAllText($path, (($lines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+  # LF, not CRLF: both call sites (STORIES.md, TASKS.md) are `* text=auto eol=lf` per .gitattributes.
+  # A hardcoded `r`n here silently re-CRLFs the whole file on every tick - invisible to git status/diff
+  # (the eol=lf clean filter normalizes it away for comparison) but caught by test-kit.ps1's raw-byte
+  # line-ending check. Found via self-hosting: dogfooding /build against this kit's own TASKS.md.
+  [System.IO.File]::WriteAllText($path, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 }
 
 # --- where are the docs? (.mcp.json wins, else <proj>\docs) ---

@@ -3952,6 +3952,53 @@ T1.1 -> T1.2 -> T2.1
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "close-unit writes TASKS.md/STORIES.md back as LF, never CRLF" {
+  # Save-Text used to hardcode `r`n regardless of the target file's .gitattributes convention (both
+  # TASKS.md and STORIES.md are `* text=auto eol=lf`). git's own status/diff never caught it - the
+  # eol=lf clean filter normalizes CRLF away when computing the staged/committed blob, so the commit
+  # looked fine while the WORKING TREE copy was silently re-CRLF'd on every tick. Found via self-hosting
+  # (dogfooding /build against this kit's own docs/TASKS.md). Assert on raw bytes, not git's view.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    @"
+# Task map
+
+## Build order
+T1.1
+
+## Tasks
+
+### [ ] T1.1 - first   (Story S1)
+- **Goal:** a
+"@ | Set-Content "$p\docs\TASKS.md" -Encoding UTF8 -NoNewline
+    @"
+# Stories
+
+### Story S1: First story   (Epic E1)   <!-- Status: TODO -->
+- **Goal:** one
+"@ | Set-Content "$p\docs\STORIES.md" -Encoding UTF8 -NoNewline
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "first" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "T1.1 close failed"
+
+    foreach ($f in @("$p\docs\TASKS.md", "$p\docs\STORIES.md")) {
+      $t = [System.IO.File]::ReadAllText($f)
+      $crlf = ([regex]::Matches($t, "`r`n")).Count
+      $lf = ([regex]::Matches($t, "(?<!`r)`n")).Count
+      Assert ($crlf -eq 0) "$(Split-Path $f -Leaf) has $crlf CRLF line ending(s) after close-unit wrote it - Save-Text regressed"
+      Assert ($lf -gt 0) "$(Split-Path $f -Leaf) has no line endings at all after close-unit wrote it - something else broke"
+    }
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "the hybrid local_generate tool is GATED on LOCALTOOLS_HYBRID (Program.cs), and labels its output a draft" {
   # The whole point of hybrid: the local drudge tool exists ONLY when the flag is on. If Program.cs ever went
   # back to assembly scanning, HybridTools would be exposed unconditionally - handing the weak local model a job
