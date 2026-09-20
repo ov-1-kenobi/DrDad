@@ -12,9 +12,16 @@
 T1.1 -> T1.2 -> T1.3 -> T1.4
 T2.1
 T3.1 -> T3.2
+T4.1
+T4.2
+T4.3
 
 (T2.1 and the T3.x chain have no dependency on the T1.x chain or each other; all three chains were
 completed independently.)
+
+(T4.1, T4.2, T4.3 are each independent of one another and of the T1.x/T2.1/T3.x chains - per Story S4's
+Behavior they are three separate deliverables (agent instruction text, a test-kit.ps1 Test-Case, and a
+grade-agent template update) with no ordering constraint between them.)
 
 ## Tasks
 
@@ -139,6 +146,68 @@ completed independently.)
 - **Depends on:** T3.1
 - **Context:** Same table already lists dotnet/python/embedded/generic/unity; this is a one-row addition,
   no structural change to the table.
+
+### [ ] T4.1 - Add R35 instruction block to dev-agent.md and qa-agent.md   (Story S4)
+- **Goal:** `dev-agent` and `qa-agent` each carry an explicit, STOP-block-styled instruction stating R35's
+  two rules, so a future agent run cannot claim ignorance of them.
+- **Touches:** `global\agents\dev-agent.md`, `global\agents\qa-agent.md`
+- **Do:** In each file, add a short instruction block in the same shape/tone as that file's existing "App
+  Control / STOP" block, stating both R35 rules: (1) never verify a real-state-touching acceptance
+  criterion against the live machine - use an isolated, parameterized target (a `-ClaudeDir`/temp-dir-style
+  override) instead, with that isolation checked to cover every mutating code path; (2) never run an
+  irreversible or outside-the-project action live without first getting explicit human consent - if the
+  human declines, code-review-only is an acceptable substitute, but record which happened (S4's Behavior
+  bullet 1 is the source for this wording). Keep the new text ASCII-only, matching each file's existing
+  formatting conventions.
+- **Acceptance:** `global\agents\dev-agent.md` and `global\agents\qa-agent.md` each contain an explicit
+  block naming both R35 rules, in the same instructional style as their existing STOP blocks (S4 AC1).
+- **Depends on:** none
+- **Context:** S4's motivating incident (already fixed, this task is generalizing the lesson, not
+  re-fixing it): `uninstall.ps1`'s PATH/`DAD_HOME`/`~/.bashrc` cleanup wasn't scoped by `-ClaudeDir`, so
+  every "sandboxed" run - including the existing `test-kit.ps1` suite - silently mutated the real machine's
+  environment; it is now guarded (`uninstall.ps1` lines ~96-133: `if ($ClaudeDir) { ... skip ... } else {
+  ... real mutation ... }`), documented in Story S1's dev note. R35 is the rule extracted from that fix.
+
+### [ ] T4.2 - Add test-kit.ps1 Test-Case: guard-conditional check on state-mutating scripts   (Story S4)
+- **Goal:** A static, mechanical `Test-Case` that would have caught the `uninstall.ps1` bug S4 is
+  generalizing from, and keeps catching it (or its recurrence) in any future state-mutating script.
+- **Touches:** `test-kit.ps1`
+- **Do:** Add a new `Test-Case` that greps a list of known state-mutating scripts - starting with
+  `uninstall.ps1`, written so more scripts can be added to the list later ("extendable to any future
+  install/uninstall/teardown script" per S4's Behavior) - for state-mutation call patterns
+  (`SetEnvironmentVariable(...,"User")`, `ollama rm`, `Remove-Item` outside the project root, registry
+  edits) that are NOT enclosed in a param-guarded conditional (an `if ($ClaudeDir)`/override-style guard).
+  Keep the pattern-matching generic/language-agnostic-ish rather than hard-coding `uninstall.ps1`'s current
+  line numbers, per S4's Dev notes and R28/R29's lesson about not pinning implementation details into a
+  gate. ASCII-only (PS 5.1).
+- **Acceptance:** `test-kit.ps1` has this `Test-Case`; it PASSES today against the current, already-fixed
+  `uninstall.ps1`, and is demonstrated to FAIL if the `if ($ClaudeDir)` guard around one of its
+  state-mutation calls is removed (S4 AC2). Running the full `test-kit.ps1` gate still prints `0 failed`
+  (S4 AC4).
+- **Depends on:** none
+- **Context:** R28 is the precedent pattern cited in S4 for turning a prose convention into a script gate:
+  `ratchet.ps1` wired directly into `close-unit.ps1` (`close-unit.ps1` lines ~354-363 and ~566-569). The
+  dangerous calls to grep for are the same ones the S1 dev-note fix addressed
+  (`SetEnvironmentVariable(...,"User")`, `ollama rm`, unscoped `Remove-Item`, registry edits).
+
+### [ ] T4.3 - Require verification-mode recording in grade-agent's card template   (Story S4)
+- **Goal:** `grade-agent`'s card-content instructions require noting, for any unit whose ACs could touch
+  real machine state, which verification mode was used (live-sandboxed vs code-review-only) and why - so
+  this becomes a checked convention rather than an incidental note like Story S1's.
+- **Touches:** `global\agents\grade-agent.md`
+- **Do:** Update grade-agent's instructions/template for what a grade card must contain: add a requirement
+  that, for any unit whose acceptance criteria could touch real machine state (env vars, installed
+  packages/models, files outside the project, registry, etc.), the card must record which verification mode
+  happened - live-sandboxed (e.g. via a `-ClaudeDir`/temp-dir-style override) or code-review-only - and the
+  reason why, mirroring the format S1's dev note already uses. ASCII-only.
+- **Acceptance:** `global\agents\grade-agent.md`'s card-content instructions/template explicitly require
+  recording verification mode + reason for any unit touching real machine state, matching the S1 dev-note
+  format (S4 AC3).
+- **Depends on:** none
+- **Context:** The S1 story note (STORIES.md, Story S1's implementation comment) is the canonical format to
+  mirror: it distinguishes AC1 ("Behaviorally verified 2026-09-19: ... via `-ClaudeDir`") from AC2
+  ("Code-review verified 2026-09-19, not live-run - see implementation note above ... to avoid actually
+  `ollama rm`-ing real installed models / unsetting real env vars").
 
 ## Open questions
 - Story S3's AC4 ("(manual) `/scaffold avalonia` appears in the menu and scaffolds a project") is a manual,
