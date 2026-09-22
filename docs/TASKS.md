@@ -262,7 +262,7 @@ because its Test-Case greps the pricing-sentence language each of them adds.)
   (placeholder + bashrc markers + every template `.mcp.json` + migration for existing installs) was
   considered and deliberately deferred - out of scope here; do not let this task drift into that scope.
 
-### [ ] T6.1 - Add [ratchet] finding computation to doc-stats.ps1 -Findings   (Story S6)
+### [x] T6.1 - Add [ratchet] finding computation to doc-stats.ps1 -Findings   (Story S6)
 - **Goal:** `doc-stats.ps1 -Findings` computes and WARNs with a `[ratchet]` finding when planning mass has
   grown far ahead of proven/DONE footprint, per the pinned Option B formula (S6 AC1, AC2, AC3, AC4, AC5).
 - **Touches:** `doc-stats.ps1`

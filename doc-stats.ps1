@@ -660,6 +660,23 @@ if ($Findings) {
     }
   }
 
+  # --- [ratchet] planning-mass WARN (R36b/C1, Option B - C1a formula, C1b message/tag): fires when the
+  # doc's planning mass (stories + tasks scoped) has grown far ahead of its proven/DONE footprint. WARN
+  # only - never blocks /build, close-unit or any LOCK gate (C1d), same class as [research]/[style]/[ux].
+  # Uses ONLY the counters already computed above (no new data source) - $storyIds.Count/$storiesDone.Count/
+  # $tasks.Count/$tasksDone.Count, per C1a (doc-stats.ps1:126,152,192-198).
+  $ratchetMassFloor = 15
+  $ratchetDoneRatioFloor = 0.15
+  $ratchetMass = $storyIds.Count + $tasks.Count
+  if ($ratchetMass -gt 0) {
+    $ratchetDoneMass = $storiesDone.Count + $tasksDone.Count
+    $ratchetDoneRatio = $ratchetDoneMass / $ratchetMass
+    if ($ratchetMass -ge $ratchetMassFloor -and $ratchetDoneRatio -lt $ratchetDoneRatioFloor) {
+      $ratchetDoneRatioPct = [Math]::Round($ratchetDoneRatio * 100, 1)
+      $f.Add("[ratchet] planning mass ($($storyIds.Count) stories + $($tasks.Count) tasks = $ratchetMass) is far ahead of proven footprint ($($storiesDone.Count) stories + $($tasksDone.Count) tasks = $ratchetDoneMass done, $ratchetDoneRatioPct% of mass) - the walking-skeleton ratchet (R36b/C1) fires once mass >= 15 and the done ratio stays under 15%. Build out what is already scoped (S1 must close first, per R30) before sharding more, or explicitly re-confirm scope growth via /design or /stories now that the cost is visible.")
+    }
+  }
+
   Write-Host "== STATE FACTS (computed - do NOT contradict these) ==" -ForegroundColor Cyan
   # [x] counts CHECKBOXES, which a hand-tick fakes. When no commit backs them, say so ON THE FACTS LINE so
   # "44/44 [x]" cannot be read as "44 verified" - a real audit wrote exactly that over 32 fabricated ticks.
