@@ -3112,6 +3112,40 @@ Test-Case "a one-word edit cannot satisfy the LOCK or the SECURITY gate" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "doc-stats flags a NOT-REQUIRED security waiver contradicted by the design's own auth content" {
+  # A.4: the existence check above (previous Test-Case) only asks "is there a parenthetical >=4 chars" -
+  # it never asks whether the reason is CREDIBLE. A real run waived the review as
+  # "NOT-REQUIRED (small personal project...)" on an app that demonstrably shipped bcrypt + JWT auth
+  # (ModelTest bake-off, haiku/docs/DESIGN.md:9) - this doc's own rule keeps auth-handling projects REQUIRED,
+  # and the gate stayed silent because the reason merely EXISTED. Grep for the auth-shaped keywords instead.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $ds = Join-Path $kit "doc-stats.ps1"
+    function Set-SecurityDesign($extraDesign, $storiesContent) {
+      $body = "# Design`r`n`r`nStatus: LOCKED`r`nSecurity review: NOT-REQUIRED (small personal project, low risk)`r`n`r`n" +
+              "## Requirements`r`n- R1: a`r`n`r`n## Contracts`r`n### C1: x`r`n- **Decision:** y`r`n$extraDesign`r`n"
+      Set-Content "$p\docs\DESIGN.md" $body -Encoding UTF8
+      if ($storiesContent) { Set-Content "$p\docs\STORIES.md" $storiesContent -Encoding UTF8 }
+      elseif (Test-Path "$p\docs\STORIES.md") { Remove-Item "$p\docs\STORIES.md" }
+    }
+    function Findings() { return (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) }
+
+    # a NOT-REQUIRED waiver with a plausible reason, but the design itself pins a JWT login requirement
+    Set-SecurityDesign "`r`n## Requirements`r`n- R2: users log in with a password and get a JWT token" $null
+    Assert ((Findings) -match '(?is)NOT-REQUIRED, but .*(mentions|DESIGN).*auth') "an auth-shaped design contradicting its own NOT-REQUIRED waiver was not flagged"
+
+    # the same waiver on a genuinely auth-free project (a CLI tool) must stay silent - no false positive
+    Set-SecurityDesign "" $null
+    $o = Findings
+    Assert ($o -notmatch '(?is)NOT-REQUIRED, but') "an auth-free project was flagged for a waiver it is entitled to"
+
+    # the keyword can also live in STORIES.md, not just DESIGN.md
+    Set-SecurityDesign "" "# Stories`r`n`r`n### Story S1: sign in   <!-- Status: TODO -->`r`n- **Goal:** add a login form"
+    Assert ((Findings) -match '(?is)NOT-REQUIRED, but') "an auth-shaped STORY was not enough to flag the waiver"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "grade cards are demanded for STORIES only, not for every task" {
   # doc-stats demanded a card for every done TASK as well as every done story, contradicting /build:2
   # ("grade + hygiene per story"), /build:98, DESIGN R18 and close-unit (which only asks under
@@ -3998,6 +4032,76 @@ Test-Case "close-unit REFUSES to close a unit whose build fails" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "close-unit REFUSES to close when no Build command resolves (no -SkipVerify)" {
+  # A.2: a missing/unparseable Build: line used to print a yellow WARNING and then close ANYWAY - no
+  # -SkipVerify required. That is how haiku's close-out (ModelTest bake-off) proceeded unverified: CLAUDE.md
+  # had no root package.json to build, Get-ClaudeCommand resolved to "", and close-unit ticked + committed
+  # regardless. -SkipVerify must be the ONLY way past verification.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Task map`n`n## Tasks`n`n### [ ] T1.1 - thing   (Story S1)`n- **Goal:** x" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    # the unfilled placeholder the template ships - Get-ClaudeCommand rejects it and returns ""
+    "# Project: t`n`n## Build / test`n- Build: ``<set in /design's architecture step>```n- Test:  ``<set in /design's architecture step>``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "thing" -ProjectDir $p -NoReindex 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "close-unit closed with no Build command resolved and no -SkipVerify"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]' -Quiet)) "it ticked the task anyway"
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $log = (git log --oneline | Out-String)
+    $ErrorActionPreference = $prev; Pop-Location
+    Assert ($log -notmatch 'T1\.1') "it committed anyway"
+
+    # -SkipVerify remains the deliberate, explicit escape hatch and still works
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "thing" -ProjectDir $p -NoReindex -SkipVerify | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-SkipVerify did not close the unit"
+    Assert (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.1' -Quiet) "-SkipVerify did not tick the task"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "Get-ClaudeCommand extracts a backtick-quoted Build command even with trailing prose" {
+  # A.1: the old regex required ONLY whitespace after the closing backtick, so a realistic line like
+  # "- Build: `npm run build` (root workspace)" failed to match AT ALL and returned "" - verified against
+  # both bake-off projects (haiku/CLAUDE.md, opus/CLAUDE.md), which both pin commands shaped exactly like
+  # this. Prove the REAL close-unit.ps1 now extracts the bare command and ignores the trailing parenthetical.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Task map`n`n## Tasks`n`n### [ ] T1.1 - thing   (Story S1)`n- **Goal:** x" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    # benign commands (exit 0 / a fake test count) so build+test trivially pass - only the PARSING is under
+    # test. This is the LAST task of its only story, so the close also verifies tests - Test: needs a
+    # parseable count, not just an exit code.
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0`` (root workspace)`n- Test:  ``cmd /c echo Total: 1`` (root workspace)" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "thing" -ProjectDir $p -NoReindex 2>&1 | Out-String
+    Assert ($out -notmatch '(?i)no build command found') "trailing prose after the backtick still defeats extraction"
+    Assert ($out -match '(?im)^\[close-unit\] build: exit 0\s*$') "extracted command is not the bare 'exit 0' (trailing parenthetical leaked into it)"
+    Assert ($LASTEXITCODE -eq 0) "close-unit did not close even though the extracted build command passes"
+    Assert (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.1' -Quiet) "did not tick after a passing build extracted from a trailing-prose line"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "close-unit: tick, roll-up timing, idempotent, commit, loud failure" {
   if (-not $haveGit) { return }
   $sb = New-Sandbox
@@ -4027,6 +4131,10 @@ T1.1 -> T1.2 -> T2.1
 # Story S2 - Second story
 - **Goal:** two
 "@ | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    # Build/Test must resolve here: A.2 made an unresolved Build: line FATAL, and two of these closes
+    # (T1.2 -> S1 roll-up, T2.1 -> S2 roll-up) are story closes, which also demand a parseable test count.
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
     Push-Location $p
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     git init -q; git config core.autocrlf false
@@ -4128,6 +4236,9 @@ T1.1
 ### Story S1: First story   (Epic E1)   <!-- Status: TODO -->
 - **Goal:** one
 "@ | Set-Content "$p\docs\STORIES.md" -Encoding UTF8 -NoNewline
+    # T1.1 is the last task of the only story, so this close also verifies tests (needs a parseable count).
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
     Push-Location $p
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     git init -q; git config core.autocrlf false

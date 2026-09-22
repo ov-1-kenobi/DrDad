@@ -262,6 +262,19 @@ if ($Findings) {
       if (-not $reason.Success -or $reason.Groups[1].Value.Trim().Length -lt 4) {
         $f.Add("[design] Security review: NOT-REQUIRED with no stated reason - write 'NOT-REQUIRED (<why>)', e.g. 'poc, no auth, never deployed'. Without it nobody can tell a decision from an omission.")
       }
+      # ADMISSIBILITY, not just existence: a reason can be present and still be false. A real run waived
+      # the review as "small personal project..." (>=4 chars, passes the check above) on an app that
+      # demonstrably implemented bcrypt password hashing and JWT auth - this doc's own rule ("anything that
+      # handles auth, user data, uploads, payments or is internet-facing stays REQUIRED") did not hold in
+      # practice. Grep the project's OWN content for the words that make REQUIRED apply and flag the
+      # contradiction. WARN, not FAIL: the words could legitimately appear in an out-of-scope note, so this
+      # is a nudge for a human to look, not a hard gate - same shape as the [research] keyword findings.
+      $authKw = '(?i)\b(auth|login|password|token|session)\b'
+      $authHit = $designRaw -match $authKw
+      if (-not $authHit -and (Test-Path $storiesFile)) { $authHit = (Get-Content $storiesFile -Raw) -match $authKw }
+      if ($authHit) {
+        $f.Add("[design] Security review: NOT-REQUIRED, but $designName (or STORIES.md) mentions auth/login/password/token/session - the waiver may not be admissible. This doc's own rule keeps anything handling auth REQUIRED; a human should confirm NOT-REQUIRED still holds here.")
+      }
     } elseif ($sr.Groups[1].Value.Trim() -match '^DONE') {
       # DONE is also one word. What makes it true is security-agent having written CITED decisions into
       # the doc; the header alone proves nothing, and flipping it is the cheapest way past Gate 2b.

@@ -44,7 +44,16 @@ $warns = New-Object System.Collections.Generic.List[string]
 function Get-ClaudeCommand([string]$kind) {
   $cm = Join-Path $proj "CLAUDE.md"
   if (-not (Test-Path $cm)) { return "" }
-  $m = [regex]::Match((Get-Content $cm -Raw), "(?m)^\s*-\s*\*{0,2}$kind\*{0,2}\s*:\s*``?([^``\r\n]+?)``?\s*$")
+  $raw = Get-Content $cm -Raw
+  # Prefer the backtick-quoted command when the line has one. A model routinely appends trailing prose
+  # after the closing backtick (e.g. "- Build: `npm run build` (root workspace)") - the old single regex
+  # required only whitespace after the closing backtick, so that trailing text made the WHOLE line fail
+  # to match and silently returned "". Match the backtick span on its own first; only if the line carries
+  # no backticks at all, fall back to the rest of the line, trimmed.
+  $m = [regex]::Match($raw, "(?m)^\s*-\s*\*{0,2}$kind\*{0,2}\s*:\s*``([^``\r\n]+)``")
+  if (-not $m.Success) {
+    $m = [regex]::Match($raw, "(?m)^\s*-\s*\*{0,2}$kind\*{0,2}\s*:\s*([^\r\n]+?)\s*$")
+  }
   if (-not $m.Success) { return "" }
   $v = $m.Groups[1].Value.Trim()
   if ($v -match '^<' -or $v -match 'set in .design') { return "" }   # unfilled placeholder
@@ -229,8 +238,19 @@ elseif ((Test-Path $storiesFile) -and (Select-String -Path $storiesFile -Pattern
 if (-not $SkipVerify) {
   $cmd = if ($BuildCommand) { $BuildCommand } else { Get-ClaudeCommand 'Build' }
   if (-not $cmd) {
-    Write-Host "[close-unit] WARNING: no build command found in CLAUDE.md - closing WITHOUT verification." -ForegroundColor Yellow
-    Write-Host "             Fill CLAUDE.md's 'Build:' line (that is /design's job) so units get verified." -ForegroundColor Yellow
+    # A missing/unparseable Build: line used to WARN and then close anyway - a model never has to pass
+    # -SkipVerify to get an unverified close, it just needs CLAUDE.md to be unfilled or unparseable.
+    # -SkipVerify is the human's deliberate escape hatch (checked above, at the top of this block); make
+    # this the ONLY other way past verification, and require the human to say so explicitly.
+    # DANGLER: docs\DESIGN.md:201 (R28's prose, LOCKED - not editable here) still describes the OLD
+    # behavior ("close-unit prints 'closing WITHOUT verification' and proceeds"). Correct it next time
+    # DESIGN.md goes to DRAFT; ratchet.ps1's ROLE here is unaffected (it separately catches the Build:
+    # LINE itself being deleted - a different failure mode from this one, which is the line existing but
+    # not resolving to a command).
+    Write-Host "[close-unit] NO BUILD COMMAND FOUND in CLAUDE.md - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+    Write-Host "             Fill CLAUDE.md's 'Build:' line (that is /design's job) so units get verified, or" -ForegroundColor Red
+    Write-Host "             re-run with -SkipVerify if you (the human) really want an unverified close." -ForegroundColor Red
+    exit 1
   } else {
     Write-Host "[close-unit] build: $cmd" -ForegroundColor Cyan
     $r = Invoke-Verify $cmd
