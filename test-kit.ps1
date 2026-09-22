@@ -2607,6 +2607,30 @@ Test-Case "doc-stats flags a hand-ticked task committed WITHOUT close-unit (doc-
     $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
     Assert ($out2 -notmatch "T2\.1 \(commit") "a real close-unit commit ('T2.1: real close') was wrongly flagged as hand-ticked"
     Assert ($out2 -match 'T1\.1') "the still-hand-ticked T1.1 finding disappeared after an unrelated close"
+
+    # FALSE POSITIVE #1 (measured on this kit's own history, commits 7c99183/70a383f/d12d844): a
+    # scribe-agent/taskmap-agent commit that SHARDS a new task into the backlog is ALSO a doc-only commit
+    # naming the id - but it ADDS the task as [ ], it never ticks it, so it must NOT be flagged.
+    $withNew = (Get-Content "$p\docs\TASKS.md" -Raw) + "`n### [ ] T3.1 - new work   (Story S3)`n- **Goal:** w"
+    $withNew | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git add docs\TASKS.md
+    git -c user.name=t -c user.email=t@t commit -q -m "TASKS: shard S3 into T3.1"
+    $ErrorActionPreference = $prev; Pop-Location
+    $out3 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out3 -notmatch "T3\.1 \(commit") "a sharding commit that ADDED a task (never ticked it) was wrongly flagged as hand-ticked"
+
+    # FALSE POSITIVE #2 (measured on this kit's own history, commit 9afc835): close-unit's own STORY
+    # roll-up commit is shaped around the TASK it closed ("T2.2: ...", never "S2: ..."), so a plain
+    # substring/shape check on the STORY id never excludes it - and the diff legitimately shows the
+    # story's Status:DONE line changing. Stories have their own dedicated stamp-based detector (the
+    # hand-tick check above), so this mechanism must not ALSO fire on the story id here.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T2.2 -Title "close the story" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "close-unit failed to close T2.2 (the last task of S2)"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S2.*Status: DONE closed:close-unit' -Quiet) "S2 did not roll up via close-unit as expected (test setup problem, not the fix)"
+    $out4 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out4 -notmatch "S2 \(commit") "a close-unit story roll-up (commit shaped around the TASK id) was wrongly flagged as a hand-ticked STORY"
   } finally { Remove-Sandbox $sb }
 }
 

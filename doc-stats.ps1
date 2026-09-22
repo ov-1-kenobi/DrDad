@@ -611,31 +611,48 @@ if ($Findings) {
   # docs-only commit standalone (it ticks, reindexes and commits in the SAME invocation as the verified
   # build, close-unit.ps1's commit step) and its message is always exactly "$Id" or "$Id`: $Title" - never
   # "Mark <id> complete". A commit that touches ONLY docs\TASKS.md/docs\STORIES.md, mentions a done id, and
-  # does NOT match that shape is the hand-tick signature one layer close-unit's own trailers cannot fake.
+  # does NOT match that shape is a CANDIDATE - but mentioning the id is not enough by itself: this kit's own
+  # history false-positived on it TWICE. (1) scribe-agent/taskmap-agent SHARDING new work ("TASKS: shard S5
+  # into T5.1...") is also a doc-only commit naming the id, but it ADDS T5.1 as `[ ]`, it never ticks it - so
+  # the candidate's own DIFF must show the id's line being ADDED already ticked (`+### [x] <id>` or
+  # `+...<id>...Status: DONE`); a sharding commit's added line is `[ ]`/no DONE marker and is now excluded.
+  # (2) STORY ids specifically: close-unit's OWN roll-up commit (e.g. stamping `closed:close-unit` onto an
+  # already-DONE story from before the stamp existed) is shaped around the TASK it closed ("T1.2: ..."), never
+  # the story id - so the shape-exclusion above never matches for the story, and the diff legitimately DOES
+  # show its Status:DONE line changing (`git show 9afc835` on this repo - real, not a hand-tick). Stories
+  # already have a purpose-built, more reliable detector (the `closed:close-unit` STAMP check just above,
+  # which reads STORIES.md directly rather than inferring from commit shape) - so this check covers TASKS
+  # ONLY, where no other detector exists. Candidate ids also need `\b` boundaries: a plain substring match let
+  # "T1" match inside "T10"/"T11" and "S1" match inside "...ps1" (a real file extension).
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     $handCommitted = New-Object System.Collections.Generic.List[string]
     try {
       Push-Location $proj
       $raw = (git log --format="%x01%H%x02%s" --name-only | Out-String)
-      Pop-Location
       $SOH = [char]1; $STX = [char]2
-      $allDoneIds = @(@($tasksDone | ForEach-Object { $_.Id }) + @($storiesDone) | Select-Object -Unique)
+      $doneTaskIds = @($tasksDone | ForEach-Object { $_.Id } | Select-Object -Unique)
       foreach ($blk in ($raw.Split($SOH) | Where-Object { $_ })) {
         $lines = $blk -split "`r?`n"
         $head = $lines[0].Split($STX)
         if ($head.Count -lt 2) { continue }
-        $sha = $head[0].Substring(0, [Math]::Min(7, $head[0].Length)); $subject = $head[1]
+        $fullSha = $head[0]; $sha = $fullSha.Substring(0, [Math]::Min(7, $fullSha.Length)); $subject = $head[1]
         $changed = @($lines | Select-Object -Skip 1 | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim().Replace('\','/') })
         if ($changed.Count -eq 0) { continue }
         $docOnly = @($changed | Where-Object { $_ -notin @('docs/TASKS.md','docs/STORIES.md') }).Count -eq 0
         if (-not $docOnly) { continue }
-        foreach ($id in $allDoneIds) {
-          if ($subject -notmatch [regex]::Escape($id)) { continue }
-          if ($subject -match ('^' + [regex]::Escape($id) + '(:\s.+)?$')) { continue }   # close-unit's own shape
-          [void]$handCommitted.Add("$id (commit $sha`: '$subject')")
+        $candidateIds = @($doneTaskIds | Where-Object {
+          $subject -match ('\b' + [regex]::Escape($_) + '\b') -and
+          $subject -notmatch ('^' + [regex]::Escape($_) + '(:\s.+)?$')
+        })
+        if ($candidateIds.Count -eq 0) { continue }
+        $diff = (git show --unified=0 --format= $fullSha -- docs/TASKS.md docs/STORIES.md 2>$null | Out-String)
+        foreach ($id in $candidateIds) {
+          $tickPattern = '(?m)^\+.*\b' + [regex]::Escape($id) + '\b.*(\[x\]|Status:\s*DONE\b)'
+          if ($diff -match $tickPattern) { [void]$handCommitted.Add("$id (commit $sha`: '$subject')") }
         }
       }
+      Pop-Location
     } catch { try { Pop-Location } catch {} } finally { $ErrorActionPreference = $prevEap }
     if ($handCommitted.Count -gt 0) {
       $shown = ($handCommitted | Select-Object -Unique | Select-Object -First 6) -join '; '
