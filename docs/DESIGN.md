@@ -373,6 +373,161 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       unsetting real env vars, removing real files, force-pushing, etc.) requires the human's EXPLICIT
       confirmation before it runs live - code-review-only verification is an acceptable substitute for the
       live run when the human declines, and the story/grade card records which one happened and why.
+- [ ] R36: **Planning cost is priced and ratcheted, not unlimited.** Measured (ModelTest bake-off,
+      `docs/ASSESSMENT.md` Failure B): Opus spent its ENTIRE session budget growing scope from 0 to 28
+      stories / 35 tasks sharded (5 of 28 stories reached `/taskmap`, each `taskmap-agent` spawn burning
+      78k-110k tokens) before writing a single line of code - 1 commit (the scaffold), 0 `.cs` files, 0
+      tasks done. The scope growth WAS human-approved (Opus's own `DESIGN.md` recorded "the v1 scope then
+      grew by four features") - the failure is that the COST of saying yes was invisible at the moment of
+      the ask. R30's walking-skeleton rule (the first STORY must run end-to-end) does not cover this: R30
+      orders what S1 must contain; nothing caps how far `/stories`/`/taskmap` may shard AHEAD of S1 ever
+      closing. R32's one-agent-per-unit rule does not cover it either - it stops a subagent from LOOPING
+      inside one spawn, not the AGGREGATE cost of many legitimately-bounded spawns sharding a plan too big
+      to have been approved at that size. Two mechanisms, run as one loop - SCOPE -> PRICE -> ASK ->
+      WALK/WARN -> BUILD -> ANALYZE -> repeat:
+      (a) **Ask-time scope pricing.** When `/design` or `/stories` grows scope (a new epic, or stories
+      added beyond what the last `/stories` pass already priced), the acting agent states the delta in
+      story/task-count terms BEFORE the human approves it, and asks explicitly: build now, or keep
+      scoping? The human's yes is to a NUMBER, not a blank check.
+      (b) **Walking-skeleton ratchet.** `doc-stats -Findings` computes planning mass against PROVEN
+      footprint (stories/tasks actually DONE, both already tracked) and WARNs when the gap crosses a
+      pinned threshold - the same generated-not-authored pattern as every other finding here, e.g. R24's
+      `[integrity]`/`[taskmap]` findings.
+      Exact thresholds, the pricing message shape, and worked examples (using this bake-off's real numbers)
+      are pinned in `## Contracts` below by `architect-agent` - this requirement records the WHAT and the
+      loop shape, not the formula.
+
+## Contracts (pin BEFORE locking - architect-agent writes these)
+### C1: R36 planning-cost ratchet - thresholds, pricing message shape, worked examples
+- **Status: APPROVED 2026-09-22.** R36 names two mechanisms as one loop (SCOPE -> PRICE -> ASK ->
+  WALK/WARN -> BUILD -> ANALYZE -> repeat). The human picked **Option B** for C1a and approved C1b/C1c/C1d
+  as written - nothing below is still open. Not yet implemented (`doc-stats.ps1`, `scribe-agent.md`, and
+  `/design`/`/stories`' prompts are unchanged by this pass); that is `/taskmap` or `/build` work from here.
+
+#### C1a: Walking-skeleton ratchet threshold formula - CHOSEN: Option B
+- **Inputs (only what `doc-stats.ps1` already computes, no new data source):** `storiesTotal =
+  $storyIds.Count`, `storiesDone = $storiesDone.Count`, `tasksTotal = $tasks.Count`, `tasksDone =
+  $tasksDone.Count` (confirmed at `doc-stats.ps1:126,152,192-198`).
+- **Option A - hard mass + zero-done gate.** Fire when `(storiesTotal + tasksTotal) >= 15 AND
+  (storiesDone + tasksDone) == 0`. Simplest; matches the Opus incident exactly. Weakness: once a SINGLE
+  unit closes it goes silent forever, even if scope then balloons again at a near-zero done ratio -
+  does not satisfy the "scales past the first ratchet" ask.
+- **Option B - mass-scaled DONE-ratio threshold (RECOMMENDED).** Let `mass = storiesTotal + tasksTotal`
+  and `doneRatio = (storiesDone + tasksDone) / mass`. Fire when `mass >= 15 AND doneRatio < 0.15` (15%).
+  One ratio + one floor, continuously re-evaluated (never permanently silenced), and it reads as exactly
+  the human's own phrasing - "warn when the DONE ratio stays near zero" - scaled by mass so a small
+  project isn't punished for having 0 done right after `/stories`, and a big one doesn't get a permanent
+  pass after its first close.
+- **Option C - outstanding-vs-proven multiplier.** Let `outstanding = (storiesTotal - storiesDone) +
+  (tasksTotal - tasksDone)` and `proven = storiesDone + tasksDone`. Fire when `outstanding >= 20 AND
+  outstanding > 5 * proven`. Most literally matches R36(b)'s own words ("planning mass against PROVEN
+  footprint... the GAP crosses a threshold") and scales the same way as B, but needs two dials (a floor
+  and a multiplier) instead of one ratio, which is harder to retune from a single false-positive report.
+- **Worked examples (all three formulas run against the same three scenarios):**
+  | scenario | storiesTotal/Done | tasksTotal/Done | A fires? | B fires? | C fires? |
+  |---|---|---|---|---|---|
+  | **Opus incident** (ASSESSMENT.md Failure B / `ModelTest/ASSESSMENT.md:29`) | 28/0 | 35/0 | mass=63>=15, done=0 -> **YES** | mass=63, ratio=0% -> **YES** | outstanding=63>=20, proven=0, 63>0 -> **YES** |
+  | **early legit project** (fresh `/stories` pass, `/taskmap` not run yet) | 3/0 | 0/0 | mass=3<15 -> no | mass=3<15 -> no | outstanding=3<20 -> no |
+  | **Opus shape before `/taskmap` ran** (scope already grew, no tasks sharded yet) | 28/0 | 0/0 | mass=28>=15, done=0 -> **YES** | mass=28, ratio=0% -> **YES** | outstanding=28>=20, proven=0 -> **YES** |
+  | **healthy large project** (steady progress, big but proportionate) | 50/10 | 80/40 | done=50<>0 -> no (permanently silent from here on) | mass=130, ratio=38.5% -> no | outstanding=80, proven=50, 80<250 -> no |
+  | **stalled large project** (scope kept growing, done ratio never recovers) | 50/3 | 80/5 | done=8<>0 -> no (misses this - the scaling gap) | mass=130, ratio=6.2%<15% -> **YES** | outstanding=122, proven=8, 122>40 -> **YES** |
+  All three pass the Opus case and stay silent on the 3-story early-project case (the two hard
+  requirements from the brief). A and B/C diverge on the last two rows, which is exactly the "scales past
+  the first ratchet" criterion - A does not scale, B and C do.
+- **CHOSEN: Option B** (`mass >= 15 AND doneRatio < 0.15`) - same catch rate as C on every row above, one
+  tunable ratio instead of two coupled dials, and its finding message can state a single percentage a
+  human can eyeball ("6% done") instead of a multiplier. A and C were considered and are recorded above for
+  why they were passed over; if 15%/15% proves too noisy or too lax in practice, retune the constants
+  before reaching for C's two-dial shape.
+
+#### C1b: Where the WARN lives - finding location + tag - APPROVED
+- **Decision:** lives in `doc-stats.ps1 -Findings`, in the generated (not librarian-authored) block, same
+  place as `[design]`/`[scribe]`/`[taskmap]`/`[integrity]` today (`doc-stats.ps1:204-663`). New tag
+  `[ratchet]` - grepped the file's existing `$f.Add("[...")` tags (`design, domain, scribe, taskmap, grade,
+  dev, hygiene, ui, ux, playtest, style, research, integrity`); none collide, and `[ratchet]` names the
+  mechanism the same way R36(b) itself does ("walking-skeleton ratchet"). This is a DIFFERENT mechanism
+  from R28's `ratchet.ps1` (that one detects a SHRINKING verification surface; this one detects planning
+  mass GROWING faster than proven footprint) - reusing the word is deliberate (both are "a threshold that
+  must not be silently crossed") but the tag lives in `doc-stats.ps1`, not `ratchet.ps1`, and is scoped by
+  its own `[ratchet]` prefix so the two are never confused in a findings list.
+- **Format / signature:** appended alongside the other findings, WARN severity (never blocks a gate, same
+  as `[research]`/`[style]`/`[ux]`): `[ratchet] planning mass ({storiesTotal} stories + {tasksTotal} tasks
+  = {mass}) is far ahead of proven footprint ({storiesDone} stories + {tasksDone} tasks = {doneMass} done,
+  {doneRatioPct}% of mass) - the walking-skeleton ratchet (R36b/C1) fires once mass >= 15 and the done
+  ratio stays under 15%. Build out what is already scoped (S1 must close first, per R30) before sharding
+  more, or explicitly re-confirm scope growth via /design or /stories now that the cost is visible.`
+- **Worked example (Opus numbers, the required trace):** `storiesTotal=28, storiesDone=0, tasksTotal=35,
+  tasksDone=0` -> `mass=63`, `doneMass=0`, `doneRatioPct=0` ->
+  `[ratchet] planning mass (28 stories + 35 tasks = 63) is far ahead of proven footprint (0 stories + 0
+  tasks = 0 done, 0% of mass) - the walking-skeleton ratchet (R36b/C1) fires once mass >= 15 and the done
+  ratio stays under 15%. Build out what is already scoped (S1 must close first, per R30) before sharding
+  more, or explicitly re-confirm scope growth via /design or /stories now that the cost is visible.`
+  Counter-example (must stay silent): `storiesTotal=3, storiesDone=0, tasksTotal=0, tasksDone=0` -> mass=3
+  < 15 -> no `[ratchet]` line printed, matching the house style proven at `doc-stats.ps1:3101-3105`'s
+  "a freshly scaffolded template must not be flagged" test.
+
+#### C1c: Ask-time scope-pricing sentence shape - APPROVED
+- **Decision:** the sentence is said by the ORCHESTRATOR in the MAIN LOOP, never inside a spawned
+  subagent (R32 - a subagent is unguarded and unobservable, so a gate that only a human-facing ask can
+  satisfy has to be said where the transcript and the human both see it). Two trigger points, at two
+  granularities, because real counts only exist once the corresponding doc exists:
+  - **At `/stories`' EXPAND loop** (`global/commands/stories.md` step 2, which already runs `dad
+    doc-stats -Findings` between epic spawns): the orchestrator snapshots
+    `storiesTotal/tasksTotal/storiesDone/tasksDone` BEFORE spawning `scribe-agent` for the next epic, and
+    diffs against the numbers `doc-stats -Findings` prints AFTER it returns - a real count, not an
+    estimate. Sentence: `"Epic {epic} added ~{deltaStories} stor(y/ies) (now {afterStories} stories /
+    {afterTasks} tasks total, {storiesDone}/{afterStories} stories and {tasksDone}/{afterTasks} tasks
+    DONE). Build what's already scoped now, or keep scoping the next epic?"`
+  - **At `/design` step 4** (adding a new epic before any of its stories exist, so there is no real count
+    yet): the orchestrator counts EXISTING epics/stories only - `"Adding epic {epic} ({feature list})
+    brings the design to {epicCount} epics. Its stories aren't priced yet - `/stories` will show the real
+    story/task count when it expands this epic. Add it now, or build the {currentStoryCount} stories
+    already scoped first?"` Deliberately does NOT fabricate a story-count estimate for an unexpanded epic -
+    `ASSESSMENT.md`'s own Failure-B table flags "ESTIMATE QUALITY" as option (d)'s biggest risk, and a
+    invented number the human trusts is worse than an honest "not priced yet."
+- **Worked example against the actual Opus moment** (`opus/docs/DESIGN.md:295-297`/`:318-322`, cited in
+  `ModelTest/ASSESSMENT.md:150-159`): opus added epic **E6** ("serving scale, tick-off persistence,
+  copy-as-text, print stylesheet" - four features) DURING `/design`, before `/stories` had run at all. At
+  that exact moment the `/design`-stage sentence (real numbers only) would have read: `"Adding epic E6
+  (serving scale, tick-off persistence, copy-as-text, print stylesheet) brings the design to 6 epics. Its
+  stories aren't priced yet - /stories will show the real story/task count when it expands this epic. Add
+  it now, or build what's already scoped first?"` **Honest gap:** `ASSESSMENT.md` and `ModelTest/
+  ASSESSMENT.md` do not preserve the exact pre-E6 epic count or the pre-growth requirement count from the
+  transcript (only the FINAL totals - 32 requirements, 9 contracts, 28 stories - are graded); "6 epics" in
+  this trace assumes E1-E5 existed before E6, which is consistent with the assessment's E6 numbering but
+  not independently verified against `opus/run.txt`. The mechanism and sentence shape are pinned; the
+  precise "before" number in this one historical trace is an approximation, flagged as such rather than
+  invented as fact.
+
+#### C1d: How the ratchet (WALK/WARN) and the pricing ask (ASK) interact - APPROVED
+- **Decision:** stay INDEPENDENT as computations - `doc-stats.ps1` has no way to know whether a human was
+  ever shown a C1c pricing sentence (that is a conversation-level event, not something STORIES.md/
+  TASKS.md state can encode), so a literal cross-reference ("you were told this would add N tasks") is not
+  mechanically computable and would have to be faked or stored as new state, which C1a's brief explicitly
+  rules out ("no new data source"). Instead, the C1b finding's WORDING references the pricing loop
+  NARRATIVELY (see the exact text above - "explicitly re-confirm scope growth via /design or /stories now
+  that the cost is visible") so a reader understands the ratchet is the loop's BACKSTOP: if pricing was
+  skipped, ignored, or answered "keep scoping" too many times, the ratchet is what eventually says so
+  out loud, without needing to prove which of those happened.
+- **Invariant:** the ratchet (C1a/C1b) may fire even when C1c was followed correctly (a human can
+  knowingly accept a heavy backlog) - it is a WARN, never a gate, so a legitimate "yes, keep scoping" is
+  never blocked, only made visible on every subsequent `doc-stats -Findings` run until the done ratio
+  recovers or the human runs `-AcceptShrink`-style acknowledgement (out of scope here - see below).
+
+- **Invariant(s) (all sub-decisions):** `[ratchet]` never blocks `/build`, `close-unit`, or any lock
+  gate - R36 records this as a WARN mechanism, matching `[research]`/`[style]`/`[ux]`'s existing WARN
+  severity, not `[design]`'s LOCK-blocking class. The formula uses ONLY `doc-stats.ps1`'s existing four
+  counters - no new file, no new tracked state, no per-story metadata.
+- **Out of scope:** an explicit acknowledgement/snooze mechanism for a `[ratchet]` finding the human has
+  seen and deliberately accepted (the way `-AcceptShrink` works for R28's ratchet) is NOT pinned here - a
+  v2 concern once the WARN exists and proves too noisy or too easy to ignore. Automatically blocking
+  `/taskmap` or `/stories` on a `[ratchet]` finding is explicitly NOT proposed (R36 calls for a WARN, not a
+  gate, and the human's "keep scoping" answer must stay honored). Which exact threshold numbers (15/0.15
+  for B, or C's 20/5x) ship is also open pending the human's C1a pick - the numbers above are the
+  recommendation's starting point, not a promise they are final; `doc-stats.ps1` should keep them as named
+  constants near the top of the `[ratchet]` block so they are easy to retune from one false-positive/
+  false-negative report, the same way other WARN thresholds in this file already are (e.g. the `>= 5`
+  uncommitted-done threshold at `doc-stats.ps1:595`).
 
 ## Components
 ### local-tools (C# MCP server)
