@@ -1572,6 +1572,37 @@ Test-Case "the corpus has a SHELL door, and it degrades instead of dying" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "docs-find NEVER creates a real directory at an unrewritten .mcp.json placeholder" {
+  # R35, found via self-hosting: this KIT's OWN .mcp.json (committed with the unrewritten dev-path
+  # placeholder - install.ps1 rewrites it only on a real install, never for the kit's own self-hosted repo)
+  # sent docs-find.ps1 chasing LOCALTOOLS_DOCS_DIR to a path that does not exist on this machine. Unlike
+  # close-unit.ps1/doc-stats.ps1 (which both guard this with -and (Test-Path $d)), docs-find.ps1 only
+  # checked `if ($d)` - truthy, not real - so it set $env:LOCALTOOLS_DOCS_DIR to the bogus path and invoked
+  # local-tools.exe, whose Rag.cs unconditionally Directory.CreateDirectory()s the docs dir AND its .index
+  # subfolder. That created a real, empty directory tree OUTSIDE any project, on the real machine - which
+  # then went on to hijack close-unit's own (correctly guarded) path resolution on a LATER run, because
+  # once the bogus path exists, Test-Path stops distinguishing "really configured" from "leaked by a bug".
+  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`n### C9: marker`n- **Decision:** the real project docs dir was used, per this text." |
+      Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    # a bogus LOCALTOOLS_DOCS_DIR, shaped exactly like an unrewritten dev-path placeholder - a path that
+    # does NOT exist and must NEVER get created just by being read.
+    $bogus = Join-Path $sb "bogus-unrewritten-placeholder\docs"
+    Assert (-not (Test-Path $bogus)) "test setup problem: the bogus path already exists"
+    @{ mcpServers = @{ 'local-tools' = @{ command = "local-tools.exe"; env = @{ LOCALTOOLS_DOCS_DIR = $bogus } } } } |
+      ConvertTo-Json -Depth 10 | Set-Content "$p\.mcp.json" -Encoding UTF8
+
+    $df = Join-Path $kit "docs-find.ps1"
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "marker" 2>&1 | Out-String)
+
+    Assert (-not (Test-Path $bogus)) "docs-find created a REAL directory at the unrewritten placeholder path - the exact R35 leak this test guards against:`n$out"
+    Assert ($out -match 'marker|C9') "docs-find did not fall back to the PROJECT'S OWN docs dir when the configured LOCALTOOLS_DOCS_DIR did not exist:`n$out"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "close-unit RECORDS the commands that worked (RECIPES stops being empty)" {
   # docs\RECIPES.md was designed as a proven-commands log agents append to on success. After nine runs on a
   # real project it held 18 lines - the bare template, zero entries. Meanwhile runs kept emitting broken

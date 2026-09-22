@@ -37,7 +37,15 @@ $mcp = Join-Path $proj ".mcp.json"
 if (Test-Path $mcp) {
   try {
     $d = (Get-Content $mcp -Raw | ConvertFrom-Json).mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
-    if ($d) { $docs = $d }
+    # GUARD: only follow this if the path actually exists. Unlike close-unit.ps1/doc-stats.ps1 (which both
+    # already have this check), this was missing here - so a project whose .mcp.json still carries the
+    # unrewritten dev-path placeholder (e.g. this KIT's own .mcp.json, self-hosted before install.ps1 ever
+    # rewrites it) sent local-tools.exe searching against a path that does not exist on THIS machine. Worse:
+    # setting $env:LOCALTOOLS_DOCS_DIR to that bogus value and invoking $exe --search made Rag.cs's own
+    # Directory.CreateDirectory(DocsDir)/CreateDirectory(IndexDir) CREATE it for real, outside the project,
+    # on the C: drive - a real R35 violation, found via self-hosting when it then hijacked close-unit's own
+    # (correctly Test-Path-guarded) path resolution on a later run.
+    if ($d -and (Test-Path $d)) { $docs = $d }
   } catch { }
 }
 
