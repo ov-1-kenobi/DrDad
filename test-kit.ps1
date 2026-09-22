@@ -3234,6 +3234,70 @@ Test-Case "grade cards are demanded for STORIES only, not for every task" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "doc-stats fires [ratchet] per C1a's worked mass/doneRatio table, silent below the floor or above the ratio" {
+  # T6.1 added a WARN-only [ratchet] finding: mass = storiesTotal + tasksTotal, doneRatio = doneMass/mass,
+  # fires when mass >= 15 AND doneRatio < 0.15 (C1a). This mechanically drives doc-stats.ps1 -Findings
+  # through DESIGN.md C1a's four worked-example rows (docs/TASKS.md T6.2) - the exact regression fixture
+  # for the real Opus/ModelTest incident (28 stories/0 done, 35 tasks/0 done, mass 63) that motivated R36b.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $ds = Join-Path $kit "doc-stats.ps1"
+    "# Design`r`n`r`nStatus: LOCKED`r`nSecurity review: NOT-REQUIRED (test fixture)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+
+    # Builds a STORIES.md/TASKS.md pair with exactly $storiesTotal story headings ($storiesDone of them
+    # carrying '<!-- Status: DONE -->' ON THE HEADING LINE - doc-stats.ps1:132 only counts DONE when the
+    # marker is on the same line as the heading) and $tasksTotal '### [ ]'/'### [x]' task blocks.
+    function Set-Fixture([int]$storiesTotal, [int]$storiesDone, [int]$tasksTotal, [int]$tasksDone) {
+      $storyLines = @("# Stories", "")
+      for ($i = 1; $i -le $storiesTotal; $i++) {
+        $marker = if ($i -le $storiesDone) { "<!-- Status: DONE -->" } else { "<!-- Status: TODO -->" }
+        $storyLines += "### Story S${i}: story $i   $marker"
+      }
+      Set-Content "$p\docs\STORIES.md" ($storyLines -join "`r`n") -Encoding UTF8
+
+      $taskLines = @("# Tasks", "", "## Tasks", "")
+      for ($i = 1; $i -le $tasksTotal; $i++) {
+        $box = if ($i -le $tasksDone) { "x" } else { " " }
+        $taskLines += "### [$box] T1.$i - task $i   (Story S1)"
+        $taskLines += "- **Goal:** x"
+        $taskLines += ""
+      }
+      Set-Content "$p\docs\TASKS.md" ($taskLines -join "`r`n") -Encoding UTF8
+    }
+    function Findings() { return (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) }
+
+    # AC1/AC4: the Opus-incident regression numbers - 28/0 stories, 35/0 tasks -> mass=63, doneRatio=0%
+    Set-Fixture 28 0 35 0
+    $o1 = Findings
+    Assert ($o1 -match '\[ratchet\]') "the Opus-incident numbers (28 stories/0 done, 35 tasks/0 done, mass 63) did not fire [ratchet]"
+    Assert ($o1 -match [regex]::Escape('(28 stories + 35 tasks = 63)')) "mass was not substituted as '(28 stories + 35 tasks = 63)'"
+    Assert ($o1 -match [regex]::Escape('(0 stories + 0 tasks = 0 done, 0% of mass)')) "doneRatio was not substituted as '0 stories + 0 tasks = 0 done, 0% of mass'"
+    # C1b's pinned message shape: names the mechanism and states the two pinned floors
+    Assert ($o1 -match '(?i)walking-skeleton ratchet \(R36b/C1\)') "message does not name the walking-skeleton ratchet per C1b"
+    Assert ($o1 -match 'mass >= 15 and the done ratio stays under 15%') "message does not state the pinned mass/doneRatio floors"
+
+    # AC2: early small project - 3/0 stories, 0/0 tasks -> mass=3 < 15 -> SILENT, no false positive
+    Set-Fixture 3 0 0 0
+    $o2 = Findings
+    Assert ($o2 -notmatch '\[ratchet\]') "an early 3-story/0-task project (mass 3 < 15) falsely fired [ratchet]"
+
+    # AC3: healthy large project - 50/10 stories, 80/40 tasks -> mass=130, doneRatio=38.5% >= 15% -> SILENT
+    Set-Fixture 50 10 80 40
+    $o3 = Findings
+    Assert ($o3 -notmatch '\[ratchet\]') "a healthy large project (mass 130, 38.5% done) falsely fired [ratchet]"
+
+    # AC5: stalled large project - 50/3 stories, 80/5 tasks -> mass=130, doneRatio=6.2% < 15% -> FIRES
+    # (the case a story-only ratio would have missed, since it is a large mostly-scoped project that just
+    # stalled, not an early one)
+    Set-Fixture 50 3 80 5
+    $o4 = Findings
+    Assert ($o4 -match '\[ratchet\]') "a stalled large project (mass 130, 6.2% done) did not fire [ratchet]"
+    Assert ($o4 -match [regex]::Escape('(50 stories + 80 tasks = 130)')) "mass was not substituted as '(50 stories + 80 tasks = 130)' for the stalled-project case"
+    Assert ($o4 -match [regex]::Escape('(3 stories + 5 tasks = 8 done, 6.2% of mass)')) "doneRatio was not substituted as '3 stories + 5 tasks = 8 done, 6.2% of mass' for the stalled-project case"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "a corpus that nothing cites is ONE finding, said loudly" {
   # Measured on the CMS run: 11 source files, a 17-contract design doc, and `cited in docs: 0`. The whole
   # research phase produced files and changed nothing downstream. Two failures at once: the count printed

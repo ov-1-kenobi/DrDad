@@ -217,7 +217,7 @@
   scope (placeholder/bashrc/`.mcp.json`) - that was explicitly deferred; file a separate story/requirement
   if that is ever wanted.
 
-### Story S6: Walking-skeleton ratchet - doc-stats `[ratchet]` finding   (R36)   <!-- Status: TODO -->
+### Story S6: Walking-skeleton ratchet - doc-stats `[ratchet]` finding   (R36)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `doc-stats.ps1 -Findings` computes and WARNs when a project's planning mass (stories + tasks)
   has grown far ahead of its proven/DONE footprint - the mechanism that would have caught the ModelTest
   bake-off's Opus failure (28 stories / 35 tasks sharded, 0 done) automatically, without a human having to

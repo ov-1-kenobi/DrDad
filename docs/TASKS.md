@@ -315,7 +315,7 @@ because its Test-Case greps the pricing-sentence language each of them adds.)
   (that one detects a SHRINKING verification surface; this detects planning mass GROWING faster than proven
   footprint) - do not touch `ratchet.ps1`, this all lives in `doc-stats.ps1`.
 
-### [ ] T6.2 - Add test-kit.ps1 Test-Case covering the [ratchet] finding (AC1-AC5)   (Story S6)
+### [x] T6.2 - Add test-kit.ps1 Test-Case covering the [ratchet] finding (AC1-AC5)   (Story S6)
 - **Goal:** A `Test-Case` in `test-kit.ps1` that mechanically verifies the `[ratchet]` finding fires/stays
   silent at each of the pinned mass/doneRatio combinations, so the full validation gate covers S6's behavior
   end to end (S6 AC6).
