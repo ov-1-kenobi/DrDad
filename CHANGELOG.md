@@ -2,6 +2,40 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.51.0 - 2026-09-22
+
+### Added - R36: planning-cost ratchet (ask-time scope pricing + a walking-skeleton ratchet)
+Grounded in a real bake-off finding (`docs/ASSESSMENT.md`, Failure B): an Opus run grew scope to 28 stories
+and 35 sharded tasks, 0 done, before writing a line of code, with no gate anywhere to make that cost
+visible. R36 pins a loop, not a one-off check - SCOPE -> PRICE -> ASK -> WALK/WARN -> BUILD -> ANALYZE ->
+repeat - via two independent mechanisms under contract C1 (architect-agent-pinned, each sub-decision traced
+against the real Opus/haiku bake-off numbers):
+
+Closed via Story S6 (the ratchet) and Story S7 (the pricing sentence):
+- **C1a/C1b - walking-skeleton ratchet:** `doc-stats.ps1` now emits a `[ratchet]` WARN when planning mass
+  (stories + tasks) reaches 15+ with a done-ratio under 15% - Option B, mass-scaled done-ratio, chosen over
+  two rejected alternatives after tracing all three against 5 real scenarios including the bake-off's own
+  numbers and a "stalled large project" case the rejected option would have missed.
+- **C1c - ask-time scope pricing:** `/stories` now states the real story/task-count delta before the human
+  approves further growth; `/design` gives an honest "not priced yet" epic-count when nothing is expanded
+  yet, rather than a fabricated estimate - noted as needing to adapt C1c's Opus "epic id" wording, since
+  this kit has no Epics section and stories are tagged by Requirement id instead.
+
+### Fixed - four gate defects found in a controlled Haiku-vs-Opus bake-off, plus a self-hosting leak
+- `close-unit.ps1`'s Build/Test line parser rejected realistic filled-in `CLAUDE.md` lines (a backtick-
+  quoted command with trailing prose); an unresolved Build command now aborts the close (fatal) instead of
+  warning and proceeding unverified - `-SkipVerify` is the only remaining escape hatch.
+- `doc-stats.ps1` now checks a `Security review: NOT-REQUIRED` waiver's credibility against the project's
+  own DESIGN/STORIES content (`auth|login|password|token|session`) instead of only checking a reason exists.
+- `doc-stats.ps1`'s hand-tick detector (`[integrity]`) now catches a docs-only commit that hand-ticks a task
+  OUTSIDE `close-unit` (which never produces a standalone docs-only commit); separately, it no longer
+  false-positives on a sharding commit that ADDS a task as `[ ]`, or on `close-unit`'s own story roll-up
+  commit - both found by running the check against this kit's own real history.
+- `docs-find.ps1` read `LOCALTOOLS_DOCS_DIR` from `.mcp.json` without the same `Test-Path` guard
+  `close-unit.ps1`/`doc-stats.ps1` already use, so an unrewritten dev-path placeholder made it create a
+  real, empty directory tree outside the project (`C:\Projects\Claude\MCP\DAD-kit\docs\.index`) - an R35
+  violation caught mid self-hosting `/build`. Guarded to match, and the leaked directory removed.
+
 ## 0.50.0 - 2026-09-20
 
 ### Added - R35: self-verification is sandboxed against real machine state; irreversible actions wait for explicit consent
