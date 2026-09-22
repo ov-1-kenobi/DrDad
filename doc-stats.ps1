@@ -602,6 +602,47 @@ if ($Findings) {
     }
   }
 
+  # --- HAND-COMMITTED AROUND close-unit: a DOC-ONLY commit ticked the box, in a shape close-unit never
+  # writes ---------------------------------------------------------------------------------------------
+  # The block above only fires when NO commit mentions the id at all. A real run's [x] tasks were EVERY
+  # one covered by SOME commit - just not one close-unit made: it hand-ticked the checkbox, then committed
+  # docs\TASKS.md ALONE with a message like "Mark T1.1 complete", separate from the real implementation
+  # commit - so the "no commit mentions it" check stayed silent. close-unit.ps1 never produces a
+  # docs-only commit standalone (it ticks, reindexes and commits in the SAME invocation as the verified
+  # build, close-unit.ps1's commit step) and its message is always exactly "$Id" or "$Id`: $Title" - never
+  # "Mark <id> complete". A commit that touches ONLY docs\TASKS.md/docs\STORIES.md, mentions a done id, and
+  # does NOT match that shape is the hand-tick signature one layer close-unit's own trailers cannot fake.
+  if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $handCommitted = New-Object System.Collections.Generic.List[string]
+    try {
+      Push-Location $proj
+      $raw = (git log --format="%x01%H%x02%s" --name-only | Out-String)
+      Pop-Location
+      $SOH = [char]1; $STX = [char]2
+      $allDoneIds = @(@($tasksDone | ForEach-Object { $_.Id }) + @($storiesDone) | Select-Object -Unique)
+      foreach ($blk in ($raw.Split($SOH) | Where-Object { $_ })) {
+        $lines = $blk -split "`r?`n"
+        $head = $lines[0].Split($STX)
+        if ($head.Count -lt 2) { continue }
+        $sha = $head[0].Substring(0, [Math]::Min(7, $head[0].Length)); $subject = $head[1]
+        $changed = @($lines | Select-Object -Skip 1 | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim().Replace('\','/') })
+        if ($changed.Count -eq 0) { continue }
+        $docOnly = @($changed | Where-Object { $_ -notin @('docs/TASKS.md','docs/STORIES.md') }).Count -eq 0
+        if (-not $docOnly) { continue }
+        foreach ($id in $allDoneIds) {
+          if ($subject -notmatch [regex]::Escape($id)) { continue }
+          if ($subject -match ('^' + [regex]::Escape($id) + '(:\s.+)?$')) { continue }   # close-unit's own shape
+          [void]$handCommitted.Add("$id (commit $sha`: '$subject')")
+        }
+      }
+    } catch { try { Pop-Location } catch {} } finally { $ErrorActionPreference = $prevEap }
+    if ($handCommitted.Count -gt 0) {
+      $shown = ($handCommitted | Select-Object -Unique | Select-Object -First 6) -join '; '
+      $f.Add("[integrity] $($handCommitted.Count) unit(s) were ticked by a DOC-ONLY commit close-unit never made (message shape does not match close-unit's own '<id>' / '<id>: <title>'): $shown - close-unit ticks and commits atomically and never writes a standalone docs-only commit, so this is the hand-tick signature (a model committed around a blocked or degraded close-unit). Re-close properly via close-unit, or revert the tick.")
+    }
+  }
+
   Write-Host "== STATE FACTS (computed - do NOT contradict these) ==" -ForegroundColor Cyan
   # [x] counts CHECKBOXES, which a hand-tick fakes. When no commit backs them, say so ON THE FACTS LINE so
   # "44/44 [x]" cannot be read as "44 verified" - a real audit wrote exactly that over 32 fabricated ticks.

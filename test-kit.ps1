@@ -2567,6 +2567,49 @@ Test-Case "only close-unit may close a story: it stamps, a hand-tick is flagged,
   } finally { Remove-Sandbox $sb2 }
 }
 
+Test-Case "doc-stats flags a hand-ticked task committed WITHOUT close-unit (doc-only commit, wrong shape)" {
+  # A.3: haiku's real repo (ModelTest bake-off) never marked its story DONE (so the story hand-tick check
+  # above never fires) and EVERY hand-ticked task WAS mentioned by some commit (so the "no commit mentions
+  # it" [integrity] check stays silent too) - it just hand-committed docs\TASKS.md ALONE with messages like
+  # "Mark T1.1 complete", a shape close-unit never writes and a file set close-unit never commits standalone.
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $before = "# Task map`n`n## Tasks`n`n### [ ] T1.1 - hand ticked   (Story S1)`n- **Goal:** x`n" +
+              "### [ ] T2.1 - real close   (Story S2)`n- **Goal:** y`n### [ ] T2.2 - stays open   (Story S2)`n- **Goal:** z"
+    $before | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->`n`n### Story S2: Two   <!-- Status: TODO -->" |
+      Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+
+    # hand-tick T1.1 directly (bypassing close-unit.ps1 entirely) and commit ONLY docs\TASKS.md
+    ($before -replace '\[ \] T1\.1', '[x] T1.1') | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    git add docs\TASKS.md
+    git -c user.name=t -c user.email=t@t commit -q -m "Mark T1.1 complete"
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $ds = Join-Path $kit "doc-stats.ps1"
+    $out1 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out1 -match '(?i)\[integrity\].*DOC-ONLY commit close-unit never made') "the hand-committed, wrong-shape tick was not flagged"
+    Assert ($out1 -match 'T1\.1') "the finding did not name T1.1"
+
+    # T2.1 closes for real, through close-unit - same doc-only file set (no code files in this fixture),
+    # but the RIGHT message shape ("T2.1: real close") must clear it
+    $cu = Join-Path $kit "close-unit.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T2.1 -Title "real close" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "close-unit failed to close T2.1"
+
+    $out2 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($out2 -notmatch "T2\.1 \(commit") "a real close-unit commit ('T2.1: real close') was wrongly flagged as hand-ticked"
+    Assert ($out2 -match 'T1\.1') "the still-hand-ticked T1.1 finding disappeared after an unrelated close"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "doc-stats flags project-root JUNK and a nav-less layout" {
   # Measured, cms3: the root was littered with ELEVEN ad-hoc SUMMARY/COMPLETE/IMPLEMENTATION files (which
   # CLAUDE.md forbids), FOUR path-mangled directories (a Windows path passed to bash, backslashes eaten, so

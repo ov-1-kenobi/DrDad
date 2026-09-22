@@ -201,6 +201,13 @@ weighing against its larger, prompt-engineering-shaped cost.
 
 ## Top issues (ranked, all five, by breakage-prevented / effort)
 
+**Status: A.1, A.2, A.3, A.4 are DONE** (commits `8c6ab1b` for A.1/A.2/A.4, and the follow-up commit for
+A.3 - see `git log --oneline -- close-unit.ps1 doc-stats.ps1 test-kit.ps1`). Each fix shipped with the
+`test-kit.ps1` case described below; the full suite passes (the two remaining failures - the Ollama-
+dependent corpus SHELL-door test and a stray local `examples\cms3` build artifact - predate this pass and
+are unrelated to it). Failure B (#5) remains a proposal only; it needs a human decision among the four
+options before anything gets built.
+
 ### 1. [P1 x S] A.2 - no-build-command degrades to a warning instead of exit 1 (`close-unit.ps1:231-233`)
 Ranked first: this is the SINGLE root cause that let haiku's entire close-out sequence proceed unverified -
 every other gap (A.1's regex, A.3's undetected hand-commit) only matters BECAUSE this one first let an
