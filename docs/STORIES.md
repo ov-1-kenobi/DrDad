@@ -259,6 +259,16 @@
   only, matching `[research]`/`[style]`/`[ux]`, never `[design]`'s LOCK-blocking class.
 
 ### Story S7: Ask-time scope pricing - state the cost before scope grows   (R36)   <!-- Status: DONE closed:close-unit -->
+<!-- Implemented: T7.1 (global\commands\stories.md step 2b) + T7.2 (global\commands\design.md step 4b) +
+     T7.3 (test-kit.ps1 static Test-Case), commits 49509a1/6c364a5/e8b8320. AC1/AC2/AC4 verified (dev+qa
+     traced the pricing sentences character-for-character against docs\DESIGN.md's C1c, confirmed the
+     no-fabrication rule, the explicit WAIT, and the epic/requirement vocabulary adaptation; AC4's
+     test-kit.ps1 case was proven to be a real negative test, not a tautology, by qa-agent temporarily
+     removing the sentences and watching it fail). AC3 (installed copies in %USERPROFILE%\.claude\commands\
+     refreshed) is DEFERRED per R35(b): install.cmd mutates state OUTSIDE this project and needs the
+     human's explicit consent before running live. Grade card grades\S7_GRADE.md flagged this gap; it is
+     recorded here per T7.3's own Context instruction rather than left silent. Run install.cmd before the
+     next live /stories or /design session picks up T7.1/T7.2's changes. -->
 - **Goal:** when `/stories` expands a requirement into stories, or `/design` adds a new requirement, the
   orchestrator states the story/task-count cost BEFORE asking the human to approve continuing to scope vs.
   building now - so the cost of saying yes is visible at the moment of the ask. This is the other half of
