@@ -216,3 +216,95 @@
 - **Dev notes:** Small, low-risk, single-file-plus-doc change. Do not let this drift into the full-rename
   scope (placeholder/bashrc/`.mcp.json`) - that was explicitly deferred; file a separate story/requirement
   if that is ever wanted.
+
+### Story S6: Walking-skeleton ratchet - doc-stats `[ratchet]` finding   (R36)   <!-- Status: TODO -->
+- **Goal:** `doc-stats.ps1 -Findings` computes and WARNs when a project's planning mass (stories + tasks)
+  has grown far ahead of its proven/DONE footprint - the mechanism that would have caught the ModelTest
+  bake-off's Opus failure (28 stories / 35 tasks sharded, 0 done) automatically, without a human having to
+  notice it by hand.
+- **Context:** `docs/ASSESSMENT.md` Failure B is the motivating incident. `docs/DESIGN.md` R36 + contract
+  `## Contracts` `### C1` (sub-decisions C1a and C1b) already PIN the exact formula, tag, message wording,
+  and worked examples - this story implements what is pinned, it does not re-derive it. C1a chose **Option
+  B**: `mass = storiesTotal + tasksTotal`, `doneRatio = (storiesDone + tasksDone) / mass`, fire when
+  `mass >= 15 AND doneRatio < 0.15`. C1b pins the tag (`[ratchet]`) and the exact message template
+  (read it directly from `docs/DESIGN.md` - do not retype it from memory here, this note is a pointer, not
+  the source of truth).
+- **Behavior:** add the `[ratchet]` computation to `doc-stats.ps1`'s `-Findings` block, alongside the other
+  generated findings (`[design]`/`[scribe]`/`[taskmap]`/`[integrity]`/etc. - same code region, same
+  generated-not-authored pattern). Use `storyIds.Count`/`storiesDone.Count`/`tasks.Count`/`tasksDone.Count`
+  (already computed earlier in the script - do not add a new data source). WARN only - append to `$f`,
+  never block `/build`/`close-unit`/a LOCK gate (per C1d's invariant). Keep the threshold constants (`15`,
+  `0.15`) named and near the top of the `[ratchet]` block, easy to retune from a single false-positive/
+  false-negative report - the same convention other WARN thresholds in this file already follow (e.g. the
+  `>= 5` uncommitted-done threshold near the `[integrity]` block).
+- **Data / interfaces:** `doc-stats.ps1` only (the `-Findings` function).
+- **Dependencies:** none (R36/C1 are already LOCKED in `docs/DESIGN.md`).
+- **Acceptance (testable):**
+  - [ ] AC1: a project with `mass >= 15` and `doneRatio < 15%` gets a `[ratchet]` finding in
+    `doc-stats -Findings`, matching the message shape pinned in `docs/DESIGN.md` C1b.
+  - [ ] AC2: a fresh/small project (`mass < 15`) stays silent - no false positive. Worked example from C1a:
+    3 stories / 0 tasks, `mass = 3` -> silent.
+  - [ ] AC3: a healthy large project (proportionate progress, `doneRatio >= 15%`) stays silent even with
+    high mass. Worked example from C1a: 50 stories/10 done + 80 tasks/40 done, `mass = 130`,
+    `doneRatio = 38.5%` -> silent.
+  - [ ] AC4: the real ModelTest/Opus numbers reproduce the fire as a regression test: 28 stories/0 done +
+    35 tasks/0 done -> `mass = 63`, `doneRatio = 0%` -> `[ratchet]` fires with the exact pinned wording.
+  - [ ] AC5: a "stalled large project" (50 stories/3 done + 80 tasks/5 done, `doneRatio = 6.2%`) also fires
+    - the scenario Option A (rejected in C1a) would have missed after its first close.
+  - [ ] AC6: the full validation gate (`test-kit.ps1`) passes; a new `Test-Case` covers AC1-AC5 (sandbox
+    fixtures at each mass/doneRatio combination, same pattern as the existing `[integrity]`/`[scribe]`
+    finding tests).
+- **Dev notes:** Formula/tag/message/thresholds are FULLY PINNED in `docs/DESIGN.md`'s `## Contracts` C1a/
+  C1b - read them directly before writing code; do not re-derive or improvise the wording. WARN severity
+  only, matching `[research]`/`[style]`/`[ux]`, never `[design]`'s LOCK-blocking class.
+
+### Story S7: Ask-time scope pricing - state the cost before scope grows   (R36)   <!-- Status: TODO -->
+- **Goal:** when `/stories` expands a requirement into stories, or `/design` adds a new requirement, the
+  orchestrator states the story/task-count cost BEFORE asking the human to approve continuing to scope vs.
+  building now - so the cost of saying yes is visible at the moment of the ask. This is the other half of
+  R36's loop (SCOPE -> **PRICE -> ASK** -> WALK/WARN -> BUILD -> ANALYZE -> repeat); S6 is the WALK/WARN
+  backstop, this story is the PRICE/ASK front door.
+- **Context:** `docs/ASSESSMENT.md` Failure B - Opus's own `DESIGN.md` recorded "the v1 scope then grew by
+  four features" with no visible cost attached to that yes. `docs/DESIGN.md` R36 + contract `## Contracts`
+  `### C1` sub-decision **C1c** pins the exact sentence shapes for two trigger points (read C1c directly -
+  it has the full templates and a worked trace against the real Opus moment). This kit has **no Epics
+  section** (DESIGN.md's own convention tags stories by Requirement id, e.g. `(R8)`, `(R35)`, `(R36)` - see
+  S1-S6 above) - C1c's worked example uses Opus's `E6` epic id because THAT project has epics; when
+  implementing the `/design`-side trigger here, adapt the sentence to this kit's own vocabulary (a new
+  Requirement, not an epic) rather than copying "epic" language verbatim into a kit that has none.
+  - **Trigger 1 - `/stories`' expand loop** (`global\commands\stories.md`, its "ONE EPIC AT A TIME" loop
+    step 2, which already runs `dad doc-stats -Findings` between spawns): before spawning the next
+    scribe-agent, snapshot `storiesTotal/tasksTotal/storiesDone/tasksDone`; after it returns and
+    `doc-stats -Findings` prints the new numbers, state the delta and ask explicitly: build what's already
+    scoped, or keep expanding? Real counts, not an estimate (C1c's "at `/stories`" branch).
+  - **Trigger 2 - `/design`'s requirement/epic-adding step** (`global\commands\design.md`, its requirements/
+    epics capture step, "3. Capture requirements" / "4. Group into epics"): when a NEW requirement is added
+    that will need stories not yet written, count only what currently exists (requirements/epics so far) and
+    say plainly that the story/task cost isn't priced yet - `/stories` will show the real number when it
+    expands this requirement. Do NOT fabricate a story-count estimate for unexpanded scope (C1c's explicit
+    "honest gap" - `ASSESSMENT.md` flagged invented estimates as option (d)'s biggest risk).
+- **Behavior:** edit `global\commands\stories.md`'s expand-loop step to add the pricing sentence + explicit
+  "build now, or keep scoping?" question, using C1c's real-counts template (adapted to this kit's R#
+  vocabulary where it names "epic"). Edit `global\commands\design.md`'s requirements-capture step
+  similarly, using C1c's epic-count-only template, adapted the same way. Both edits are PROMPT TEXT
+  (instructions the orchestrator/human read), not PowerShell - small, targeted insertions into the existing
+  step text, not a rewrite of either file.
+- **Data / interfaces:** `global\commands\stories.md`, `global\commands\design.md`. After editing, re-run
+  `install.cmd` per `CLAUDE.md`'s "Global commands/agents" convention (installed copies must match).
+- **Dependencies:** none (R36/C1 are already LOCKED in `docs/DESIGN.md`); independent of S6 (no shared code
+  - C1d pins the ratchet and the pricing ask as independently computed, only narratively linked in wording).
+- **Acceptance (testable):**
+  - [ ] AC1: `global\commands\stories.md`'s expand-loop step contains the pricing sentence shape from C1c
+    (real story/task-count delta + an explicit build-vs-keep-scoping question) at the point where the next
+    epic/requirement would be spawned.
+  - [ ] AC2: `global\commands\design.md`'s requirement/epic-capture step contains the epic-count-only
+    pricing sentence shape from C1c, explicitly stating the story/task cost is "not priced yet" rather than
+    inventing a number.
+  - [ ] AC3: `install.cmd` has been re-run (or the story notes that it must be, if this is verified by
+    static file content only) so the installed copies in `%USERPROFILE%\.claude\commands\` match.
+  - [ ] AC4: the full validation gate (`test-kit.ps1`) passes; a new `Test-Case` statically greps both
+    command files for the pricing-sentence language (prose content, so a presence/shape check - matching
+    how other prompt-content `Test-Case`s in this file already work, not a behavioral test).
+- **Dev notes:** This is PROMPT TEXT, not code - there is no build to verify beyond ASCII/parse checks and
+  the static content test. Keep the wording close to C1c's pinned sentences (read `docs/DESIGN.md` directly)
+  so the shipped mechanism does not drift from what the human approved in `/design`.
