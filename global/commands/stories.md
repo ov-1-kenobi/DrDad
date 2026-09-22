@@ -86,10 +86,12 @@ Pick the mode from **$ARGUMENTS**:
 - **a story id** (e.g. `S3`) or **"go"** -> normalize/create that story with small Edit calls.
 
 **The loop, ONE EPIC AT A TIME - do not batch:**
-1. Spawn **scribe-agent** via the **Task tool** (subagent_type: "scribe-agent"), scoped to **exactly one
-   epic**, and say so in the prompt ("expand ONLY epic E2; do not touch any other epic"). It writes those
-   stories with small Edits and returns a short summary. For a tiny project you may simply write the
-   stories yourself here instead - both are fine, and the main loop has the guards.
+1. Run `dad doc-stats -Findings` and snapshot the BEFORE numbers -
+   `storiesTotal/tasksTotal/storiesDone/tasksDone` - then spawn **scribe-agent** via the **Task tool**
+   (subagent_type: "scribe-agent"), scoped to **exactly one epic**, and say so in the prompt ("expand ONLY
+   epic E2; do not touch any other epic"). It writes those stories with small Edits and returns a short
+   summary. For a tiny project you may simply write the stories yourself here instead - both are fine, and
+   the main loop has the guards.
 2. Run the gate:
    ```
    dad doc-stats -Findings
@@ -98,6 +100,19 @@ Pick the mode from **$ARGUMENTS**:
    `STORIES.md is NNKB but NOT ONE story id is parseable`, the heading shape is wrong - fix it NOW, at
    story one, rather than discovering it after thirty. Required shape:
    `### Story S<n>: <title>   <!-- Status: TODO -->`
+2b. Diff step 2's AFTER numbers against step 1's BEFORE snapshot (`deltaStories = afterStories -
+   beforeStories`), then say the C1c Trigger-1 pricing sentence and WAIT for the human's explicit answer
+   before moving to step 3 - do not auto-continue the loop. Fill `{unit}`/`{id}` from whatever grouping the
+   TARGET project's own `docs/DESIGN.md` actually uses for the thing just expanded: "Epic"/`E2` if that
+   design doc has an `## Epics` section, otherwise "Requirement"/`R36` (this kit's own `docs/DESIGN.md` is
+   the no-epics case - its S1-S6 are tagged by R# only). Never hardcode the literal word "epic" here:
+   ```
+   "{unit} {id} added ~{deltaStories} stor(y/ies) (now {afterStories} stories / {afterTasks} tasks total,
+   {storiesDone}/{afterStories} stories and {tasksDone}/{afterTasks} tasks DONE). Build what's already
+   scoped now, or keep scoping the next {unit}?"
+   ```
+   If the human says build, stop the expand loop and hand off to `/build`. If they say keep scoping,
+   continue to step 3.
 3. Next epic - a FRESH agent, not the same one. After the last one, reindex.
 
 **If you find yourself running the same search twice, stop searching and Read the file.** Two identical

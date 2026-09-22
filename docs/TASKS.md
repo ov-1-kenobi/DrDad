@@ -342,7 +342,7 @@ because its Test-Case greps the pricing-sentence language each of them adds.)
   do not invent new ones. Existing `[integrity]`/`[scribe]` finding `Test-Case`s in `test-kit.ps1` are the
   structural pattern to mirror (sandbox fixture -> run doc-stats -Findings -> assert on output).
 
-### [ ] T7.1 - Add C1c pricing sentence to stories.md's expand loop (Trigger 1)   (Story S7)
+### [x] T7.1 - Add C1c pricing sentence to stories.md's expand loop (Trigger 1)   (Story S7)
 - **Goal:** `global\commands\stories.md`'s "ONE EPIC AT A TIME" expand-loop step states the real
   story/task-count delta and asks "build now or keep scoping?" before spawning the next unit's
   `scribe-agent`, per C1c's Trigger-1 sentence shape (S7 AC1).
