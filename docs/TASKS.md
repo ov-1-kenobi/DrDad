@@ -412,7 +412,7 @@ because its Test-Case greps the pricing-sentence language each of them adds.)
   moment (`opus/docs/DESIGN.md:295-297`, cited in `ModelTest/ASSESSMENT.md:150-159`) used epic id `E6` from
   a project that HAS epics; this kit does not, hence the vocabulary adaptation this task performs.
 
-### [ ] T7.3 - test-kit.ps1 Test-Case for the pricing-sentence language + re-run install.cmd   (Story S7)
+### [x] T7.3 - test-kit.ps1 Test-Case for the pricing-sentence language + re-run install.cmd   (Story S7)
 - **Goal:** The full validation gate mechanically checks that both `stories.md` and `design.md` contain the
   pricing-sentence language T7.1/T7.2 added, and the installed copies in `%USERPROFILE%\.claude\commands\`
   are refreshed to match (S7 AC3, AC4).

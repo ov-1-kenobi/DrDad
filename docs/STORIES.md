@@ -258,7 +258,7 @@
   C1b - read them directly before writing code; do not re-derive or improvise the wording. WARN severity
   only, matching `[research]`/`[style]`/`[ux]`, never `[design]`'s LOCK-blocking class.
 
-### Story S7: Ask-time scope pricing - state the cost before scope grows   (R36)   <!-- Status: TODO -->
+### Story S7: Ask-time scope pricing - state the cost before scope grows   (R36)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** when `/stories` expands a requirement into stories, or `/design` adds a new requirement, the
   orchestrator states the story/task-count cost BEFORE asking the human to approve continuing to scope vs.
   building now - so the cost of saying yes is visible at the moment of the ask. This is the other half of

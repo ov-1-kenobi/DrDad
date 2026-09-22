@@ -4447,6 +4447,18 @@ Test-Case "settings.json env can gain LOCALTOOLS_HYBRID (a NEW key) without thro
   Assert ($rt.env.LOCALTOOLS_HYBRID -eq "1") "LOCALTOOLS_HYBRID did not survive a ConvertTo-Json/ConvertFrom-Json round-trip"
 }
 
+Test-Case "S7's pricing-sentence language landed in both stories.md and design.md" {
+  # T7.1/T7.2 added a pricing ask to /stories (per-epic expand loop) and /design (new requirement/epic with
+  # no stories yet), mirroring the existing 4b pricing sentence shape. Presence/shape check on prose content
+  # only - not a behavioral test - same pattern as the other prompt-content Test-Cases in this file.
+  $stories = Get-Content (Join-Path $kit "global\commands\stories.md") -Raw
+  Assert ($stories -match "keep scoping the next") "stories.md is missing the T7.1 pricing sentence's 'keep scoping the next' phrasing"
+  Assert ($stories -match "Build what's already\s+scoped") "stories.md is missing the T7.1 pricing sentence's 'Build what's already scoped' phrasing"
+
+  $design = Get-Content (Join-Path $kit "global\commands\design.md") -Raw
+  Assert ($design -match "aren't\s+priced yet") "design.md is missing the T7.2 pricing sentence's 'aren't priced yet' phrasing"
+}
+
 # ---------------------------------------------------------------- server
 if (-not $SkipBuild) {
   Write-Host "-- server --" -ForegroundColor Cyan
