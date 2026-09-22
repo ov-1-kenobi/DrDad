@@ -377,7 +377,7 @@ because its Test-Case greps the pricing-sentence language each of them adds.)
   scoped now, or keep scoping the next epic?"` - adapt the id vocabulary per the Do section above; the
   counting logic and sentence SHAPE are otherwise unchanged.
 
-### [ ] T7.2 - Add C1c pricing sentence to design.md's requirement/epic-capture step (Trigger 2)   (Story S7)
+### [x] T7.2 - Add C1c pricing sentence to design.md's requirement/epic-capture step (Trigger 2)   (Story S7)
 - **Goal:** `global\commands\design.md`'s requirements/epics capture step (steps 3-4) states, for a newly
   added requirement/epic with no stories yet, that its story/task cost is honestly "not priced yet" (never
   a fabricated estimate) and asks whether to add it now or build what's already scoped first, per C1c's

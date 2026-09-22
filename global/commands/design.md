@@ -93,6 +93,20 @@ vision model transcribes it to text - and use that as design input.)
    tradeoffs, recommend one, WAIT for my choice. Reindex after edits.
 4. **Group into epics** under `## Epics` - lightweight, coarse feature groups (`E1`, `E2`, ...). Keep it light:
    a small project may have one epic or none. These are what `/stories` expands into stories.
+4b. **Pricing ask - before moving on from a newly added requirement/epic that has no stories yet, say so and
+   WAIT.** When step 3 adds a new requirement or step 4 adds a new epic grouping, count ONLY what currently
+   exists (the requirements/epics/stories already in the doc) - there is no real story/task count for the
+   thing just added until `/stories` expands it, so do NOT fabricate one. Fill `{unit}`/`{unit-plural}` from
+   whatever grouping THIS project's own `docs\DESIGN.md` actually uses: "epic"/"epics" if the doc has an
+   `## Epics` section, otherwise "requirement"/"requirements" (this kit's own `docs/DESIGN.md` is the
+   no-epics case - S1-S6 above are tagged by Requirement id `R8`/`R35`/`R36`, never an epic id). Never
+   hardcode the literal word "epic" here:
+   ```
+   "Adding {unit} {id} ({feature list}) brings the design to {unitCount} {unit-plural}. Its stories aren't
+   priced yet - /stories will show the real story/task count when it expands this {unit}. Add it now, or
+   build the {currentStoryCount} stories already scoped first?"
+   ```
+   WAIT for my explicit answer before continuing to the next requirement/epic or on to contracts.
 5. **Contracts - pin the load-bearing decisions (the step that keeps local dev models from improvising):**
    spawn the **architect-agent** via the **Task tool** (subagent_type: "architect-agent" - an AGENT, not a
    skill). It hunts UNDERSPECIFIED contracts (data formats, core-function semantics like "what exactly does
