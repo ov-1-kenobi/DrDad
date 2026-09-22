@@ -30,6 +30,19 @@ T5.1
 (T5.1 is a single self-contained task, independent of the T1.x/T2.1/T3.x/T4.x chains - Story S5 has no
 dependency on any prior story.)
 
+T6.1 -> T6.2
+
+(T6.1/T6.2 are independent of every prior story's chains - Story S6 has no dependency on S1-S5. T6.2
+depends on T6.1 because the Test-Case it adds exercises the `[ratchet]` computation T6.1 implements.)
+
+T7.1
+T7.2
+T7.3 (needs T7.1, T7.2)
+
+(T7.1 edits stories.md, T7.2 edits design.md - two different files, two independent trigger points per C1c,
+no shared code, so they have no ordering constraint on each other or on S6's chain. T7.3 depends on BOTH
+because its Test-Case greps the pricing-sentence language each of them adds.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -248,6 +261,183 @@ dependency on any prior story.)
   on that literal string, so this story is scoped to ONLY the packaged output's name. A full rename
   (placeholder + bashrc markers + every template `.mcp.json` + migration for existing installs) was
   considered and deliberately deferred - out of scope here; do not let this task drift into that scope.
+
+### [ ] T6.1 - Add [ratchet] finding computation to doc-stats.ps1 -Findings   (Story S6)
+- **Goal:** `doc-stats.ps1 -Findings` computes and WARNs with a `[ratchet]` finding when planning mass has
+  grown far ahead of proven/DONE footprint, per the pinned Option B formula (S6 AC1, AC2, AC3, AC4, AC5).
+- **Touches:** `doc-stats.ps1`
+- **Do:** In `doc-stats.ps1`'s `-Findings` function, in the same generated-finding code region as the
+  existing `[design]`/`[scribe]`/`[taskmap]`/`[integrity]` blocks (per `docs/DESIGN.md` C1b, that region is
+  around `doc-stats.ps1:204-663`), add a new block using ONLY the counters already computed earlier in the
+  script (per C1a: `storiesTotal = $storyIds.Count`, `storiesDone = $storiesDone.Count`, `tasksTotal =
+  $tasks.Count`, `tasksDone = $tasksDone.Count` - confirmed at `doc-stats.ps1:126,152,192-198`; do not add a
+  new data source). Declare the two threshold constants named and near the top of this new block (not
+  inline magic numbers), matching the convention other WARN thresholds in this file already follow (e.g.
+  the `>= 5` uncommitted-done threshold near the `[integrity]` block, `doc-stats.ps1:595`):
+  ```
+  $ratchetMassFloor = 15
+  $ratchetDoneRatioFloor = 0.15
+  ```
+  Compute `mass = storiesTotal + tasksTotal`, `doneMass = storiesDone + tasksDone`, `doneRatio = doneMass /
+  mass` (guard divide-by-zero: if `mass -eq 0`, skip the block entirely - a zero-mass project cannot fire).
+  Fire (append via `$f.Add("[ratchet] ...")`, matching the existing `$f.Add("[...")` call convention used
+  by the other tags in this file) when `mass -ge $ratchetMassFloor -and $doneRatio -lt
+  $ratchetDoneRatioFloor`. Use EXACTLY this pinned message template (read verbatim from `docs/DESIGN.md`
+  `## Contracts` `### C1` `#### C1b` - do not paraphrase), with `{storiesTotal}`/`{tasksTotal}`/`{mass}`/
+  `{storiesDone}`/`{tasksDone}`/`{doneMass}`/`{doneRatioPct}` substituted (doneRatioPct = doneRatio*100,
+  rounded to match the worked examples' "0%"/"6.2%" style):
+  ```
+  [ratchet] planning mass ({storiesTotal} stories + {tasksTotal} tasks = {mass}) is far ahead of proven
+  footprint ({storiesDone} stories + {tasksDone} tasks = {doneMass} done, {doneRatioPct}% of mass) - the
+  walking-skeleton ratchet (R36b/C1) fires once mass >= 15 and the done ratio stays under 15%. Build out
+  what is already scoped (S1 must close first, per R30) before sharding more, or explicitly re-confirm
+  scope growth via /design or /stories now that the cost is visible.
+  ```
+  This finding is WARN severity only - it must never block `/build`, `close-unit`, or any LOCK gate (C1d's
+  invariant), matching how `[research]`/`[style]`/`[ux]` already behave in this file (never `[design]`'s
+  LOCK-blocking class).
+- **Acceptance:** Against the pinned worked examples in `docs/DESIGN.md` C1a/C1b:
+  - `storiesTotal=28, storiesDone=0, tasksTotal=35, tasksDone=0` (the ModelTest/Opus numbers) -> `mass=63,
+    doneMass=0, doneRatioPct=0` -> `doc-stats -Findings` prints the `[ratchet]` line with those exact
+    numbers substituted into the pinned template (AC1, AC4).
+  - `storiesTotal=3, storiesDone=0, tasksTotal=0, tasksDone=0` -> `mass=3 < 15` -> no `[ratchet]` line
+    printed (AC2).
+  - `storiesTotal=50, storiesDone=10, tasksTotal=80, tasksDone=40` -> `mass=130, doneRatio=38.5% >= 15%` ->
+    no `[ratchet]` line printed (AC3).
+  - `storiesTotal=50, storiesDone=3, tasksTotal=80, tasksDone=5` -> `mass=130, doneRatio=6.2% < 15%` ->
+    `[ratchet]` line DOES print (AC5 - the "stalled large project" case Option A would have missed).
+- **Depends on:** none
+- **Context:** Formula/tag/message/thresholds are FULLY PINNED in `docs/DESIGN.md`'s `## Contracts` `### C1`
+  sub-decisions C1a (formula: Option B, `mass = storiesTotal + tasksTotal`, `doneRatio = (storiesDone +
+  tasksDone) / mass`, fire when `mass >= 15 AND doneRatio < 0.15`) and C1b (tag `[ratchet]`, exact message
+  template above, WARN severity, lives in the generated-not-authored findings block alongside
+  `[design]`/`[scribe]`/`[taskmap]`/`[integrity]`). This is a DIFFERENT mechanism from R28's `ratchet.ps1`
+  (that one detects a SHRINKING verification surface; this detects planning mass GROWING faster than proven
+  footprint) - do not touch `ratchet.ps1`, this all lives in `doc-stats.ps1`.
+
+### [ ] T6.2 - Add test-kit.ps1 Test-Case covering the [ratchet] finding (AC1-AC5)   (Story S6)
+- **Goal:** A `Test-Case` in `test-kit.ps1` that mechanically verifies the `[ratchet]` finding fires/stays
+  silent at each of the pinned mass/doneRatio combinations, so the full validation gate covers S6's behavior
+  end to end (S6 AC6).
+- **Touches:** `test-kit.ps1`
+- **Do:** Add a new `Test-Case` following the same pattern as the existing `[integrity]`/`[scribe]` finding
+  tests in this file (sandbox fixtures - a fixture STORIES.md/TASKS.md pair or equivalent doc-stats inputs
+  at each mass/doneRatio combination, then run `doc-stats.ps1 -Findings` against each and assert on the
+  `[ratchet]` line's presence/absence and, for the firing cases, its exact wording). Cover all five
+  scenarios pinned in `docs/DESIGN.md` C1a's worked-examples table and required by T6.1's Acceptance:
+  1. Opus numbers (28/0 stories, 35/0 tasks) -> `[ratchet]` FIRES with the exact pinned message
+     substituting `mass=63, doneMass=0, doneRatioPct=0` (AC4 - the regression test for the real incident).
+  2. Early small project (3/0 stories, 0/0 tasks) -> mass=3 < 15 -> SILENT, no false positive (AC2).
+  3. Healthy large project (50/10 stories, 80/40 tasks) -> mass=130, doneRatio=38.5% -> SILENT (AC3).
+  4. Stalled large project (50/3 stories, 80/5 tasks) -> mass=130, doneRatio=6.2% -> FIRES (AC5).
+  5. General fire case (any `mass >= 15 AND doneRatio < 0.15` combination distinct from #1/#4, or reuse #1)
+     confirming the finding matches the message shape pinned in `docs/DESIGN.md` C1b (AC1).
+  Run this against a sandboxed/fixture target, never mutating any real project's STORIES.md/TASKS.md, per
+  the R35 sandboxing convention already followed by other `test-kit.ps1` fixture tests in this file.
+- **Acceptance:** `test-kit.ps1` contains this new `Test-Case`; running the full validation gate
+  (`test-kit.ps1`) prints `0 failed`, with this case passing all five scenarios above (S6 AC6).
+- **Depends on:** T6.1
+- **Context:** `docs/DESIGN.md` C1a's worked-examples table (Opus incident / early legit project / healthy
+  large project / stalled large project rows) is the source of the five scenarios - use those exact numbers,
+  do not invent new ones. Existing `[integrity]`/`[scribe]` finding `Test-Case`s in `test-kit.ps1` are the
+  structural pattern to mirror (sandbox fixture -> run doc-stats -Findings -> assert on output).
+
+### [ ] T7.1 - Add C1c pricing sentence to stories.md's expand loop (Trigger 1)   (Story S7)
+- **Goal:** `global\commands\stories.md`'s "ONE EPIC AT A TIME" expand-loop step states the real
+  story/task-count delta and asks "build now or keep scoping?" before spawning the next unit's
+  `scribe-agent`, per C1c's Trigger-1 sentence shape (S7 AC1).
+- **Touches:** `global\commands\stories.md`
+- **Do:** In the loop currently numbered 1-3 ("The loop, ONE EPIC AT A TIME - do not batch"), insert a new
+  sub-step between step 2 (`dad doc-stats -Findings`) and step 3 ("Next epic - a FRESH agent"). Before this
+  step existed, step 1 already spawns `scribe-agent` for one unit and step 2 runs `dad doc-stats -Findings`
+  and checks the story count rose. Add step 1 language to snapshot
+  `storiesTotal/tasksTotal/storiesDone/tasksDone` (from `doc-stats -Findings`) BEFORE the step-1 spawn, then
+  add the new step (call it **2b**) that, once step 2's `doc-stats -Findings` has printed the AFTER numbers,
+  states the delta and asks, WAITING for the human's answer before proceeding to step 3:
+  ```
+  "{unit} {id} added ~{deltaStories} stor(y/ies) (now {afterStories} stories / {afterTasks} tasks total,
+  {storiesDone}/{afterStories} stories and {tasksDone}/{afterTasks} tasks DONE). Build what's already
+  scoped now, or keep scoping the next {unit}?"
+  ```
+  `{unit}`/`{id}` name whatever grouping the TARGET project's own DESIGN.md actually uses for the thing just
+  expanded - an Epic id (e.g. `E2`) if that project's design doc has an `## Epics` section, or a Requirement
+  id (e.g. `R36`) if it does not, the way this kit's OWN `docs/DESIGN.md` does (S1-S6 above are tagged
+  `(R8)`/`(R35)`/`(R36)`, never an epic id) - do not hardcode the literal word "epic" into the sentence
+  produced for a no-epics project. Keep this a small, targeted insertion into the existing step text, not a
+  rewrite of `stories.md`.
+- **Acceptance:** `global\commands\stories.md`'s expand-loop step contains the pricing sentence shape above
+  (real story/task-count delta + an explicit build-vs-keep-scoping question), positioned at the point where
+  the next unit would be spawned (S7 AC1).
+- **Depends on:** none
+- **Context:** Per `docs/DESIGN.md` Contract C1c (Trigger 1, "At `/stories`' EXPAND loop"): the sentence is
+  said by the ORCHESTRATOR in the MAIN LOOP, never inside a spawned subagent (R32 - a subagent is unguarded
+  and unobservable). C1c's literal worked template (from a DIFFERENT project that has epics) is:
+  `"Epic {epic} added ~{deltaStories} stor(y/ies) (now {afterStories} stories / {afterTasks} tasks total,
+  {storiesDone}/{afterStories} stories and {tasksDone}/{afterTasks} tasks DONE). Build what's already
+  scoped now, or keep scoping the next epic?"` - adapt the id vocabulary per the Do section above; the
+  counting logic and sentence SHAPE are otherwise unchanged.
+
+### [ ] T7.2 - Add C1c pricing sentence to design.md's requirement/epic-capture step (Trigger 2)   (Story S7)
+- **Goal:** `global\commands\design.md`'s requirements/epics capture step (steps 3-4) states, for a newly
+  added requirement/epic with no stories yet, that its story/task cost is honestly "not priced yet" (never
+  a fabricated estimate) and asks whether to add it now or build what's already scoped first, per C1c's
+  Trigger-2 sentence shape (S7 AC2).
+- **Touches:** `global\commands\design.md`
+- **Do:** After step 4 ("Group into epics under `## Epics` - lightweight, coarse feature groups... a small
+  project may have one epic or none. These are what `/stories` expands into stories."), add a short
+  paragraph: when a NEW requirement (step 3) or a new epic grouping (step 4) is added that has no stories
+  yet, count ONLY what currently exists and say plainly the cost isn't priced yet, WAITING for the human's
+  answer before continuing:
+  ```
+  "Adding {unit} {id} ({feature list}) brings the design to {unitCount} {unit-plural}. Its stories aren't
+  priced yet - /stories will show the real story/task count when it expands this {unit}. Add it now, or
+  build the {currentStoryCount} stories already scoped first?"
+  ```
+  `{unit}`/`{unit-plural}` = "epic"/"epics" for a project whose design doc groups by epic (has an `##
+  Epics` section), or "requirement"/"requirements" for one that does not - the way THIS kit's own
+  `docs/DESIGN.md` works today (no `## Epics` section; S1-S6 above are tagged by Requirement id `R8`/`R35`/
+  `R36`, never an epic id). This is the adaptation the story's Context section calls out explicitly: do NOT
+  copy the literal word "epic" verbatim into a project (like this one) that has no epics - state the rule
+  generically in `design.md` so it resolves correctly for either kind of project. Explicitly instruct: do
+  NOT fabricate a story-count estimate for the unexpanded unit. Small, targeted insertion after step 4's
+  existing text, not a rewrite of `design.md`.
+- **Acceptance:** `global\commands\design.md`'s requirement/epic-capture step contains the epic-count-only
+  (or requirement-count-only, per the adaptation above) pricing sentence shape, explicitly stating the
+  story/task cost is "not priced yet" rather than inventing a number (S7 AC2).
+- **Depends on:** none
+- **Context:** Per `docs/DESIGN.md` Contract C1c (Trigger 2, "At `/design` step 4"): counts only EXISTING
+  epics/stories since there is no real count yet for an unexpanded unit. `ASSESSMENT.md`'s Failure-B table
+  flags "ESTIMATE QUALITY" as the biggest risk of fabricating a number here - an invented estimate the
+  human trusts is worse than an honest "not priced yet." C1c's own worked trace against the real Opus
+  moment (`opus/docs/DESIGN.md:295-297`, cited in `ModelTest/ASSESSMENT.md:150-159`) used epic id `E6` from
+  a project that HAS epics; this kit does not, hence the vocabulary adaptation this task performs.
+
+### [ ] T7.3 - test-kit.ps1 Test-Case for the pricing-sentence language + re-run install.cmd   (Story S7)
+- **Goal:** The full validation gate mechanically checks that both `stories.md` and `design.md` contain the
+  pricing-sentence language T7.1/T7.2 added, and the installed copies in `%USERPROFILE%\.claude\commands\`
+  are refreshed to match (S7 AC3, AC4).
+- **Touches:** `test-kit.ps1`
+- **Do:**
+  1. Add a new `Test-Case` to `test-kit.ps1` that statically greps `global\commands\stories.md` for a
+     distinctive substring from T7.1's inserted sentence (e.g. `"keep scoping the next"` and `"Build what's
+     already scoped"`) and greps `global\commands\design.md` for a distinctive substring from T7.2's
+     inserted sentence (e.g. `"aren't priced yet"`). This is a presence/shape check on prose content, same
+     pattern as this file's other prompt-content `Test-Case`s - not a behavioral test.
+  2. Re-run `install.cmd` (per `CLAUDE.md`'s "Global commands/agents" convention: "After editing them or
+     the C# server, re-run `install.cmd`") so the installed copies of `stories.md`/`design.md` in
+     `%USERPROFILE%\.claude\commands\` match the edited source files in `global\commands\`. If this task's
+     execution environment cannot run the real installer against a live `~/.claude`, note explicitly in the
+     completion record that this step is outstanding and must happen before the next `/stories`/`/design`
+     session, per AC3's "or the story notes that it must be, if this is verified by static file content
+     only" allowance - do not silently skip it.
+- **Acceptance:** `test-kit.ps1` contains the new `Test-Case`, and running the full validation gate prints
+  `0 failed` with this case passing against the T7.1/T7.2 edits (S7 AC4); `install.cmd` has been re-run (or
+  the outstanding-reinstall note above is recorded) so installed copies match (S7 AC3).
+- **Depends on:** T7.1, T7.2
+- **Context:** Per Story S7's Dev notes: "This is PROMPT TEXT, not code - there is no build to verify beyond
+  ASCII/parse checks and the static content test." Match the grep substrings to whatever exact wording T7.1
+  and T7.2 actually land on (the ones above are the wording those two tasks specify) so this test does not
+  drift from what was actually inserted.
 
 ## Open questions
 - Story S3's AC4 ("(manual) `/scaffold avalonia` appears in the menu and scaffolds a project") is a manual,
