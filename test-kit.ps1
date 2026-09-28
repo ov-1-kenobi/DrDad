@@ -242,6 +242,23 @@ Test-Case "every kit file the docs tell you to RUN actually exists" {
     # CHANGELOG is HISTORY: it must be free to name the broken thing it is recording the fix for.
     if ($f.Name -eq "CHANGELOG.md") { continue }
     $text = Get-Content $f.FullName -Raw
+    # TASKS.md legitimately NAMES a not-yet-built deliverable, inside an UNCHECKED task's own "Do:" text
+    # AND in the Build-order section's prose describing that same task - it is describing what the task
+    # will create, not telling the model to run it now (taskmap shards a story's whole task set up front,
+    # per R32/S8-S10; the file a task creates does not exist until that task is actually built). Collect
+    # every filename named inside an UNCHECKED "### [ ]" task body and treat it as forward-declared
+    # ANYWHERE in this one file (Build-order commentary included), so planned-but-not-yet-built work does
+    # not trip a check meant to catch STALE prose about files that no longer, or never, existed. A CHECKED
+    # "[x]" task's files (and every other doc) are still required to exist, unchanged.
+    $pendingNames = $null
+    if ($f.Name -eq "TASKS.md") {
+      $pendingNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+      foreach ($body in [regex]::Matches($text, '(?ms)^### \[ \].*?(?=^### |\z)')) {
+        foreach ($pm in [regex]::Matches($body.Value, '(?i)([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
+          [void]$pendingNames.Add($pm.Groups[1].Value)
+        }
+      }
+    }
     # any reference to a kit script, however it is written: via the dev-path placeholder, or bare
     foreach ($m in [regex]::Matches($text, '(?i)(?:DAD-kit[\\/])?([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
       $name = $m.Groups[1].Value
@@ -249,6 +266,7 @@ Test-Case "every kit file the docs tell you to RUN actually exists" {
       if ($name -match '(?i)^(setup|build|run|deploy|foo|bar|example|script|my)') { continue }
       $isKitish = ($name -match '(?i)^(dad-|close-|doc-|docs-|api-|new-|upgrade-|use-|sync-|install|uninstall|package-|scan-|test-|reindex|recover-|ratchet|source-|grade-|ollama-|corpus\.|env\.)')
       if (-not $isKitish) { continue }
+      if ($pendingNames -and $pendingNames.Contains($name)) { continue }
       $checked++
       if (-not (Test-Path (Join-Path $kit $name))) {
         $line = ($text.Substring(0, $m.Index) -split "`n").Count
@@ -1847,6 +1865,45 @@ Test-Case "close-unit REFUSES to close over a shrink, and only ratchets on succe
     Assert ($LASTEXITCODE -eq 0) "-AcceptShrink did not allow a deliberate removal"
     $base = Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json
     Assert ($base.tests -eq 1) "the baseline was not lowered to the accepted number ($($base.tests))"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-gates-smoke: skeleton reports SKIP honestly, never a fabricated pass (T8.1)" {
+  # T8.2/T8.3/T8.4 replace the stub Test-*Gate functions one at a time with real provocations - this case
+  # is meant to be EXTENDED (not replaced) as each gate lands, so it keeps asserting the report/exit-code
+  # contract holds regardless of which gates are still stubbed.
+  $gs = Join-Path $kit "dad-gates-smoke.ps1"
+  Assert (Test-Path $gs) "dad-gates-smoke.ps1 is missing"
+  $errs = $null
+  [System.Management.Automation.Language.Parser]::ParseFile($gs, [ref]$null, [ref]$errs) | Out-Null
+  Assert ($errs.Count -eq 0) "dad-gates-smoke.ps1 does not parse: $($errs[0].Message)"
+  $bad = ([System.IO.File]::ReadAllBytes($gs) | Where-Object { $_ -gt 127 }).Count
+  Assert ($bad -eq 0) "dad-gates-smoke.ps1 has $bad non-ASCII byte(s)"
+
+  $gsCmd = Join-Path $kit "dad-gates-smoke.cmd"
+  Assert (Test-Path $gsCmd) "dad-gates-smoke.cmd is missing"
+
+  $usage = (& cmd /c "`"$(Join-Path $kit 'dad.cmd')`" 2>&1" | Out-String)
+  Assert ($usage -match '(?m)^\s{4,}dad gates-smoke\b') "dad.cmd's usage text does not advertise 'gates-smoke'"
+
+  # -ProjectDir must fail loudly on a bad path, same convention as ratchet.ps1/doc-stats.ps1.
+  $bogus = Join-Path $kit "_no_such_project_dir_gates_smoke"
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $gs -ProjectDir $bogus 2>&1 | Out-Null
+  Assert ($LASTEXITCODE -eq 2) "dad-gates-smoke.ps1 did not fail loudly on a missing -ProjectDir (got exit $LASTEXITCODE)"
+
+  # Running it TODAY, with all three real checks still stubbed, must report every gate as SKIP - never a
+  # fabricated INTERCEPTED - and the overall exit code must still be non-zero (an all-SKIP run proved
+  # nothing and must never look like success).
+  $sb = New-Sandbox
+  try {
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $gs -ProjectDir $sb 2>&1 | Out-String)
+    $exit = $LASTEXITCODE
+    foreach ($gate in @("loop-guard", "ratchet-close-refusal", "dad-guard-stop")) {
+      Assert ($out -match [regex]::Escape("[gates-smoke] $gate`: SKIP")) "gate '$gate' was not reported as SKIP (real gates get filled in by T8.2/T8.3/T8.4):`n$out"
+    }
+    Assert ($out -notmatch 'INTERCEPTED') "an all-stubbed run fabricated an INTERCEPTED result:`n$out"
+    Assert ($out -notmatch 'SILENT-FAIL') "an all-stubbed run fabricated a SILENT-FAIL result:`n$out"
+    Assert ($exit -ne 0) "an all-SKIP run exited 0 - that must never look like success"
   } finally { Remove-Sandbox $sb }
 }
 

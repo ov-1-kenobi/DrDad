@@ -43,6 +43,37 @@ T7.3 (needs T7.1, T7.2)
 no shared code, so they have no ordering constraint on each other or on S6's chain. T7.3 depends on BOTH
 because its Test-Case greps the pricing-sentence language each of them adds.)
 
+T8.1 -> T8.2 -> T8.3 -> T8.4
+
+(Story S8 is a brand-new standalone command with no dependency on S1-S7 - it exercises existing gate
+mechanisms as black boxes per its own Dependencies note. T8.1 creates the dad-gates-smoke.ps1 skeleton
+that T8.2/T8.3/T8.4 each fill in with one real gate provocation; they are sequenced only because all three
+edit the same file - T8.2 does not structurally require T8.3, but T8.4's aggregate exit-code/report logic
+and its test-kit.ps1 Test-Case cover all three gates together, so it depends on all of T8.1/T8.2/T8.3.)
+
+T9.1 -> T9.2 -> T9.4
+T9.1 -> T9.3 -> T9.4
+
+(Story S9 has no dependency on S1-S8 - it adds a structured log alongside gates that already exist and
+work unchanged. T9.1 pins the log schema/file location and ships the one shared dad-gates-log.ps1 helper
+every other S9 task calls; T9.2/T9.3 each wire that helper into two of the four gates and depend only on
+T9.1 - they are independent of each other, grouped by mechanism kind (T9.2 = the two Claude Code hook-based
+gates, loop-guard and dad-guard-stop; T9.3 = the two plain-subprocess gates, ratchet and close-unit-refusal)
+rather than by file, but both edit different files so neither blocks the other. T9.4's test-kit.ps1
+coverage exercises all four wired gates together, so it depends on T9.1/T9.2/T9.3.)
+
+T10.1 (needs T9.1) -> T10.2
+T10.1 -> T10.3
+T10.4 (needs T10.1, T10.2, T10.3)
+
+(Story S10 structurally depends on S9 - it pulls its gate-interventions figure from T9.1's
+dad-gates-log.ps1 query helper, so T10.1 depends on T9.1 specifically (the schema + query mechanism),
+not on T9.2/T9.3 (the wiring of individual gates into that log) - T10.1's own fixture can seed log lines
+directly via T9.1's append mode, the same way T9.4's test-kit coverage does. T10.2 (wires the summary into
+/build's end-of-scope) and T10.3 (wires it into /audit's full-run) each depend only on T10.1 shipping the
+summary script; they are independent of each other since they edit two different command files. T10.4's
+test-kit.ps1 coverage exercises the script plus both wiring points together, so it depends on all three.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -439,8 +470,549 @@ because its Test-Case greps the pricing-sentence language each of them adds.)
   and T7.2 actually land on (the ones above are the wording those two tasks specify) so this test does not
   drift from what was actually inserted.
 
+### [x] T8.1 - dad-gates-smoke command skeleton + report/exit-code contract   (Story S8)
+- **Goal:** Create the standalone `dad-gates-smoke.ps1` command (+ `dad-gates-smoke.cmd` wrapper, + a
+  `dad.cmd` usage-text entry) with the report/exit-code contract S8 requires - one line per gate
+  (INTERCEPTED / SILENT-FAIL / SKIP-with-reason) and an overall exit code that is 0 only when every gate
+  actually provoked was intercepted, non-zero and NAMING the gate on any silent pass, and never a
+  fabricated PASS for a gate reported SKIP - shipped runnable today with all three real gate checks still
+  stubbed as SKIP (T8.2/T8.3/T8.4 fill them in one at a time).
+- **Touches:** `dad-gates-smoke.ps1` (new), `dad-gates-smoke.cmd` (new), `dad.cmd`, `test-kit.ps1`
+- **Do:**
+  1. Create `dad-gates-smoke.ps1` with `[CmdletBinding()] param([string]$ProjectDir = ".")` - CmdletBinding
+     so a mistyped parameter is an ERROR, not a silently-ignored default (the convention every other kit
+     script here follows, e.g. `dad-guard.ps1`/`ratchet.ps1`'s own header comments explain why: these
+     scripts are invoked by models, which typo parameter names). `$ErrorActionPreference = "Stop"`. Resolve
+     `-ProjectDir` and exit 2 loudly if it does not exist (matching the "a script given a project dir that
+     does not exist FAILS, loudly" convention already enforced by `test-kit.ps1` at its `ratchet.ps1`/
+     `doc-stats.ps1`/`source-stats.ps1` case, ~line 420-432).
+  2. Define an ordered gate list: `loop-guard`, `ratchet-close-refusal`, `dad-guard-stop`. For each, call a
+     function (`Test-LoopGuardGate`, `Test-RatchetCloseGate`, `Test-DadGuardStopGate`) that returns one of
+     three results: `INTERCEPTED`, `SILENT-FAIL` (the violation got through - name it), or `SKIP` (with a
+     stated reason string - never fabricate a pass in place of a SKIP).
+  3. In THIS task, implement all three functions as stubs that unconditionally return
+     `SKIP "not yet implemented"` - the skeleton must run end-to-end today, before any real provocation
+     exists.
+  4. Print a report line per gate: `[gates-smoke] <gate>: <RESULT>[ - <reason>]`. Compute the overall
+     result: exit 1 and name every `SILENT-FAIL` gate if any exist; otherwise, if every gate is `SKIP` (as
+     it will be until T8.2/T8.3/T8.4 land), print a summary line stating nothing was actually verified and exit
+     non-zero (an all-SKIP run must never look like success); otherwise (at least one `INTERCEPTED`, zero
+     `SILENT-FAIL`) exit 0.
+  5. Create `dad-gates-smoke.cmd` as a one-line wrapper mirroring the existing pattern (see `ratchet.cmd`):
+     `powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0dad-gates-smoke.ps1" %*`.
+  6. Add a `dad gates-smoke` line to `dad.cmd`'s `:usage` block, 4-space-indented in the same style as its
+     existing "Closing work out" section entries (e.g. next to `dad ratchet`) - `dad.cmd`'s `:resolve` logic
+     already auto-aliases `gates-smoke` to `gates-smoke.cmd` or `dad-gates-smoke.cmd`, so no other `dad.cmd`
+     change is needed.
+  7. Add a `test-kit.ps1` `Test-Case` asserting: `dad-gates-smoke.ps1` exists, parses (PS AST, same pattern
+     as the "all .ps1 parse" case), is ASCII-only; `dad-gates-smoke.cmd` exists; `dad.cmd`'s usage text now
+     advertises `gates-smoke` (this also satisfies the existing "dad's usage advertises X, wrapper must
+     exist" case around `test-kit.ps1:323-329` automatically); and running
+     `dad-gates-smoke.ps1 -ProjectDir <a fresh sandbox dir>` today (all three checks still stubbed) exits
+     non-zero and its output reports all three gates as `SKIP` - never a fabricated `INTERCEPTED`.
+- **Acceptance:** `test-kit.ps1`'s new case passes: `dad-gates-smoke.ps1` exists/parses/is ASCII,
+  `dad-gates-smoke.cmd` exists, `dad.cmd`'s usage lists `gates-smoke`, and running the script against a
+  fresh sandbox directory prints all three gates as `SKIP` and exits non-zero.
+- **Depends on:** none
+- **Context:** Mirrors `ratchet.ps1`/`dad-guard.ps1`'s own header conventions (CmdletBinding, fail loudly on
+  a bad `-ProjectDir`). `dad.cmd`'s `:resolve` step tries `<SUB>.cmd` then `dad-<SUB>.cmd` automatically -
+  confirmed by reading `dad.cmd` directly. Per Story S8's Behavior: "Degrades to a reported SKIP (never a
+  false pass) for a gate whose violation needs state it can't safely construct on its own" and "Exits
+  non-zero and NAMES the gate if one silently let something through" - this task establishes that
+  report/exit-code contract before any real gate provocation exists, so a half-finished `gates-smoke` can
+  never be mistaken for a working one.
+
+### [ ] T8.2 - Provoke the loop guard: 4 identical consecutive calls, confirm the 4th is blocked   [research]   (Story S8)
+- **Goal:** Implement `Test-LoopGuardGate` in `dad-gates-smoke.ps1` so it actually forces 4+ identical
+  consecutive tool calls against the kit's real `dad-loopguard.ps1` PreToolUse hook and confirms the 4th is
+  blocked (exit 2), reporting `INTERCEPTED` - or naming `loop-guard` as `SILENT-FAIL` if it is not (S8 AC1).
+- **Touches:** `dad-gates-smoke.ps1`
+- **Do:** Implement `Test-LoopGuardGate` using `dad-loopguard.ps1`'s own documented hook contract (stdin
+  JSON `{session_id, tool_name, tool_input}`, exit 0 = allow, exit 2 = BLOCK - read directly from
+  `dad-loopguard.ps1`'s header comment and its `Test-Command` function):
+  1. Resolve the loop-guard script as a sibling of `dad-gates-smoke.ps1` itself
+     (`Join-Path $PSScriptRoot "dad-loopguard.ps1"`) - it is a KIT-level file, not something that lives
+     inside the target `-ProjectDir` (it is wired kit-wide as a PreToolUse hook in `settings.json`, not
+     per-project state).
+  2. Pick a session id scoped to this gates-smoke run (e.g. `"gates-smoke-$PID-$(Get-Random)"`) and call
+     `dad-loopguard.ps1 -Reset` first to clear any stale streak state for it.
+  3. Build the exact payload shape `test-kit.ps1`'s own loop-guard test already proves correct
+     (`test-kit.ps1:2894-2898`'s `Invoke-Guard` helper):
+     `@{ session_id = $sid; tool_name = "Bash"; tool_input = @{ command = "ls -la nowhere-at-all-gates-smoke" } } | ConvertTo-Json -Compress`,
+     piped via stdin to `powershell -NoProfile -ExecutionPolicy Bypass -File <loopguard path>`.
+  4. Send that identical payload 4 times in a row, nothing else run in between (the CONSECUTIVE-identical
+     shape the guard's streak counter actually detects).
+  5. Result is `INTERCEPTED` if any of calls 1-3 return exit 0 and the 4th returns exit 2 (mirroring
+     `test-kit.ps1:2933-2939`'s own tolerance: blocking as early as the 3rd call is fine, never blocking by
+     the 4th is the bug). Result is `SILENT-FAIL "loop-guard"` if the 4th call still returns exit 0.
+  6. `dad-loopguard.ps1` is a hard kit prerequisite, not state gates-smoke must construct - so this gate
+     should not normally SKIP; only SKIP (with that reason stated) if the script cannot be found next to
+     `dad-gates-smoke.ps1`.
+  7. Call `dad-loopguard.ps1 -Reset` again afterward so gates-smoke leaves no residual streak state for its
+     own synthetic session id.
+- **Acceptance:** running `dad-gates-smoke.ps1 -ProjectDir <any target>` reports the `loop-guard` gate as
+  `INTERCEPTED` (proving 4 identical consecutive calls are blocked on the 4th, matching S8 AC1); a
+  `test-kit.ps1` assertion (extending T8.1's case) confirms the loop-guard line in gates-smoke's own output
+  says `INTERCEPTED`, not `SKIP` or `SILENT-FAIL`.
+- **Depends on:** T8.1
+- **Refs:** S8 (AC1: force 4+ identical consecutive calls, confirm the 4th is blocked); R32 (names the
+  PreToolUse loop-guard hook as the mechanism this gate provokes); the exact payload shape and tolerance
+  (block as early as call 3 is fine) are pulled from `test-kit.ps1`'s own already-passing loop-guard
+  `Test-Case` (`test-kit.ps1:2883-2955`) - reuse that proven shape, do not invent a new one.
+- **Context:** `dad-loopguard.ps1`'s exact hook contract (regex-parsed stdin JSON, exit 0/2), its `-Reset`
+  switch, and the payload shape are all read directly from `dad-loopguard.ps1` and reused unchanged from
+  `test-kit.ps1`'s own already-passing `Test-Case "the loop guard breaks a repeated command..."`
+  (`test-kit.ps1:2883-2955`) rather than inventing a new shape. Per `dad-loopguard.ps1`'s `Test-Command`,
+  streaks are tracked PER SESSION ID in `$env:TEMP\dad-loopguard\<session>.json`, so a fresh, gates-smoke-
+  scoped session id keeps this provocation from colliding with (or polluting) a real Claude Code session's
+  own streak state.
+
+### [ ] T8.3 - Provoke ratchet + close-unit's shrink refusal on a throwaway fixture   [research]   (Story S8)
+- **Goal:** Implement `Test-RatchetCloseGate` in `dad-gates-smoke.ps1` so it engineers a shrunk test count
+  and confirms `close-unit.ps1` REFUSES the close via `ratchet.ps1` (R28's mechanism, wired into
+  `close-unit.ps1`) - reporting `INTERCEPTED`, or naming `ratchet-close-refusal` as `SILENT-FAIL` if a
+  shrink is allowed through (S8 AC2).
+- **Touches:** `dad-gates-smoke.ps1`
+- **Do:**
+  - **Mechanism clarification (read this before writing code):** Story S8's Behavior text says "the ratchet
+    (`[ratchet]` finding / R36 mechanism) refuses the close" - but `docs/DESIGN.md`'s own pinned contract
+    C1d (implemented in `doc-stats.ps1`, Story S6/T6.1) states the `[ratchet]` finding is WARN-ONLY and
+    "must never block `/build`, `close-unit`, or any LOCK gate." Confirmed by reading `close-unit.ps1`
+    directly (~lines 374-391 and ~590-594): the mechanism that ACTUALLY refuses a close on a shrink is
+    `ratchet.ps1` (R28, a different, differently-scoped script - it detects the verification surface
+    SHRINKING: tests, requirements, contracts, story/task totals, source rows, grade-card bytes, or
+    CLAUDE.md's Build:/Test: lines going missing), invoked by `close-unit.ps1` and blocking with
+    `"[close-unit] VERIFICATION SURFACE SHRANK"` (exit 1) unless `-AcceptShrink` is passed. This task
+    exercises THAT actual blocking mechanism, not the WARN-only `[ratchet]` finding - report the gate as
+    `ratchet-close-refusal` to keep the two mechanisms distinct in gates-smoke's own output.
+  - Build a small, throwaway, GIT-INITIALIZED fixture in a fresh temp directory (never the real `-ProjectDir`
+    target - per R35, never provoke a real-state-touching violation against a live target) using exactly
+    the shape `test-kit.ps1`'s own `Test-Case "close-unit REFUSES to close over a shrink..."`
+    (`test-kit.ps1:1815-1851`) already proves works: a minimal `docs\TASKS.md` (one `### [ ] T1.1 ...`
+    heading under `## Tasks`), `docs\STORIES.md` (one `### Story S1: ...` heading), `CLAUDE.md` with a
+    `## Build / test` section whose `Build:`/`Test:` lines are trivial (`` `exit 0` ``), and a test file with
+    several `[Fact]`-style markers; `git init`, `git add -A`, commit.
+  - Run `close-unit.ps1 -Id T1.1 -Title "gates-smoke fixture" -ProjectDir <fixture> -NoReindex` once - this
+    clean close should succeed (exit 0) and record `.claude\.dad-ratchet.json` as the baseline.
+  - Delete most of the `[Fact]` markers from the fixture's test file (shrinking the verification surface),
+    then run `close-unit.ps1 -Id T1.2 -Title "gates-smoke shrink" -ProjectDir <fixture> -NoReindex` again.
+  - `INTERCEPTED` if this second close exits non-zero and its output contains `SHRANK`. `SILENT-FAIL
+    "ratchet-close-refusal"` if it exits 0 (the shrink was let through).
+  - This fixture is entirely self-constructed (no dependency on the real target's git history or content),
+    so this gate should not normally SKIP; SKIP only if `git`/`close-unit.ps1`/`ratchet.ps1` cannot be found
+    or invoked at all in the current environment (a genuine hard prerequisite gap, stated as the reason).
+  - Delete the temp fixture directory afterward regardless of outcome.
+- **Acceptance:** running `dad-gates-smoke.ps1 -ProjectDir <any target>` reports the `ratchet-close-refusal`
+  gate as `INTERCEPTED` when `close-unit.ps1`/`ratchet.ps1` behave correctly (matching S8 AC2); a
+  `test-kit.ps1` assertion (extending T8.1's case) confirms this line says `INTERCEPTED`.
+- **Depends on:** T8.1
+- **Refs:** S8 (AC2: engineer a shrunk test/story count, confirm the close is refused); R28 (pins
+  `ratchet.ps1`, wired into `close-unit.ps1`, as the mechanism that actually blocks a shrinking
+  verification surface - NOT the WARN-only R36/C1 `[ratchet]` finding S8's own prose loosely named); the
+  throwaway-fixture shape is pulled from `test-kit.ps1`'s own already-passing shrink-refusal `Test-Case`
+  (`test-kit.ps1:1815-1851`) - reuse that proven shape, do not invent a new one.
+- **Context:** `ratchet.ps1`'s own header explains why it exists (a run rewrote a test fixture, 15 of 16
+  tests did not survive, and every OTHER gate went green). `close-unit.ps1` invokes it at ~line 378-391 (a
+  fresh close, no `-AcceptShrink`) and ~line 592-594 (records a new baseline only on a CLEAN close, never a
+  failed one). The fixture shape above is copied from `test-kit.ps1:1815-1851`'s own already-passing test of
+  this exact mechanism - reuse it rather than inventing a new one, since it is a proven-working shape, not a
+  guess.
+
+### [ ] T8.4 - Provoke dad-guard's Stop-hook block; wire the full pass/fail/skip aggregate + test-kit case   [research]   (Story S8)
+- **Goal:** Implement `Test-DadGuardStopGate` in `dad-gates-smoke.ps1` so it leaves uncommitted code with no
+  fresh `.dad-verified` stamp in a throwaway fixture and confirms `dad-guard.ps1` (the Stop hook, R22) BLOCKS
+  (S8 AC3); finish wiring the overall exit-code/report aggregate across all three gates (S8 AC4, AC5); add
+  the `test-kit.ps1` `Test-Case` that exercises `dad-gates-smoke.ps1` end to end against real, working gates.
+- **Touches:** `dad-gates-smoke.ps1`, `test-kit.ps1`
+- **Do:**
+  1. Implement `Test-DadGuardStopGate` using the fixture shape `test-kit.ps1`'s own dad-guard tests already
+     prove works (e.g. `test-kit.ps1:3716-3733`): build a fresh temp fixture with `docs\DESIGN.md` (so
+     `dad-guard.ps1` recognizes it as a DAD project - it checks for `.dad-kit-version` OR `docs\DESIGN.md`/
+     `docs\TEDD.md`), `git init`/`add`/commit a clean baseline, then add ONE new, UNTRACKED `.cs` file (a
+     code extension `dad-guard.ps1` watches) with no `.claude\.dad-verified` stamp at all.
+  2. Run `dad-guard.ps1 -Check -ProjectDir <fixture>` (its `-Check` mode is exactly the human/test entry
+     point: prints the verdict, exits 1 if it would block, per `dad-guard.ps1`'s own header comment).
+  3. `INTERCEPTED` if the exit code is 1 (matches `test-kit.ps1:3730-3731`'s own assertion shape).
+     `SILENT-FAIL "dad-guard-stop"` if it exits 0 despite the untracked code file.
+  4. This fixture is entirely self-constructed, so this gate should not normally SKIP either; SKIP only if
+     `git`/`dad-guard.ps1` cannot be found or invoked at all, stating that reason.
+  5. Delete the temp fixture directory afterward regardless of outcome.
+  6. Finish the aggregate reporting in `dad-gates-smoke.ps1` (built as a stub in T8.1): with all three real
+     checks now wired in, confirm the exit-0-only-if-every-provoked-gate-intercepted rule, the non-zero-and-
+     name-the-gate rule on any `SILENT-FAIL`, and that a `SKIP` is reported plainly and never counted as a
+     pass (S8 AC4, AC5) - print a final one-line summary (e.g. `gates-smoke: 3 intercepted, 0 silent, 0
+     skipped -> PASS` or naming the failing/skipped gate(s) otherwise).
+  7. Add a `test-kit.ps1` `Test-Case` "dad-gates-smoke intercepts all three real gates" that runs
+     `dad-gates-smoke.ps1 -ProjectDir <any sandbox target>` against the kit's OWN real, unmodified
+     `dad-loopguard.ps1`/`ratchet.ps1`/`close-unit.ps1`/`dad-guard.ps1` and asserts: exit code 0, and the
+     output reports all three gates (`loop-guard`, `ratchet-close-refusal`, `dad-guard-stop`) as
+     `INTERCEPTED` with zero `SILENT-FAIL` and zero `SKIP`.
+- **Acceptance:** `test-kit.ps1`'s new case passes: `dad-gates-smoke.ps1` exits 0 and reports all three real
+  gates as `INTERCEPTED` (S8 AC1-AC3 exercised together); the full validation gate (`test-kit.ps1`) still
+  prints `0 failed`.
+- **Depends on:** T8.1, T8.2, T8.3
+- **Refs:** S8 (AC3: uncommitted code with no `.dad-verified` stamp is blocked at Stop; AC4/AC5: the
+  overall exit-code/report aggregate); R22 (pins `dad-guard.ps1` as the Stop-hook mechanism, its `-Check`
+  entry point, and its fail-open convention on unexpected errors); the fixture shape is pulled from
+  `test-kit.ps1`'s own already-passing dad-guard `Test-Case` (`test-kit.ps1:3716-3733`) - reuse that proven
+  shape, do not invent a new one.
+- **Context:** `dad-guard.ps1`'s `-Check` mode and its DAD-project detection (`.dad-kit-version` or
+  `docs\DESIGN.md`/`docs\TEDD.md`) and its `codeExt` list (which extensions count as "code") are read
+  directly from `dad-guard.ps1`; the fixture shape mirrors `test-kit.ps1`'s own already-passing dad-guard
+  tests (e.g. `test-kit.ps1:3716-3733`, "the guard missed code inside an untracked directory"). Per S8's
+  Acceptance: "AC4: `gates-smoke` exits 0 only when every gate it safely provoked was actually intercepted;
+  if any gate silently lets a violation through, it exits non-zero and names that gate" and "AC5: any gate
+  whose violation cannot be safely constructed is reported as SKIP, never fabricated as a pass" - this task
+  is where those two rules get their first real, non-stub exercise across all three gates at once.
+
+### [ ] T9.1 - Pin the gate-decision log schema + ship dad-gates-log.ps1 (append + query)   [research]   (Story S9)
+- **Goal:** Define the exact structured-log format (file location, one-line-per-event schema) every other
+  S9 task writes to, and ship one small, reusable helper script (`dad-gates-log.ps1`) that appends a line
+  or queries the log - so T9.2/T9.3 each make one mechanical call instead of four scripts each improvising
+  their own log format.
+- **Touches:** `dad-gates-log.ps1` (new), `dad-gates-log.cmd` (new)
+- **Do:**
+  1. **File location:** `.claude\dad-gates-log.jsonl`, resolved under whatever `-ProjectDir` the caller
+     passes - the same per-project `.claude\` convention already used by `.dad-ratchet.json` (`ratchet.ps1`),
+     `.dad-verified` and `.dad-ack-log` (`dad-guard.ps1`): project-local state, gitignored, never committed.
+  2. **Format:** JSONL (one compact JSON object per line), UTF-8 no BOM, LF line endings (this kit's text
+     convention). Fields, EXACTLY these five, no more:
+     - `ts` - UTC ISO-8601, `yyyy-MM-ddTHH:mm:ssZ`.
+     - `gate` - a short id. This story wires up exactly four: `loop-guard`, `ratchet`, `dad-guard-stop`,
+       `close-unit-refusal` (see T9.2/T9.3) - not a closed enum, a future gate may add its own id later.
+     - `tool` - the Claude Code tool name, when the gate's own hook payload has one (`loop-guard` does,
+       e.g. `Bash`); `""` when the gate has no per-tool concept at its block point (`dad-guard-stop` fires
+       at Stop, once per turn, not per tool; `ratchet`/`close-unit-refusal` are invoked as plain
+       subprocesses, never as a hook, so neither has a tool at all).
+     - `reason` - the human-readable block reason, whitespace-collapsed and truncated to 300 chars.
+     - `session` - the Claude Code session id, when the caller's hook payload has one (`loop-guard` and
+       `dad-guard-stop` do); `""` when it does not (`ratchet`/`close-unit-refusal` are invoked directly by a
+       human or by another script, never through a Claude Code hook, so there is no session id to record).
+  3. Create `dad-gates-log.ps1`:
+     `[CmdletBinding()] param([string]$ProjectDir=".", [string]$Gate="", [string]$Tool="", [string]$Reason="", [string]$Session="", [switch]$Query, [string]$FilterGate="")`
+     - **Append mode** (default, `-Gate` non-empty, `-Query` not passed): resolve `-ProjectDir`; if it does
+       not exist, do nothing and exit 0 (logging must NEVER become a new reason a gate's own block fails).
+       Ensure `.claude\` exists (create if missing). Build the JSON object (`ts`/`gate`/`tool`/`reason`
+       collapsed+truncated/`session`) and append it with `[System.IO.File]::AppendAllText`, a
+       `New-Object System.Text.UTF8Encoding($false)`, and a trailing `` `n ``, mirroring `ratchet.ps1`'s own
+       no-BOM `WriteAllText` convention. Wrap the WHOLE body in try/catch that swallows every error and
+       exits 0 - fails OPEN, exactly like `dad-loopguard.ps1`/`dad-guard.ps1` themselves ("a guard that
+       breaks the session when IT has a bug gets switched off").
+     - **Query mode** (`-Query`): read `.claude\dad-gates-log.jsonl` line by line under `-ProjectDir` (if it
+       does not exist, print "no gate log yet" and exit 0); parse each line with `ConvertFrom-Json` (this is
+       a diagnostic path, not the hot per-tool-call path, so the regex-only performance convention
+       `dad-loopguard.ps1` uses for its own stdin does not apply here); if `-FilterGate` is set, print only
+       lines whose `gate` matches (case-insensitive); otherwise print every line. Exit 0.
+  4. Create `dad-gates-log.cmd` as a one-line wrapper mirroring every other kit script's `.cmd` (see
+     `ratchet.cmd`): `powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0dad-gates-log.ps1" %*`.
+- **Acceptance:** running `dad-gates-log.ps1 -ProjectDir <fresh sandbox dir> -Gate loop-guard -Tool Bash -Reason "test block" -Session s1`
+  creates `<sandbox>\.claude\dad-gates-log.jsonl` containing exactly one line, a valid JSON object with
+  `ts`/`gate`/`tool`/`reason`/`session` keys matching the values just passed; running it again with a
+  different `-Gate` appends a SECOND line (file now has 2 lines); running
+  `dad-gates-log.ps1 -ProjectDir <sandbox> -Query -FilterGate loop-guard` prints only the line(s) whose
+  `gate` is `loop-guard`.
+- **Depends on:** none
+- **Refs:** S9 (Data/interfaces: "A new structured log file (one line per gate decision: timestamp, gate
+  id, tool, reason, session)"). This exact schema is PINNED HERE, in this task, grounded in what each of
+  the four real wiring points (T9.2/T9.3) actually has on hand at its own block point (see their own
+  Context) - it is NOT a verbatim copy of claude-gates (DevRik99)'s `.ai/gates-log.jsonl`, which S9's Dev
+  notes cite only as inspiration, not as a binding format for this kit.
+- **Context:** No `docs/DESIGN.md` Requirement governs this yet (S8-S11 are tagged `(Epic: Receipts)`,
+  pending a future `/design` pass per STORIES.md's note above Story S8) - so unlike T6.1/T7.1 (which read a
+  format straight out of a LOCKED `## Contracts` entry), the schema decision is made in THIS task, once,
+  rather than left for each of T9.2/T9.3 to improvise differently. `dad-loopguard.ps1`/`dad-guard.ps1`/
+  `ratchet.ps1` all already fail open on their own bugs (read their header comments) - this helper must be
+  at least as forgiving, since a logging bug must never become a new way for a real gate to misbehave.
+
+### [ ] T9.2 - Wire the loop guard's and dad-guard's Stop-hook blocks into the gate log   [research]   (Story S9)
+- **Goal:** Every time `dad-loopguard.ps1` blocks (repeat-command or read-only-spiral) or `dad-guard.ps1`
+  blocks a Stop in real hook mode, one line lands in that project's `dad-gates-log.jsonl` via T9.1's helper
+  (S9 AC1, gates `loop-guard` and `dad-guard-stop`).
+- **Touches:** `dad-loopguard.ps1`, `dad-guard.ps1`
+- **Do:**
+  1. **dad-loopguard.ps1:** add one more regex extraction to hook mode, alongside the existing `tool_name`/
+     `session_id` regexes (~lines 296-306): `"cwd"\s*:\s*"([^"]*)"` - the standard Claude Code hook payload
+     carries `cwd` alongside `session_id`/`tool_name`, and this script does not currently read it. At each
+     of the three existing block exit points in hook mode - the shared
+     `if ($reason) { [Console]::Error.WriteLine($reason); exit 2 }` after `Test-Command`, for both the
+     shell-command branch (~line 317) and the non-shell-tool branch (~line 322); and the spiral block
+     (~line 327) - call, immediately BEFORE that `exit 2`, and only when `$cwd` was actually extracted:
+     ```
+     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "dad-gates-log.ps1") -ProjectDir $cwd -Gate "loop-guard" -Tool $toolName -Reason $reason -Session $sessionId 2>$null | Out-Null
+     ```
+     (substitute `$spiral` for `$reason` at the spiral exit point). If `$cwd` was empty/missing, SKIP the
+     log call entirely rather than erroring - this hook must stay fail-open no matter what. Do NOT add a log
+     call to the `-Check`/`-Bench` self-test paths - those are diagnostics, not real gate events, and would
+     pollute a real project's log with test data.
+  2. **dad-guard.ps1:** hook mode already parses the full payload via `$hook = $raw | ConvertFrom-Json`
+     (~line 68) and already resolves `$proj` from `$hook.cwd`; capture `$hook.session_id` into a
+     script-scope `$sessionId` variable alongside the existing `$sessionStart` capture. Inside
+     `Block($reason)` (~lines 48-57), immediately before its `exit 2`, and ONLY when running in real hook
+     mode (guard on `-not $Check` - a `-Check` run, including `gates-smoke`'s own T8.4 provocation, is a
+     diagnostic/test invocation and must not pollute a real project's log with test data), call:
+     ```
+     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "dad-gates-log.ps1") -ProjectDir $proj -Gate "dad-guard-stop" -Tool "" -Reason $reason -Session $sessionId 2>$null | Out-Null
+     ```
+- **Acceptance:** (a) forcing 4 identical consecutive `dad-loopguard.ps1` hook calls whose payload includes
+  a real `cwd` appends a `"gate":"loop-guard"` line to that dir's `.claude\dad-gates-log.jsonl` on the
+  blocking (4th) call; (b) running `dad-guard.ps1` in real hook mode (stdin JSON with `stop_hook_active`
+  false, a `cwd` pointing at a fixture with uncommitted code and no `.dad-verified` stamp) appends a
+  `"gate":"dad-guard-stop"` line to that fixture's `.claude\dad-gates-log.jsonl` (S9 AC1).
+- **Depends on:** T9.1
+- **Refs:** S9 (AC1); R32 (names the PreToolUse loop-guard hook this task instruments - the guard's own
+  block BEHAVIOR is unchanged, only a log append is added alongside its existing `exit 2`); R22 (pins
+  `dad-guard.ps1` as the Stop-hook mechanism this task instruments the same way).
+- **Context:** Both hooks fail OPEN by design (their own header comments say so explicitly). The new log
+  call must never become a new reason either hook fails to block or fails to allow correctly - it is
+  wrapped inside T9.1's own try/catch, so a bad path or a permissions error inside `dad-gates-log.ps1`
+  cannot propagate back into either hook's own exit code. `dad-loopguard.ps1` parses stdin with regexes
+  rather than `ConvertFrom-Json`, deliberately, because it runs before EVERY tool call and a full parse
+  measured ~500ms in PS 5.1 - the new `cwd` extraction must follow that same fast, regex-only style.
+
+### [ ] T9.3 - Wire ratchet's shrink-refusal and close-unit's other refusal paths into the gate log   [research]   (Story S9)
+- **Goal:** Every time `ratchet.ps1` detects a shrink, or `close-unit.ps1` refuses a close for any OTHER
+  reason (no build command, build failed, tests failed, wrong-id commit, id not found, or the final
+  aggregate check), one line lands in that project's `dad-gates-log.jsonl` via T9.1's helper (S9 AC1, gates
+  `ratchet` and `close-unit-refusal`).
+- **Touches:** `ratchet.ps1`, `close-unit.ps1`
+- **Do:**
+  1. **ratchet.ps1:** it already resolves `$proj` from its own `-ProjectDir` param (~line 46) and has no
+     session/tool concept - it runs as a plain subprocess, invoked either by a human directly or by
+     `close-unit.ps1` (~line 380). At its own shrink-detection exit point, immediately BEFORE the final
+     `exit 1` (~line 231, after the "`$($drops.Count) THING(S) SHRANK`" report), call:
+     ```
+     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "dad-gates-log.ps1") -ProjectDir $proj -Gate "ratchet" -Tool "" -Reason (($drops | ForEach-Object { "$($_.what): $($_.was)->$($_.now)" }) -join "; ") -Session "" 2>$null | Out-Null
+     ```
+     Put this call HERE, inside `ratchet.ps1` itself - NOT duplicated inside `close-unit.ps1` - so exactly
+     one line is written whether `ratchet.ps1` runs standalone or as the subprocess `close-unit.ps1` already
+     invokes; do not add a second log call for this same event in `close-unit.ps1`.
+  2. **close-unit.ps1:** it already resolves `$proj` (~line 38) and likewise has no session/tool concept
+     (invoked directly, never via a Claude Code hook). Add one log call, same shape, at EACH of these
+     existing `exit 1` refusal sites (all already print a `Write-Host` explaining the refusal - pass that
+     message, or a short summary of it, as `-Reason`), all under gate id `"close-unit-refusal"`: no build
+     command found (~lines 250-253), build failed (~lines 270-280), tests failed / zero tests / no evidence
+     tests ran (~lines 305-321), committing under the wrong id (~lines 363-368), id not found in
+     TASKS.md/STORIES.md (~lines 436-437), and the final aggregate check
+     `if ($problems.Count -gt 0) { ...; exit 1 }` (~line 588). Example call shape (adapt `-Reason` per site):
+     ```
+     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-gates-log.ps1") -ProjectDir $proj -Gate "close-unit-refusal" -Tool "" -Reason "<this site's refusal message>" -Session "" 2>$null | Out-Null
+     ```
+- **Acceptance:** (a) running `ratchet.ps1 -ProjectDir <fixture whose test/story/task count shrank vs its
+  recorded baseline>` appends a `"gate":"ratchet"` line to that fixture's `.claude\dad-gates-log.jsonl`;
+  (b) running `close-unit.ps1` against a fixture that trips any one of the refusal sites listed above (e.g.
+  a failing build) appends a `"gate":"close-unit-refusal"` line to that fixture's log (S9 AC1).
+- **Depends on:** T9.1
+- **Refs:** S9 (AC1); R28 (pins `ratchet.ps1`, enforced by `close-unit`, as the mechanism that refuses a
+  shrinking verification surface - this task instruments its existing refusal, does not change it); R18
+  (pins `close-unit.ps1`'s own "exits non-zero if any step did not happen" mechanical-close-out mechanism,
+  which is exactly what every refusal site listed above already implements).
+- **Context:** Neither script has a Claude Code session id or a "tool" concept available to it - both are
+  invoked as plain PowerShell subprocesses (by a human, or by another script), never as a hook - so both
+  always pass `-Tool ""` and `-Session ""`, per T9.1's own schema note that these fields are legitimately
+  empty when the calling gate has no such data on hand at its block point.
+
+### [ ] T9.4 - test-kit.ps1 Test-Case: the gate log actually gets written and is queryable   (Story S9)
+- **Goal:** The full validation gate mechanically proves the structured log from T9.1/T9.2/T9.3 actually
+  gets written by real gate events (not just by calling the helper directly) and is queryable by gate id,
+  covering S9's AC1 and AC2 end to end.
+- **Touches:** `test-kit.ps1`
+- **Do:**
+  1. Add a Test-Case that calls `dad-gates-log.ps1` directly against a fresh sandbox dir with each of the
+     four gate ids (`loop-guard`, `ratchet`, `dad-guard-stop`, `close-unit-refusal`) and asserts
+     `.claude\dad-gates-log.jsonl` ends up with 4 lines, each parseable as JSON with all five pinned keys
+     (`ts`/`gate`/`tool`/`reason`/`session`) present - the schema T9.1 pinned (AC1's "structured,
+     machine-readable line").
+  2. In the same or a following case, run `dad-gates-log.ps1 -Query -FilterGate loop-guard` against that
+     same sandbox and assert the output contains only the `loop-guard` line, none of the other 3 (AC2 -
+     "queryable... without hand-parsing console output or prose").
+  3. Extend the EXISTING loop-guard Test-Case (`test-kit.ps1:2883-2955`) with a `"cwd"` field pointed at its
+     own sandbox and assert a `loop-guard` line lands in that sandbox's `dad-gates-log.jsonl` after the 4th
+     (blocking) call - proving T9.2's real wiring, not just T9.1's helper called in isolation.
+  4. Extend the EXISTING shrink-refusal Test-Case (`test-kit.ps1:1815-1851`) and the EXISTING dad-guard
+     Test-Case (`test-kit.ps1:3716-3733`) the same way: after the expected refusal/block, assert a
+     `ratchet` (or `close-unit-refusal`) / `dad-guard-stop` line respectively landed in that fixture's log -
+     proving T9.3's real wiring.
+  5. Do not assert anything about `grade-trends.ps1`/`/retro` actually reading this log - AC3 only requires
+     that the log CAN be read as a data source, satisfied by it being a plain, documented JSONL file at a
+     fixed path; no `grade-trends.ps1` code change is in scope for this story.
+- **Acceptance:** `test-kit.ps1` contains this new/extended Test-Case coverage; running the full validation
+  gate (`test-kit.ps1`) prints `0 failed`.
+- **Depends on:** T9.1, T9.2, T9.3
+- **Refs:** S9 (AC1, AC2, AC3).
+- **Context:** `test-kit.ps1`'s existing loop-guard (`:2883-2955`), shrink-refusal (`:1815-1851`), and
+  dad-guard (`:3716-3733`) Test-Cases already build the exact fixtures/payloads these gates need to actually
+  fire - extend them rather than building new fixtures from scratch, the same "reuse a proven shape"
+  convention T8.2/T8.3/T8.4 already followed for their own gate provocations.
+
+### [ ] T10.1 - Pin the summary's data sources + ship dad-run-summary.ps1 (tokens/wall-clock/files-touched/findings/gate-interventions)   [research]   (Story S10)
+- **Goal:** Define concretely, per figure, what each of S10's five numbers means and where it is
+  genuinely sourced from - then ship one script, `dad-run-summary.ps1`, that computes the four figures a
+  script CAN compute and honestly reports the one it cannot, so T10.2/T10.3 each make one call instead of
+  improvising their own sourcing (the same "pin it once" pattern T9.1 used for S9's log schema).
+- **Touches:** `dad-run-summary.ps1` (new), `dad-run-summary.cmd` (new), `dad.cmd`
+- **Do:**
+  1. **Pin the sourcing decisions** (write them as a header comment in the new script, same convention as
+     `dad-gates-log.ps1`'s own header):
+     - **wall-clock:** a script has no visibility into when a Claude Code scope/session started, so this
+       is CALLER-SUPPLIED, not self-discovered: require `-StartTime <a [datetime]>` and compute
+       `wall-clock = (Get-Date) - $StartTime`. The caller (T10.2/T10.3's edited orchestrator instructions)
+       is the one who actually knows when the scope began.
+     - **files touched:** a computed git fact, not narrated - require `-SinceCommit <a git ref>` (the
+       commit at scope start) and count unique paths from
+       `git diff --name-only $SinceCommit..HEAD` run inside `-ProjectDir`.
+     - **findings count:** run `doc-stats.ps1 -ProjectDir <target> -Findings` and count output lines that
+       start with a `[tag]` marker (the same generated-finding lines `[design]`/`[scribe]`/`[taskmap]`/
+       `[ratchet]`/etc. already use) - reuse that existing output, do not add a second findings mechanism.
+     - **gate interventions:** call `dad-gates-log.ps1 -ProjectDir <target> -Query` (T9.1's helper) and
+       count returned lines whose `ts` falls inside `[$StartTime, now]` - this is S10 AC2's literal
+       requirement ("pulled from S9's structured gate decision log, not from a human's manual count").
+     - **tokens used:** confirmed by reading this kit's OWN `publish-run.ps1` directly - it treats a run
+       transcript as an externally-supplied text file it never parses for a usage/token field, and no
+       script anywhere in this kit reads a Claude Code session transcript's usage data. Claude Code does
+       NOT expose a session's token usage to project-local tooling. Report this honestly as unavailable -
+       do NOT fabricate a number - using this exact line:
+       `tokens used: not available (Claude Code does not expose this to project tooling)`
+       (the same honest-gap convention C1c already uses for "not priced yet" rather than an invented
+       estimate).
+  2. Implement `dad-run-summary.ps1`:
+     `[CmdletBinding()] param([string]$ProjectDir=".", [Parameter(Mandatory)][string]$SinceCommit, [Parameter(Mandatory)][datetime]$StartTime)`
+     (CmdletBinding so a mistyped parameter errors rather than silently defaulting, matching every other
+     kit script's convention). `$ErrorActionPreference = "Stop"`. Resolve `-ProjectDir` and exit 2 loudly
+     if it does not exist. Compute the four real figures per the sourcing above, plus the fixed tokens
+     line, and print exactly:
+     ```
+     [run-summary] wall-clock: <Xm Ys>
+     [run-summary] files touched: <N>
+     [run-summary] findings: <N>
+     [run-summary] gate interventions: <N>
+     [run-summary] tokens used: not available (Claude Code does not expose this to project tooling)
+     ```
+  3. Create `dad-run-summary.cmd` as a one-line wrapper mirroring every other kit script's `.cmd` (see
+     `dad-gates-log.cmd`): `powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0dad-run-summary.ps1" %*`.
+  4. Add a `dad run-summary` line to `dad.cmd`'s `:usage` block (4-space-indented, same style as the
+     existing entries) - `dad.cmd`'s `:resolve` logic already auto-aliases `run-summary` to
+     `run-summary.cmd` or `dad-run-summary.cmd`, so no other `dad.cmd` change is needed.
+- **Acceptance:** against a fresh git-initialized sandbox fixture with a baseline commit, 2 further commits
+  touching 3 distinct files total after that baseline, a `.claude\dad-gates-log.jsonl` seeded with 1 line
+  (via `dad-gates-log.ps1`'s own append mode) timestamped between `-StartTime` and now, and a
+  `doc-stats.ps1 -Findings` run that prints 2 finding lines: running
+  `dad-run-summary.ps1 -ProjectDir <fixture> -SinceCommit <baseline> -StartTime <baseline timestamp>`
+  prints `files touched: 3`, `findings: 2`, `gate interventions: 1`, and the tokens line verbatim as
+  pinned above.
+- **Depends on:** T9.1
+- **Refs:** S10 (AC1: tokens/wall-clock/files-touched/findings computed, not narrated; AC2: gate-
+  interventions figure pulled from S9's log); S9 (T9.1 ships the `dad-gates-log.ps1` schema + `-Query`
+  mode this task calls as its gate-interventions source). No `docs/DESIGN.md` Requirement governs this
+  Epic yet (per STORIES.md's note above Story S8), so - like T9.1 did for S9's log schema - this task PINS
+  its own sourcing decisions once, here, rather than leaving each wiring task (T10.2/T10.3) to improvise a
+  different interpretation.
+- **Context:** `publish-run.ps1` (read directly) is the closest existing "run receipt" mechanism in this
+  kit - it copies a human-supplied transcript and a `doc-stats.ps1` snapshot into a runs/ folder, but never
+  computes wall-clock, files-touched, or a token count itself. This task is the first place any of those
+  four figures get computed at all; the tokens figure specifically has NO available data source anywhere
+  in this kit today, confirmed by grepping every `.ps1` file for token/usage/transcript-parsing logic
+  before writing this task - it is a genuine capability gap, not an oversight, and must be reported as such
+  rather than guessed at.
+
+### [ ] T10.2 - Wire dad-run-summary.ps1 into /build's end-of-scope   [research]   (Story S10)
+- **Goal:** `global\commands\build.md`'s "## End of scope" step actually captures a scope-start baseline
+  and calls T10.1's `dad-run-summary.ps1`, relaying its output, instead of a `/build` run ending with no
+  computed summary at all.
+- **Touches:** `global\commands\build.md`
+- **Do:**
+  1. Near `build.md`'s existing "Gate 3 - PROVE THE SHELL WORKS" step (where the orchestrator first
+     confirms the shell works via `dad doc-stats`), add a short instruction for the orchestrator to record
+     this scope's baseline BEFORE any unit work starts: the current git ref (`git rev-parse HEAD` inside
+     the target project) and the current time, held for the rest of the scope as `$sinceCommit`/
+     `$startTime`. This is prose instruction text (the orchestrator IS the one running shell commands in
+     this loop), not a script change.
+  2. In the existing "## End of scope" section, AFTER "Run CLAUDE.md's build command once more and report
+     the result" and BEFORE "spawn librarian-agent (AUDIT)", add a step instructing the orchestrator to run
+     `dad run-summary -ProjectDir <project> -SinceCommit <the baseline captured in step 1> -StartTime <the
+     baseline time captured in step 1>` and relay its 5-line output verbatim as part of the end-of-scope
+     report.
+  3. Small, targeted insertion into the existing step text, not a rewrite of `build.md`.
+- **Acceptance:** `global\commands\build.md` instructs capturing a git-ref + timestamp baseline at scope
+  start, and its "## End of scope" section instructs running `dad run-summary` with that baseline and
+  relaying its output, positioned between the build re-run and the librarian-agent spawn (S10 AC1, AC3 -
+  the summary is generated without a human having to watch and tally anything by hand).
+- **Depends on:** T10.1
+- **Refs:** S10 (AC1: "at the end of a `/build` scope ... a summary is generated"); S9 (indirectly, via
+  T10.1's use of the gate log).
+- **Context:** `build.md`'s current "## End of scope" text (read directly) is: "Run CLAUDE.md's build
+  command once more and report the result, then spawn **librarian-agent** (AUDIT) and route approved fixes
+  to their owners." - this task inserts the `dad run-summary` step into that existing sequence, it does not
+  restructure the rest of `/build`'s loop.
+
+### [ ] T10.3 - Wire dad-run-summary.ps1 into /audit's full-audit run   [research]   (Story S10)
+- **Goal:** `global\commands\audit.md`'s full-audit path actually captures a baseline and calls T10.1's
+  `dad-run-summary.ps1`, relaying its output, so a full `/audit` also produces the computed summary S10
+  requires, not just a `/build` scope.
+- **Touches:** `global\commands\audit.md`
+- **Do:**
+  1. Near `audit.md`'s existing first step ("FIRST, before spawning anything ... `dad doc-stats
+     -Findings`"), add an instruction for the orchestrator to capture this audit's own baseline: the
+     current git ref (`git rev-parse HEAD` inside the target project) and current time, held as
+     `$sinceCommit`/`$startTime` for the rest of the run. Note explicitly that unlike `/build`'s single
+     scope, a full `/audit` has no natural "start of work" commit range, so the baseline here is simply
+     "now" at audit-start - the resulting files-touched/gate-interventions figures reflect only whatever
+     happens DURING this audit run (routing fixes to owner agents), not prior history, and the summary
+     should say so.
+  2. AFTER the existing "THEN update the dashboard: `dad doc-stats -UpdateStatus`" step, add a step
+     instructing the orchestrator to run `dad run-summary -ProjectDir <project> -SinceCommit <the baseline
+     captured in step 1> -StartTime <the baseline time captured in step 1>` and relay its 5-line output
+     verbatim as part of the audit's findings report.
+  3. Small, targeted insertion into the existing step text, not a rewrite of `audit.md`.
+- **Acceptance:** `global\commands\audit.md` instructs capturing a git-ref + timestamp baseline at
+  audit-start, and instructs running `dad run-summary` with that baseline (right after the
+  `doc-stats -UpdateStatus` step) and relaying its output (S10 AC1, AC3).
+- **Depends on:** T10.1
+- **Refs:** S10 (AC1: "... or a full `/audit`, a summary is generated"); S9 (indirectly, via T10.1's use of
+  the gate log).
+- **Context:** `audit.md`'s current early steps (read directly) run `dad doc-stats -Findings` first, then
+  later `dad doc-stats -UpdateStatus` to refresh `docs/STATUS.md`'s Snapshot block - this task's baseline
+  capture goes at the very start (before either), and the `dad run-summary` call goes right after the
+  `-UpdateStatus` step, before the librarian-agent spawn.
+
+### [ ] T10.4 - test-kit.ps1 Test-Case: dad-run-summary.ps1 computes correctly + build.md/audit.md reference it   (Story S10)
+- **Goal:** The full validation gate mechanically proves T10.1's script computes its four real figures
+  correctly against a fixture, and that both `build.md` and `audit.md` actually reference it (not merely
+  that the file exists), covering S10's AC1-AC3 end to end.
+- **Touches:** `test-kit.ps1`
+- **Do:**
+  1. Build a small git-initialized sandbox fixture (never a real project, per the R35 sandboxing
+     convention already followed by this file's other fixture tests): a baseline commit, then further
+     commits touching a known number of distinct files, a `.claude\dad-gates-log.jsonl` seeded via
+     `dad-gates-log.ps1`'s own append mode with a known number of lines timestamped inside the test's
+     `-StartTime`..now window, and a `docs/STORIES.md`/`docs/TASKS.md` pair that produces a known,
+     non-zero `doc-stats.ps1 -Findings` line count.
+  2. Run `dad-run-summary.ps1 -ProjectDir <fixture> -SinceCommit <baseline> -StartTime <baseline
+     timestamp>` and assert: `files touched` equals the known distinct-file count, `gate interventions`
+     equals the known seeded line count, `findings` equals the known findings count, and the tokens line
+     matches T10.1's pinned "not available" wording exactly.
+  3. Add a static presence check (grep, not behavioral) that `global\commands\build.md` contains
+     `run-summary` in its "## End of scope" section and `global\commands\audit.md` contains `run-summary`
+     near its dashboard-update step - confirming T10.2/T10.3's wiring text actually landed, the same
+     presence-check pattern T7.3 already uses for prompt-text insertions.
+- **Acceptance:** `test-kit.ps1` contains this new `Test-Case`; running the full validation gate
+  (`test-kit.ps1`) prints `0 failed`, with this case's fixture assertions and both grep checks passing.
+- **Depends on:** T10.1, T10.2, T10.3
+- **Refs:** S10 (AC1, AC2, AC3).
+- **Context:** `test-kit.ps1`'s existing `[integrity]`/`[scribe]`/`[ratchet]` fixture `Test-Case`s and T9.4's
+  own gate-log coverage are the structural pattern to mirror (sandbox fixture -> run the script -> assert
+  on output) - reuse that shape rather than inventing a new fixture style.
+
 ## Open questions
 - Story S3's AC4 ("(manual) `/scaffold avalonia` appears in the menu and scaffolds a project") is a manual,
   human-run verification step, not a shardable dev task - it was confirmed at implementation time per the
   story's note ("AC4 (manual /scaffold avalonia) confirm on the 5080") and is not represented as a separate
   task here.
+- Story S11 ("[SPIKE] Should high-stakes verification run as a separate process?") is deliberately NOT
+  sharded into any task here. It is a research/decision spike, not a build story - its own deliverable (a
+  written recommendation weighing R32's same-session subagent discipline against claude-code-audit-gate's
+  separate-process Kapitan/Auditor architecture) is already written directly into STORIES.md's S11 section
+  under "Recommendation (draft - pending human decision, satisfies AC1)". There is no code to shard: S11's
+  own text says "no build work follows from this story until a human decision is made" among options A
+  (stay same-session), B (fully separate-process), or C (hybrid). `doc-stats -Findings`'s `[taskmap]`
+  finding will keep reporting S11 as having no tasks - that is correct and expected, not a gap to fill,
+  until a human picks an option and a follow-up story/task is scoped for whichever one is chosen.

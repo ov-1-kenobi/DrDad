@@ -318,3 +318,152 @@
 - **Dev notes:** This is PROMPT TEXT, not code - there is no build to verify beyond ASCII/parse checks and
   the static content test. Keep the wording close to C1c's pinned sentences (read `docs/DESIGN.md` directly)
   so the shipped mechanism does not drift from what the human approved in `/design`.
+
+## Epic: Receipts
+<!-- These 4 stories (S8-S11) do NOT yet correspond to any docs/DESIGN.md Requirement - DESIGN.md is
+     LOCKED and stays LOCKED this session. Tagged "(Epic: Receipts)" in place of an (R#) tag as a
+     placeholder grouping; a human will run a separate /design pass later to fold these into formal
+     Requirements (proof a gate actually fires, a queryable record of every gate decision, and a real
+     accounting of what a run costs). Do not treat "(Epic: Receipts)" as a locked Requirement id. -->
+
+### Story S8: dad gates-smoke - prove the gates actually fire   (Epic: Receipts)   <!-- Status: TODO -->
+- **Goal:** A standalone command that deliberately provokes a known violation against each of DrDad's real
+  gates on a target project and confirms each one actually intercepts it - not that the hook file merely
+  exists.
+- **Context:** Today a gate's presence (the script/hook file existing) is not the same as it firing on the
+  exact violation it claims to catch. This story closes that gap with an active smoke test rather than a
+  passive file-existence check.
+- **Behavior:**
+  - Force 4+ identical consecutive tool calls and confirm the loop guard blocks the 4th.
+  - Engineer a shrunk test/story count and confirm the ratchet (`[ratchet]` finding / R36 mechanism)
+    refuses the close.
+  - Leave uncommitted code with no `.dad-verified` stamp and confirm dad-guard blocks the Stop.
+  - Exits 0 only if every gate it can safely provoke actually intercepted.
+  - Exits non-zero and NAMES the gate if one silently let something through.
+  - Degrades to a reported SKIP (never a false pass) for a gate whose violation needs state it can't
+    safely construct on its own.
+- **Data / interfaces:** New standalone command (e.g. `dad gates-smoke`), scoped to a target project path;
+  reads/exercises the existing loop guard, ratchet (R36/C1), and dad-guard mechanisms without modifying them.
+- **Dependencies:** none (exercises existing R36/ratchet + dad-guard/loop-guard mechanisms as black boxes).
+- **Acceptance (testable):**
+  - [ ] AC1: 4+ identical consecutive tool calls against a target project are blocked on the 4th by the loop
+    guard, and `gates-smoke` reports this as intercepted.
+  - [ ] AC2: a shrunk test/story count scenario causes the ratchet to refuse the close; `gates-smoke` reports
+    this as intercepted.
+  - [ ] AC3: uncommitted code with no `.dad-verified` stamp is blocked at Stop by dad-guard; `gates-smoke`
+    reports this as intercepted.
+  - [ ] AC4: `gates-smoke` exits 0 only when every gate it safely provoked was actually intercepted; if any
+    gate silently lets a violation through, it exits non-zero and names that gate.
+  - [ ] AC5: any gate whose violation cannot be safely constructed is reported as SKIP, never fabricated as a
+    pass.
+- **Dev notes:** Inspired by claude-gates (DevRik99)'s `smoke` command, which does exactly this across its 50
+  gates. Pending a future `/design` pass to fold into a formal Requirement.
+
+### Story S9: Structured gate decision log   (Epic: Receipts)   <!-- Status: TODO -->
+- **Goal:** Every deny/warn/block a DrDad gate produces (loop guard, ratchet, dad-guard, a close-unit
+  refusal) gets appended as one structured, machine-readable line - not just printed to console and lost.
+- **Context:** Gate decisions today are ephemeral console output. Making them a durable, queryable record is
+  what would let `grade-trends.ps1` / `/retro` (R27) mine real data instead of parsing prose after the fact.
+- **Behavior:**
+  - Defines this as the real data `grade-trends.ps1` / `/retro` (R27) should be mining (e.g. "a theme in
+    40%+ of cards is a convention problem") instead of parsing prose after the fact.
+  - Would let a head-to-head model comparison count gate interventions automatically instead of a human
+    watching and noting them by hand.
+- **Data / interfaces:** A new structured log file (one line per gate decision: timestamp, gate id, tool,
+  reason, session), written by the loop guard, ratchet, dad-guard, and close-unit's refusal path.
+- **Dependencies:** none; feeds S10 (per-run stats) as a data source for its gate-interventions figure.
+- **Acceptance (testable):**
+  - [ ] AC1: a deny/warn/block from the loop guard, the ratchet, dad-guard, or a close-unit refusal each
+    appends one structured, machine-readable line (timestamp, gate id, tool, reason, session) to the log.
+  - [ ] AC2: the log is queryable (e.g. filterable by gate id / deny-only) without hand-parsing console
+    output or prose.
+  - [ ] AC3: `grade-trends.ps1` / `/retro` (R27) can read this log as a data source instead of parsing prose.
+- **Dev notes:** Inspired by claude-gates (DevRik99)'s `.ai/gates-log.jsonl` (timestamp, gate, tool, reason,
+  session - queryable via `claude-gates log --deny --gate <id>`). Pending a future `/design` pass to fold
+  into a formal Requirement.
+
+### Story S10: Per-run stats summary   (Epic: Receipts)   <!-- Status: TODO -->
+- **Goal:** At the end of a `/build` scope or a full `/audit`, auto-generate a short, computed-not-narrated
+  summary: tokens used, wall-clock time, files touched, findings count, gate interventions (pulled from S9's
+  log).
+- **Context:** This directly serves cost/reliability comparisons already underway elsewhere in this kit,
+  turning a run's cost into a computed fact rather than a human's after-the-fact narration.
+- **Behavior:**
+  - Directly serves cost/reliability comparisons already underway elsewhere in this kit.
+  - Depends on S9 (the gate decision log) as its data source for the gate-interventions figure - note this
+    dependency explicitly.
+- **Data / interfaces:** A generated per-run summary (tokens, wall-clock time, files touched, findings
+  count, gate interventions), produced at the end of a `/build` scope or a full `/audit` run.
+- **Dependencies:** S9 (the structured gate decision log) - required as the data source for the
+  gate-interventions figure in the summary.
+- **Acceptance (testable):**
+  - [ ] AC1: at the end of a `/build` scope or a full `/audit`, a summary is generated containing tokens
+    used, wall-clock time, files touched, and findings count, computed (not narrated) from run data.
+  - [ ] AC2: the summary's gate-interventions figure is pulled from S9's structured gate decision log, not
+    from a human's manual count.
+  - [ ] AC3: the summary generation does not require a human to watch and tally interventions by hand.
+- **Dev notes:** Inspired by claude-code-audit-gate (fotografvecerek-ai)'s STATISTIKA.html (lines of code,
+  screens, findings, time, exact token counts, generated at the end of every audit run). Pending a future
+  `/design` pass to fold into a formal Requirement.
+
+### Story S11: [SPIKE] Should high-stakes verification run as a separate process?   (Epic: Receipts)   <!-- Status: TODO -->
+- **Type:** Research spike (no code) - **[human]** decision pending; do NOT implement anything for this
+  story.
+- **Goal:** Produce a short, cited written recommendation on whether DrDad's grade-agent/librarian-agent (or
+  a future high-stakes gate) should run as a fully separate Claude Code process - its own workspace,
+  read-only repo access, a file/message bus back to the main session - rather than a same-session Task-tool
+  subagent. Do NOT implement anything for this story.
+- **Context:**
+  - R32 already establishes that a same-session subagent is "an unguarded, unobservable region" and
+    mitigates this through discipline (one agent per unit, orchestrator regains control between spawns).
+  - claude-code-audit-gate (fotografvecerek-ai) answers the identical underlying problem structurally
+    instead: its auditor runs as a genuinely separate OS process (a second Claude Code window, "Kapitan"
+    building / "Auditor" reviewing) connected by a HANDOFF -> EVIDENCE -> VERDICT bus, so it literally
+    cannot share contaminated context with the agent it's reviewing.
+  - The deliverable must weigh that real gain (closes R32's gap structurally) against the real cost
+    (coordinating two live sessions instead of one).
+  - Explicitly mark this as a **[human]**-flagged decision - do not build toward either answer until a human
+    picks one - the same pattern as architect-agent hunting an underspecified contract and forcing a
+    human-approved pin rather than guessing.
+- **Behavior:** Write the recommendation into this story's own Dev notes (below) or a pointed-to doc (e.g.
+  `docs/SOURCES.md`); it must cite R32 and claude-code-audit-gate's Kapitan/Auditor architecture, weigh the
+  structural gain against the two-live-session coordination cost, and explicitly defer the choice to a
+  human. No build/task work follows from this story until that human decision is made.
+- **Data / interfaces:** None (no code). Deliverable is a written recommendation (in this story's Dev notes
+  or a linked doc).
+- **Dependencies:** R32 (same-session subagent isolation discipline) as the baseline being evaluated against.
+- **Acceptance (testable, "deliverable produced" not code-tested):**
+  - [ ] AC1: a written recommendation exists (in this story's Dev notes / a Context subsection, or points to
+    where it should be written) citing R32 and claude-code-audit-gate's Kapitan/Auditor architecture.
+  - [ ] AC2: the recommendation explicitly states it is a **[human]** decision pending approval, and does not
+    commit to building either option.
+- **Dev notes:** Inspired by claude-code-audit-gate (fotografvecerek-ai)'s Kapitan/Auditor two-process
+  (HANDOFF -> EVIDENCE -> VERDICT) architecture. This is a RESEARCH SPIKE, not a build story - flagged
+  **[human]** for decision; pending a future `/design` pass to fold into a formal Requirement if approved.
+- **Recommendation (draft - pending human decision, satisfies AC1):**
+  - **Option A - status quo (same-session Task-tool subagent, R32's discipline).** Pros: no new
+    infrastructure; matches how every other agent in this kit already runs; R32's own evidence (11 graded
+    runs, zero loops) shows the discipline mitigation works empirically for ordinary units today. Cons:
+    does NOT structurally close R32's stated gap - while a Task call is in flight the orchestrator is
+    suspended (cannot poll, cannot read a progress file, cannot interrupt), so the "unguarded, unobservable
+    region" remains real, just rare so far.
+  - **Option B - fully separate OS process (Kapitan/Auditor pattern, claude-code-audit-gate).**
+    grade-agent/librarian-agent (or a future high-stakes gate) runs as a second, independent Claude Code
+    process with its own workspace, read-only repo access, and a file/message bus back to the main session
+    (HANDOFF -> EVIDENCE -> VERDICT). Pros: cannot share contaminated context by construction (separate
+    process, separate context window) - closes R32's gap structurally instead of by discipline; a runaway
+    auditor can be observed/killed from OUTSIDE the session that spawned it; read-only repo access becomes
+    an OS/filesystem-level guarantee, not just a tool-allowlist promise. Cons: real, ongoing cost of
+    coordinating two live sessions (process lifecycle, and the file/message bus itself becomes new surface
+    to design, gate, and maintain); loses this kit's current single-session continuation model; adds
+    latency/friction to the common case, where most units are NOT the highest-stakes case.
+  - **Where the tradeoff actually bites:** R32's discipline is empirically holding for ordinary
+    dev/qa/hygiene units today - this is not a currently-observed recurring failure, so Option B's
+    structural fix is insurance against a rare-but-real class of failure, not a fix for an active one. That
+    argues against an all-or-nothing swap and toward a **hybrid** (Option C): separate-process ONLY for the
+    single highest-stakes verification point (e.g. grade-agent's final LOCK-adjacent verdict, or a future
+    audit-gate signoff), same-session for everything else.
+  - **[human] decision required - pick one before any code is written toward this:** (A) keep same-session
+    for all agents: (B) go fully separate-process for all high-stakes agents; or (C) hybrid - separate-
+    process only for the named highest-stakes gate(s), same-session for the rest. This write-up does not
+    pick for you; no build work follows from S11 until the human answers.
