@@ -86,6 +86,8 @@ function Test-LoopGuardGate {
 
   & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
 
+  # $i is intentionally read here after the loop's `break` - PowerShell for-loop variables are not
+  # scoped to the loop body, so $i still holds the attempt number that triggered $blocked = $true.
   if ($blocked) {
     return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "4 identical consecutive Bash calls were blocked by attempt $i" }
   }

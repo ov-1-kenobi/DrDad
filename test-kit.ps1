@@ -1910,6 +1910,38 @@ Test-Case "dad-gates-smoke intercepts all three real gates (T8.2/T8.3/T8.4 toget
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "dad-gates-smoke reports a genuine per-gate SKIP when one sibling script is missing (S8 grade follow-up)" {
+  # The two Test-Cases above only prove the CONTRACT (T8.1 skeleton) and the all-real/all-INTERCEPTED
+  # path (T8.2/T8.3/T8.4 together) - neither one forces an INDIVIDUAL gate's own SKIP branch text to
+  # actually fire against otherwise-working tooling, only the aggregate all-SKIP->FAIL path is stubbed
+  # elsewhere. Copy dad-gates-smoke.ps1 to an isolated directory together with ONLY the two siblings
+  # loop-guard/dad-guard-stop need (dad-loopguard.ps1, dad-guard.ps1), deliberately omitting close-
+  # unit.ps1/ratchet.ps1 - so ratchet-close-refusal's own "sibling not found" SKIP (dad-gates-smoke.ps1:111)
+  # is the ONLY gate that skips, while the other two still run for real and INTERCEPT.
+  $sb = New-Sandbox
+  $isolated = Join-Path $env:TEMP ("dadkit_gs_iso_" + [guid]::NewGuid().ToString("N").Substring(0,8))
+  New-Item -ItemType Directory -Force $isolated | Out-Null
+  try {
+    Copy-Item (Join-Path $kit "dad-gates-smoke.ps1") $isolated
+    Copy-Item (Join-Path $kit "dad-loopguard.ps1") $isolated
+    Copy-Item (Join-Path $kit "dad-guard.ps1") $isolated
+
+    $gs = Join-Path $isolated "dad-gates-smoke.ps1"
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $gs -ProjectDir $sb 2>&1 | Out-String)
+    $exit = $LASTEXITCODE
+
+    Assert ($out -match [regex]::Escape("[gates-smoke] ratchet-close-refusal: SKIP")) "the per-gate sibling-missing SKIP did not fire for ratchet-close-refusal:`n$out"
+    Assert ($out -match 'close-unit\.ps1 / ratchet\.ps1 not found') "the SKIP reason text did not match the sibling-missing message:`n$out"
+    Assert ($out -match [regex]::Escape("[gates-smoke] loop-guard: INTERCEPTED")) "loop-guard should still run for real when its own sibling is present:`n$out"
+    Assert ($out -match [regex]::Escape("[gates-smoke] dad-guard-stop: INTERCEPTED")) "dad-guard-stop should still run for real when its own sibling is present:`n$out"
+    Assert ($out -notmatch 'SILENT-FAIL') "no gate should silently fail in this scenario:`n$out"
+    Assert ($exit -eq 0) "one genuine per-gate SKIP alongside two real INTERCEPTED gates is not all-skipped and has zero silent-fails, so it should still exit 0:`n$out"
+  } finally {
+    Remove-Sandbox $sb
+    Remove-Item -LiteralPath $isolated -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 Test-Case "grade-trends reads the STATED grade, not a capital letter in prose" {
   # First version scanned for \b[A-F]\b, so "A worked example was missing" scored a D card as an A - and
   # it flipped the reported direction on a real project. A retro built on mis-parsed grades is exactly the
