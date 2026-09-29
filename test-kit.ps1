@@ -1740,14 +1740,37 @@ Test-Case "the corpus has a SHELL door, and it degrades instead of dying" {
     Assert (Test-Path $df) "docs-find.ps1 is missing"
     Assert (Test-Path (Join-Path $kit "docs-find.cmd")) "docs-find has no .cmd wrapper"
 
-    # This box has no Ollama, so semantic search cannot run - the point is that it still ANSWERS.
-    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "tile sizes" 2>&1 | Out-String)
-    Assert ($out -match 'tile sizes|512') "it returned nothing when semantic search was unavailable:`n$out"
-    Assert ($out -match 'literal scan|semantic search unavailable') "it did not say it had fallen back"
+    # FORCE the degrade instead of assuming the box lacks Ollama. This case used to read "this box has no
+    # Ollama, so semantic search cannot run" - true on CI, false on any dev machine that actually runs the
+    # models this kit is built around. There it PASSED VACUOUSLY in reverse: semantic search succeeded, no
+    # fallback was printed, and the assertion that it announced a fallback failed - reporting a defect in
+    # docs-find.ps1 that did not exist, while never once exercising the degrade path on CI's behalf either.
+    # Pointing OLLAMA_HOST at a dead port makes the embedding call fail on EVERY box (Rag.cs:92 reads it),
+    # so the fallback branch is tested deterministically rather than environmentally.
+    $prevHost = $env:OLLAMA_HOST
+    try {
+      $env:OLLAMA_HOST = "http://127.0.0.1:1"
+      $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "tile sizes" 2>&1 | Out-String)
+      Assert ($out -match 'tile sizes|512') "it returned nothing when semantic search was unavailable:`n$out"
+      Assert ($out -match 'literal scan|semantic search unavailable') "it did not say it had fallen back"
 
-    # a query with no match must say so rather than returning noise
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "zzzznotpresentzzzz" 2>&1 | Out-Null
-    Assert ($LASTEXITCODE -eq 1) "a no-match query did not exit non-zero"
+      # a query with no match must say so rather than returning noise
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "zzzznotpresentzzzz" 2>&1 | Out-Null
+      Assert ($LASTEXITCODE -eq 1) "a no-match query did not exit non-zero"
+    } finally {
+      if ($null -eq $prevHost) { Remove-Item Env:\OLLAMA_HOST -ErrorAction SilentlyContinue }
+      else { $env:OLLAMA_HOST = $prevHost }
+    }
+
+    # And with the real backend reachable it must still answer - the normal path, only when it is testable.
+    if (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe")) {
+      $live = ""
+      try { $live = (Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -TimeoutSec 3 -UseBasicParsing 2>$null).Content } catch { }
+      if ($live) {
+        $ok = (& powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "tile sizes" 2>&1 | Out-String)
+        Assert ($ok -match 'tile sizes|512') "semantic search was reachable but the shell door still returned nothing:`n$ok"
+      }
+    }
 
     # and the agents that need it must point at it
     foreach ($a in @("global\agents\dev-agent.md","global\agents\qa-agent.md","global\commands\build.md")) {
