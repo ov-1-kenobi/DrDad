@@ -40,6 +40,20 @@ $notes = New-Object System.Collections.Generic.List[string]
 $problems = New-Object System.Collections.Generic.List[string]
 $warns = New-Object System.Collections.Generic.List[string]
 
+# Gate log (DESIGN C3/C3b, gate "close-unit-refusal"): one line per verdict via dad-gates-log.ps1, into the
+# project's grades\gates-log.jsonl. Fail-open: logging never changes a verdict or exit code. -SkipVerify (the
+# human's unverified escape hatch) does not log. Empty args are omitted (a native call drops them); the
+# reason is flattened, quote-swapped and capped before the native call.
+$script:allowLogged = $false
+function Write-GateLog([string]$decision, [string]$why) {
+  if ($SkipVerify) { return }
+  try {
+    $why = ([regex]::Replace([string]$why, '\s+', ' ')).Replace([string][char]34, "'").Trim()
+    if ($why.Length -gt 300) { $why = $why.Substring(0, 300) }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-gates-log.ps1") -ProjectDir $proj -Gate "close-unit-refusal" -Decision $decision -Reason $why 2>$null | Out-Null
+  } catch { }
+}
+
 # Pull a command out of CLAUDE.md's "## Build / test" block ("Build" or "Test").
 function Get-ClaudeCommand([string]$kind) {
   $cm = Join-Path $proj "CLAUDE.md"
@@ -269,6 +283,7 @@ if (-not $SkipVerify) {
     Write-Host "[close-unit] NO BUILD COMMAND FOUND in CLAUDE.md - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
     Write-Host "             Fill CLAUDE.md's 'Build:' line (that is /design's job) so units get verified, or" -ForegroundColor Red
     Write-Host "             re-run with -SkipVerify if you (the human) really want an unverified close." -ForegroundColor Red
+    Write-GateLog "block" "$Id not closed: no build command found in CLAUDE.md"
     exit 1
   } else {
     Write-Host "[close-unit] build: $cmd" -ForegroundColor Cyan
@@ -302,14 +317,17 @@ if (-not $SkipVerify) {
     if ($r.Code -ne 0) {
       Write-Host "[close-unit] BUILD FAILED (exit $($r.Code)) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
       Show-Tail $r.Output
-      if (Show-EnvBlock $r.Output) { exit 1 }        # environmental: do not offer "fix the build"
+      $buildWhy = "$Id not closed: build failed (exit $($r.Code))"
+      if (Show-EnvBlock $r.Output) { Write-GateLog "block" "$buildWhy - environment block"; exit 1 }        # environmental: do not offer "fix the build"
       if ($r.Output -match '(?i)MSB3026|being used by another process') {
         Write-Host "             Still locked after clearing project processes. A process OUTSIDE this project" -ForegroundColor Red
         Write-Host "             may hold the file (an editor, a debugger). Close it, or run: dad free-locks" -ForegroundColor Red
+        Write-GateLog "block" "$buildWhy - file lock"
         exit 1
       }
       Show-Signatures $r.Output
       Write-Host "             Fix the build, then re-run. (-SkipVerify overrides, but then 'done' means nothing.)" -ForegroundColor Red
+      Write-GateLog "block" $buildWhy
       exit 1
     }
     if ($lockCurrent) { $notes.Add("build up-to-date (output locked by a running app; no sources changed since it was built) - nothing killed") }
@@ -339,6 +357,7 @@ if (-not $SkipVerify) {
         Write-Host "[close-unit] TESTS FAILED (exit $($t.Code)) - story $predictedStory is NOT closed. Nothing changed." -ForegroundColor Red
         Show-Tail $t.Output
         [void](Show-EnvBlock $t.Output)             # a refusal to RUN the test DLL lands here, not a real failure
+        Write-GateLog "block" "story $predictedStory not closed: tests failed (exit $($t.Code))"
         exit 1
       }
       if ($count -eq 0) {
@@ -346,12 +365,14 @@ if (-not $SkipVerify) {
         Write-Host "             A green run of 0 tests verifies nothing. Usual cause: test projects missing from" -ForegroundColor Red
         Write-Host "             the solution (dotnet sln add tests/**/*.csproj)." -ForegroundColor Red
         Show-Tail $t.Output
+        Write-GateLog "block" "story $predictedStory not closed: tests ran zero tests"
         exit 1
       }
       if ($count -lt 0) {
         Write-Host "[close-unit] Could not find any evidence tests ran - story $predictedStory is NOT closed." -ForegroundColor Red
         Write-Host "             No test count in the output. Fix the test command, or use -SkipVerify knowingly." -ForegroundColor Red
         Show-Tail $t.Output
+        Write-GateLog "block" "story $predictedStory not closed: no evidence tests ran"
         exit 1
       }
       $notes.Add("tests verified ($count test(s) ran)")
@@ -399,6 +420,7 @@ if ($alreadyClosed -and -not $NoCommit -and (Get-Command git -ErrorAction Silent
     Write-Host "             Committing them under '$Id' would file this work against the wrong unit - the" -ForegroundColor Red
     Write-Host "             commit message would describe something the diff does not contain. Close them" -ForegroundColor Red
     Write-Host "             under the id that OWNS them (check docs\TASKS.md), or -NoCommit to skip banking." -ForegroundColor Red
+    Write-GateLog "block" "$Id already closed but $($pending.Count) uncommitted code file(s) would be committed under the wrong id"
     exit 1
   }
 }
@@ -428,6 +450,7 @@ if (-not $SkipVerify) {
       Write-Host "               powershell -File `"$kit\recover-lost.ps1`" -ProjectDir `"$proj`"" -ForegroundColor Yellow
       Write-Host "               ...add -Restore to put the vanished units back, KEEPING what the change added." -ForegroundColor Yellow
       Write-Host "             Or re-run with -AcceptShrink if the removal was deliberate (lowers the baseline)." -ForegroundColor Red
+      # No log call here: ratchet.ps1 (the subprocess above) already logged its own block for this event.
       exit 1
     }
     if ($rCode -ne 0 -and $AcceptShrink) { $warns.Add("shrink ACCEPTED by -AcceptShrink - baseline lowered") }
@@ -468,6 +491,7 @@ elseif ((Test-Path $storiesFile) -and (Select-String -Path $storiesFile -Pattern
 }
 else {
   Write-Host "[close-unit] '$Id' not found in TASKS.md or STORIES.md - check the id (nothing committed)." -ForegroundColor Red
+  Write-GateLog "block" "$Id not found in TASKS.md or STORIES.md"
   exit 1
 }
 
@@ -507,6 +531,10 @@ if (-not $NoCommit) {
     $ErrorActionPreference = "Continue"
     try {
       $msg = if ($Title) { "$Id`: $Title" } else { "$Id" }
+      # Log the clean-close allow BEFORE staging so the tracked grades\gates-log.jsonl line lands in this
+      # unit's own commit. Written only while nothing has failed so far; if the commit/verify then fails,
+      # the aggregate refusal below logs a block after it (honest sequence).
+      if ($problems.Count -eq 0) { Write-GateLog "allow" "clean close: $Id"; $script:allowLogged = $true }
       git add -A | Out-Null
       $stagedFiles = @(git diff --cached --name-only)
       $staged = ($stagedFiles -join "`n").Trim()
@@ -619,7 +647,13 @@ Write-Host "== close-unit $Id ==" -ForegroundColor Cyan
 foreach ($n in $notes) { Write-Host "  ok   $n" -ForegroundColor Green }
 foreach ($w in $warns) { Write-Host "  WARN $w" -ForegroundColor Yellow }
 foreach ($p in $problems) { Write-Host "  FAIL $p" -ForegroundColor Red }
-if ($problems.Count -gt 0) { Write-Host "close-unit INCOMPLETE - fix the above before moving on." -ForegroundColor Red; exit 1 }
+if ($problems.Count -gt 0) {
+  Write-Host "close-unit INCOMPLETE - fix the above before moving on." -ForegroundColor Red
+  Write-GateLog "block" "$Id INCOMPLETE: $($problems -join '; ')"
+  exit 1
+}
+# -NoCommit closes (no commit to land in) log here; committed closes already logged before staging.
+if (-not $script:allowLogged) { Write-GateLog "allow" "clean close: $Id"; $script:allowLogged = $true }
 # The close verified: build (and tests at a story close), bookkeeping landed, commit landed. THIS is the
 # state worth ratcheting to - never on a failed close, or a bad run would raise the bar it just failed.
 try {

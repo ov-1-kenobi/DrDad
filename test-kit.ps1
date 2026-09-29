@@ -5390,6 +5390,183 @@ Test-Case "T9.2 (characterization): dad-loopguard Unescape-Json replaces \t befo
   Assert ($iT -lt $iBs) "Unescape-Json now handles \\ before \t - the known bug looks FIXED; update this characterization"
 }
 
+# ---------------------------------------------------------------- T9.3: ratchet + close-unit gate-log wiring
+function New-CuGateFixture([string]$sb, [string]$buildCmd = "exit 0") {
+  $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\tests" | Out-Null
+  "# Task map`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T1.2 - b   (Story S1)`n- **Goal:** y`n`n### [ ] T1.3 - c   (Story S1)`n- **Goal:** z" |
+    Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+  "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+  "# Project: t`n`n## Build / test`n- Build: ``$buildCmd```n- Test:  ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+  $tests = (1..10 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+  "public class T {`r`n$tests`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+  Push-Location $p
+  $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  git init -q; git config core.autocrlf false
+  git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+  $ErrorActionPreference = $prev; Pop-Location
+  return $p
+}
+function Get-GL([string]$p, [string]$gate = "") {
+  $l = Join-Path $p "grades\gates-log.jsonl"
+  if (-not (Test-Path -LiteralPath $l -PathType Leaf)) { return @() }
+  $rows = @([System.IO.File]::ReadAllLines($l) | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+  if ($gate) { $rows = @($rows | Where-Object { $_.gate -eq $gate }) }
+  return $rows
+}
+function Invoke-Cu([string]$script, [string]$p, [string[]]$more) {
+  $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $p -NoReindex @more 2>&1 | Out-String)
+  return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
+}
+
+Test-Case "T9.3 (a): ratchet logs one block line on a shrink and one allow line (with counts) on a clean run" {
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    $r = Join-Path $kit "ratchet.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Update | Out-Null
+    $n0 = @(Get-GL $p "ratchet").Count
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "clean ratchet exit $LASTEXITCODE"
+    $l = @(Get-GL $p "ratchet")
+    Assert ($l.Count -eq $n0 + 1) "clean run added $($l.Count - $n0) ratchet lines, expected 1"
+    Assert ($l[-1].decision -eq "allow") "clean run decision '$($l[-1].decision)'"
+    Assert ($l[-1].reason -match '^no shrink \(tests \d+, stories \d+, tasks \d+\)$') "allow reason '$($l[-1].reason)'"
+    Assert ($l[-1].reason -match 'tests 10, stories 1, tasks 3') "allow reason counts wrong: '$($l[-1].reason)'"
+    # -Json mode also logs exactly once
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Json | Out-Null
+    Assert (@(Get-GL $p "ratchet").Count -eq $n0 + 2) "-Json clean run did not log exactly once"
+
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $n1 = @(Get-GL $p "ratchet").Count
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "shrink exit $LASTEXITCODE"
+    $l = @(Get-GL $p "ratchet")
+    Assert ($l.Count -eq $n1 + 1) "shrink added $($l.Count - $n1) lines, expected 1"
+    Assert ($l[-1].decision -eq "block") "shrink decision '$($l[-1].decision)'"
+    Assert ($l[-1].reason -match 'tests: 10->1') "block reason '$($l[-1].reason)'"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.3 (b): close-unit refusals (failing build, unknown id, quoted/newline id) log block; exit codes stay 1" {
+  if (-not $haveGit) { return }
+  $cu = Join-Path $kit "close-unit.ps1"
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb "exit 1"
+    $x = Invoke-Cu $cu $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 1) "failing build exit $($x.Code)"
+    $l = @(Get-GL $p "close-unit-refusal")
+    Assert ($l.Count -eq 1) "failing build wrote $($l.Count) close-unit-refusal lines"
+    Assert ($l[0].decision -eq "block" -and $l[0].reason -match 'T1\.1' -and $l[0].reason -match 'build failed') "build-fail line wrong: $($l[0] | ConvertTo-Json -Compress)"
+    Assert ($l[0].tool -eq "" -and $l[0].session -eq "") "tool/session not empty"
+  } finally { Remove-Sandbox $sb }
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    $x = Invoke-Cu $cu $p @("-Id","T9.9")
+    Assert ($x.Code -eq 1) "unknown id exit $($x.Code)"
+    $l = @(Get-GL $p "close-unit-refusal")
+    Assert (($l.Count -eq 1) -and ($l[0].decision -eq "block") -and ($l[0].reason -match 'T9\.9 not found')) "unknown-id line wrong (count $($l.Count))"
+    # (i) confirm: -SkipVerify + unknown id is unlogged
+    $x = Invoke-Cu $cu $p @("-Id","T9.8","-SkipVerify")
+    Assert ($x.Code -eq 1) "skipverify unknown id exit $($x.Code)"
+    Assert (@(Get-GL $p "close-unit-refusal").Count -eq 1) "(i) -SkipVerify + unknown id was logged"
+    # quotes + newline in the refusal reason: still logged, still exit 1, valid JSON line
+    $bad = "T`"7`"`nX"
+    $x = Invoke-Cu $cu $p @("-Id",$bad)
+    Assert ($x.Code -eq 1) "quoted id exit $($x.Code)"
+    $l = @(Get-GL $p "close-unit-refusal")
+    Assert ($l.Count -eq 2) "quoted/newline refusal was not logged (count $($l.Count))"
+    Assert ($l[-1].decision -eq "block" -and $l[-1].reason -match 'not found') "quoted line reason '$($l[-1].reason)'"
+    Assert ($l[-1].reason -notmatch "[\r\n]") "reason still contains a newline"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.3 (b): clean close logs allow INTO its own commit; ratchet logs once per close; -SkipVerify logs nothing; -AcceptShrink characterized" {
+  if (-not $haveGit) { return }
+  $cu = Join-Path $kit "close-unit.ps1"
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    $x = Invoke-Cu $cu $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 0) "clean close exit $($x.Code):`n$($x.Out)"
+    $l = @(Get-GL $p "close-unit-refusal")
+    Assert (($l.Count -eq 1) -and ($l[0].decision -eq "allow") -and ($l[0].reason -eq "clean close: T1.1")) "allow line wrong (count $($l.Count))"
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $tree = (& git -C $p ls-tree -r --name-only HEAD 2>&1 | Out-String)
+    $show = (& git -C $p show --stat --format=%s HEAD 2>&1 | Out-String)
+    $status = (& git -C $p status --porcelain 2>&1 | Out-String)
+    $ErrorActionPreference = $prev
+    Assert ($tree -match 'grades/gates-log\.jsonl') "gates-log.jsonl not in HEAD tree"
+    Assert ($show -match 'gates-log\.jsonl') "gates-log.jsonl not in the unit's own commit stat:`n$show"
+    Assert ($status -notmatch 'gates-log') "gates-log.jsonl left dirty after the close:`n$status"
+    # characterization: with NO baseline yet ratchet measures nothing and logs nothing on the first close
+    Assert (@(Get-GL $p "ratchet").Count -eq 0) "first close (no baseline) now logs a ratchet line - update this characterization"
+    $x = Invoke-Cu $cu $p @("-Id","T1.2","-Title","b")
+    Assert ($x.Code -eq 0) "second close exit $($x.Code)"
+    $rat = @(Get-GL $p "ratchet")
+    Assert ($rat.Count -eq 1) "ratchet logged $($rat.Count) times for one baselined close (expected exactly 1)"
+    Assert ($rat[0].decision -eq "allow") "ratchet line via close-unit decision $($rat[0].decision)"
+
+    # -SkipVerify: no log lines at all (allow path included)
+    $before = @(Get-GL $p).Count
+    $x = Invoke-Cu $cu $p @("-Id","T1.3","-Title","c","-SkipVerify")
+    Assert ($x.Code -eq 0) "skipverify close exit $($x.Code):`n$($x.Out)"
+    Assert (@(Get-GL $p).Count -eq $before) "-SkipVerify wrote log lines ($before -> $(@(Get-GL $p).Count))"
+  } finally { Remove-Sandbox $sb }
+
+  # (ii) -AcceptShrink characterization: ratchet does not know the flag, so a shrink block line is still written
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    $x = Invoke-Cu $cu $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 0) "setup close exit $($x.Code)"
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $x = Invoke-Cu $cu $p @("-Id","T1.2","-Title","b","-AcceptShrink")
+    Assert ($x.Code -eq 0) "-AcceptShrink close exit $($x.Code)"
+    $rb = @(Get-GL $p "ratchet" | Where-Object { $_.decision -eq "block" })
+    Assert ($rb.Count -eq 1) "(ii) characterization changed: ratchet block lines under -AcceptShrink = $($rb.Count) (was 1)"
+    $ca = @(Get-GL $p "close-unit-refusal" | Where-Object { $_.reason -eq "clean close: T1.2" })
+    Assert ($ca.Count -eq 1) "-AcceptShrink close did not log its clean-close allow"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.3: gate-log failure never changes ratchet/close-unit exit codes (helper missing; grades is a file)" {
+  if (-not $haveGit) { return }
+  # helper missing: run a COPY of the kit scripts without dad-gates-log.ps1
+  $sb = New-Sandbox
+  try {
+    $k2 = Join-Path $sb "kit"; New-Item -ItemType Directory -Force $k2 | Out-Null
+    Get-ChildItem $kit -File -Filter *.ps1 | Where-Object { $_.Name -ne "dad-gates-log.ps1" } | Copy-Item -Destination $k2
+    $p = New-CuGateFixture $sb
+    $x = Invoke-Cu (Join-Path $k2 "close-unit.ps1") $p @("-Id","T9.9")
+    Assert ($x.Code -eq 1) "helper missing: refusal exit $($x.Code)"
+    $x = Invoke-Cu (Join-Path $k2 "close-unit.ps1") $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 0) "helper missing: clean close exit $($x.Code):`n$($x.Out)"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $k2 "ratchet.ps1") -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "helper missing: clean ratchet exit $LASTEXITCODE"
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $k2 "ratchet.ps1") -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "helper missing: shrink ratchet exit $LASTEXITCODE"
+    Assert (@(Get-GL $p).Count -eq 0) "lines appeared with no helper"
+  } finally { Remove-Sandbox $sb }
+  # grades is a FILE: unwritable log path
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    [System.IO.File]::WriteAllText((Join-Path $p "grades"), "x")
+    $x = Invoke-Cu (Join-Path $kit "close-unit.ps1") $p @("-Id","T9.9")
+    Assert ($x.Code -eq 1) "grades-file: refusal exit $($x.Code)"
+    $x = Invoke-Cu (Join-Path $kit "close-unit.ps1") $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 0) "grades-file: clean close exit $($x.Code):`n$($x.Out)"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "ratchet.ps1") -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "grades-file: clean ratchet exit $LASTEXITCODE"
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "ratchet.ps1") -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "grades-file: shrink ratchet exit $LASTEXITCODE"
+  } finally { Remove-Sandbox $sb }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

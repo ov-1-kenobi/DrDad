@@ -883,7 +883,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   truncate here. `dad-loopguard.ps1` parses stdin with regexes rather than `ConvertFrom-Json`, deliberately,
   so the new `cwd` extraction must follow that same fast, regex-only style.
 
-### [ ] T9.3 - Wire ratchet's shrink-refusal and close-unit's other refusal paths into the gate log   [research]   (Story S9)
+### [x] T9.3 - Wire ratchet's shrink-refusal and close-unit's other refusal paths into the gate log   [research]   (Story S9)
 - **Goal:** `ratchet.ps1` and `close-unit.ps1` each write to that project's `grades/gates-log.jsonl` via
   T9.1's helper on EVERY invocation - `allow` on a clean pass/clean close, `block` on a shrink refusal or
   per refusal site (S9 AC1, gates `ratchet` and `close-unit-refusal`).
