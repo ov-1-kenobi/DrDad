@@ -18,13 +18,12 @@
 - S1-S3: safe uninstall, web-tools steering, avalonia profile - DONE pre-migration.  (grade A- each)
 
 ## In progress / next ready
-- A `/design` pass is IN FLIGHT (DESIGN is deliberately DRAFT): R38 plus contracts C3 (C3a-C3f, the
-  `grades/gates-log.jsonl` gate-decision log) and C4 (C4a-C4d, `dad-run-summary.ps1`). None of it is
-  committed yet (DESIGN/STORIES/TASKS/STATUS/test-kit.ps1/doc-stats.ps1 all modified in the working tree).
-- TASKS.md has been re-sharded against C3/C4: T9.1-T9.7, T10.1-T10.6 and the new S13 (T13.1-T13.3) all
-  cite their contracts. NEXT: T9.1; then T9.5 (the C3f `cwd` measurement) BEFORE T9.2.
-- S11 is a research SPIKE with its recommendation drafted in STORIES.md; deliberately unsharded until a
-  human picks option A, B or C.
+- DESIGN re-LOCKED 2026-09-29 with R38 plus contracts C3 (C3a-C3f, the `grades/gates-log.jsonl`
+  gate-decision log) and C4 (C4a-C4d, `dad-run-summary.ps1`); S9/S10/S13 stories now cite them.
+- TASKS.md is sharded against C3/C4: T9.1-T9.7, T10.1-T10.6 and S13 (T13.1-T13.3) all cite their
+  contracts. NEXT: T9.1; then T9.5 (the C3f `cwd` measurement) BEFORE T9.2.
+- S11 is a research SPIKE (T11.1-T11.2) that verifies its drafted recommendation; the choice of option
+  A, B or C stays a [human] decision and no build work follows until it is made.
 
 ## Issues & blockers (dated; clear them when resolved)
 - 2026-09-29: if T9.5 finds no `cwd` in the PreToolUse payload, the loop-guard writer's fallback is a NEW
