@@ -722,8 +722,9 @@ are independent of each other; T13.3's test-kit.ps1 coverage exercises both, so 
      because the file is COMMITTED: `install-hooks.ps1:73` installs a pre-commit hook running
      `scan-secrets.ps1 -Staged -Quiet` that BLOCKS the commit on a finding, so an un-redacted credential
      quoted inside a blocked command line would block `close-unit.ps1`'s own commit.
-  4. **Append mode (per C3c):** `New-Object System.IO.FileStream($path, [IO.FileMode]::Append,
-     [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)` and ONE `Write` of the complete UTF-8 line
+  4. **Append mode (per C3c, revised 2026-09-29):** `New-Object System.IO.FileStream($path,
+     [IO.FileMode]::OpenOrCreate, [System.Security.AccessControl.FileSystemRights]::AppendData,
+     [IO.FileShare]::ReadWrite, 4096, [IO.FileOptions]::None)` (NOT `FileMode.Append`) and ONE `Write` of the complete UTF-8 line
      INCLUDING its trailing LF. Do NOT use `[System.IO.File]::AppendAllText` - C3c rejects it BY NAME: it
      opens `FileShare.Read`, so a concurrent writer (`dad watch` in another terminal, a subagent's hook,
      `close-unit.ps1` running while a Stop hook fires) takes a sharing violation, the blanket try/catch
@@ -770,7 +771,7 @@ are independent of each other; T13.3's test-kit.ps1 coverage exercises both, so 
   open on their own bugs (read their header comments) - this helper must be at least as forgiving, per C3's
   invariant (i): logging NEVER changes a gate's own verdict or exit code.
 
-### [ ] T9.5 - MEASURE whether Claude Code's PreToolUse payload carries `cwd` (C3f prerequisite, BLOCKS T9.2)   [research]   (Story S9)
+### [x] T9.5 - MEASURE whether Claude Code's PreToolUse payload carries `cwd` (C3f prerequisite, BLOCKS T9.2)   [research]   (Story S9)
 - **Goal:** Settle, by MEASUREMENT against the installed Claude Code binary, whether the real `PreToolUse`
   hook payload carries a `cwd` field - because T9.2's loop-guard writer resolves the project from `cwd` and
   skips the append when it is empty, so if the field is absent the loop guard NEVER logs, every test still

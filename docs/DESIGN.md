@@ -809,9 +809,11 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   1. collapse whitespace -> `curl -H "Authorization: Bearer <token>" https://api.example.com/v1/x`
   2. redact with `scan-secrets.ps1`'s patterns -> `curl -H "Authorization: Bearer [REDACTED]" https://api.example.com/v1/x`
   3. truncate to 300 chars -> unchanged (78 chars)
-  and THAT string is what lands in the line's `reason`. (This example deliberately uses a `<token>`
-  placeholder rather than a realistic key literal, because `scan-secrets.ps1` runs over this document too;
-  `scan-secrets.ps1:60` suppresses `<...>` placeholders for its heuristic patterns.)
+  and THAT string is what lands in the line's `reason`. (This example deliberately writes `<token>` rather
+  than a realistic key literal, because `scan-secrets.ps1` runs over this document too. CAVEAT found at
+  T9.1 QA: `scan-secrets.ps1:60` suppresses `<...>` placeholders and no pattern matches `Bearer <token>`,
+  so a LITERAL `<token>` would NOT be redacted - step 2 only fires for a STRUCTURAL token such as `ghp_`
+  followed by 40 characters. The `test-kit.ps1` assertion therefore builds its token at run time.)
   **Counter-example that MUST stay impossible:** skip step 2, and the credential reaches
   `grades/gates-log.jsonl`; `close-unit.ps1`'s `git commit` is then refused by the pre-commit scanner and
   the unit cannot close, because its own gate log is unstageable.
@@ -857,15 +859,22 @@ local-model ceiling, but every command, agent, and gate is identical across all 
 
 #### C3c: Append semantics with concurrent writers
 - **Status: APPROVED 2026-09-29.**
-- **Decision:** `New-Object System.IO.FileStream($path, [IO.FileMode]::Append, [IO.FileAccess]::Write,
-  [IO.FileShare]::ReadWrite)` and ONE `Write` of the complete UTF-8 line including its trailing LF.
+- **Decision (REVISED 2026-09-29):** `New-Object System.IO.FileStream($path, [IO.FileMode]::OpenOrCreate,
+  [System.Security.AccessControl.FileSystemRights]::AppendData, [IO.FileShare]::ReadWrite, 4096,
+  [IO.FileOptions]::None)` and ONE `Write` of the complete UTF-8 line including its trailing LF.
+  `FileMode.Append` is REJECTED BY NAME, like `AppendAllText`: see Reasoning.
   Bounded retry on a sharing violation - 3 attempts at 40 / 80 / 160 ms with jitter - then give up,
   swallow, and `exit 0`, still failing OPEN.
 - **Reasoning:** `[System.IO.File]::AppendAllText` (T9.1's draft) opens with `FileShare.Read`. A second
   writer - `dad watch` in another terminal, a subagent's hook, `close-unit.ps1` running while a Stop hook
   fires - takes a sharing violation, T9.1's blanket try/catch swallows it, and THE LINE IS SILENTLY LOST.
   That is precisely the failure class this requirement exists to eliminate, reintroduced by the mechanism
-  meant to end it. `FileShare.ReadWrite` plus a single sub-4KB write lets concurrent writers interleave
+  meant to end it. `FileMode.Append` (this contract's first pin) is ALSO wrong, found by measurement at
+  T9.1 QA: on .NET Framework (PS 5.1) it seeks to EOF ONCE at open and writes at that private position, so
+  two handles opened close together write at the SAME offset and one line silently overwrites the other
+  (two processes x 12 appends gave 19-23 of 24 lines, no exception swallowed). `FileSystemRights.AppendData`
+  gives true append-only semantics - the OS positions every write at the current EOF (24/24 on repeated
+  runs). `FileShare.ReadWrite` plus a single sub-4KB `AppendData` write lets concurrent writers interleave
   whole LINES and never fragments. A named machine-wide Mutex was considered and rejected: correct, but it
   introduces a lock a hung process can hold, inside a hook that must never hang.
 - **INVARIANT: one line must be UNDER 4096 BYTES.** This is what makes C3a's 300-char `reason` truncation
@@ -875,7 +884,9 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   same 5 ms window against one sandbox - one `ratchet` block, one `loop-guard` block. EXPECTED: the file
   contains EXACTLY 2 lines, each independently parseable by `ConvertFrom-Json` with all seven C3b keys
   present; their ORDER is unspecified and must NOT be asserted. Counter-example the case exists to catch:
-  1 line (one writer's line lost), or 2 lines one of which is a truncated fragment of the other.
+  1 line (one writer's line lost), or 2 lines one of which is a truncated fragment of the other. The
+  shipped `test-kit.ps1` case is the harder form - two processes x 12 appends must yield exactly 24 lines -
+  because a 2-line race passes by luck under `FileMode.Append` and only a burst exposes it.
 
 #### C3d: Rotation - MANUAL only, with a genesis record; no automatic roll, ever
 - **Status: APPROVED 2026-09-29.**

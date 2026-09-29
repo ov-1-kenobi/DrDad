@@ -121,3 +121,16 @@
 - **When:** any mkdir / redirect / path arg from the Bash tool.
 - **Gotcha:** bash EATS backslashes, so `mkdir "D:\proj\src"` makes ONE dir literally named `Dprojsrc` in the CWD. A real run left four such junk dirs. Forward slashes or relative paths survive; the Write tool avoids the shell entirely.
 - **Verified:** 2026-08-27, Opus
+
+- **Command:** `claude -p "Run the bash command: echo hi" --allowedTools "Bash(echo hi)" --max-turns 3 < /dev/null` from a scratch dir whose `.claude/settings.json` registers a `PreToolUse` hook with `"command": "cat > D:/scratch/payload.txt"`
+- **Does:** captures the REAL PreToolUse hook payload (raw stdin) from the installed Claude Code binary.
+- **When:** measuring what a hook payload actually carries (R37c: vendor docs are a hypothesis).
+- **Gotcha:** hook commands run under a bash-like shell here, so use forward-slash paths (`cmd /c more > D:\x` and backslash PowerShell paths wrote nothing); `< /dev/null` avoids a 3s stdin wait; a failed hook is SILENT - always check the capture file exists. T9.5 measurement (claude 2.1.285, 2026-09-29): payload keys = session_id, transcript_path, cwd, prompt_id, permission_mode, effort, hook_event_name, tool_name, tool_input, tool_use_id - `cwd` IS present (absolute Windows path, backslashes), so T9.2 proceeds. Not measured: `cwd` after an in-session `cd` or when launched from a subdirectory - resolve the project defensively (walk up to `docs`/`grades`), do not assume cwd is the root.
+- **Verified:** 2026-09-29, Sonnet 5.5
+
+## Verified by close-unit
+<!-- Appended automatically when a unit closes clean. These ran and worked ON THIS MACHINE. -->
+| Command | Does | When | Gotcha | Verified |
+|---|---|---|---|---|
+| `dotnet build local-tools\local-tools.csproj -c Release` | build this project | from the project root | verified by close-unit on T9.1 | 2026-09-29 |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1` | test this project | from the project root | verified by close-unit on T9.1 | 2026-09-29 |
