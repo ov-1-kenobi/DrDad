@@ -61,6 +61,11 @@ try {
   # otherwise the block would evaporate.
   if ($code -eq 2) {
     $json = ""
+    # This single-line match depends on dad-guard.ps1 emitting its verdict with ConvertTo-Json -COMPRESS.
+    # Pretty-printed JSON spans lines and would not match without RegexOptions.Singleline. If that
+    # -Compress is ever dropped, this falls through to the synthesize branch below: the block STILL lands
+    # (the reason becomes the raw stdout), it just stops being the guard's own structured payload.
+    # Degrading rather than losing the block is deliberate - same fail-open posture as the rest of this file.
     if ($stdout -match '\{.*\}') {
       $candidate = $Matches[0]
       try {

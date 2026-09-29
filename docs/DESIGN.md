@@ -574,9 +574,9 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   behavior DISAGREE, with no error either way. **Version stamp: these facts are true OF Copilot CLI
   1.0.89, measured 2026-09-29.** A reader on any later version must re-measure before trusting them.
 - **Enforced by `test-kit.ps1`** (R37c's "each load-bearing fact carries a test case"):
-  `"copilot-hooks.json is the shape Copilot CLI actually loads"` (C2a + C2b, `test-kit.ps1:1338`),
-  `"dad-guard-copilot converts a BLOCK into Copilot's JSON+exit-0 contract"` (C2c, `test-kit.ps1:1382`),
-  `"uninstall removes the Copilot CLI hook file (sandboxed)"` (R37e teardown, `test-kit.ps1:1430`).
+  `"copilot-hooks.json is the shape Copilot CLI actually loads"` (C2a + C2b),
+  `"dad-guard-copilot converts a BLOCK into Copilot's JSON+exit-0 contract"` (C2c),
+  `"uninstall removes the Copilot CLI hook file (sandboxed)"` (R37e teardown).
 
 #### C2a: Config location - USER level only; the DOCUMENTED repo-level path loads nothing
 - **Measured:** hooks load ONLY from the user-level dir `%USERPROFILE%\.copilot\hooks\*.json`. The
@@ -585,11 +585,11 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   `version: 1`, cwd = repo root, tested both before and after the repo had a commit. Only the user-level
   file ever fired.
 - **Consequence pinned into the kit:** `install.ps1 -CopilotCli` writes exactly one file,
-  `%USERPROFILE%\.copilot\hooks\dad.json` (`install.ps1:262-265`), and never writes `.github/hooks/`.
+  `%USERPROFILE%\.copilot\hooks\dad.json` (`install.ps1`'s -CopilotCli step), and never writes `.github/hooks/`.
   An installer that followed the docs would report success and wire a gate that never fires - R22's
   original silent-failure mode wearing a new hat.
 - **Teardown (R37e):** `uninstall.ps1` removes that same single file, and only if its contents reference
-  our guards, so a same-named third-party file is never deleted (`uninstall.ps1:88-99`). The
+  our guards, so a same-named third-party file is never deleted (`uninstall.ps1`'s Copilot teardown section). The
   `-CopilotDir` parameter exists so the removal is testable against a sandbox, not the real machine.
 
 #### C2b: File shape + event-name casing - PascalCase, registered ONCE
@@ -678,7 +678,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
 - **Worked example (1/2) - `%USERPROFILE%\.copilot\hooks\dad.json` as installed** (source template:
   `copilot-hooks.json`; `install.ps1 -CopilotCli` rewrites the dev-path placeholder
   `C:\Projects\Claude\MCP\DAD-kit` to the real install root on the PARSED object, because JSON doubles
-  backslashes and a text replace would match nothing - `install.ps1:266-284`):
+  backslashes and a text replace would match nothing - see `install.ps1`'s -CopilotCli step):
   ```json
   {
     "version": 1,
@@ -720,7 +720,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   exactly like `dad-guard.ps1` - every error path ends in `exit 0` (allow the stop), because a guard that
   blocks on its own bugs is worse than the problem it solves; (iv) whatever `-CopilotCli` installs,
   `uninstall.ps1` removes (R37e); (v) a hook change only takes effect on Copilot CLI restart, since it
-  loads hooks at startup (`install.ps1:293`).
+  loads hooks at startup (reported by `install.ps1`'s -CopilotCli step).
 - **Out of scope:** other Copilot surfaces (VS Code Copilot Chat, Agents View, cloud coding agent) - see
   `## Out of scope`; `SubagentStart` (fires, but un-normalized per C2b, and unused); any attempt to make
   the camelCase event family work; automatic detection of a Copilot CLI version other than 1.0.89.

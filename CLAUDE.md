@@ -23,6 +23,13 @@ This folder IS the **DrDad** kit (local, offline Claude Code). Editing it here m
   -> produces `local-tools\bin\Release\net8.0\local-tools.exe` (what `.mcp.json` launches). This is the
   only compiled piece of the kit; `close-unit.ps1`'s `Get-ClaudeCommand 'Build'` parses this exact bullet
   label to verify a build before ticking a unit - without it, close-unit closes WITHOUT verification.
+- Test: `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1`
+  -> the same suite as the validation gate below, parsed by `Get-ClaudeCommand 'Test'`. Until this bullet
+  existed, closing a STORY here printed "closing WITHOUT tests" and verified the BUILD ONLY - the kit's own
+  close gate was doing to itself exactly what the Build bullet's note warns about. close-unit refuses the
+  close if the suite exits non-zero, and also if it reports ZERO tests (a green run of nothing verifies
+  nothing). It runs the full suite deliberately, NOT `-SkipBuild`: the skip drops the MCP-server cases,
+  which are the ones a C# change is most likely to break.
 
 ## Validation gate (run after ANY change; don't say "done" until it passes)
 **Run the suite - that IS the gate:**

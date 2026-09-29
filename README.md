@@ -95,7 +95,16 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud
 # ...or -Hybrid: the cloud loop PLUS your GPU as a drudge co-processor (the local_generate tool):
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Hybrid
+# ...and -CopilotCli ADDS GitHub Copilot CLI as a second harness (combine with any of the above):
+#    powershell -ExecutionPolicy Bypass -File .\install.ps1 -CopilotCli
 ```
+
+`-CopilotCli` is a HARNESS switch, not a backend mode: `-Cloud`/`-Hybrid` change where the model runs,
+this changes which agent CLI enforces the gates. It leaves the Claude Code wiring untouched and also
+writes `%USERPROFILE%\.copilot\hooks\dad.json`, so the SAME stop guard and loop guard run under
+`copilot` too - including on a subagent's own tool calls. Copilot CLI normally signs in to GitHub, but
+it can run account-free against your local Ollama (`COPILOT_PROVIDER_BASE_URL=http://localhost:11434/v1`),
+which is the only reason it is in scope for an offline-first kit. See `docs/DESIGN.md` R37 / contract C2.
 
 `install.ps1` detects its own location, reconciles Ollama with `models.json`, builds the C# server,
 installs the global commands/agents and `settings.json` (paths auto-fixed), and puts `dad` on your PATH.

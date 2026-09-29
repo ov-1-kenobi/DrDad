@@ -1372,8 +1372,21 @@ Test-Case "copilot-hooks.json is the shape Copilot CLI actually loads" {
   Assert ($all -match [regex]::Escape($devPath)) "copilot-hooks.json does not use the dev-path placeholder"
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match 'copilot-hooks\.json') "install.ps1 never reads copilot-hooks.json"
-  Assert ($inst -match '\$h\.bash\s*=\s*\$h\.bash\.Replace') "install.ps1 does not rewrite the Copilot hook's bash command"
-  Assert ($inst -match '\$h\.powershell\s*=\s*\$h\.powershell\.Replace') "install.ps1 does not rewrite the Copilot hook's powershell command"
+  # PERFORM the rewrite rather than grepping install.ps1 for the assignment (which pinned an
+  # implementation detail - the same lesson uninstall.ps1:17-19 already records). What must hold is that
+  # the placeholder survives a parse/serialize round-trip and is replaceable on the PARSED object in BOTH
+  # per-harness keys: a text replace over raw JSON matches nothing, because JSON doubles the backslashes.
+  $rt = $all.Replace($devPath, "D:\elsewhere")
+  Assert ($rt -notmatch [regex]::Escape($devPath)) "the Copilot hook placeholder is not rewritable via the parsed object"
+  Assert ($rt -match [regex]::Escape("D:\elsewhere")) "rewriting the Copilot hook placeholder produced no new root"
+  foreach ($e in $evts) {
+    foreach ($h in $j.hooks.$e) {
+      foreach ($k in @("bash","powershell")) {
+        Assert ($h.$k -match [regex]::Escape($devPath)) "copilot-hooks.json $e '$k' does not carry the dev-path placeholder - install.ps1 would leave it pointing at the dev machine"
+        Assert ($h.$k.Replace($devPath, "D:\elsewhere") -notmatch [regex]::Escape($devPath)) "copilot-hooks.json $e '$k' placeholder is not cleanly replaceable"
+      }
+    }
+  }
   # USER-level only: Copilot's DOCUMENTED repo-level .github/hooks/ location silently loads nothing on
   # 1.0.89, so following the docs produces a hook that never fires and an installer that says it worked.
   Assert ($inst -match '\.copilot\\hooks') "install.ps1 does not write to the user-level .copilot\hooks dir"
@@ -1473,6 +1486,28 @@ Test-Case "the measured Copilot version cannot drift between DESIGN's C2 and ins
   foreach ($g in @("dad-guard-copilot.ps1","dad-loopguard.ps1")) {
     $gs = Get-Content (Join-Path $kit $g) -Raw
     Assert ($gs -notmatch '\$CopilotMeasuredVersion') "$g self-checks the harness version at runtime - C2f keeps drift detection at SETUP only, so a guard never blocks on its own uncertainty"
+  }
+}
+
+Test-Case "dad-doctor's Copilot harness section renders without erroring" {
+  # The R37 section was previously covered only by the parse check and C2f's static assertions - nothing
+  # ever RAN it. Guarded so it never becomes environment-dependent (the trap the corpus shell-door case
+  # fell into): the section is designed to stay silent unless this machine actually uses the harness, so
+  # only assert it renders when the harness is present. Read-only - dad-doctor inspects, it never mutates.
+  $hookFile = Join-Path $env:USERPROFILE ".copilot\hooks\dad.json"
+  $haveCopilot = [bool](Get-Command copilot -ErrorAction SilentlyContinue)
+  if (-not ((Test-Path $hookFile) -or $haveCopilot)) { return }   # harness not on this box - nothing to assert
+
+  $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") 2>&1 | Out-String)
+  Assert ($out -match 'copilot cli harness') "dad-doctor did not render the R37 section on a machine that has the harness"
+  Assert ($out -notmatch 'Exception|CommandNotFoundException|cannot be found on this object') "dad-doctor's R37 section threw:`n$out"
+  # It must report on the hooks either way, and must never claim a version match without a version.
+  Assert ($out -match 'copilot hooks') "dad-doctor's R37 section did not report hook state"
+  if ($out -match 'copilot version\s+matches the measured contract \(([0-9][0-9.]*)\)') {
+    $claimed = $Matches[1]
+    $instSrc = Get-Content (Join-Path $kit "install.ps1") -Raw
+    $constant = [regex]::Match($instSrc, '\$CopilotMeasuredVersion\s*=\s*"([^"]+)"').Groups[1].Value
+    Assert ($claimed -eq $constant) "dad-doctor reported a match against '$claimed' but install.ps1's constant is '$constant'"
   }
 }
 
