@@ -1476,6 +1476,31 @@ Test-Case "the measured Copilot version cannot drift between DESIGN's C2 and ins
   }
 }
 
+Test-Case "C2f's drift check compares versions by EQUALITY, not substring (graded S12 defect)" {
+  # Found by grade-agent on S12. Both consumers originally tested the raw `copilot --version` LINE with
+  # -match against the measured number. That is silently wrong: "1.0.890" and "11.0.89" both CONTAIN
+  # "1.0.89", so an UNMEASURED harness reported "[ok] matches the measured contract" - C2f's only drift
+  # mechanism defeating itself, which is precisely the silent-failure class C2 exists to prevent.
+  #
+  # Prove the defect is REAL first, so this case cannot pass vacuously (e.g. on a typo'd regex): the old
+  # comparison must actually mis-match these values, and the new one must not.
+  $measured = "1.0.89"
+  foreach ($adversarial in @("1.0.890", "11.0.89")) {
+    Assert ($adversarial -match [regex]::Escape($measured)) "test is vacuous: '$adversarial' no longer trips the substring form"
+    $extracted = [regex]::Match($adversarial, '\d+(\.\d+)+').Value
+    Assert ($extracted -ne $measured) "extract-then-compare failed to distinguish '$adversarial' from '$measured'"
+  }
+
+  # Now assert neither consumer still carries the substring form, and that both extract + compare.
+  foreach ($f in @("install.ps1","dad-doctor.ps1")) {
+    $src = Get-Content (Join-Path $kit $f) -Raw
+    Assert ($src -notmatch '-notmatch\s+\[regex\]::Escape\(\$(CopilotMeasuredVersion|measured)\)') `
+      "$f still substring-tests the Copilot version - '1.0.890' would report as a match on an unmeasured harness"
+    Assert ($src -match "\[regex\]::Match\(\`$c\w*,\s*'\\d\+\(\\\.\\d\+\)\+'\)") "$f does not EXTRACT a numeric version before comparing"
+    Assert ($src -match '-ne\s+\$(CopilotMeasuredVersion|measured)') "$f does not compare the extracted version for equality"
+  }
+}
+
 Test-Case "the guard counts WEB source as code (.cshtml, appsettings.json)" {
   # The extension list was C#/Python/JS-shaped and omitted .cshtml, .razor, .html, .css and .json. So for
   # the project types this kit is most likely to be pointed at - an ASP.NET Razor Pages site, or anything

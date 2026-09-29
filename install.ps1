@@ -266,13 +266,19 @@ if ($CopilotCli) {
     # inspected. A WARN, not a stop: an unmeasured version is a known-unknown, not a known-broken.
     $cv = ""
     try { $cv = ((copilot --version 2>&1 | Out-String) -split "`n" | Select-Object -First 1).Trim() } catch { }
-    if ($cv -and ($cv -notmatch [regex]::Escape($CopilotMeasuredVersion))) {
+    # EXTRACT the version, then compare for EQUALITY. A substring/-match test is silently wrong here:
+    # "1.0.890" and "11.0.89" both CONTAIN "1.0.89", so an unmeasured harness would report [ok] and C2f's
+    # only drift mechanism would defeat itself - the exact silent-failure class this contract exists to stop.
+    $cvNum = ""
+    $vm = [regex]::Match($cv, '\d+(\.\d+)+')
+    if ($vm.Success) { $cvNum = $vm.Value }
+    if ($cvNum -and ($cvNum -ne $CopilotMeasuredVersion)) {
       Write-Host "  [warn] DESIGN.md contract C2 was measured against Copilot CLI $CopilotMeasuredVersion." -ForegroundColor Yellow
       Write-Host "         You are running: $cv" -ForegroundColor Yellow
       Write-Host "         Hook location, event casing and the Stop block contract may have changed - and a" -ForegroundColor Yellow
       Write-Host "         mismatch fails SILENTLY (the gate just stops firing). Re-measure C2a-C2e before" -ForegroundColor Yellow
       Write-Host "         trusting these gates. Installing anyway." -ForegroundColor Yellow
-    } elseif ($cv) {
+    } elseif ($cvNum) {
       Write-Host "  [ok]   Copilot CLI matches the measured contract version ($CopilotMeasuredVersion)" -ForegroundColor Green
     }
   }

@@ -1,10 +1,7 @@
 # Technical Design Document - DrDad (Design Research Document, Agentic Development)
 
-Status: DRAFT
-Security review: NOT-REQUIRED (local-only dev CLI; no user data stored, no exposed service. The kit itself
-  handles no credentials: where a harness authenticates (R37's Copilot CLI default), that is the harness's
-  own login, and R37's supported offline path is BYOK against local Ollama - slower, but account-free, so
-  no path through this kit REQUIRES an account)
+Status: LOCKED
+Security review: NOT-REQUIRED (local-only dev CLI; no user data stored, no exposed service; the kit stores no credentials - a harness's login is its own, and R37's supported path is BYOK to local Ollama, so no route through this kit requires an account)
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
      Flip to DRAFT (and use /design or /proto) only to change the design itself. -->
 
@@ -400,7 +397,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       are pinned in `## Contracts` below by `architect-agent` - this requirement records the WHAT and the
       loop shape, not the formula.
 
-- [ ] R37: **A second HARNESS, not a fourth backend mode - the gates travel, the guard scripts do not fork.**
+- [x] R37: **A second HARNESS, not a fourth backend mode - the gates travel, the guard scripts do not fork.**
       R34's three modes vary WHERE THE MODEL RUNS. This varies WHICH AGENT HARNESS ENFORCES THE GATES, which
       is a different axis: R22's Stop guard and R32's loop guard are only worth anything if the harness the
       human actually drives will run them. Claude Code stays the DEFAULT and the reference harness (R1, R22);

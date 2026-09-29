@@ -498,10 +498,17 @@ if ((Test-Path $copilotHookFile) -or $haveCopilot) {
   if ($haveCopilot -and $measured) {
     $cver = ""
     try { $cver = ((copilot --version 2>&1 | Out-String) -split "`n" | Select-Object -First 1).Trim() } catch { }
-    if ($cver -and ($cver -notmatch [regex]::Escape($measured))) {
+    # EXTRACT then compare for EQUALITY - never substring. A longer build number, or one with a wider major
+    # version, CONTAINS the measured one as a substring, so a -match test reports OK on an unmeasured
+    # harness and quietly defeats C2f's only mechanism. (No literal version here on purpose: C2f keeps ONE
+    # source of truth for that number, and test-kit.ps1 fails this file if it carries its own copy.)
+    $cverNum = ""
+    $dvm = [regex]::Match($cver, '\d+(\.\d+)+')
+    if ($dvm.Success) { $cverNum = $dvm.Value }
+    if ($cverNum -and ($cverNum -ne $measured)) {
       Say "WARN" "copilot version" "contract C2 was measured against $measured; you are on '$cver'" `
           "re-measure DESIGN.md C2a-C2e (hook location, casing, block semantics) - a mismatch fails SILENTLY"
-    } elseif ($cver) { Say "OK" "copilot version" "matches the measured contract ($measured)" }
+    } elseif ($cverNum) { Say "OK" "copilot version" "matches the measured contract ($measured)" }
   }
 }
 
