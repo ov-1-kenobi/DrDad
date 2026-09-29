@@ -567,7 +567,7 @@ test-kit.ps1 coverage exercises the script plus both wiring points together, so 
   scoped session id keeps this provocation from colliding with (or polluting) a real Claude Code session's
   own streak state.
 
-### [ ] T8.3 - Provoke ratchet + close-unit's shrink refusal on a throwaway fixture   [research]   (Story S8)
+### [x] T8.3 - Provoke ratchet + close-unit's shrink refusal on a throwaway fixture   [research]   (Story S8)
 - **Goal:** Implement `Test-RatchetCloseGate` in `dad-gates-smoke.ps1` so it engineers a shrunk test count
   and confirms `close-unit.ps1` REFUSES the close via `ratchet.ps1` (R28's mechanism, wired into
   `close-unit.ps1`) - reporting `INTERCEPTED`, or naming `ratchet-close-refusal` as `SILENT-FAIL` if a

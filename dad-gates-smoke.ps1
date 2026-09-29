@@ -93,9 +93,80 @@ function Test-LoopGuardGate {
 }
 
 function Test-RatchetCloseGate {
-  # Stubbed in T8.1. T8.3 implements this by engineering a shrunk verification surface on a throwaway
-  # fixture and confirming close-unit.ps1 refuses the close via ratchet.ps1 (R28).
-  [pscustomobject]@{ Result = "SKIP"; Reason = "not yet implemented" }
+  # T8.3: Story S8's Behavior text loosely says "the ratchet ([ratchet] finding / R36 mechanism) refuses
+  # the close" - but DESIGN.md's own pinned contract C1d (doc-stats.ps1, S6/T6.1) states the [ratchet]
+  # finding is WARN-ONLY and "must never block /build, close-unit, or any LOCK gate." The mechanism that
+  # ACTUALLY refuses a close on a shrinking verification surface is ratchet.ps1 (R28, a different,
+  # differently-scoped script - tests/requirements/contracts/story+task totals/source rows/grade-card
+  # bytes/CLAUDE.md's Build:/Test: lines), invoked by close-unit.ps1 (~line 383) and blocking with
+  # "[close-unit] VERIFICATION SURFACE SHRANK" (exit 1) unless -AcceptShrink is passed. This gate
+  # provokes THAT mechanism - named "ratchet-close-refusal" to keep it distinct from the WARN-only
+  # [ratchet] finding.
+  #
+  # close-unit.ps1 and ratchet.ps1 are KIT-level files, resolved as siblings of THIS script (not inside
+  # -ProjectDir), same as Test-LoopGuardGate resolves dad-loopguard.ps1.
+  $cu = Join-Path $PSScriptRoot "close-unit.ps1"
+  $rt = Join-Path $PSScriptRoot "ratchet.ps1"
+  if (-not (Test-Path -LiteralPath $cu) -or -not (Test-Path -LiteralPath $rt)) {
+    return [pscustomobject]@{ Result = "SKIP"; Reason = "close-unit.ps1 / ratchet.ps1 not found next to dad-gates-smoke.ps1" }
+  }
+  $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+  if (-not $gitCmd) {
+    return [pscustomobject]@{ Result = "SKIP"; Reason = "git not found on PATH - cannot construct the fixture" }
+  }
+
+  # A fresh, throwaway, self-constructed, git-initialized fixture in a TEMP directory - never the real
+  # -ProjectDir target (R35: never provoke a real-state-touching violation against a live target). Shape
+  # mirrors test-kit.ps1's own already-passing "close-unit REFUSES to close over a shrink..." Test-Case
+  # (test-kit.ps1:1833-1861) exactly - reused, not invented.
+  $fixture = Join-Path $env:TEMP "dad-gates-smoke-ratchet-$PID-$(Get-Random)"
+  New-Item -ItemType Directory -Force -Path (Join-Path $fixture "docs") | Out-Null
+  New-Item -ItemType Directory -Force -Path (Join-Path $fixture "tests") | Out-Null
+  try {
+    "# Task map`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T1.2 - b   (Story S1)`n- **Goal:** y" |
+      Set-Content (Join-Path $fixture "docs\TASKS.md") -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content (Join-Path $fixture "docs\STORIES.md") -Encoding UTF8
+    # T1.2 is the LAST open task under Story S1, so close-unit.ps1 predicts a story close and requires its
+    # Test: command to report a REAL parseable count (Get-TestCount) before it will even reach ratchet's
+    # own shrink check - `exit 0` alone parses to "no evidence tests ran" and refuses the close for THAT
+    # reason first, never exercising ratchet.ps1 at all. `echo Total: N` is cheap and always parses.
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``echo Total: 10``" | Set-Content (Join-Path $fixture "CLAUDE.md") -Encoding UTF8
+    $fixtureTests = (1..10 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$fixtureTests`r`n}" | Set-Content (Join-Path $fixture "tests\ApiTests.cs") -Encoding UTF8
+
+    $prevLoc = Get-Location
+    $prevEap = $ErrorActionPreference
+    try {
+      Set-Location $fixture
+      $ErrorActionPreference = "Continue"
+      git init -q
+      git config core.autocrlf false
+      git add -A
+      git -c user.name=gates-smoke -c user.email=gates-smoke@dad commit -q -m base
+    } finally {
+      $ErrorActionPreference = $prevEap
+      Set-Location $prevLoc
+    }
+
+    # First close is clean -> should succeed and record the ratchet baseline.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "gates-smoke fixture" -ProjectDir $fixture -NoReindex | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      return [pscustomobject]@{ Result = "SKIP"; Reason = "the fixture's own first clean close failed - cannot provoke the gate from a broken baseline" }
+    }
+
+    # Now shrink the verification surface: delete most of the [Fact] markers.
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content (Join-Path $fixture "tests\ApiTests.cs") -Encoding UTF8
+
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.2 -Title "gates-smoke shrink" -ProjectDir $fixture -NoReindex 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+
+    if ($code -ne 0 -and $out -match 'SHRANK') {
+      return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "close-unit.ps1 refused the second close (exit $code) after 9 of 10 [Fact] markers were deleted" }
+    }
+    return [pscustomobject]@{ Result = "SILENT-FAIL"; Reason = "ratchet-close-refusal" }
+  } finally {
+    Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
+  }
 }
 
 function Test-DadGuardStopGate {
