@@ -4954,6 +4954,120 @@ Test-Case "S7's pricing-sentence language landed in both stories.md and design.m
   Assert ($design -match "aren't\s+priced yet") "design.md is missing the T7.2 pricing sentence's 'aren't priced yet' phrasing"
 }
 
+# ---------------------------------------------------------------- gates log (T9.1, C3)
+Write-Host "-- gates log --" -ForegroundColor Cyan
+
+function Invoke-GatesLog([string[]]$ArgList) {
+  # Runs dad-gates-log.ps1 as a child process; returns exit code + raw stdout + raw stderr.
+  $so = [System.IO.Path]::GetTempFileName(); $se = [System.IO.Path]::GetTempFileName()
+  try {
+    $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + (Join-Path $kit "dad-gates-log.ps1") + '"')) + $ArgList
+    $pr = Start-Process powershell -ArgumentList $a -Wait -PassThru -NoNewWindow -RedirectStandardOutput $so -RedirectStandardError $se
+    return [pscustomobject]@{ Exit = $pr.ExitCode; Out = [System.IO.File]::ReadAllText($so); Err = [System.IO.File]::ReadAllText($se) }
+  } finally { Remove-Item $so, $se -Force -ErrorAction SilentlyContinue }
+}
+function New-GatesSandbox {
+  $root = Join-Path $kit "_tmp"; New-Item -ItemType Directory -Force $root | Out-Null
+  $p = Join-Path $root ("gl_" + [guid]::NewGuid().ToString("N").Substring(0,8)); New-Item -ItemType Directory -Force $p | Out-Null
+  return $p
+}
+
+Test-Case "dad-gates-log: acceptance scenario (append, schema, order, ts, second append, -Gate filter, -Count on missing log)" {
+  $sb = New-GatesSandbox
+  try {
+    $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", "`"test block`"", "-Session", "s1")
+    Assert ($r.Exit -eq 0) "append exit $($r.Exit)"
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    Assert (Test-Path $log) "grades\gates-log.jsonl not created"
+    $lines = @([System.IO.File]::ReadAllLines($log))
+    Assert ($lines.Count -eq 1) "expected 1 line, got $($lines.Count)"
+    $o = $lines[0] | ConvertFrom-Json
+    $keys = @($o.PSObject.Properties.Name) -join ","
+    Assert ($keys -eq "v,ts,gate,decision,tool,reason,session") "keys/order wrong: $keys"
+    Assert ($o.v -eq 1) "v != 1"
+    Assert ($o.ts -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') "ts format: $($o.ts)"
+    Assert (($o.gate -eq "loop-guard") -and ($o.decision -eq "block") -and ($o.tool -eq "Bash") -and ($o.reason -eq "test block") -and ($o.session -eq "s1")) "field values wrong: $($lines[0])"
+    $raw = [System.IO.File]::ReadAllBytes($log)
+    Assert (-not ($raw.Length -ge 3 -and $raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF)) "log has a UTF-8 BOM"
+    Assert ($raw[$raw.Length - 1] -eq 10) "line does not end in LF"
+    Assert (-not ($raw -contains 13)) "log contains CR"
+
+    $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "ratchet", "-Decision", "allow", "-Tool", "`"`"", "-Reason", "`"ok`"", "-Session", "s1")
+    $lines = @([System.IO.File]::ReadAllLines($log))
+    Assert ($lines.Count -eq 2) "second append: expected 2 lines, got $($lines.Count)"
+
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Gate", "loop-guard")
+    Assert ($q.Exit -eq 0) "query exit $($q.Exit)"
+    $ql = @($q.Out -split "`r?`n" | Where-Object { $_ })
+    Assert ($ql.Count -eq 1) "-Query -Gate loop-guard returned $($ql.Count) lines"
+    Assert ($ql[0] -eq $lines[0]) "query line not verbatim"
+
+    $fresh = New-GatesSandbox
+    try {
+      $c = Invoke-GatesLog @("-ProjectDir", "`"$fresh`"", "-Query", "-Count")
+      Assert ($c.Exit -eq 0) "count exit $($c.Exit)"
+      Assert ($c.Out -eq "0`r`n" -or $c.Out -eq "0`n") "stdout not exactly 0: [$($c.Out)]"
+      Assert ($c.Err -match "no gate log yet") "stderr lacks the 'no gate log yet' note: [$($c.Err)]"
+    } finally { Remove-Sandbox $fresh }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-gates-log: redacts a structural token inside a curl reason (C3a worked example)" {
+  $sb = New-GatesSandbox
+  try {
+    $tok = "gh" + "p_" + ('a' * 40)
+    $reason = 'curl   -H "Authorization: Bearer ' + $tok + '"   https://api.example.com/v1/x'
+    $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", ('"' + ($reason -replace '"', '\"') + '"'), "-Session", "s1")
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    Assert (Test-Path $log) "no log written"
+    $txt = [System.IO.File]::ReadAllText($log)
+    Assert ($txt -notmatch [regex]::Escape($tok)) "the raw token reached the log"
+    $o = ($txt.Trim() | ConvertFrom-Json)
+    $want = 'curl -H "Authorization: Bearer [REDACTED]" https://api.example.com/v1/x'
+    Assert ($o.reason -eq $want) "reason was [$($o.reason)], wanted [$want]"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-gates-log: two concurrent writers lose no lines" {
+  $sb = New-GatesSandbox
+  try {
+    $script = Join-Path $kit "dad-gates-log.ps1"
+    $n = 12
+    $procs = @()
+    foreach ($w in @("wa", "wb")) {
+      $cmd = "for (`$i = 0; `$i -lt $n; `$i++) { & '$script' -ProjectDir '$sb' -Gate $w -Decision block -Tool Bash -Reason ('r' + `$i) -Session s }"
+      $procs += Start-Process powershell -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ('"' + $cmd + '"')) -PassThru -WindowStyle Hidden
+    }
+    foreach ($p in $procs) { $p.WaitForExit() }
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    $lines = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })
+    Assert ($lines.Count -eq (2 * $n)) "expected $(2 * $n) lines, got $($lines.Count) - a concurrent line was lost"
+    foreach ($l in $lines) { $null = $l | ConvertFrom-Json }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-gates-log: missing -ProjectDir exits 0 silently and creates nothing" {
+  $ghost = Join-Path $kit ("_tmp\gl_missing_" + [guid]::NewGuid().ToString("N").Substring(0,8))
+  $r = Invoke-GatesLog @("-ProjectDir", "`"$ghost`"", "-Gate", "loop-guard", "-Decision", "block", "-Reason", "x")
+  Assert ($r.Exit -eq 0) "exit $($r.Exit)"
+  Assert ($r.Out -eq "" -and $r.Err -eq "") "not silent: out=[$($r.Out)] err=[$($r.Err)]"
+  Assert (-not (Test-Path $ghost)) "created the missing project dir"
+}
+
+Test-Case "dad-gates-log: .cmd wrapper exists and scan-secrets -PatternsOnly leaves normal scanning unchanged" {
+  $cmdTxt = Get-Content (Join-Path $kit "dad-gates-log.cmd") -Raw
+  Assert ($cmdTxt -match 'dad-gates-log\.ps1') "dad-gates-log.cmd does not call the .ps1"
+  $sb = New-Sandbox
+  try {
+    Set-Content "$sb\f.txt" ("gh" + "p_" + ('a' * 40)) -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "scan-secrets.ps1") -Path $sb -Quiet | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "scan-secrets no longer flags a planted token (exit $LASTEXITCODE)"
+    Set-Content "$sb\f.txt" "nothing secret here" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "scan-secrets.ps1") -Path $sb -Quiet | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "scan-secrets flags a clean file (exit $LASTEXITCODE)"
+  } finally { Remove-Sandbox $sb }
+}
+
 # ---------------------------------------------------------------- server
 if (-not $SkipBuild) {
   Write-Host "-- server --" -ForegroundColor Cyan

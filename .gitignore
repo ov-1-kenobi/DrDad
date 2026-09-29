@@ -30,3 +30,11 @@ __pycache__/
 *.pfx
 *.key
 secrets/
+appsettings.*.local.json
+*.binlog
+_tmp/
+nul
+NUL
+bin/
+obj/
+docs/.index/

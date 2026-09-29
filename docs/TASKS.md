@@ -700,7 +700,7 @@ are independent of each other; T13.3's test-kit.ps1 coverage exercises both, so 
   whose violation cannot be safely constructed is reported as SKIP, never fabricated as a pass" - this task
   is where those two rules get their first real, non-stub exercise across all three gates at once.
 
-### [ ] T9.1 - Ship dad-gates-log.ps1 (append + query) implementing contract C3   [research]   (Story S9)
+### [x] T9.1 - Ship dad-gates-log.ps1 (append + query) implementing contract C3   [research]   (Story S9)
 - **Goal:** Ship one small, reusable helper script (`dad-gates-log.ps1`) that appends a gate-decision line
   or queries the log, implementing the location/schema/append/query contract ALREADY PINNED in
   `docs/DESIGN.md` C3 - so T9.2/T9.3 each make one mechanical call instead of four scripts each improvising

@@ -27,7 +27,8 @@
 param(
   [string]$Path = ".",
   [switch]$Staged,
-  [switch]$Quiet
+  [switch]$Quiet,
+  [switch]$PatternsOnly
 )
 $ErrorActionPreference = "Stop"
 
@@ -55,6 +56,11 @@ $patterns = [ordered]@{
 # Keyword-driven rules only: these fire on any 8+ char value after "password:"/"token="/etc, so they need
 # placeholder suppression or they are unusable. Structural rules above do NOT get this treatment.
 $heuristic = @("Password/secret literal", "Azure client secret")
+
+# -PatternsOnly: for DOT-SOURCING (. scan-secrets.ps1 -PatternsOnly) by dad-gates-log.ps1, which redacts
+# with THIS pattern list so the kit keeps ONE definition of a secret (R20, C3a). Defines $patterns and
+# returns before any scanning; normal invocations are unchanged.
+if ($PatternsOnly) { return }
 
 # Obvious non-secrets - placeholders, env references, docs.
 $placeholder = '(?i)(<[^>]*>|\$\{|%[A-Z_]+%|\$env:|xxx+|changeme|your[-_]|example|placeholder|dummy|redacted|\*\*\*|todo|n/?a$|process\.env|os\.environ|getenv)'
