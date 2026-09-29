@@ -807,7 +807,7 @@ are independent of each other; T13.3's test-kit.ps1 coverage exercises both, so 
   and the log looks clean. That is C2c's trap wearing a third hat." This task is placed immediately after
   T9.1 in FILE ORDER (not id order) so `doc-stats`' naive next-unchecked pointer reaches it before T9.2.
 
-### [ ] T9.2 - Wire the loop guard's and dad-guard's Stop-hook blocks into the gate log   [research]   (Story S9)
+### [x] T9.2 - Wire the loop guard's and dad-guard's Stop-hook blocks into the gate log   [research]   (Story S9)
 - **Goal:** `dad-loopguard.ps1` and `dad-guard.ps1`'s Stop hook each write to that project's
   `grades/gates-log.jsonl` via T9.1's helper - ONE `allow` "armed" line on the session's first invocation,
   then a `block` line on every block (S9 AC1, gates `loop-guard` and `dad-guard-stop`).

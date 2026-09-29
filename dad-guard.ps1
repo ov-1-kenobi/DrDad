@@ -45,8 +45,31 @@ function Allow($why) {
   exit 0
 }
 
+# Gate log (DESIGN C3, R38(b)). Real hook mode only ($hookMode) - never -Check/-Ack. Fail-open.
+# Project = nearest ancestor of $proj holding docs or grades (cwd may be a subdirectory), else $proj.
+$hookMode = $false
+$sessionId = ""
+function Write-GateLog([string]$decision, [string]$why) {
+  if (-not $hookMode -or -not $proj) { return }
+  try {
+    $pd = $proj; $d = $proj
+    for ($i = 0; $i -lt 32 -and $d; $i++) {
+      if ((Test-Path -LiteralPath (Join-Path $d "docs")) -or (Test-Path -LiteralPath (Join-Path $d "grades"))) { $pd = $d; break }
+      $parent = Split-Path -Parent $d
+      if (-not $parent -or $parent -eq $d) { break }
+      $d = $parent
+    }
+    # Native-call args: collapse whitespace, swap double quotes (they split the argument), cap length (helper truncates to 300 anyway).
+    $why = ([regex]::Replace([string]$why, '\s+', ' ')).Replace([string][char]34, "'").Trim()
+    if ($why.Length -gt 300) { $why = $why.Substring(0, 300) }
+    # -Tool is omitted (helper default ""): an empty string argument is dropped by the native call.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "dad-gates-log.ps1") -ProjectDir $pd -Gate "dad-guard-stop" -Decision $decision -Reason $why -Session $sessionId 2>$null | Out-Null
+  } catch { }
+}
+
 function Block($reason) {
   if ($Check) { Write-Host "dad-guard: BLOCK - $reason" -ForegroundColor Red; exit 1 }
+  Write-GateLog "block" $reason
   # Emit both shapes on purpose: some builds read the JSON decision, some read exit code 2 + stderr.
   # Whichever this build honors, the message lands; if it honors neither we fail open, which is the
   # documented behavior anyway.
@@ -66,6 +89,8 @@ if (-not $Check -and -not $Ack) {
   if ($raw) {
     try {
       $hook = $raw | ConvertFrom-Json
+      $hookMode = $true
+      if ($hook.session_id) { $sessionId = [string]$hook.session_id }
       # The retry pass. Allow it, or the model can never finish. One nag per stop is the whole design.
       if ($hook.stop_hook_active) { exit 0 }
       if ($hook.cwd) { $proj = $hook.cwd }
@@ -119,6 +144,30 @@ $isAd = (Test-Path (Join-Path $proj ".dad-kit-version")) -or
         (Test-Path (Join-Path $proj "docs\DESIGN.md")) -or
         (Test-Path (Join-Path $proj "docs\TEDD.md"))
 if (-not $isAd) { Allow "not a DAD project" }
+
+# ARMED HEARTBEAT (C3b): ONE allow line on the session's first Stop that reaches this point (the
+# stop_hook_active retry exits earlier, so it never counts). "First Stop" is derived from the gate log itself:
+# no dad-guard-stop armed line for this session id yet. That is existing per-session state - no new file.
+if ($hookMode -and $sessionId) {
+  try {
+    $armedSeen = $false
+    $pd0 = $proj; $d0 = $proj
+    for ($i = 0; $i -lt 32 -and $d0; $i++) {
+      if ((Test-Path -LiteralPath (Join-Path $d0 "docs")) -or (Test-Path -LiteralPath (Join-Path $d0 "grades"))) { $pd0 = $d0; break }
+      $par0 = Split-Path -Parent $d0
+      if (-not $par0 -or $par0 -eq $d0) { break }
+      $d0 = $par0
+    }
+    $lp = Join-Path $pd0 "grades\gates-log.jsonl"
+    if (Test-Path -LiteralPath $lp) {
+      $needle = '"session":"' + $sessionId + '"'
+      foreach ($ln in [System.IO.File]::ReadAllLines($lp)) {
+        if ($ln.Contains('"gate":"dad-guard-stop"') -and $ln.Contains('"reason":"armed"') -and $ln.Contains($needle)) { $armedSeen = $true; break }
+      }
+    }
+    if (-not $armedSeen) { Write-GateLog "allow" "armed" }
+  } catch { }
+}
 if (-not (Test-Path (Join-Path $proj ".git"))) { Allow "no git repo - nothing to compare against" }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Allow "git not on PATH" }
 

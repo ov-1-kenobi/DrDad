@@ -217,6 +217,36 @@ Do not reword the query and try again.
 "@
 }
 
+# ---- gate log (DESIGN C3, R38(b)) -----------------------------------------------------------------
+# Resolve the project the hook payload's cwd belongs to: nearest ancestor holding docs or grades (cwd may
+# be a subdirectory), else cwd itself. Returns "" when cwd is empty, and the caller then skips logging.
+function Resolve-LogProject([string]$cwd) {
+  if (-not $cwd) { return "" }
+  $d = $cwd
+  for ($i = 0; $i -lt 32 -and $d; $i++) {
+    if ([System.IO.Directory]::Exists((Join-Path $d "docs")) -or [System.IO.Directory]::Exists((Join-Path $d "grades"))) { return $d }
+    $parent = [System.IO.Path]::GetDirectoryName($d)
+    if (-not $parent -or $parent -eq $d) { break }
+    $d = $parent
+  }
+  return $cwd
+}
+
+# Fail-open append via dad-gates-log.ps1 (spawns powershell - call ONLY on the first call and on blocks).
+function Write-GateLog([string]$cwd, [string]$decision, [string]$tool, [string]$why, [string]$sid) {
+  try {
+    $pd = Resolve-LogProject $cwd
+    if (-not $pd) { return }
+    # An EMPTY string argument is dropped by the native call, so -Tool is passed only when non-empty (the helper defaults it to "").
+    # Native-call args: collapse whitespace, swap double quotes (they split the argument), cap length (helper truncates to 300 anyway).
+    $why = ([regex]::Replace([string]$why, '\s+', ' ')).Replace([string][char]34, "'").Trim()
+    if ($why.Length -gt 300) { $why = $why.Substring(0, 300) }
+    $la = @("-NoProfile","-ExecutionPolicy","Bypass","-File",(Join-Path $PSScriptRoot "dad-gates-log.ps1"),"-ProjectDir",$pd,"-Gate","loop-guard","-Decision",$decision,"-Reason",$why,"-Session",$sid)
+    if ($tool) { $la += @("-Tool",$tool) }
+    & powershell @la 2>$null | Out-Null
+  } catch { }
+}
+
 # ---------------- self-test ------------------------------------------------------------------------
 if ($Reset) {
   if (Test-Path -LiteralPath $stateDir) { Remove-Item -LiteralPath $stateDir -Recurse -Force }
@@ -299,6 +329,12 @@ try {
   $sessionId = ""
   $m = [regex]::Match($raw, '"session_id"\s*:\s*"([^"]*)"')
   if ($m.Success) { $sessionId = $m.Groups[1].Value }
+  # cwd: absolute Windows path, JSON-escaped (\\ for \) in the raw payload (measured, T9.5). Gate log only.
+  $cwd = ""
+  $m = [regex]::Match($raw, '"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"')
+  # Single-pass unescape of \\ \" \/ ONLY. Not Unescape-Json: its sequential Replace turns the '\\' + 't' in
+  # "...\\t92" into TAB (\t is replaced before \\), yielding an illegal path. Fail-open: a bad cwd just skips.
+  if ($m.Success) { $cwd = [regex]::Replace($m.Groups[1].Value, '\\([\\"/])', '$1') }
   # tool_input verbatim - its exact text IS the signature of the call, which is all we need
   $inputSig = ""
   $m = [regex]::Match($raw, '"tool_input"\s*:\s*(\{.*)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
@@ -311,20 +347,34 @@ try {
   # of seeing a single one. A loop breaker that watches one tool is not a loop breaker.
   if (-not $toolName) { exit 0 }
 
+  # ARMED HEARTBEAT (C3b): the session's first invocation = no per-session state file yet. The spiral file is
+  # written on every non-blocked call, so it is the "seen this session" marker; created here so a first call
+  # that itself blocks does not re-arm on the next one. No new state file.
+  if ($cwd) {
+    $safeKey = ($(if ($sessionId) { $sessionId } else { "nosession" }) -replace '[^A-Za-z0-9_.-]', '_')
+    if ($safeKey.Length -gt 64) { $safeKey = $safeKey.Substring(0, 64) }
+    $marker = Join-Path $stateDir "$safeKey.spiral.json"
+    if (-not [System.IO.File]::Exists($marker)) {
+      Write-GateLog $cwd "allow" "" "armed" $sessionId
+      if (-not [System.IO.Directory]::Exists($stateDir)) { [System.IO.Directory]::CreateDirectory($stateDir) | Out-Null }
+      [System.IO.File]::WriteAllText($marker, "0", (New-Object System.Text.UTF8Encoding($false)))
+    }
+  }
+
   if ($cmdMatch.Success) {
     # A shell command: the 2>nul check and the work-command exemption both apply.
     $reason = Test-Command (Unescape-Json $cmdMatch.Groups[1].Value) $sessionId
-    if ($reason) { [Console]::Error.WriteLine($reason); exit 2 }
+    if ($reason) { if ($cwd) { Write-GateLog $cwd "block" $toolName $reason $sessionId }; [Console]::Error.WriteLine($reason); exit 2 }
   } else {
     # Any other tool: the call's identity is its name plus its input verbatim, so a repeated identical
     # Read / Grep / search_datasheets is caught exactly the way a repeated command is.
     $reason = Test-Command "$toolName $inputSig" $sessionId
-    if ($reason) { [Console]::Error.WriteLine($reason); exit 2 }
+    if ($reason) { if ($cwd) { Write-GateLog $cwd "block" $toolName $reason $sessionId }; [Console]::Error.WriteLine($reason); exit 2 }
   }
 
   # And the spiral check applies to everything: many looks, nothing written.
   $spiral = Test-Spiral $toolName $sessionId
-  if ($spiral) { [Console]::Error.WriteLine($spiral); exit 2 }
+  if ($spiral) { if ($cwd) { Write-GateLog $cwd "block" $toolName $spiral $sessionId }; [Console]::Error.WriteLine($spiral); exit 2 }
   exit 0
 } catch {
   exit 0

@@ -5220,6 +5220,152 @@ if (-not $SkipBuild) {
   }
 }
 
+# ---------------------------------------------------------------- gates log wiring (T9.2, C3b)
+Write-Host "-- gates log wiring (loop-guard, dad-guard-stop) --" -ForegroundColor Cyan
+
+function Invoke-HookScript([string]$script, [string]$json, [string[]]$extra = @()) {
+  # Pipes $json to a hook script on stdin in a child powershell; returns the exit code.
+  $json | & powershell -NoProfile -ExecutionPolicy Bypass -File $script @extra 2>$null | Out-Null
+  return $LASTEXITCODE
+}
+function Get-GateLines([string]$proj) {
+  $l = Join-Path $proj "grades\gates-log.jsonl"
+  if (-not (Test-Path -LiteralPath $l)) { return @() }
+  return @([System.IO.File]::ReadAllLines($l) | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+}
+function New-GuardFixture {
+  $p = New-GatesSandbox
+  New-Item -ItemType Directory -Force (Join-Path $p "docs") | Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $p "docs\DESIGN.md"), "# d`n")
+  & git -C $p init -q 2>$null | Out-Null
+  & git -C $p config user.email t@t.t 2>$null | Out-Null
+  & git -C $p config user.name t 2>$null | Out-Null
+  & git -C $p add -A 2>$null | Out-Null
+  & git -C $p commit -q -m init 2>$null | Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $p "a.cs"), "class A {}`n")
+  return $p
+}
+
+Test-Case "T9.2 (a): loop-guard 4 identical calls with payload cwd -> exactly 2 log lines (armed allow, block); subdir cwd resolves to project" {
+  $lg = Join-Path $kit "dad-loopguard.ps1"
+  $sids = @()
+  try {
+    foreach ($variant in @("root", "subdir")) {
+      $sb = New-GatesSandbox
+      New-Item -ItemType Directory -Force (Join-Path $sb "docs") | Out-Null
+      $cwd = $sb
+      if ($variant -eq "subdir") { $cwd = Join-Path $sb "src\deep"; New-Item -ItemType Directory -Force $cwd | Out-Null }
+      $sid = "t92a-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+      $esc = $cwd.Replace('\', '\\')
+      $json = '{"session_id":"' + $sid + '","cwd":"' + $esc + '","tool_name":"Read","tool_input":{"file_path":"same.md"}}'
+      $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript $lg $json) }
+      Assert (($codes -join ",") -eq "0,0,0,2") "$variant exit codes changed by logging: $($codes -join ',')"
+      $rows = Get-GateLines $sb
+      Assert ($rows.Count -eq 2) "$variant expected exactly 2 lines, got $($rows.Count)"
+      Assert (($rows[0].gate -eq "loop-guard") -and ($rows[0].decision -eq "allow") -and ($rows[0].reason -eq "armed") -and ($rows[0].session -eq $sid)) "$variant line 1 not the armed allow"
+      Assert (($rows[1].gate -eq "loop-guard") -and ($rows[1].decision -eq "block") -and ($rows[1].tool -eq "Read")) "$variant line 2 not the block"
+      if ($variant -eq "subdir") { Assert (-not (Test-Path (Join-Path $cwd "grades"))) "subdir got its own grades\ instead of the project's" }
+      Remove-Item $sb -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  } finally {
+    foreach ($sid in $sids) { Get-ChildItem (Join-Path $env:TEMP "dad-loopguard") -Filter "$sid*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+Test-Case "T9.2 (a): loop-guard empty/missing cwd -> no log, exit codes unchanged; helper missing or grades unwritable -> still exit 2" {
+  $lg = Join-Path $kit "dad-loopguard.ps1"
+  $sids = @()
+  try {
+    $sb = New-GatesSandbox; New-Item -ItemType Directory -Force (Join-Path $sb "docs") | Out-Null
+    $sid = "t92n-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+    $json = '{"session_id":"' + $sid + '","tool_name":"Read","tool_input":{"file_path":"nocwd.md"}}'
+    $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript $lg $json) }
+    Assert (($codes -join ",") -eq "0,0,0,2") "no-cwd exit codes: $($codes -join ',')"
+    Assert (-not (Test-Path (Join-Path $sb "grades"))) "a log was written with no cwd"
+    $sid = "t92e-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+    $json = '{"session_id":"' + $sid + '","cwd":"","tool_name":"Read","tool_input":{"file_path":"emptycwd.md"}}'
+    $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript $lg $json) }
+    Assert (($codes -join ",") -eq "0,0,0,2") "empty-cwd exit codes: $($codes -join ',')"
+
+    # helper missing: copy the guard alone into a folder with no dad-gates-log.ps1
+    $iso = New-GatesSandbox; Copy-Item $lg $iso
+    $sid = "t92m-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+    $json = '{"session_id":"' + $sid + '","cwd":"' + $sb.Replace('\','\\') + '","tool_name":"Read","tool_input":{"file_path":"nohelper.md"}}'
+    $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript (Join-Path $iso "dad-loopguard.ps1") $json) }
+    Assert (($codes -join ",") -eq "0,0,0,2") "helper-missing exit codes: $($codes -join ',')"
+
+    # grades\ unwritable: a FILE named grades blocks directory creation
+    [System.IO.File]::WriteAllText((Join-Path $sb "grades"), "x")
+    $sid = "t92u-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+    $json = '{"session_id":"' + $sid + '","cwd":"' + $sb.Replace('\','\\') + '","tool_name":"Read","tool_input":{"file_path":"unwritable.md"}}'
+    $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript $lg $json) }
+    Assert (($codes -join ",") -eq "0,0,0,2") "unwritable-grades exit codes: $($codes -join ',')"
+    Remove-Item $sb, $iso -Recurse -Force -ErrorAction SilentlyContinue
+  } finally {
+    foreach ($sid in $sids) { Get-ChildItem (Join-Path $env:TEMP "dad-loopguard") -Filter "$sid*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+Test-Case "T9.2 (b): dad-guard real hook mode -> armed allow + block; second Stop adds only a block; retry pass logs nothing" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $fx = New-GuardFixture
+  try {
+    $esc = $fx.Replace('\', '\\')
+    $json = '{"session_id":"t92b-sess","cwd":"' + $esc + '","stop_hook_active":false}'
+    $c1 = Invoke-HookScript $dg $json
+    Assert ($c1 -eq 2) "first Stop exit $c1 (block must stay 2)"
+    $rows = Get-GateLines $fx
+    Assert ($rows.Count -eq 2) "after 1st Stop expected 2 lines, got $($rows.Count)"
+    Assert (($rows[0].gate -eq "dad-guard-stop") -and ($rows[0].decision -eq "allow") -and ($rows[0].reason -eq "armed") -and ($rows[0].session -eq "t92b-sess")) "line 1 not armed allow"
+    Assert (($rows[1].gate -eq "dad-guard-stop") -and ($rows[1].decision -eq "block")) "line 2 not block"
+    # the block reason embeds double quotes (close-unit command) and newlines - it must have logged anyway
+    Assert ($rows[1].reason.Length -gt 10) "block reason empty"
+    $c2 = Invoke-HookScript $dg $json
+    Assert ($c2 -eq 2) "second Stop exit $c2"
+    $rows = Get-GateLines $fx
+    Assert ($rows.Count -eq 3) "after 2nd Stop expected 3 lines (one more block only), got $($rows.Count)"
+    Assert (@($rows | Where-Object { $_.reason -eq "armed" }).Count -eq 1) "a second armed line was written"
+    Assert ($rows[2].decision -eq "block") "third line not a block"
+    # stop_hook_active retry: exits 0, logs nothing
+    $c3 = Invoke-HookScript $dg ('{"session_id":"t92b-sess","cwd":"' + $esc + '","stop_hook_active":true}')
+    Assert ($c3 -eq 0) "stop_hook_active retry exit $c3"
+    Assert ((Get-GateLines $fx).Count -eq 3) "retry pass wrote a line"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case "T9.2 (b): dad-guard -Check and -Ack write nothing; empty cwd -> no log in fixture; unwritable grades -> exit still 2" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $fx = New-GuardFixture
+  try {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Check -ProjectDir $fx 2>$null | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "-Check on dirty fixture exit $LASTEXITCODE (expected 1)"
+    Assert (-not (Test-Path (Join-Path $fx "grades"))) "-Check wrote a gate log"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Ack -ProjectDir $fx -Reason "t92 test" 2>$null | Out-Null
+    Assert (-not (Test-Path (Join-Path $fx "grades\gates-log.jsonl"))) "-Ack wrote a gate log"
+    Remove-Item (Join-Path $fx ".dad-verified") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $fx ".claude") -Recurse -Force -ErrorAction SilentlyContinue
+
+    # empty cwd: falls back to the process cwd - only assert nothing lands in the fixture
+    $empty = New-GatesSandbox; Push-Location $empty   # empty cwd falls back to the PROCESS cwd - keep that out of the kit's own repo
+    try { $c = Invoke-HookScript $dg '{"session_id":"t92b-empty","cwd":"","stop_hook_active":false}' } finally { Pop-Location; Remove-Item $empty -Recurse -Force -ErrorAction SilentlyContinue }
+    Assert (($c -eq 0) -or ($c -eq 2)) "empty-cwd exit $c"
+    Assert (-not (Test-Path (Join-Path $fx "grades\gates-log.jsonl"))) "empty-cwd payload wrote into the fixture"
+
+    # unwritable grades: a FILE named grades
+    [System.IO.File]::WriteAllText((Join-Path $fx "grades"), "x")
+    $c = Invoke-HookScript $dg ('{"session_id":"t92b-unw","cwd":"' + $fx.Replace('\','\\') + '","stop_hook_active":false}')
+    Assert ($c -eq 2) "unwritable grades changed the block exit to $c"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case "T9.2 (characterization): dad-loopguard Unescape-Json replaces \t before \\ (known pre-existing bug; flips when fixed)" {
+  $src = Get-Content (Join-Path $kit "dad-loopguard.ps1") -Raw
+  $iT = $src.IndexOf(".Replace('\t'")
+  $iBs = $src.IndexOf(".Replace('\\'")
+  Assert (($iT -ge 0) -and ($iBs -ge 0)) "could not locate the Unescape-Json replacement chain"
+  Assert ($iT -lt $iBs) "Unescape-Json now handles \\ before \t - the known bug looks FIXED; update this characterization"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })
