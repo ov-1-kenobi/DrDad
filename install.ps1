@@ -12,8 +12,12 @@
 # -Hybrid: the cloud agent loop of -Cloud PLUS the 5080 offered to the cloud model as a drudge co-processor -
 # it sets LOCALTOOLS_HYBRID=1, which turns on the local_generate MCP tool (implementation guesses, test data)
 # and pulls a local generation model. The presence of LOCALTOOLS_HYBRID is what dad-doctor reads as "hybrid".
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -CopilotCli  ALSO wire the gates into Copilot CLI.
+# -CopilotCli: an ADDITIVE target, not a mode. It leaves the Claude Code install untouched and additionally
+# writes %USERPROFILE%\.copilot\hooks\dad.json so the SAME two guard scripts run under GitHub Copilot CLI.
+# Combine it with -Cloud/-Hybrid or use it on its own.
 [CmdletBinding()]
-param([switch]$Cloud, [switch]$Hybrid)
+param([switch]$Cloud, [switch]$Hybrid, [switch]$CopilotCli)
 $ErrorActionPreference = "Stop"
 # -Hybrid runs the cloud AGENT LOOP (base-URL dropped) like -Cloud, and additionally lights up the local GPU
 # tools. $cloudLoop = "the agent talks to Anthropic, not Ollama" and drives the settings.json edit + labels.
@@ -21,6 +25,11 @@ $cloudLoop = $Cloud -or $Hybrid
 $root   = $PSScriptRoot
 $old    = 'C:\Projects\Claude\MCP\DAD-kit'            # dev-path placeholder baked into the markdown command files
 $claude = Join-Path $env:USERPROFILE ".claude"
+# The Copilot CLI version DESIGN.md's C2 contract was MEASURED against. Contract C2f makes this the ONE
+# source of truth for that number, and test-kit.ps1 asserts it equals the version stamped in C2 - so the doc
+# and the code cannot drift apart silently, which is the precise failure the contract exists to prevent.
+# Bump it only after re-measuring C2a-C2e (hook location, event casing, block semantics, subagent coverage).
+$CopilotMeasuredVersion = "1.0.89"
 
 function Have($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }
 function Write-NoBom($path, $content) {
@@ -242,6 +251,72 @@ try {
 if (-not $Cloud) {
   Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
   & (Join-Path $root "ollama-tuning.ps1")
+}
+
+# GitHub Copilot CLI is a SECOND harness that runs the same two guard scripts. Opt-in, additive: the
+# Claude Code wiring above is untouched, so a machine can run both.
+if ($CopilotCli) {
+  Write-Host "`n== 9) Install GitHub Copilot CLI hooks ==" -ForegroundColor Cyan
+  if (-not (Have copilot)) {
+    Write-Host "  [warn] 'copilot' not on PATH - installing the hooks anyway; they activate once you" -ForegroundColor Yellow
+    Write-Host "         run 'npm install -g @github/copilot' (needs Node 22+)." -ForegroundColor Yellow
+  } else {
+    # C2f: LOUD at setup, never at runtime. C2a-C2e are true of $CopilotMeasuredVersion and of nothing else,
+    # and a harness that changed any of them breaks the gates SILENTLY - so say so here, where setup is
+    # inspected. A WARN, not a stop: an unmeasured version is a known-unknown, not a known-broken.
+    $cv = ""
+    try { $cv = ((copilot --version 2>&1 | Out-String) -split "`n" | Select-Object -First 1).Trim() } catch { }
+    # EXTRACT the version, then compare for EQUALITY. A substring/-match test is silently wrong here:
+    # "1.0.890" and "11.0.89" both CONTAIN "1.0.89", so an unmeasured harness would report [ok] and C2f's
+    # only drift mechanism would defeat itself - the exact silent-failure class this contract exists to stop.
+    $cvNum = ""
+    $vm = [regex]::Match($cv, '\d+(\.\d+)+')
+    if ($vm.Success) { $cvNum = $vm.Value }
+    if ($cvNum -and ($cvNum -ne $CopilotMeasuredVersion)) {
+      Write-Host "  [warn] DESIGN.md contract C2 was measured against Copilot CLI $CopilotMeasuredVersion." -ForegroundColor Yellow
+      Write-Host "         You are running: $cv" -ForegroundColor Yellow
+      Write-Host "         Hook location, event casing and the Stop block contract may have changed - and a" -ForegroundColor Yellow
+      Write-Host "         mismatch fails SILENTLY (the gate just stops firing). Re-measure C2a-C2e before" -ForegroundColor Yellow
+      Write-Host "         trusting these gates. Installing anyway." -ForegroundColor Yellow
+    } elseif ($cvNum) {
+      Write-Host "  [ok]   Copilot CLI matches the measured contract version ($CopilotMeasuredVersion)" -ForegroundColor Green
+    }
+  }
+  # USER-level only. Copilot CLI's DOCUMENTED repo-level location (.github/hooks/*.json) silently loads
+  # nothing on 1.0.89 - measured 2026-09-29 - and its parser skips unrecognised keys without an error, so
+  # an installer that followed the docs would report success and wire a hook that never fires.
+  $copilotHooks = Join-Path $env:USERPROFILE ".copilot\hooks"
+  New-Item -ItemType Directory -Force $copilotHooks | Out-Null
+  $cdst = Join-Path $copilotHooks "dad.json"
+  if (Test-Path $cdst) { Copy-Item $cdst "$cdst.bak" -Force; Write-Host "  existing dad.json -> dad.json.bak" -ForegroundColor Yellow }
+  $cj = Get-Content (Join-Path $root "copilot-hooks.json") -Raw | ConvertFrom-Json
+  # Same placeholder rewrite as settings.json, and for the same reason: do it on the PARSED object,
+  # because JSON doubles backslashes and a text replace of C:\Projects\... matches nothing on disk.
+  # Copilot puts the command under 'bash'/'powershell' keys rather than Claude Code's 'command'.
+  try {
+    foreach ($evt in $cj.hooks.PSObject.Properties.Name) {
+      foreach ($h in $cj.hooks.$evt) {
+        if ($h.bash)       { $h.bash       = $h.bash.Replace($old, $root) }
+        if ($h.powershell) { $h.powershell = $h.powershell.Replace($old, $root) }
+      }
+    }
+  } catch { }
+  Write-NoBom $cdst ($cj | ConvertTo-Json -Depth 10)
+  Write-Host "  wrote $cdst"
+  $ccmd = ""
+  try {
+    $ccmd = ($cj.hooks.PSObject.Properties.Name | ForEach-Object { $cj.hooks.$_ } |
+             ForEach-Object { @($_.bash) + @($_.powershell) }) -join " "
+  } catch { }
+  # dad-guard-copilot, NOT dad-guard: Copilot ignores exit code 2 and discards stdout with it, so
+  # dad-guard.ps1 wired directly would emit the right JSON and still be ignored - the close-out gates
+  # would quietly go back to being model-optional. The adapter re-emits the verdict with exit 0.
+  if ($ccmd -match 'dad-guard-copilot') { Write-Host "  Stop hook: dad-guard-copilot.ps1 (adapts dad-guard's verdict to Copilot's JSON+exit-0 contract)" -ForegroundColor Green }
+  else { Write-Host "  WARNING: no Copilot Stop hook - the close-out gates are model-optional under Copilot" -ForegroundColor Yellow }
+  if ($ccmd -match 'dad-loopguard') { Write-Host "  PreToolUse hook: dad-loopguard.ps1 (unchanged - Copilot honors exit 2 for tool calls)" -ForegroundColor Green }
+  else { Write-Host "  WARNING: no Copilot PreToolUse hook - a subagent can repeat one failing command indefinitely" -ForegroundColor Yellow }
+  Write-Host "  Copilot CLI subagents ARE covered: its PreToolUse fires for a subagent's own tool calls." -ForegroundColor Cyan
+  Write-Host "  RESTART Copilot CLI - it loads hooks at startup." -ForegroundColor Yellow
 }
 
 Write-Host "`n== DONE ==" -ForegroundColor Green

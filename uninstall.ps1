@@ -1,5 +1,6 @@
-# uninstall.ps1 - reverse what install.ps1 did to %USERPROFILE%\.claude.
-# Default: remove the kit's commands/agents and restore settings.json from its .bak.
+# uninstall.ps1 - reverse what install.ps1 did to %USERPROFILE%\.claude (and \.copilot\hooks).
+# Default: remove the kit's commands/agents, restore settings.json from its .bak, and remove the
+#          Copilot CLI hook file (dad.json) that install.ps1 -CopilotCli writes.
 # -Full:   also remove the Ollama -cc model variants and the OLLAMA_* tuning env vars.
 # Never removes: the kit folder, the npm Claude Code CLI, or the VS Code extension (manual).
 #
@@ -16,10 +17,14 @@ param(
   # -ClaudeDir exists so the teardown can be TESTED. It was previously asserted by grepping this file for
   # the string "Remove('Stop')", which pinned an implementation detail: generalising the removal to cover
   # a second hook event broke the test while improving the code. A gate that cannot be run is prose.
-  [string]$ClaudeDir = ""
+  [string]$ClaudeDir = "",
+  # -CopilotDir is the same idea for the Copilot CLI hooks dir (install.ps1 -CopilotCli writes dad.json
+  # there). Same reason: the removal has to be runnable against a sandbox instead of the real machine.
+  [string]$CopilotDir = ""
 )
 $ErrorActionPreference = "Stop"
 $claude = if ($ClaudeDir) { $ClaudeDir } else { Join-Path $env:USERPROFILE ".claude" }
+$copilotHooks = if ($CopilotDir) { $CopilotDir } else { Join-Path $env:USERPROFILE ".copilot\hooks" }
 
 # Keep these lists in sync with install.ps1 (global\commands and global\agents).
 $commands = @("scaffold","research","document","design","taskmap","proto","spec","build","assets","tidy","stories","diagram","audit","grade","retro","corpus","assess")
@@ -73,6 +78,28 @@ if (Test-Path $bak) {
       }
     } catch { Write-Host "  could not edit settings.json - remove the 'hooks' block by hand" -ForegroundColor Yellow }
   }
+}
+
+Write-Host "== Removing GitHub Copilot CLI hooks ==" -ForegroundColor Cyan
+# install.ps1 -CopilotCli writes dad.json here. Left behind, its two hooks would fire on every Copilot
+# tool call and every stop and fail once this folder is gone - the same reason the Claude Code hooks are
+# stripped above. Only touch the file if it actually references OUR guards, so a same-named file that
+# someone else wrote is never deleted.
+$cdad = Join-Path $copilotHooks "dad.json"
+if (Test-Path $cdad) {
+  try {
+    $craw = Get-Content $cdad -Raw
+    if ($craw -match 'dad-guard-copilot|dad-guard|dad-loopguard') {
+      Remove-Item $cdad -Force
+      Write-Host "  removed $cdad"
+      $cbak = "$cdad.bak"
+      if (Test-Path $cbak) { Copy-Item $cbak $cdad -Force; Write-Host "  restored dad.json from dad.json.bak" }
+    } else {
+      Write-Host "  $cdad is not ours (no DAD guard reference) - left alone" -ForegroundColor Yellow
+    }
+  } catch { Write-Host "  could not remove $cdad - delete it by hand" -ForegroundColor Yellow }
+} else {
+  Write-Host "  (no Copilot CLI hooks installed)"
 }
 
 if ($Full) {

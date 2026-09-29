@@ -467,3 +467,57 @@
     for all agents: (B) go fully separate-process for all high-stakes agents; or (C) hybrid - separate-
     process only for the named highest-stakes gate(s), same-session for the rest. This write-up does not
     pick for you; no build work follows from S11 until the human answers.
+
+<!-- S12 is NOT part of the "Epic: Receipts" grouping above - it is tagged to a real, LOCKED Requirement
+     (R37), like S1-S7. It appears after S11 only to keep story ids in numeric order. -->
+
+### Story S12: GitHub Copilot CLI as a second harness (opt-in install target)   (R37)   <!-- Status: DONE closed:close-unit -->
+- **Goal:** the kit's two gates - the Stop guard (`dad-guard.ps1`) and the loop guard (`dad-loopguard.ps1`) -
+  run under GitHub Copilot CLI as well as Claude Code, from one opt-in installer switch, WITHOUT forking
+  either guard script.
+- **Context:** `docs/DESIGN.md` R37 and contract `### C2` (sub-decisions C2a-C2f) already PIN the measured
+  harness contract - hook location, event casing, per-event block semantics, subagent coverage, the BYOK
+  offline path, and the version-drift policy. This story implements what is pinned; it does not re-derive
+  it. C2 is stamped MEASURED 2026-09-29 against Copilot CLI 1.0.89 - read it directly rather than retyping
+  the facts from memory, and re-measure before trusting it on any later version (C2f).
+  **Delivered ahead of this card** by the `dogfood/copilot-pilot` research pilot (commit `64188cc`); the card
+  exists so the work is gradeable and closeable through the normal gate, not to schedule new work.
+- **Behavior:** `install.ps1 -CopilotCli` is ADDITIVE - it leaves the Claude Code wiring untouched and also
+  writes `%USERPROFILE%\.copilot\hooks\dad.json`, so one machine runs both harnesses. The Stop hook goes
+  through a thin adapter, `dad-guard-copilot.ps1`, because Copilot IGNORES exit code 2 and discards stdout
+  with it (C2c): `dad-guard.ps1`'s existing JSON+exit-2 `Block()` therefore LOOKS correct and silently does
+  nothing. The adapter re-runs the unmodified guard and re-emits its verdict with exit 0. `dad-loopguard.ps1`
+  is wired UNCHANGED - Copilot honors exit 2 for tool calls, and its PascalCase payload is already the
+  snake_case shape that guard parses. `uninstall.ps1 -CopilotDir` removes the hook file (sandbox-testable,
+  and it leaves a same-named file that is not ours alone). `dad-doctor` reports the harness, the wiring, a
+  stale kit path, and version drift.
+- **Data / interfaces:** `dad-guard-copilot.ps1` + `.cmd`, `copilot-hooks.json` (the template carrying the
+  dev-path placeholder), `install.ps1` (step 9 + `$CopilotMeasuredVersion`), `uninstall.ps1` (`-CopilotDir`),
+  `dad-doctor.ps1` (the R37 section), `test-kit.ps1` (4 cases). `dad-guard.ps1` and `dad-loopguard.ps1` are
+  NOT modified - that is the point of C2's no-fork invariant.
+- **Dependencies:** none (R37 + C2 are LOCKED in `docs/DESIGN.md`).
+- **Acceptance (testable):**
+  - [x] AC1: the installed hooks file matches the only shape Copilot actually loads - user-level path,
+    `version: 1`, `bash`/`powershell` keys, PascalCase events registered EXACTLY ONCE, Stop routed through
+    the adapter. Covered by `test-kit.ps1` "copilot-hooks.json is the shape Copilot CLI actually loads".
+  - [x] AC2: the adapter converts a dad-guard BLOCK into Copilot's JSON+exit-0 contract, allows silently,
+    synthesizes a decision if the guard blocked without parsable JSON, and FAILS OPEN when `dad-guard.ps1`
+    is absent. Covered by "dad-guard-copilot converts a BLOCK into Copilot's JSON+exit-0 contract".
+  - [x] AC3: `uninstall.ps1` removes the hook file against a sandbox and leaves a foreign `dad.json` alone.
+    Covered by "uninstall removes the Copilot CLI hook file (sandboxed)".
+  - [x] AC4: the measured version cannot drift between C2's stamp and `install.ps1`; `dad-doctor` reads that
+    constant rather than duplicating it; neither guard gains a runtime version self-check (C2f).
+    Covered by "the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)".
+  - [x] AC5: end-to-end against LIVE Copilot CLI, not a mock - the Stop guard blocked a real session (the
+    model then attempted `dad-guard.ps1 -Ack`, a remediation step named only inside the block message), and
+    the loop guard denied a 4th identical SUBAGENT tool call, verified by counting side effects on disk
+    (3 lines written for 4 attempts) rather than trusting the agent's self-report.
+  - [ ] AC6: `install.cmd -CopilotCli` has been run live on a real machine. DEFERRED per R35(b) - the
+    installer mutates state OUTSIDE this project (npm global install, USER PATH, `%USERPROFILE%`) and needs
+    explicit human consent before a live run. Step 9's logic was instead verified by its `test-kit.ps1` case
+    plus a faithful replay of its exact JSON transformation during the end-to-end test. Same deferral shape
+    as S7's AC3; run `install.cmd -CopilotCli` before relying on the Copilot gates on this machine.
+- **Dev note (real machine state, per S4/R35):** verification wrote to `%USERPROFILE%\.copilot\` (a hooks
+  file and three probe agents) and scaffolded a throwaway project outside the kit. Both were removed
+  afterwards and `~/.copilot/` was confirmed returned to stock. Verification mode: **live-sandboxed** for
+  AC1-AC5; **deferred, not code-review-only** for AC6 (see above).

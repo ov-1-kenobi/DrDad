@@ -1335,6 +1335,207 @@ Test-Case "settings.json wires dad-guard as a Stop hook, at a rewritable path" {
   } finally { Remove-Sandbox $sb2 }
 }
 
+Test-Case "copilot-hooks.json is the shape Copilot CLI actually loads" {
+  $p = Join-Path $kit "copilot-hooks.json"
+  Assert (Test-Path $p) "copilot-hooks.json is missing (install.ps1 -CopilotCli reads it)"
+  $bytes = [System.IO.File]::ReadAllBytes($p)
+  Assert (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) "copilot-hooks.json has a BOM"
+  $j = Get-Content $p -Raw | ConvertFrom-Json
+  Assert ($j.version -eq 1) "copilot-hooks.json must declare version 1 or Copilot skips it"
+  $evts = @($j.hooks.PSObject.Properties.Name)
+  # PascalCase ONLY. Copilot CLI accepts both casings but they are NOT aliases - each dispatches
+  # independently, so registering both fires every hook TWICE and corrupts dad-loopguard's repeat
+  # count (its whole job is counting identical calls). PascalCase is also the casing that delivers the
+  # snake_case payload (tool_name/session_id/tool_input) dad-loopguard already parses.
+  foreach ($e in $evts) {
+    Assert ($e -cmatch '^[A-Z]') "copilot-hooks.json event '$e' is not PascalCase - camelCase would double-fire alongside it"
+  }
+  Assert ($evts -contains "Stop") "no Stop hook - the close-out gates would be model-optional under Copilot"
+  Assert ($evts -contains "PreToolUse") "no PreToolUse hook - a subagent could repeat one failing command indefinitely"
+  # Stop MUST go through the adapter. dad-guard.ps1 wired directly emits the right JSON and is still
+  # ignored, because Copilot discards stdout on a nonzero exit - a silent downgrade with no error.
+  $stopCmds = @($j.hooks.Stop | ForEach-Object { @($_.bash) + @($_.powershell) }) -join " "
+  Assert ($stopCmds -match 'dad-guard-copilot') "Copilot's Stop hook must call dad-guard-copilot.ps1, not dad-guard.ps1 directly"
+  $preCmds = @($j.hooks.PreToolUse | ForEach-Object { @($_.bash) + @($_.powershell) }) -join " "
+  Assert ($preCmds -match 'dad-loopguard') "Copilot's PreToolUse hook does not call dad-loopguard.ps1"
+  # Copilot reads 'bash'/'powershell', not Claude Code's 'command'. A missing key = a silent no-op.
+  foreach ($e in $evts) {
+    foreach ($h in $j.hooks.$e) {
+      Assert ($h.type -eq "command") "copilot-hooks.json $e entry has type '$($h.type)', expected 'command'"
+      Assert ($h.bash)       "copilot-hooks.json $e entry has no 'bash' command"
+      Assert ($h.powershell) "copilot-hooks.json $e entry has no 'powershell' command"
+    }
+  }
+  # Same placeholder contract as settings.json: install.ps1 rewrites it on the PARSED object.
+  $devPath = 'C:\Projects\Claude\MCP\DAD-kit'
+  $all = @($evts | ForEach-Object { $j.hooks.$_ } | ForEach-Object { @($_.bash) + @($_.powershell) }) -join " "
+  Assert ($all -match [regex]::Escape($devPath)) "copilot-hooks.json does not use the dev-path placeholder"
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  Assert ($inst -match 'copilot-hooks\.json') "install.ps1 never reads copilot-hooks.json"
+  # PERFORM the rewrite rather than grepping install.ps1 for the assignment (which pinned an
+  # implementation detail - the same lesson uninstall.ps1:17-19 already records). What must hold is that
+  # the placeholder survives a parse/serialize round-trip and is replaceable on the PARSED object in BOTH
+  # per-harness keys: a text replace over raw JSON matches nothing, because JSON doubles the backslashes.
+  $rt = $all.Replace($devPath, "D:\elsewhere")
+  Assert ($rt -notmatch [regex]::Escape($devPath)) "the Copilot hook placeholder is not rewritable via the parsed object"
+  Assert ($rt -match [regex]::Escape("D:\elsewhere")) "rewriting the Copilot hook placeholder produced no new root"
+  foreach ($e in $evts) {
+    foreach ($h in $j.hooks.$e) {
+      foreach ($k in @("bash","powershell")) {
+        Assert ($h.$k -match [regex]::Escape($devPath)) "copilot-hooks.json $e '$k' does not carry the dev-path placeholder - install.ps1 would leave it pointing at the dev machine"
+        Assert ($h.$k.Replace($devPath, "D:\elsewhere") -notmatch [regex]::Escape($devPath)) "copilot-hooks.json $e '$k' placeholder is not cleanly replaceable"
+      }
+    }
+  }
+  # USER-level only: Copilot's DOCUMENTED repo-level .github/hooks/ location silently loads nothing on
+  # 1.0.89, so following the docs produces a hook that never fires and an installer that says it worked.
+  Assert ($inst -match '\.copilot\\hooks') "install.ps1 does not write to the user-level .copilot\hooks dir"
+}
+
+Test-Case "dad-guard-copilot converts a BLOCK into Copilot's JSON+exit-0 contract" {
+  # Measured on Copilot CLI 1.0.89 (2026-09-29), for its Stop hook:
+  #   exit 2 alone                  -> IGNORED, turn ends
+  #   {"decision":"block"} + exit 0 -> BLOCKS (retry arrives with stop_hook_active=true)
+  #   {"decision":"block"} + exit 2 -> IGNORED (nonzero exit = "hook errored", stdout discarded)
+  # dad-guard.ps1's Block() emits JSON *and* exit 2 - the third row - so pointing Copilot at it looks
+  # correct and silently does nothing. Run the real adapter over a STUB guard so this asserts the
+  # conversion itself, not dad-guard's project-detection.
+  $sb = New-Sandbox
+  try {
+    Copy-Item (Join-Path $kit "dad-guard-copilot.ps1") (Join-Path $sb "dad-guard-copilot.ps1") -Force
+    $adapter = Join-Path $sb "dad-guard-copilot.ps1"
+    $payload = '{"session_id":"t","cwd":"C:\\x","stop_hook_active":false}'
+
+    # 1) stub BLOCKS in dad-guard.ps1's real shape (JSON on stdout + stderr + exit 2)
+    $block = '$null = [Console]::In.ReadToEnd()' + "`r`n" +
+             '[Console]::Out.Write(''{"decision":"block","reason":"stub blocked"}'')' + "`r`n" +
+             '[Console]::Error.Write("stub blocked")' + "`r`n" + 'exit 2'
+    Set-Content (Join-Path $sb "dad-guard.ps1") $block -Encoding ASCII
+    $out = $payload | & powershell -NoProfile -ExecutionPolicy Bypass -File $adapter 2>$null
+    $code = $LASTEXITCODE
+    $text = ($out | Out-String).Trim()
+    Assert ($code -eq 0) "adapter exited $code on a block; Copilot discards stdout on a nonzero exit, so the block would be IGNORED"
+    Assert ($text -match '"decision"\s*:\s*"block"') "adapter did not re-emit a block decision (got: '$text')"
+    Assert ($text -match 'stub blocked') "adapter dropped dad-guard's reason text"
+
+    # 2) stub ALLOWS -> adapter must allow silently (no stray JSON that Copilot might read as a block)
+    Set-Content (Join-Path $sb "dad-guard.ps1") ('$null = [Console]::In.ReadToEnd()' + "`r`n" + 'exit 0') -Encoding ASCII
+    $out2 = $payload | & powershell -NoProfile -ExecutionPolicy Bypass -File $adapter 2>$null
+    $code2 = $LASTEXITCODE
+    Assert ($code2 -eq 0) "adapter exited $code2 on an allow"
+    Assert ((($out2 | Out-String).Trim()) -notmatch '"decision"') "adapter emitted a decision on an ALLOW - it would block every stop"
+
+    # 3) stub blocks but prints NO json (stderr only). The verdict must survive, or exit 2's message
+    #    would vanish entirely under Copilot.
+    Set-Content (Join-Path $sb "dad-guard.ps1") ('$null = [Console]::In.ReadToEnd()' + "`r`n" + '[Console]::Error.Write("no json here")' + "`r`n" + 'exit 2') -Encoding ASCII
+    $out3 = $payload | & powershell -NoProfile -ExecutionPolicy Bypass -File $adapter 2>$null
+    Assert ($LASTEXITCODE -eq 0) "adapter exited nonzero on a json-less block"
+    Assert ((($out3 | Out-String).Trim()) -match '"decision"\s*:\s*"block"') "adapter lost a block that produced no JSON"
+
+    # 4) fail OPEN when dad-guard.ps1 is absent, matching dad-guard's own policy
+    Remove-Item (Join-Path $sb "dad-guard.ps1") -Force
+    $out4 = $payload | & powershell -NoProfile -ExecutionPolicy Bypass -File $adapter 2>$null
+    Assert ($LASTEXITCODE -eq 0) "adapter did not fail open when dad-guard.ps1 was missing"
+    Assert ((($out4 | Out-String).Trim()) -notmatch '"decision"') "adapter blocked when dad-guard.ps1 was missing - it must fail open"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "uninstall removes the Copilot CLI hook file (sandboxed)" {
+  # A dad.json left behind fires on every Copilot tool call and every stop, and fails once the kit
+  # folder is gone - the same failure the Claude Code hook teardown above exists to prevent.
+  $sb = New-Sandbox
+  try {
+    $fakeHooks = Join-Path $sb "copilot-hooks-dir"
+    New-Item -ItemType Directory -Force $fakeHooks | Out-Null
+    Copy-Item (Join-Path $kit "copilot-hooks.json") (Join-Path $fakeHooks "dad.json") -Force
+    $fakeClaude = Join-Path $sb ".claude"
+    New-Item -ItemType Directory -Force $fakeClaude | Out-Null
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "uninstall.ps1") -ClaudeDir $fakeClaude -CopilotDir $fakeHooks 2>&1 | Out-Null
+    Assert (-not (Test-Path (Join-Path $fakeHooks "dad.json"))) "uninstall left the Copilot hook file behind - it would fail on every tool call once the folder is gone"
+    # A same-named file that is NOT ours must survive.
+    Set-Content (Join-Path $fakeHooks "dad.json") '{"version":1,"hooks":{}}' -Encoding ASCII
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "uninstall.ps1") -ClaudeDir $fakeClaude -CopilotDir $fakeHooks 2>&1 | Out-Null
+    Assert (Test-Path (Join-Path $fakeHooks "dad.json")) "uninstall deleted a dad.json that contained no DAD guard reference"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)" {
+  # Contract C2f names install.ps1's $CopilotMeasuredVersion the ONE source of truth for the version C2 was
+  # measured against, and requires this assertion so the doc and the code cannot disagree silently. That is
+  # the contract applying its own rule to itself: every OTHER silent-drift failure here (hook location,
+  # event casing, block semantics) is invisible at runtime, and so is this one - a stale number would keep
+  # claiming a contract had been verified against a harness nobody ever tested.
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  $m = [regex]::Match($inst, '\$CopilotMeasuredVersion\s*=\s*"([^"]+)"')
+  Assert $m.Success "install.ps1 has no `$CopilotMeasuredVersion constant (contract C2f requires one)"
+  $constant = $m.Groups[1].Value
+
+  $design = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
+  $d = [regex]::Match($design, 'MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+GitHub\s+Copilot\s+CLI\s+([0-9][0-9.]*)')
+  Assert $d.Success "DESIGN.md contract C2 carries no 'MEASURED <date> against GitHub Copilot CLI <version>' stamp"
+  $stamped = $d.Groups[1].Value
+
+  Assert ($constant -eq $stamped) "install.ps1 says Copilot $constant but DESIGN.md C2 is stamped $stamped - re-measure C2a-C2e, then update BOTH"
+
+  # dad-doctor must READ the constant, not carry its own copy: two hard-coded numbers is the drift C2f bans.
+  $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
+  Assert ($doc -match 'CopilotMeasuredVersion') "dad-doctor.ps1 does not read install.ps1's `$CopilotMeasuredVersion"
+  Assert ($doc -notmatch '"' + [regex]::Escape($constant) + '"') "dad-doctor.ps1 hard-codes the Copilot version instead of reading it from install.ps1"
+
+  # C2f: LOUD at setup, fail-open at runtime. The guards must NOT gain a version self-check.
+  foreach ($g in @("dad-guard-copilot.ps1","dad-loopguard.ps1")) {
+    $gs = Get-Content (Join-Path $kit $g) -Raw
+    Assert ($gs -notmatch '\$CopilotMeasuredVersion') "$g self-checks the harness version at runtime - C2f keeps drift detection at SETUP only, so a guard never blocks on its own uncertainty"
+  }
+}
+
+Test-Case "dad-doctor's Copilot harness section renders without erroring" {
+  # The R37 section was previously covered only by the parse check and C2f's static assertions - nothing
+  # ever RAN it. Guarded so it never becomes environment-dependent (the trap the corpus shell-door case
+  # fell into): the section is designed to stay silent unless this machine actually uses the harness, so
+  # only assert it renders when the harness is present. Read-only - dad-doctor inspects, it never mutates.
+  $hookFile = Join-Path $env:USERPROFILE ".copilot\hooks\dad.json"
+  $haveCopilot = [bool](Get-Command copilot -ErrorAction SilentlyContinue)
+  if (-not ((Test-Path $hookFile) -or $haveCopilot)) { return }   # harness not on this box - nothing to assert
+
+  $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") 2>&1 | Out-String)
+  Assert ($out -match 'copilot cli harness') "dad-doctor did not render the R37 section on a machine that has the harness"
+  Assert ($out -notmatch 'Exception|CommandNotFoundException|cannot be found on this object') "dad-doctor's R37 section threw:`n$out"
+  # It must report on the hooks either way, and must never claim a version match without a version.
+  Assert ($out -match 'copilot hooks') "dad-doctor's R37 section did not report hook state"
+  if ($out -match 'copilot version\s+matches the measured contract \(([0-9][0-9.]*)\)') {
+    $claimed = $Matches[1]
+    $instSrc = Get-Content (Join-Path $kit "install.ps1") -Raw
+    $constant = [regex]::Match($instSrc, '\$CopilotMeasuredVersion\s*=\s*"([^"]+)"').Groups[1].Value
+    Assert ($claimed -eq $constant) "dad-doctor reported a match against '$claimed' but install.ps1's constant is '$constant'"
+  }
+}
+
+Test-Case "C2f's drift check compares versions by EQUALITY, not substring (graded S12 defect)" {
+  # Found by grade-agent on S12. Both consumers originally tested the raw `copilot --version` LINE with
+  # -match against the measured number. That is silently wrong: "1.0.890" and "11.0.89" both CONTAIN
+  # "1.0.89", so an UNMEASURED harness reported "[ok] matches the measured contract" - C2f's only drift
+  # mechanism defeating itself, which is precisely the silent-failure class C2 exists to prevent.
+  #
+  # Prove the defect is REAL first, so this case cannot pass vacuously (e.g. on a typo'd regex): the old
+  # comparison must actually mis-match these values, and the new one must not.
+  $measured = "1.0.89"
+  foreach ($adversarial in @("1.0.890", "11.0.89")) {
+    Assert ($adversarial -match [regex]::Escape($measured)) "test is vacuous: '$adversarial' no longer trips the substring form"
+    $extracted = [regex]::Match($adversarial, '\d+(\.\d+)+').Value
+    Assert ($extracted -ne $measured) "extract-then-compare failed to distinguish '$adversarial' from '$measured'"
+  }
+
+  # Now assert neither consumer still carries the substring form, and that both extract + compare.
+  foreach ($f in @("install.ps1","dad-doctor.ps1")) {
+    $src = Get-Content (Join-Path $kit $f) -Raw
+    Assert ($src -notmatch '-notmatch\s+\[regex\]::Escape\(\$(CopilotMeasuredVersion|measured)\)') `
+      "$f still substring-tests the Copilot version - '1.0.890' would report as a match on an unmeasured harness"
+    Assert ($src -match "\[regex\]::Match\(\`$c\w*,\s*'\\d\+\(\\\.\\d\+\)\+'\)") "$f does not EXTRACT a numeric version before comparing"
+    Assert ($src -match '-ne\s+\$(CopilotMeasuredVersion|measured)') "$f does not compare the extracted version for equality"
+  }
+}
+
 Test-Case "the guard counts WEB source as code (.cshtml, appsettings.json)" {
   # The extension list was C#/Python/JS-shaped and omitted .cshtml, .razor, .html, .css and .json. So for
   # the project types this kit is most likely to be pointed at - an ASP.NET Razor Pages site, or anything
@@ -1574,14 +1775,37 @@ Test-Case "the corpus has a SHELL door, and it degrades instead of dying" {
     Assert (Test-Path $df) "docs-find.ps1 is missing"
     Assert (Test-Path (Join-Path $kit "docs-find.cmd")) "docs-find has no .cmd wrapper"
 
-    # This box has no Ollama, so semantic search cannot run - the point is that it still ANSWERS.
-    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "tile sizes" 2>&1 | Out-String)
-    Assert ($out -match 'tile sizes|512') "it returned nothing when semantic search was unavailable:`n$out"
-    Assert ($out -match 'literal scan|semantic search unavailable') "it did not say it had fallen back"
+    # FORCE the degrade instead of assuming the box lacks Ollama. This case used to read "this box has no
+    # Ollama, so semantic search cannot run" - true on CI, false on any dev machine that actually runs the
+    # models this kit is built around. There it PASSED VACUOUSLY in reverse: semantic search succeeded, no
+    # fallback was printed, and the assertion that it announced a fallback failed - reporting a defect in
+    # docs-find.ps1 that did not exist, while never once exercising the degrade path on CI's behalf either.
+    # Pointing OLLAMA_HOST at a dead port makes the embedding call fail on EVERY box (Rag.cs:92 reads it),
+    # so the fallback branch is tested deterministically rather than environmentally.
+    $prevHost = $env:OLLAMA_HOST
+    try {
+      $env:OLLAMA_HOST = "http://127.0.0.1:1"
+      $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "tile sizes" 2>&1 | Out-String)
+      Assert ($out -match 'tile sizes|512') "it returned nothing when semantic search was unavailable:`n$out"
+      Assert ($out -match 'literal scan|semantic search unavailable') "it did not say it had fallen back"
 
-    # a query with no match must say so rather than returning noise
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "zzzznotpresentzzzz" 2>&1 | Out-Null
-    Assert ($LASTEXITCODE -eq 1) "a no-match query did not exit non-zero"
+      # a query with no match must say so rather than returning noise
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "zzzznotpresentzzzz" 2>&1 | Out-Null
+      Assert ($LASTEXITCODE -eq 1) "a no-match query did not exit non-zero"
+    } finally {
+      if ($null -eq $prevHost) { Remove-Item Env:\OLLAMA_HOST -ErrorAction SilentlyContinue }
+      else { $env:OLLAMA_HOST = $prevHost }
+    }
+
+    # And with the real backend reachable it must still answer - the normal path, only when it is testable.
+    if (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe")) {
+      $live = ""
+      try { $live = (Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -TimeoutSec 3 -UseBasicParsing 2>$null).Content } catch { }
+      if ($live) {
+        $ok = (& powershell -NoProfile -ExecutionPolicy Bypass -File $df -ProjectDir $p "tile sizes" 2>&1 | Out-String)
+        Assert ($ok -match 'tile sizes|512') "semantic search was reachable but the shell door still returned nothing:`n$ok"
+      }
+    }
 
     # and the agents that need it must point at it
     foreach ($a in @("global\agents\dev-agent.md","global\agents\qa-agent.md","global\commands\build.md")) {

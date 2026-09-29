@@ -1,0 +1,21 @@
+{
+    "version":  1,
+    "hooks":  {
+                  "Stop":  [
+                               {
+                                   "type":  "command",
+                                   "bash":  "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-guard-copilot.ps1\"",
+                                   "powershell":  "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-guard-copilot.ps1\"",
+                                   "timeoutSec":  20
+                               }
+                           ],
+                  "PreToolUse":  [
+                                     {
+                                         "type":  "command",
+                                         "bash":  "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-loopguard.ps1\"",
+                                         "powershell":  "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-loopguard.ps1\"",
+                                         "timeoutSec":  10
+                                     }
+                                 ]
+              }
+}
