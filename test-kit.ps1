@@ -5070,6 +5070,49 @@ Test-Case "dad-gates-log: two concurrent writers lose no lines" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "T9.4: all four gate ids in one sandbox -> 4 lines/7 keys; -Query -Gate/-Decision/-Count; 4096-byte invariant with a huge -Reason" {
+  $sb = New-GatesSandbox
+  try {
+    $ids = @("loop-guard", "ratchet", "dad-guard-stop", "close-unit-refusal")
+    foreach ($g in $ids) {
+      $dec = if ($g -eq "ratchet") { "allow" } else { "block" }
+      $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", $g, "-Decision", $dec, "-Tool", "Bash", "-Reason", "`"r-$g`"", "-Session", "s1")
+      Assert ($r.Exit -eq 0) "append $g exit $($r.Exit)"
+    }
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    $lines = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })
+    Assert ($lines.Count -eq 4) "expected 4 lines, got $($lines.Count)"
+    $want = @("v", "ts", "gate", "decision", "tool", "reason", "session")
+    for ($i = 0; $i -lt 4; $i++) {
+      $o = $lines[$i] | ConvertFrom-Json
+      $names = @($o.PSObject.Properties.Name)
+      foreach ($k in $want) { Assert ($names -contains $k) "line $i missing key $k" }
+      Assert ($o.v -eq 1) "line $i v != 1"
+      Assert ($o.ts -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') "line $i ts format: $($o.ts)"
+      Assert ($o.gate -eq $ids[$i]) "line $i gate $($o.gate)"
+    }
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Gate", "loop-guard")
+    $ql = @($q.Out -split "`r?`n" | Where-Object { $_ })
+    Assert ($ql.Count -eq 1 -and $ql[0] -eq $lines[0]) "-Query -Gate loop-guard did not return only the loop-guard line: [$($q.Out)]"
+    foreach ($l in $ql) { Assert ($l.StartsWith("{")) "prose in query stdout: $l" }
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Decision", "block")
+    $ql = @($q.Out -split "`r?`n" | Where-Object { $_ })
+    Assert ($ql.Count -eq 3) "-Query -Decision block returned $($ql.Count) lines, expected 3"
+    foreach ($l in $ql) { Assert (($l | ConvertFrom-Json).decision -eq "block") "non-block line in -Decision block: $l" }
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Count")
+    Assert ($q.Exit -eq 0) "count exit $($q.Exit)"
+    Assert ($q.Out.Trim() -eq "4") "-Query -Count not bare 4: [$($q.Out)]"
+    # C3c invariant: huge reason -> line still under 4096 bytes (300-char truncation)
+    $huge = 'x' * 20000
+    $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", "`"$huge`"", "-Session", "s1")
+    $lines = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })
+    Assert ($lines.Count -eq 5) "huge-reason append: expected 5 lines, got $($lines.Count)"
+    foreach ($l in $lines) { Assert ([System.Text.Encoding]::UTF8.GetByteCount($l) -lt 4096) "a line is >= 4096 bytes" }
+    $o = $lines[4] | ConvertFrom-Json
+    Assert ($o.reason.Length -le 300) "huge reason not truncated to 300: $($o.reason.Length)"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-gates-log: missing -ProjectDir exits 0 silently and creates nothing" {
   $ghost = Join-Path $kit ("_tmp\gl_missing_" + [guid]::NewGuid().ToString("N").Substring(0,8))
   $r = Invoke-GatesLog @("-ProjectDir", "`"$ghost`"", "-Gate", "loop-guard", "-Decision", "block", "-Reason", "x")

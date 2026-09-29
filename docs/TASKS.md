@@ -943,7 +943,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   command lines, the log is COMMITTED (C3a), and an unredacted credential in it would make
   `close-unit.ps1`'s own `git commit` fail the pre-commit secret scan.
 
-### [ ] T9.4 - test-kit.ps1 Test-Case: the gate log actually gets written and is queryable   (Story S9)
+### [x] T9.4 - test-kit.ps1 Test-Case: the gate log actually gets written and is queryable   (Story S9)
 - **Goal:** The full validation gate mechanically proves the structured log from T9.1/T9.2/T9.3 actually
   gets written by real gate events (not just by calling the helper directly) and is queryable by gate id,
   covering S9's AC1 and AC2 end to end.
