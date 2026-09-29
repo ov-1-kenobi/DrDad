@@ -10,7 +10,8 @@ This folder IS the **DrDad** kit (local, offline Claude Code). Editing it here m
 - Markdown - templates, global commands/agents, and docs.
 
 ## Design doc
-- Design doc: `docs/DESIGN.md` (Status: LOCKED). It defines what the kit must do.
+- Design doc: `docs/DESIGN.md` - its own `Status:` header is authoritative (LOCKED except while a
+  `/design` pass has it at DRAFT). It defines what the kit must do.
 - Indexed in `local-tools`; use `search_datasheets` / the `doc-researcher` subagent to pull from it.
 
 ## Modes

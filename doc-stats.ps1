@@ -742,7 +742,11 @@ if ($UpdateStatus) {
     $out.Add("") | Out-Null
     for ($j = 1; $j -lt $lines.Count; $j++) { $out.Add($lines[$j]) | Out-Null }
   }
-  [System.IO.File]::WriteAllText($statusPath, (($out -join "`r`n").TrimEnd() + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+  # LF, not CRLF: .gitattributes mandates LF for *.md (only *.cmd/*.bat keep CRLF), and this write used
+  # to hard-code "`r`n" for both the join and the terminator. Every `-UpdateStatus` - which /audit
+  # MANDATES - therefore rewrote docs\STATUS.md as CRLF and broke the kit's own line-ending gate
+  # ("STATUS.md is CRLF but should be LF"). Still WriteAllText + UTF8Encoding($false) (no BOM).
+  [System.IO.File]::WriteAllText($statusPath, (($out -join "`n").TrimEnd() + "`n"), (New-Object System.Text.UTF8Encoding($false)))
   Write-Host "docs\STATUS.md Snapshot updated: $($result.storiesDone)/$($result.storiesTotal) stories, $($result.tasksDone)/$($result.tasksTotal) tasks, next $($result.nextTask)" -ForegroundColor Green
   exit 0
 }

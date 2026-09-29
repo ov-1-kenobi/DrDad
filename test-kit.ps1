@@ -228,37 +228,63 @@ Test-Case "scaffold never leaves a repo with NO commits" {
   } finally { Remove-Sandbox $sb }
 }
 
-Test-Case "every kit file the docs tell you to RUN actually exists" {
-  # /research's last step said `-File "...\DAD-kit\reindex.ps1" docs`. There is no reindex.ps1 - only
-  # reindex.cmd, which takes an absolute path. So the final step of the kit's ONLY online mode failed with
-  # "no such file", and the model, having just been told the gate passed, reported the corpus was
-  # searchable. Every later offline command then queried an index missing the sources just captured.
-  # The existing "every executable a command tells the model to run is permitted" test checks that
-  # `powershell` is allow-listed - it never checked that the -File TARGET resolves. This does.
+# TASKS.md legitimately NAMES a not-yet-built deliverable, inside an UNCHECKED task's own "Do:" text
+# AND in the Build-order section's prose describing that same task - it is describing what the task
+# will create, not telling the model to run it now (taskmap shards a story's whole task set up front,
+# per R32/S8-S10; the file a task creates does not exist until that task is actually built). Collect
+# every filename named inside an UNCHECKED "### [ ]" task body; the caller treats those as
+# forward-declared, so planned-but-not-yet-built work does not trip a check meant to catch STALE prose
+# about files that no longer, or never, existed. A CHECKED "[x]" task's files are still required to exist.
+function Get-PendingScriptNames([string]$TasksPath) {
+  $set = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  if (-not $TasksPath -or -not (Test-Path $TasksPath)) { return ,$set }
+  $t = Get-Content $TasksPath -Raw
+  foreach ($body in [regex]::Matches($t, '(?ms)^### \[ \].*?(?=^### |\z)')) {
+    foreach ($pm in [regex]::Matches($body.Value, '(?i)([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
+      [void]$set.Add($pm.Groups[1].Value)
+    }
+  }
+  # , so PowerShell hands back the HashSet itself instead of unrolling it into loose strings (an empty
+  # set would otherwise come back as $null and silently exempt nothing - or everything, on a typo).
+  return ,$set
+}
+
+# Lifted out of the Test-Case below so the detection can be run against a FIXTURE directory as well as
+# against the live kit: an exemption nobody can test in both directions is an exemption that quietly
+# turns the gate off. $ScriptRoot is where a named script would have to live (the kit is flat).
+function Find-MissingRunnableScripts([object[]]$Docs, [string]$ScriptRoot) {
   $missing = @()
   $checked = 0
-  $docs = @(Get-KitFiles @("*.md")) + @(Get-ChildItem (Join-Path $kit "global") -Recurse -Filter *.md -File)
-  foreach ($f in ($docs | Sort-Object FullName -Unique)) {
+  # one pending-set per DIRECTORY, computed once: the exemption below is a property of the folder's task
+  # map, not of the individual doc, and the scan now consults it for every .md in the tree.
+  $pendingByDir = @{}
+  foreach ($f in ($Docs | Sort-Object FullName -Unique)) {
     # CHANGELOG is HISTORY: it must be free to name the broken thing it is recording the fix for.
     if ($f.Name -eq "CHANGELOG.md") { continue }
     $text = Get-Content $f.FullName -Raw
-    # TASKS.md legitimately NAMES a not-yet-built deliverable, inside an UNCHECKED task's own "Do:" text
-    # AND in the Build-order section's prose describing that same task - it is describing what the task
-    # will create, not telling the model to run it now (taskmap shards a story's whole task set up front,
-    # per R32/S8-S10; the file a task creates does not exist until that task is actually built). Collect
-    # every filename named inside an UNCHECKED "### [ ]" task body and treat it as forward-declared
-    # ANYWHERE in this one file (Build-order commentary included), so planned-but-not-yet-built work does
-    # not trip a check meant to catch STALE prose about files that no longer, or never, existed. A CHECKED
-    # "[x]" task's files (and every other doc) are still required to exist, unchanged.
-    $pendingNames = $null
-    if ($f.Name -eq "TASKS.md") {
-      $pendingNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-      foreach ($body in [regex]::Matches($text, '(?ms)^### \[ \].*?(?=^### |\z)')) {
-        foreach ($pm in [regex]::Matches($body.Value, '(?i)([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
-          [void]$pendingNames.Add($pm.Groups[1].Value)
-        }
-      }
+    # THE RULE: any .md sitting in the same directory as a TASKS.md may name that map's forward-declared
+    # deliverables (see Get-PendingScriptNames). Docs beside a task map are written against the PLAN, so
+    # they legitimately name files the plan has not built yet.
+    # This started as an exemption for TASKS.md plus STATUS.md by name: STATUS.md:24 read "NEXT: T9.1 -
+    # ... ship `dad-gates-log.ps1`" and reddened this suite over a file T9.1 has not been built to create
+    # yet, and its "NEXT:" line is DERIVED from the next unchecked task, so rewording it would have broken
+    # again at T10.1 (dad-run-summary.ps1) and at every task after it that ships a script. Enumerating the
+    # two filenames was still too narrow: a /design pass then pinned contracts C3 and C4, which SPECIFY
+    # dad-gates-log.ps1 and dad-run-summary.ps1 before either exists, and DESIGN.md went red for five
+    # lines at once. Pinning a contract ahead of the build is the whole point of the contracts step, so a
+    # contract necessarily names an unbuilt script - DESIGN.md was simply the third file to hit a rule that
+    # was never about STATUS.md in particular.
+    # The exemption is scoped BY DIRECTORY - a doc is excused only by the TASKS.md sitting beside it, never
+    # by the kit's own docs\TASKS.md - because the kit carries several TASKS/STATUS pairs (templates,
+    # examples) and one global set would let any of them excuse a stale name in any other. A doc with no
+    # sibling TASKS.md gets NO exemption at all, and even with one the excuse covers only names found in an
+    # UNCHECKED "### [ ]" task body: a CHECKED task's files, and any name the map never mentions, must
+    # still exist.
+    $dir = $f.DirectoryName
+    if (-not $pendingByDir.ContainsKey($dir)) {
+      $pendingByDir[$dir] = Get-PendingScriptNames (Join-Path $dir "TASKS.md")
     }
+    $pendingNames = $pendingByDir[$dir]
     # any reference to a kit script, however it is written: via the dev-path placeholder, or bare
     foreach ($m in [regex]::Matches($text, '(?i)(?:DAD-kit[\\/])?([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
       $name = $m.Groups[1].Value
@@ -268,14 +294,85 @@ Test-Case "every kit file the docs tell you to RUN actually exists" {
       if (-not $isKitish) { continue }
       if ($pendingNames -and $pendingNames.Contains($name)) { continue }
       $checked++
-      if (-not (Test-Path (Join-Path $kit $name))) {
+      if (-not (Test-Path (Join-Path $ScriptRoot $name))) {
         $line = ($text.Substring(0, $m.Index) -split "`n").Count
         $missing += "$($f.Name):$line -> $name"
       }
     }
   }
-  Assert ($checked -gt 20) "this test found only $checked kit-script references - the pattern stopped matching, so it is proving nothing"
-  Assert ($missing.Count -eq 0) "the docs tell the model to run files that do not exist: $(($missing | Sort-Object -Unique) -join '; ')"
+  return [pscustomobject]@{ Checked = $checked; Missing = $missing }
+}
+
+Test-Case "every kit file the docs tell you to RUN actually exists" {
+  # /research's last step said `-File "...\DAD-kit\reindex.ps1" docs`. There is no reindex.ps1 - only
+  # reindex.cmd, which takes an absolute path. So the final step of the kit's ONLY online mode failed with
+  # "no such file", and the model, having just been told the gate passed, reported the corpus was
+  # searchable. Every later offline command then queried an index missing the sources just captured.
+  # The existing "every executable a command tells the model to run is permitted" test checks that
+  # `powershell` is allow-listed - it never checked that the -File TARGET resolves. This does.
+  $docs = @(Get-KitFiles @("*.md")) + @(Get-ChildItem (Join-Path $kit "global") -Recurse -Filter *.md -File)
+  $scan = Find-MissingRunnableScripts $docs $kit
+  Assert ($scan.Checked -gt 20) "this test found only $($scan.Checked) kit-script references - the pattern stopped matching, so it is proving nothing"
+  Assert ($scan.Missing.Count -eq 0) "the docs tell the model to run files that do not exist: $(($scan.Missing | Sort-Object -Unique) -join '; ')"
+}
+
+Test-Case "the forward-declaration exemption stays narrow: sibling TASKS.md only, and every doc beside it is still checked" {
+  # The risk in exempting a doc is not that it stays red - it is that the exemption goes WIDE and the gate
+  # silently stops checking that doc at all, which no green suite would ever reveal. So assert both
+  # directions on a fixture: a name that IS an unchecked task's deliverable passes, and a kit-ish name that
+  # is NOT (and does not exist) is still reported. The lonely dir proves the scoping is per-DIRECTORY: one
+  # folder's task map must never excuse another folder's docs. Both directions are asserted for STATUS.md
+  # AND for a doc that is neither TASKS.md nor STATUS.md (a fixture DESIGN.md), because the rule is "any .md
+  # beside a task map" and a by-name enumeration would pass the STATUS.md halves while failing these.
+  $sb = New-Sandbox
+  try {
+    $pair   = Join-Path $sb "pair";   New-Item -ItemType Directory -Force $pair   | Out-Null
+    $bogus  = Join-Path $sb "bogus";  New-Item -ItemType Directory -Force $bogus  | Out-Null
+    $lonely = Join-Path $sb "lonely"; New-Item -ItemType Directory -Force $lonely | Out-Null
+
+    # (a) STATUS.md's NEXT line names the deliverable of an UNCHECKED task in its OWN sibling TASKS.md
+    @("# Task map", "", "### [ ] T9.1 - pin the gate log   (Story S9)", "- **Do:** ship ``dad-gates-log.ps1`` (append + query)") -join "`n" |
+      Set-Content (Join-Path $pair "TASKS.md") -Encoding UTF8
+    @("# Status", "", "- NEXT: T9.1 - ship ``dad-gates-log.ps1`` (append + query), Story S9.") -join "`n" |
+      Set-Content (Join-Path $pair "STATUS.md") -Encoding UTF8
+    # (a2) a THIRD doc name, exercising the general rule rather than the two enumerated ones: a contract
+    #      pinned in DESIGN.md before the build necessarily names the script the build will create.
+    @("# Design", "", "## C3: the gate log", "- Appended by ``dad-gates-log.ps1`` (T9.1).") -join "`n" |
+      Set-Content (Join-Path $pair "DESIGN.md") -Encoding UTF8
+
+    # (b) same shape, plus a name no task declares - and a CHECKED task's deliverable, which TASKS.md
+    #     itself must still be held to (proving the TASKS.md behaviour did not widen either).
+    @("# Task map", "", "### [x] T8.1 - done   (Story S8)", "- **Do:** ship ``dad-checked-only.ps1``",
+      "", "### [ ] T10.1 - later   (Story S10)", "- **Do:** ship ``dad-run-summary.ps1``") -join "`n" |
+      Set-Content (Join-Path $bogus "TASKS.md") -Encoding UTF8
+    @("# Status", "", "- NEXT: T10.1 - ship ``dad-run-summary.ps1``.", "- Also run ``dad-nonexistent.ps1`` first.") -join "`n" |
+      Set-Content (Join-Path $bogus "STATUS.md") -Encoding UTF8
+    # (b2) the same both-directions pair for the third doc name: the unchecked deliverable is excused, a
+    #      kit-ish name no task declares is NOT - a design doc does not get a blanket pass just for being
+    #      one, or a contract could keep citing a script that was renamed away.
+    @("# Design", "", "## C4: the run summary", "- Rendered by ``dad-run-summary.ps1`` (T10.1).",
+      "- Older prose still says ``dad-contract-only.ps1``.") -join "`n" |
+      Set-Content (Join-Path $bogus "DESIGN.md") -Encoding UTF8
+
+    # (c) no sibling TASKS.md -> no exemption, even though the pair dir's task map declares that very name
+    @("# Status", "", "- NEXT: T9.1 - ship ``dad-gates-log.ps1``.") -join "`n" |
+      Set-Content (Join-Path $lonely "STATUS.md") -Encoding UTF8
+
+    $docs = @(Get-ChildItem $sb -Recurse -File -Filter *.md)
+    $scan = Find-MissingRunnableScripts $docs $sb
+    $found = @($scan.Missing | Sort-Object -Unique)
+    $joined = ($found -join '; ')
+    # the specific assertions come FIRST: the Checked canary also trips on a too-wide exemption, and when
+    # it does it says only "proving nothing", which is the least useful sentence available at that moment.
+    Assert ($joined -notmatch 'dad-run-summary\.ps1') "an unchecked task's OWN deliverable was reported for a doc beside the map: $joined"
+    Assert ($joined -notmatch 'DESIGN\.md:\d+ -> dad-gates-log\.ps1') "the exemption is still enumerated by filename: a DESIGN.md beside the map was not excused its own task's deliverable: $joined"
+    Assert ($joined -match 'DESIGN\.md:\d+ -> dad-contract-only\.ps1') "the exemption went WIDE: a DESIGN.md beside a task map is no longer checked at all: $joined"
+    Assert ($joined -match 'STATUS\.md:\d+ -> dad-nonexistent\.ps1') "the exemption went WIDE: STATUS.md is no longer checked at all: $joined"
+    Assert ($joined -match 'STATUS\.md:\d+ -> dad-gates-log\.ps1') "a STATUS.md with no sibling TASKS.md was exempted by another folder's task map: $joined"
+    Assert ($joined -match 'TASKS\.md:\d+ -> dad-checked-only\.ps1') "a CHECKED task's deliverable stopped being required to exist: $joined"
+    Assert ($found.Count -eq 4) "expected exactly 4 findings from the fixture, got $($found.Count): $joined"
+    Assert ($scan.Checked -ge 3) "the scanner matched almost nothing on the fixture ($($scan.Checked)) - it is proving nothing"
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "prose never names a model alias or roster count that is not real" {
@@ -4118,6 +4215,57 @@ Test-Case "doc-stats -UpdateStatus writes the Snapshot; the model never counts" 
       "/audit does not generate the counts before spawning the librarian"
     Assert ((Get-Content (Join-Path $kit "global\agents\librarian-agent.md") -Raw) -match '-UpdateStatus') `
       "librarian-agent still computes its own counts"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "doc-stats -UpdateStatus writes LF, not CRLF (it used to break the kit's own gate)" {
+  # doc-stats.ps1's single write path hard-coded "`r`n" for BOTH the join and the trailing terminator, so
+  # every -UpdateStatus rewrote docs\STATUS.md as CRLF - and .gitattributes mandates LF for *.md (only
+  # *.cmd/*.bat keep CRLF). Because /audit MANDATES -UpdateStatus, running an audit broke this suite every
+  # single time: "== 166 passed, 1 failed ==  STATUS.md is CRLF but should be LF".
+  # The existing "line endings are consistent per file" case only caught it by LUCK: it scans the WORKING
+  # TREE, so it fires only when STATUS.md happens to be dirty at scan time - on a committed-clean tree the
+  # bug is invisible. This case is BEHAVIOURAL instead: run the writer on a fixture and assert the bytes.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: DONE -->`n`n### Story S2: Two   <!-- Status: TODO -->" |
+      Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Task map`n`n## Tasks`n`n### [x] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T2.1 - b   (Story S2)`n- **Goal:** y" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+
+    # the fixture STATUS.md is written LF-ONLY and on purpose carries a STALE Snapshot plus a prose
+    # section after it, so we can tell a real replace from a write that quietly no-opped.
+    $statusPath = Join-Path $p "docs\STATUS.md"
+    $seed = @(
+      "# Status",
+      "",
+      "## Snapshot",
+      "- As of: 1999-01-01  (counts generated by doc-stats.ps1 - do not hand-edit this section)",
+      "- DESIGN: UNKNOWN   Stories: 9/9   Tasks: 9/9",
+      "- NEXT: T9.9",
+      "",
+      "## Issues & blockers",
+      "- librarian-owned prose that must survive",
+      ""
+    ) -join "`n"
+    [System.IO.File]::WriteAllText($statusPath, $seed, (New-Object System.Text.UTF8Encoding($false)))
+    Assert (([regex]::Matches([System.IO.File]::ReadAllText($statusPath), "`r`n")).Count -eq 0) `
+      "the fixture itself was not written LF-only - this case would prove nothing"
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -UpdateStatus | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-UpdateStatus exited $LASTEXITCODE"
+
+    $raw = [System.IO.File]::ReadAllText($statusPath)
+    $crlf = ([regex]::Matches($raw, "`r`n")).Count
+    Assert ($crlf -eq 0) "-UpdateStatus wrote $crlf CRLF into a *.md file; .gitattributes mandates LF"
+    # a write that no-opped would pass the line-ending assertion trivially, so prove the block CHANGED
+    Assert ($raw -notmatch '1999-01-01') "the stale Snapshot survived - -UpdateStatus did not replace the block"
+    Assert ($raw -notmatch 'Stories: 9/9') "the stale Snapshot counts survived - nothing was regenerated"
+    Assert ($raw -match 'Stories: 1/2') "the regenerated Snapshot has the wrong story count:`n$raw"
+    Assert ($raw -match 'librarian-owned prose that must survive') "-UpdateStatus destroyed the prose section"
+    Assert ($raw.EndsWith("`n") -and -not $raw.EndsWith("`n`n")) "-UpdateStatus did not end the file with exactly one LF"
   } finally { Remove-Sandbox $sb }
 }
 

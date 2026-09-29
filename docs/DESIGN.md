@@ -1,7 +1,7 @@
 # Technical Design Document - DrDad (Design Research Document, Agentic Development)
 
 Status: LOCKED
-Security review: NOT-REQUIRED (local-only dev CLI; no user data stored, no exposed service; the kit stores no credentials - a harness's login is its own, and R37's supported path is BYOK to local Ollama, so no route through this kit requires an account)
+Security review: NOT-REQUIRED (local-only dev CLI; no user data stored, no exposed service; the kit stores and reads no credentials - a harness's login is its own, including R34's cloud/hybrid Anthropic key, and R37's supported path is BYOK to local Ollama, so no route through this kit requires an account. Re-confirmed 2026-09-29 against doc-stats' auth-keyword WARN: the hits are LLM token counts - R38c/C4a, harness session ids - C3b/C4b, the harness's own login and dummy local-Ollama auth token, and the secret scanner's detection patterns; none is this kit authenticating anyone)
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
      Flip to DRAFT (and use /design or /proto) only to change the design itself. -->
 
@@ -373,7 +373,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       unsetting real env vars, removing real files, force-pushing, etc.) requires the human's EXPLICIT
       confirmation before it runs live - code-review-only verification is an acceptable substitute for the
       live run when the human declines, and the story/grade card records which one happened and why.
-- [ ] R36: **Planning cost is priced and ratcheted, not unlimited.** Measured (ModelTest bake-off,
+- [x] R36: **Planning cost is priced and ratcheted, not unlimited.** Measured (ModelTest bake-off,
       `docs/ASSESSMENT.md` Failure B): Opus spent its ENTIRE session budget growing scope from 0 to 28
       stories / 35 tasks sharded (5 of 28 stories reached `/taskmap`, each `taskmap-agent` spawn burning
       78k-110k tokens) before writing a single line of code - 1 commit (the scaffold), 0 `.cs` files, 0
@@ -435,12 +435,40 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       testable against a sandbox rather than the real machine. A hook left pointing at a deleted kit folder
       fires on every turn and fails - the same reason the Claude Code hook teardown already exists.
 
+- [ ] R38: **A gate that cannot be shown to have FIRED is not a gate - gate activity leaves EVIDENCE.**
+      R22, R28 and R32 each establish that a gate EXISTS; nothing in the kit proves one ever INTERCEPTED
+      anything. That is this project's own thesis - never accept an assertion a script can settle - left
+      unapplied one level up: the gates themselves are currently trusted by assertion. The failure is not
+      hypothetical, it is R37(c)'s: a hook that is misnamed, wrongly cased or in the wrong location produces
+      NO error, so the gate silently never fires and the run looks clean. Three mechanisms, each producing a
+      COMPUTED artifact rather than console output a human reads once:
+      (a) **Active proof, not file-existence.** A standalone command provokes a known violation against each
+          real gate on a target project and confirms that gate actually intercepts it. Asserting "the hook
+          file is present" tests the wrong thing; only a provoked violation distinguishes a wired gate from
+          a dead one. (`dad gates-smoke`, shipped.)
+      (b) **A durable, queryable record.** Every block a gate produces - the loop guard, `dad-guard`'s
+          Stop hook, the ratchet's shrink refusal, a `close-unit` refusal - appends ONE structured,
+          machine-readable line instead of printing to the console and vanishing, alongside the `allow`
+          heartbeat lines C3b pins so that an empty block history is distinguishable from an unwired gate
+          (WARN findings are not gate decisions and are not logged). Ephemeral
+          output cannot be mined: R27's `/retro` parses PROSE today precisely because no data exists, and a
+          model comparison counts gate interventions by a human watching and noting them by hand.
+      (c) **Run cost is computed, not narrated.** The end of a `/build` scope or a full `/audit` emits a
+          short summary - tokens, wall-clock, files touched, findings, and gate interventions drawn from
+          (b). R24 made project STATE computed rather than observed; this extends the identical rule to what
+          a RUN cost, which is today an after-the-fact human narration - and it is the real-numbers source
+          R36's pricing loop needs in order to price scope against anything but an estimate.
+
 ## Contracts (pin BEFORE locking - architect-agent writes these)
 ### C1: R36 planning-cost ratchet - thresholds, pricing message shape, worked examples
 - **Status: APPROVED 2026-09-22.** R36 names two mechanisms as one loop (SCOPE -> PRICE -> ASK ->
   WALK/WARN -> BUILD -> ANALYZE -> repeat). The human picked **Option B** for C1a and approved C1b/C1c/C1d
-  as written - nothing below is still open. Not yet implemented (`doc-stats.ps1`, `scribe-agent.md`, and
-  `/design`/`/stories`' prompts are unchanged by this pass); that is `/taskmap` or `/build` work from here.
+  as written - nothing below is still open. **SHIPPED**: C1a/C1b's `[ratchet]` WARN is live in
+  `doc-stats.ps1 -Findings` (Story S6, T6.1/T6.2), and C1c's pricing sentences are live in `/stories`' expand
+  loop and `/design`'s requirement-capture step (Story S7, T7.1/T7.2); both carry `test-kit.ps1` cases. This
+  line read "Not yet implemented ... that is `/taskmap` or `/build` work from here" until 2026-09-29, which
+  is what a contract header says on the day it is approved and never says again - it outlived the build it
+  was describing by two closed stories.
 
 #### C1a: Walking-skeleton ratchet threshold formula - CHOSEN: Option B
 - **Inputs (only what `doc-stats.ps1` already computes, no new data source):** `storiesTotal =
@@ -560,12 +588,12 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   seen and deliberately accepted (the way `-AcceptShrink` works for R28's ratchet) is NOT pinned here - a
   v2 concern once the WARN exists and proves too noisy or too easy to ignore. Automatically blocking
   `/taskmap` or `/stories` on a `[ratchet]` finding is explicitly NOT proposed (R36 calls for a WARN, not a
-  gate, and the human's "keep scoping" answer must stay honored). Which exact threshold numbers (15/0.15
-  for B, or C's 20/5x) ship is also open pending the human's C1a pick - the numbers above are the
-  recommendation's starting point, not a promise they are final; `doc-stats.ps1` should keep them as named
-  constants near the top of the `[ratchet]` block so they are easy to retune from one false-positive/
-  false-negative report, the same way other WARN thresholds in this file already are (e.g. the `>= 5`
-  uncommitted-done threshold at `doc-stats.ps1:595`).
+  gate, and the human's "keep scoping" answer must stay honored). The threshold numbers are NOT open: C1a
+  records **CHOSEN: Option B**, so B's 15/0.15 shipped and C's 20/5x did not. They are still not a promise
+  they are final - retuning them is a normal response to a false-positive/false-negative report, not a
+  contract change - and `doc-stats.ps1` keeps them as named constants near the top of the `[ratchet]`
+  block so a retune is a one-line edit, the same way other WARN thresholds in this file already are
+  (e.g. the `>= 5` uncommitted-done threshold at `doc-stats.ps1:595`).
 
 ### C2: R37 GitHub Copilot CLI harness contract - hook location, event casing, block semantics, subagent coverage
 - **Status: MEASURED 2026-09-29 against GitHub Copilot CLI 1.0.89 on Windows.** Per R37(c) every fact in
@@ -725,12 +753,355 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   `## Out of scope`; `SubagentStart` (fires, but un-normalized per C2b, and unused); any attempt to make
   the camelCase event family work; automatic detection of a Copilot CLI version other than 1.0.89.
 - **Open questions returned to the human - NOT decided here, do not implement either way yet:**
-  (i) harness-contract DRIFT policy (what the kit does when a future Copilot version changes one of these
-  contracts - fail open like `dad-guard.ps1`, or fail loud); (ii) how the supported harness version is
-  RECORDED and whether `install.ps1`/`dad-doctor` detects version drift at install time; (iii) whether
-  `SubagentStart`'s un-normalized payload should be defensively parsed now or left unused; (iv) whether a
-  future candidate harness must PROVE subagent interception (C2d-style marker test) before it may be
-  added, and where that proof lives.
+  (i) whether `SubagentStart`'s un-normalized payload should be defensively parsed now or left unused.
+  Three further questions were listed here and have since been ANSWERED; they are removed rather than left
+  for every audit to re-discover as open. Harness-contract DRIFT policy and how the supported version is
+  RECORDED/detected at install time are both decided by **C2f** above (LOUD at setup, fail-open at
+  runtime, one constant in `install.ps1` asserted by `test-kit.ps1`). Whether a future candidate harness
+  must PROVE subagent interception before it may be wired is decided by **R37(d)**'s admission test (the
+  MARKER TEST), of which C2d is the worked instance.
+
+### C3: R38(b) gate-decision log - location, line schema, append semantics, rotation, query, proof
+- **Status: APPROVED 2026-09-29.** R38(b) names FOUR writers (`dad-loopguard.ps1`, `dad-guard.ps1`'s Stop
+  hook, `ratchet.ps1`'s shrink refusal, `close-unit.ps1`'s refusal paths) and ONE record. Per R37(c), a
+  writer that disagrees with the schema produces NO error - the line is simply wrong or missing and the
+  run looks clean - so the schema is pinned HERE, once, before four callers depend on it.
+- **R38(b) records BLOCK decisions plus C3b's `allow` heartbeats - never WARN.** Every block is logged;
+  `allow` lines are written only where C3b's per-gate table says (an "armed" line per session for the
+  hooks, every invocation for `ratchet`/`close-unit-refusal`), so a quiet week proves the gates ran rather
+  than that they were never wired. `doc-stats -Findings`' WARN lines (`[ratchet]`, `[integrity]`,
+  `[research]`, ...) are NOT gate decisions and are NOT written to this log: they are already a computed
+  artifact with their own home (R24). The `decision` enum is `{allow, block}` and has no `warn` member.
+- **Supersedes:** `docs/TASKS.md` T9.1 pinned a provisional schema inside its own task body (a
+  `.claude\dad-gates-log.jsonl` location and a five-field line). C3 supersedes it in four places - the
+  location (C3a), the `v` and `decision` fields (C3b), the append call (C3c), the query parameters (C3e).
+  T9.1-T9.4 must be re-read against C3 before they are worked.
+
+#### C3a: Location - `grades/gates-log.jsonl`, COMMITTED, plus two adjacent globs that must not widen
+- **Status: APPROVED 2026-09-29.**
+- **Decision:** one file per project at `grades/gates-log.jsonl`, TRACKED BY GIT and committed like any
+  other evidence artifact. NOT `.claude\` (gitignored runtime state), NOT `docs/`.
+- **Reasoning:** `grades/` is already this kit's committed evidence folder - a grade card records how a
+  unit went, a gate log records what the gates did, and the two belong in the same clone. `docs/` was
+  rejected on R20 grounds: everything under `LOCALTOOLS_DOCS_DIR` becomes PLAINTEXT in
+  `.index/chunks.json`, and a block reason quotes the command that was blocked. `grades/` sits OUTSIDE
+  that root (`.mcp.json:6` points `LOCALTOOLS_DOCS_DIR` at `docs` only), so the plaintext-index hazard
+  does not reach it at all. `.claude\` was rejected because a record whose entire purpose is DURABILITY
+  should not die with a clone.
+- **Reason-field pipeline (forced by the committed location), in this exact order:** collapse whitespace
+  -> REDACT using `scan-secrets.ps1`'s OWN patterns, replacing each match with `[REDACTED]` -> truncate to
+  300 chars. Redaction is not optional and not a new convention: `install-hooks.ps1:73` installs a
+  pre-commit hook that runs `scan-secrets.ps1 -Staged -Quiet` and BLOCKS the commit on a finding, so an
+  un-redacted credential quoted inside a blocked command line would block `close-unit.ps1`'s own commit -
+  the evidence log poisoning the close it exists to be evidence for. Reusing the scanner's patterns keeps
+  ONE definition of "secret" in the kit (R20).
+- **Two adjacent globs that are safe today only by ACCIDENT - neither may be widened:**
+  (i) `ratchet.ps1:88` totals grade-card bytes with `-Filter *_GRADE.md`, so `gates-log.jsonl` is NOT part
+  of `gradeBytes`. Widening that filter to all of `grades/` would make a deliberate manual roll (C3d) read
+  as a SHRINK and REFUSE the next close (R28).
+  (ii) `dad-guard.ps1:153` lists `.json` in `$codeExt` but NOT `.jsonl`, and matching is on
+  `GetExtension`, so `.jsonl` can never match. That is what stops the Stop hook's own append from counting
+  as an unverified edit on the very turn it reports. Adding `.jsonl` would create a feedback loop in which
+  the guard blocks on the log line it just wrote.
+  Both facts carry a `test-kit.ps1` assertion, so the accident becomes a guarantee.
+- **Worked example (the reason pipeline, end to end).** The loop guard blocks a repeated shell call whose
+  raw command line was `curl   -H "Authorization: Bearer <token>"   https://api.example.com/v1/x`:
+  1. collapse whitespace -> `curl -H "Authorization: Bearer <token>" https://api.example.com/v1/x`
+  2. redact with `scan-secrets.ps1`'s patterns -> `curl -H "Authorization: Bearer [REDACTED]" https://api.example.com/v1/x`
+  3. truncate to 300 chars -> unchanged (78 chars)
+  and THAT string is what lands in the line's `reason`. (This example deliberately uses a `<token>`
+  placeholder rather than a realistic key literal, because `scan-secrets.ps1` runs over this document too;
+  `scan-secrets.ps1:60` suppresses `<...>` placeholders for its heuristic patterns.)
+  **Counter-example that MUST stay impossible:** skip step 2, and the credential reaches
+  `grades/gates-log.jsonl`; `close-unit.ps1`'s `git commit` is then refused by the pre-commit scanner and
+  the unit cannot close, because its own gate log is unstageable.
+
+#### C3b: Line schema + what counts as a gate decision
+- **Status: APPROVED 2026-09-29.**
+- **Format:** one compact JSON object per line, UTF-8 no BOM, LF. SEVEN fields, all REQUIRED - always
+  present, empty string when not applicable, so a consumer never has to test for a missing key:
+  | field | type | meaning |
+  |---|---|---|
+  | `v` | int | schema version, currently `1`. Four writers and a committed file that is never migrated. |
+  | `ts` | string | UTC, MILLISECOND precision, `yyyy-MM-ddTHH:mm:ss.fffZ`. C4 windows on this. |
+  | `gate` | string | short id. Five today: `loop-guard`, `dad-guard-stop`, `ratchet`, `close-unit-refusal`, `gates-log` (C3d's genesis record). NOT a closed enum - a future gate may add its own. |
+  | `decision` | string | `allow` or `block`. No `warn` member (see the C3 header). |
+  | `tool` | string | the harness tool name when the gate's payload has one (`loop-guard` does, e.g. `Bash`); `""` otherwise. |
+  | `reason` | string | human-readable, through C3a's collapse -> redact -> truncate(300) pipeline. |
+  | `session` | string | the harness session id when the caller has one (`loop-guard`, `dad-guard-stop`); `""` for `ratchet`/`close-unit-refusal`, which run as plain subprocesses, never as hooks. |
+- **Decision - WHAT GETS A LINE (the load-bearing half).** A deny-only log cannot distinguish "no
+  violations this week" from "the hook was never wired", which is the exact confusion R38 exists to end -
+  and it also fails S9's own AC2 ("filterable by gate id / DENY-ONLY"), which is unsatisfiable with no
+  `decision` field. Logging EVERY evaluation was rejected on MEASURED grounds: `dad-loopguard.ps1` runs
+  before every tool call and its own design already rejects a ~500ms-per-call full JSON parse (hence its
+  regex-only stdin read), so a `powershell -File` spawn per tool call would be far worse. The pinned
+  middle, per gate:
+  | gate | writes |
+  |---|---|
+  | `loop-guard` | ONE `allow` "armed" line on the session's FIRST invocation, then every `block` |
+  | `dad-guard-stop` | ONE `allow` "armed" line on the session's FIRST Stop, then every `block` |
+  | `ratchet` | EVERY invocation - `allow` on a clean pass, `block` on a shrink refusal |
+  | `close-unit-refusal` | EVERY invocation - `allow` on a clean close, `block` per refusal site |
+- **The heartbeat is nearly free:** `dad-loopguard.ps1:44` ALREADY keeps per-session streak state under
+  `$env:TEMP\dad-loopguard`, so "no state file for this session yet" IS the first-call signal. No new
+  state, no new file, one extra branch.
+- **Worked example (three lines from one session, exactly as written):**
+  ```
+  {"v":1,"ts":"2026-09-29T14:02:11.004Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"abc123"}
+  {"v":1,"ts":"2026-09-29T14:07:48.517Z","gate":"loop-guard","decision":"block","tool":"Bash","reason":"BLOCKED: 4th consecutive identical command: dir \"D:\\src\\cms\" 2>nul","session":"abc123"}
+  {"v":1,"ts":"2026-09-29T14:31:02.880Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 61, stories 14, tasks 40)","session":""}
+  ```
+  What this buys, stated plainly: `-Query -Decision block` over a whole week returning ZERO lines now
+  MEANS something, because the `allow` heartbeats prove the gates were armed and ran. Under a deny-only
+  schema the same empty result is indistinguishable from a dead hook.
+
+#### C3c: Append semantics with concurrent writers
+- **Status: APPROVED 2026-09-29.**
+- **Decision:** `New-Object System.IO.FileStream($path, [IO.FileMode]::Append, [IO.FileAccess]::Write,
+  [IO.FileShare]::ReadWrite)` and ONE `Write` of the complete UTF-8 line including its trailing LF.
+  Bounded retry on a sharing violation - 3 attempts at 40 / 80 / 160 ms with jitter - then give up,
+  swallow, and `exit 0`, still failing OPEN.
+- **Reasoning:** `[System.IO.File]::AppendAllText` (T9.1's draft) opens with `FileShare.Read`. A second
+  writer - `dad watch` in another terminal, a subagent's hook, `close-unit.ps1` running while a Stop hook
+  fires - takes a sharing violation, T9.1's blanket try/catch swallows it, and THE LINE IS SILENTLY LOST.
+  That is precisely the failure class this requirement exists to eliminate, reintroduced by the mechanism
+  meant to end it. `FileShare.ReadWrite` plus a single sub-4KB write lets concurrent writers interleave
+  whole LINES and never fragments. A named machine-wide Mutex was considered and rejected: correct, but it
+  introduces a lock a hung process can hold, inside a hook that must never hang.
+- **INVARIANT: one line must be UNDER 4096 BYTES.** This is what makes C3a's 300-char `reason` truncation
+  LOAD-BEARING rather than cosmetic - the truncation is what keeps the single-write atomicity argument
+  true. It may not be raised without revisiting this decision.
+- **Worked example (this is the `test-kit.ps1` assertion):** start two `dad-gates-log` appends within the
+  same 5 ms window against one sandbox - one `ratchet` block, one `loop-guard` block. EXPECTED: the file
+  contains EXACTLY 2 lines, each independently parseable by `ConvertFrom-Json` with all seven C3b keys
+  present; their ORDER is unspecified and must NOT be asserted. Counter-example the case exists to catch:
+  1 line (one writer's line lost), or 2 lines one of which is a truncated fragment of the other.
+
+#### C3d: Rotation - MANUAL only, with a genesis record; no automatic roll, ever
+- **Status: APPROVED 2026-09-29.**
+- **Decision:** the log NEVER rolls itself. Nothing in the kit renames, trims or truncates
+  `grades/gates-log.jsonl`. Instead:
+  - `dad-doctor` REPORTS the log's size, line count and newest-entry age, and WARNs past 5 MB, naming the
+    manual roll as the fix.
+  - Rolling is a HUMAN renaming the file (convention: `grades/gates-log-<yyyy-MM-dd>.jsonl`).
+  - The next append finds no `gates-log.jsonl`, creates it, and writes a GENESIS RECORD as its first line.
+- **Why no automatic roll:** for a COMMITTED file, a size-triggered roll bounds the working-tree file but
+  NOT the repository - git keeps every blob - so the roll's main benefit evaporates while its main cost
+  remains. An append-only evidence record that silently discards its own history is the wrong shape for
+  committed evidence.
+- **The genesis record is a NORMAL JSONL line, not a comment header** - `gate: "gates-log"`,
+  `decision: "allow"`. Deliberate: C3e pins stdout as VERBATIM JSONL, and a `#` preamble would break every
+  `ConvertFrom-Json` consumer on the very first line of the file.
+- **Predecessor discovery needs no stored state:** on creation, scan `grades/` for other
+  `gates-log*.jsonl` and name the NEWEST one in the reason, with its line count and date span. If there is
+  none, say so plainly. A genesis record is written on ANY fresh log, INCLUDING a brand-new project, so a
+  reader can always tell a complete history from a continuation.
+- **The gate log is NOT a ratcheted surface (R28).** A deliberate roll must never read as a shrink - which
+  is exactly what C3a(i) protects by keeping `ratchet.ps1:88`'s `*_GRADE.md` filter narrow.
+- **Worked example (both genesis forms, verbatim).** After a human renames a 12,481-line log to
+  `grades/gates-log-2026-04-02.jsonl`, the next append creates the file and writes:
+  ```
+  {"v":1,"ts":"2026-09-29T14:02:11.004Z","gate":"gates-log","decision":"allow","tool":"","reason":"log created; prior history in grades/gates-log-2026-04-02.jsonl (12,481 lines, 2026-04-02..2026-09-29)","session":""}
+  ```
+  On a brand-new project with nothing to find, the same code writes:
+  ```
+  {"v":1,"ts":"2026-01-08T09:14:03.221Z","gate":"gates-log","decision":"allow","tool":"","reason":"log created; no prior history found - this log begins here","session":""}
+  ```
+
+#### C3e: Query contract - machine-clean stdout
+- **Status: APPROVED 2026-09-29.**
+- **Signature:** `dad-gates-log.ps1 -ProjectDir <dir> -Query [-Gate <id>] [-Decision <allow|block>]
+  [-Since <datetime>] [-Last <n>] [-Count]`. Filters compose with AND.
+- **Post-conditions:** stdout is VERBATIM JSONL and nothing else - one matching line per matching line,
+  unmodified. Any human-facing note (for example "no gate log yet") goes to STDERR. `-Count` prints a bare
+  integer, and prints `0` for a missing or empty log. ALWAYS `exit 0`. Because C3d has no automatic roll,
+  `-Query` reads the CURRENT file only - there are no `.1` generations to chain, and a rolled-away
+  predecessor is queried by pointing `-ProjectDir`/the path at it directly.
+- **Three T9.1 defects this fixes:**
+  (i) T9.1 used `-Gate` to APPEND and `-FilterGate` to QUERY, so the obvious invocation
+  `-Query -Gate ratchet` was silently IGNORED and returned EVERY line - a wrong answer with no error.
+  `-FilterGate` is DROPPED; `-Gate` is the filter in query mode.
+  (ii) T9.1 printed "no gate log yet" to STDOUT, while T10.1 counts returned lines as gate interventions -
+  so an EMPTY log could be counted as one intervention. Human notes now go to stderr.
+  (iii) T9.1 had no deny-only filter, leaving S9's AC2 unsatisfiable. `-Decision block` is it.
+- **Worked example (against the C3b three-line log above):**
+  ```
+  > dad gates-log -ProjectDir . -Query -Decision block -Since 2026-09-29T14:00:00Z -Count
+  1
+  > dad gates-log -ProjectDir . -Query -Gate ratchet
+  {"v":1,"ts":"2026-09-29T14:31:02.880Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 61, stories 14, tasks 40)","session":""}
+  > dad gates-log -ProjectDir <fresh sandbox with no log> -Query -Count
+  0
+  ```
+
+#### C3f: Proving the LOG ITSELF is wired - runtime silent, proof at smoke time
+- **Status: APPROVED 2026-09-29.**
+- **Decision:** the same split C2f pinned for version drift. **RUNTIME stays silent and fail-open:** no
+  writer may block, warn, or self-check on a failed append mid-turn. **PROOF moves to smoke/setup time:**
+  - `dad gates-smoke` (R38a, shipped as S8) gains a FOURTH assertion - after provoking each gate in its own
+    throwaway fixture, assert that a matching `"decision":"block"` line landed in that fixture's
+    `grades/gates-log.jsonl`. If not, report `SILENT-FAIL "<gate>-log"` and exit non-zero, exactly like its
+    existing three gate assertions.
+  - `dad-doctor` additionally reports the newest-line age of a project's log, alongside C3d's size/count.
+- **Reasoning:** without this, the one thing that can still fail silently is the WRITER WIRING itself.
+  Concretely: `dad-loopguard.ps1` has never read `cwd` - it extracts only `session_id`, `tool_name` and
+  `tool_input` (`dad-loopguard.ps1:300`) - T9.2 proposes adding a `cwd` regex and SKIPPING the log call
+  when it comes back empty, and T9.4's tests supply `cwd` themselves. If the real payload does not carry
+  `cwd`, the loop guard never logs, every test still passes, and the log looks clean. That is C2c's trap
+  wearing a third hat.
+- **PREREQUISITE MEASUREMENT (blocks T9.2):** confirm whether Claude Code's real `PreToolUse` payload
+  carries `cwd`, measured against the installed binary and recorded in C2b's measured-table style with a
+  `claude --version` stamp. Vendor documentation is a starting hypothesis, not a source of truth (R37c).
+  If it does NOT, the fallback - a machine-level log, or resolving the project another way - is a NEW
+  decision to be taken then; it is deliberately not pre-decided here.
+- **This REOPENS S8, which is currently DONE/closed.** The fourth assertion is new scope against a closed
+  story: route it as a follow-up unit rather than silently editing a closed story's acceptance criteria.
+- **Worked example (what a wired-but-unlogged gate looks like):**
+  ```
+  gates-smoke: loop-guard INTERCEPTED (logged), ratchet-close-refusal INTERCEPTED (logged),
+               dad-guard-stop INTERCEPTED (NOT LOGGED) -> SILENT-FAIL "dad-guard-stop-log"
+  exit 1
+  ```
+  The gate itself fired correctly in that trace; only its evidence did not land. Under R38 that is still a
+  failure, because a gate that cannot be shown to have fired is not a gate.
+
+- **Invariant(s) (all C3 sub-decisions):** (i) logging NEVER changes a gate's own verdict or exit code -
+  every writer's log call is best-effort and every failure path ends in the gate's original behaviour
+  (R22/R28/R32 all fail open on their own bugs; a logging bug must not become a new way for a real gate to
+  misbehave). (ii) `reason` is ALWAYS redacted before it is written (C3a) - there is no unredacted path.
+  (iii) one line is always under 4096 bytes (C3c). (iv) the log is append-only from the kit's side; only a
+  human ever renames it (C3d). (v) the log is NOT a ratcheted surface (R28) and is NOT counted in
+  `gradeBytes` (C3a-i). (vi) `-Query` stdout is machine-parseable JSONL with no prose (C3e).
+- **Out of scope:** a cross-project or per-machine aggregate log (each project owns its own file); any
+  automatic rotation, trimming or compaction (C3d); `grade-trends.ps1`/`/retro` actually CONSUMING the log
+  (S9 AC3 requires only that it CAN be read as a data source - a plain, documented JSONL file at a fixed
+  path satisfies that, and no `grade-trends.ps1` change is in scope); a schema migration path for `v: 2`
+  (the field exists so one is possible, not because one is planned); logging `doc-stats` WARN findings
+  (see the C3 header).
+
+### C4: R38(c) run summary - tokens, session discovery, scope boundary, files touched
+- **Status: APPROVED 2026-09-29.** Pinned as a SEPARATE top-level contract rather than as C3g-C3j: R38(b)
+  is a data FORMAT with four writers; R38(c) is a single CONSUMER script with its own sourcing and its own
+  open measurement, and the two are cited by different tasks (T9.x cite C3, T10.x cite C4). An id exists to
+  be cited - "per C3" pointing at ten sub-decisions spanning two unrelated scripts stops being a pointer.
+- **Supersedes:** `docs/TASKS.md` T10.1's in-task sourcing pins in three places - tokens (C4a), the
+  missing-`-StartTime` behaviour (C4b/C4c) and the files-touched definition (C4d).
+
+#### C4a: Tokens - CONDITIONAL on a measurement; never a fabricated number, never an unmeasured denial
+- **Status: APPROVED 2026-09-29** (conditional pin; the measurement that resolves it is a named follow-up
+  task, and until it returns `dad-run-summary.ps1` prints the fallback line WITH its reason).
+- **Decision:** the token figure is MEASURED-OR-NAMED, stamped per harness and per version:
+  - measured YES -> `dad-run-summary.ps1` streams the session transcript, sums input / output / cache
+    tokens over entries at or after the window start, and prints the number WITH its source and the
+    version it was measured against.
+  - measured NO, or transcript missing, or a non-Claude harness -> print the fallback line NAMING THE
+    REASON. An honest gap that says WHY is a finding; a bare "not available" is an assertion.
+- **Why not simply pin "not available" (T10.1's draft):** T10.1 justified that line by grepping this kit's
+  own `.ps1` files for token/usage parsing. That evidence proves THE KIT does not read it - a different
+  claim from THE DATA IS ABSENT. Direct evidence in this repo points the other way: `dad-guard.ps1:63`
+  documents that the Stop payload carries `transcript_path`, and `dad-guard.ps1:76-77` OPENS that file
+  (`Test-Path` + `Get-Item ... CreationTimeUtc`) to derive session start. The transcript is a local file
+  this kit already touches. Pinning "not available" without opening it would be accepting an assertion a
+  script can settle - which this document forbids in its own words (R24: "never accept an assertion a
+  script can settle").
+- **Two facts the pin carries regardless of the outcome:** (i) the number is HARNESS-specific - Copilot
+  CLI (R37) has no Claude Code session transcript at all, so on that harness the fallback line is the
+  correct and PERMANENT answer, not a gap; (ii) it is BACKEND-specific - whether an Ollama-proxied response
+  populates a usage field at all is itself unmeasured, so R1 (local) and R34(b) (cloud) must BOTH be
+  measured and neither generalised from the other.
+- **The measurement task carries:** both backends, the exact transcript path measured, the field names
+  found, and a `test-kit.ps1` assertion tying the stamped version constant in the script to the version
+  recorded in this contract - the same doc-and-code-cannot-drift device C2f pinned for the harness version.
+- **Worked example (both branches; each names its provenance):**
+  ```
+  [run-summary] tokens: 412,300 in / 38,914 out / 1,204,880 cache read
+                (source: transcript abc123.jsonl, 214 assistant entries, Claude Code <measured version>)
+  [run-summary] tokens: not available (harness=copilot-cli: no session transcript is exposed to project tooling)
+  [run-summary] tokens: not available (transcript path recorded but file missing: .claude\.dad-session.json -> C:\...\abc123.jsonl)
+  ```
+  The third form is the one that matters most: it is still an honest gap, and it names a cause a human can
+  act on, instead of collapsing three different situations into one unfalsifiable sentence.
+
+#### C4b: Session discovery - the Stop hook records what only it can see
+- **Status: APPROVED 2026-09-29.**
+- **Decision:** `dad-guard.ps1`'s Stop hook writes `{session_id, transcript_path, first_seen_utc}` ONCE
+  per session to `.claude\.dad-session.json`. Any later plain subprocess - `dad-run-summary.ps1`,
+  `publish-run.ps1` - reads it to find both the session clock and the transcript. `-StartTime` and
+  `-TranscriptPath` remain explicit overrides and always win.
+- **Reasoning:** the Stop hook is the ONLY place in the kit that ever sees `transcript_path`, and it
+  already parses and opens it (`dad-guard.ps1:76-77`). This is therefore ONE EXTRA WRITE of data already
+  in hand, not a new discovery mechanism. Scanning `~/.claude/projects/` for the newest JSONL was
+  rejected: it guesses the session by mtime and picks the wrong one whenever two sessions share a project.
+- **This file is EPHEMERAL RUNTIME STATE, and therefore correctly lives in gitignored `.claude\` -
+  deliberately NOT in `grades/`.** It is a pointer to a machine-local transcript, valid only on the machine
+  that wrote it and only while that transcript exists. It is not evidence, and committing it would put a
+  dead absolute path into every clone. The split IS the point: C3a's log is evidence and is committed;
+  this is state and is not.
+- **Worked example:** `.claude\.dad-session.json` after the first Stop of a session:
+  ```json
+  {"session_id":"abc123","transcript_path":"C:\\Users\\me\\.claude\\projects\\D--projects-DrDad\\abc123.jsonl","first_seen_utc":"2026-09-29T13:38:07.412Z"}
+  ```
+  `dad-run-summary.ps1` invoked with no `-StartTime` then windows from `2026-09-29T13:38:07.412Z` and
+  labels that figure `source: session start` (C4c).
+
+#### C4c: Scope boundary - caller-supplied, with a LABELLED session-start fallback
+- **Status: APPROVED 2026-09-29.**
+- **Decision:** NO marker file and NO `-Start` mode. The orchestrator prose of T10.2 (`/build` captures a
+  git ref + timestamp baseline at Gate 3) and T10.3 (`/audit` captures one at audit start) stands as
+  drafted. What makes the prose path safe is its composition with C4b:
+  - `-StartTime` / `-SinceCommit` supplied -> use them; every figure's provenance reads `caller-supplied`.
+  - either absent -> fall back to `.dad-session.json`'s `first_seen_utc`, and to the git HEAD as of that
+    time for the commit range; provenance reads `session start`.
+  A forgotten `-StartTime` therefore yields a LABELLED DEFAULT window, not a silently wrong one.
+- **C4 INVARIANT - EVERY PRINTED FIGURE NAMES ITS PROVENANCE:** one of `source: caller-supplied`,
+  `source: session start`, `source: git range`, `source: gate log`, `source: transcript`,
+  `source: doc-stats -Findings`. This is R23's provenance thesis - a corpus without provenance fails the
+  same way code without a build does, because six weeks later nobody can tell where a number came from -
+  applied to RUN COST. It is the rule that makes the prose boundary acceptable: a number whose origin is
+  printed beside it cannot be quietly mistaken for a different number, and a wrong window announces itself
+  instead of being believed.
+- **Worked example (the full summary, both boundary paths).** `/build` scope, baseline supplied:
+  ```
+  [run-summary] wall-clock: 42m 11s                              (source: caller-supplied -StartTime 2026-09-29T14:02:00Z)
+  [run-summary] files touched: 14 (11 committed, 3 uncommitted)  (source: git range 77bf021..HEAD + working tree)
+  [run-summary] findings: 2                                      (source: doc-stats -Findings)
+  [run-summary] gate interventions: 1 block, 2 armed             (source: gate log, grades/gates-log.jsonl)
+  [run-summary] tokens: not available (harness=copilot-cli: no session transcript is exposed to project tooling)
+  ```
+  The SAME run with `-StartTime`/`-SinceCommit` forgotten changes exactly two things - the window and the
+  label, never the silence:
+  ```
+  [run-summary] wall-clock: 1h 06m 04s                           (source: session start, .claude\.dad-session.json first_seen_utc 2026-09-29T13:38:07Z)
+  [run-summary] files touched: 19 (16 committed, 3 uncommitted)  (source: git range 4a1c9f2..HEAD + working tree, HEAD at session start)
+  ```
+
+#### C4d: Files touched - committed AND uncommitted, reported SPLIT
+- **Status: APPROVED 2026-09-29.**
+- **Decision:** the union, deduplicated by path, of `git diff --name-only <since>..HEAD` (committed),
+  `git diff --name-only <since>` (tracked but uncommitted) and `git ls-files --others --exclude-standard`
+  (untracked), printed SPLIT: `files touched: 14 (11 committed, 3 uncommitted)`. NO extension filter and
+  NO directory filter - the summary is descriptive, not a gate.
+- **Reasoning:** T10.1's committed-range-only definition reports the wrong number for exactly the run this
+  kit exists to catch. R22's motivating failure - a 7,115-line `/build` that made 106 file edits and ZERO
+  shell calls, never committed, and left 47 dirty files - would print `files touched: 0`: the worst
+  possible answer from the summary whose entire job is making a run's cost visible. The UNCOMMITTED half is
+  the half that correlates with every failure R22 and R28 exist for, so it may not be invisible; and
+  splitting rather than merging the two is what makes the pathology legible at a glance.
+- **Worked example (the R22 run, scored both ways):** this contract prints
+  `files touched: 47 (0 committed, 47 uncommitted)   (source: git range <baseline>..HEAD + working tree)`,
+  where T10.1 as drafted prints `files touched: 0`. A reader of the first line knows immediately what went
+  wrong; a reader of the second concludes the run did nothing.
+
+- **Invariant(s) (all C4 sub-decisions):** (i) every printed figure names its provenance (C4c) - a number
+  without a source is a defect, not a formatting preference. (ii) `dad-run-summary.ps1` NEVER fabricates a
+  figure it cannot source, and never prints a bare "not available" without a reason (C4a). (iii) it is
+  READ-ONLY - it computes and prints, it writes no project state and takes no action on what it finds.
+  (iv) it never blocks anything: a summary is a report, and no gate depends on it.
+- **Out of scope:** a per-run HTML or markdown artifact (the summary is console output relayed by the
+  orchestrator; `publish-run.ps1` remains the mechanism for a committed run receipt); cost in CURRENCY
+  (tokens are the unit, and a price table would be a second thing to keep true); attributing figures to
+  individual subagents (R32 - a subagent is an unobservable region; the summary is per SCOPE); a
+  cross-run trend view of these figures (that is `/retro`'s territory, R27, once the data exists).
 
 ## Components
 ### local-tools (C# MCP server)
@@ -763,7 +1134,10 @@ models declared in `models.json` (never hand-written Modelfiles); re-run `instal
 commands/agents/server; one C# MCP server only.
 
 ## Stories
-See `docs/STORIES.md` for the story backlog (S1-S3, all DONE as of this migration; managed by /stories).
+See `docs/STORIES.md` for the story backlog (managed by `/stories`). Deliberately NO count or status
+summary here: this line used to read "S1-S3, all DONE as of this migration" and was still saying it at
+twelve stories, because a hand-written count is only true on the day it is typed. A count is a fact a
+script can settle, so `dad doc-stats` settles it (R24) and this line points instead of counting.
 This design doc previously embedded the story backlog inline; it now lives in the split-out doc per R7.
 
 ## Out of scope

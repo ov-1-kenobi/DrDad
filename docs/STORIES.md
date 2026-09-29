@@ -319,14 +319,11 @@
   the static content test. Keep the wording close to C1c's pinned sentences (read `docs/DESIGN.md` directly)
   so the shipped mechanism does not drift from what the human approved in `/design`.
 
-## Epic: Receipts
-<!-- These 4 stories (S8-S11) do NOT yet correspond to any docs/DESIGN.md Requirement - DESIGN.md is
-     LOCKED and stays LOCKED this session. Tagged "(Epic: Receipts)" in place of an (R#) tag as a
-     placeholder grouping; a human will run a separate /design pass later to fold these into formal
-     Requirements (proof a gate actually fires, a queryable record of every gate decision, and a real
-     accounting of what a run costs). Do not treat "(Epic: Receipts)" as a locked Requirement id. -->
+<!-- The /design pass happened: S8/S9/S10 are now tagged to R38 (gate activity leaves EVIDENCE -
+     R38a active proof, R38b a durable queryable record, R38c computed run cost). S11 moved to R32:
+     it interrogates R32's same-session-subagent mitigation, not R38's evidence thesis. -->
 
-### Story S8: dad gates-smoke - prove the gates actually fire   (Epic: Receipts)   <!-- Status: DONE closed:close-unit -->
+### Story S8: dad gates-smoke - prove the gates actually fire   (R38)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** A standalone command that deliberately provokes a known violation against each of DrDad's real
   gates on a target project and confirms each one actually intercepts it - not that the hook file merely
   exists.
@@ -357,11 +354,12 @@
   - [ ] AC5: any gate whose violation cannot be safely constructed is reported as SKIP, never fabricated as a
     pass.
 - **Dev notes:** Inspired by claude-gates (DevRik99)'s `smoke` command, which does exactly this across its 50
-  gates. Pending a future `/design` pass to fold into a formal Requirement.
+  gates.
 
-### Story S9: Structured gate decision log   (Epic: Receipts)   <!-- Status: TODO -->
-- **Goal:** Every deny/warn/block a DrDad gate produces (loop guard, ratchet, dad-guard, a close-unit
-  refusal) gets appended as one structured, machine-readable line - not just printed to console and lost.
+### Story S9: Structured gate decision log   (R38)   <!-- Status: TODO -->
+- **Goal:** Every `block` a DrDad gate produces (loop guard, ratchet, dad-guard, a close-unit refusal),
+  plus C3b's `allow` heartbeats, gets appended as one structured, machine-readable line - not just printed
+  to console and lost. WARN findings are not gate decisions and are never logged (C3 header).
 - **Context:** Gate decisions today are ephemeral console output. Making them a durable, queryable record is
   what would let `grade-trends.ps1` / `/retro` (R27) mine real data instead of parsing prose after the fact.
 - **Behavior:**
@@ -369,20 +367,26 @@
     40%+ of cards is a convention problem") instead of parsing prose after the fact.
   - Would let a head-to-head model comparison count gate interventions automatically instead of a human
     watching and noting them by hand.
-- **Data / interfaces:** A new structured log file (one line per gate decision: timestamp, gate id, tool,
-  reason, session), written by the loop guard, ratchet, dad-guard, and close-unit's refusal path.
+- **Data / interfaces:** Contract: C3 (C3a-C3f) in docs/DESIGN.md. One committed file per project,
+  `grades/gates-log.jsonl` (C3a); one compact JSON object per line, UTF-8 no BOM, LF, SEVEN required fields
+  `v, ts, gate, decision, tool, reason, session` (C3b); `decision` is `allow` or `block` only. Written by
+  `dad-loopguard.ps1`, `dad-guard.ps1`'s Stop hook, `ratchet.ps1`, and `close-unit.ps1`'s refusal paths;
+  queried via `dad-gates-log.ps1 -Query` (C3e).
 - **Dependencies:** none; feeds S10 (per-run stats) as a data source for its gate-interventions figure.
 - **Acceptance (testable):**
-  - [ ] AC1: a deny/warn/block from the loop guard, the ratchet, dad-guard, or a close-unit refusal each
-    appends one structured, machine-readable line (timestamp, gate id, tool, reason, session) to the log.
-  - [ ] AC2: the log is queryable (e.g. filterable by gate id / deny-only) without hand-parsing console
-    output or prose.
+  - [ ] AC1: per C3b's per-gate table, `loop-guard` and `dad-guard-stop` each write ONE `allow` "armed" line
+    on the session's first invocation (first Stop, for `dad-guard-stop`), then every `block`; `ratchet` and
+    `close-unit-refusal` write EVERY invocation (`allow` or `block`). Each line lands in
+    `grades/gates-log.jsonl` with all seven C3b fields present (`""` when not applicable) and no `warn`
+    decision.
+  - [ ] AC2: the log is queryable per C3e (`-Query [-Gate <id>] [-Decision <allow|block>] [-Since] [-Last]
+    [-Count]`, e.g. `-Decision block` for deny-only) with stdout verbatim JSONL only - no hand-parsing of
+    console output or prose.
   - [ ] AC3: `grade-trends.ps1` / `/retro` (R27) can read this log as a data source instead of parsing prose.
 - **Dev notes:** Inspired by claude-gates (DevRik99)'s `.ai/gates-log.jsonl` (timestamp, gate, tool, reason,
-  session - queryable via `claude-gates log --deny --gate <id>`). Pending a future `/design` pass to fold
-  into a formal Requirement.
+  session - queryable via `claude-gates log --deny --gate <id>`).
 
-### Story S10: Per-run stats summary   (Epic: Receipts)   <!-- Status: TODO -->
+### Story S10: Per-run stats summary   (R38)   <!-- Status: TODO -->
 - **Goal:** At the end of a `/build` scope or a full `/audit`, auto-generate a short, computed-not-narrated
   summary: tokens used, wall-clock time, files touched, findings count, gate interventions (pulled from S9's
   log).
@@ -392,21 +396,29 @@
   - Directly serves cost/reliability comparisons already underway elsewhere in this kit.
   - Depends on S9 (the gate decision log) as its data source for the gate-interventions figure - note this
     dependency explicitly.
-- **Data / interfaces:** A generated per-run summary (tokens, wall-clock time, files touched, findings
-  count, gate interventions), produced at the end of a `/build` scope or a full `/audit` run.
+- **Data / interfaces:** Contract: C4 (C4a-C4d) in docs/DESIGN.md. `dad-run-summary.ps1` prints
+  `[run-summary]` lines (tokens, wall-clock, files touched, findings, gate interventions) at the end of a
+  `/build` scope or a full `/audit`; every figure names its `source:` (C4c invariant). Window from
+  `-StartTime` / `-SinceCommit` (caller-supplied) else `.claude\.dad-session.json`'s `first_seen_utc`
+  (C4b). READ-ONLY and never blocks: writes no project state, no gate depends on it.
 - **Dependencies:** S9 (the structured gate decision log) - required as the data source for the
   gate-interventions figure in the summary.
 - **Acceptance (testable):**
-  - [ ] AC1: at the end of a `/build` scope or a full `/audit`, a summary is generated containing tokens
-    used, wall-clock time, files touched, and findings count, computed (not narrated) from run data.
+  - [ ] AC1: at the end of a `/build` scope or a full `/audit`, `dad-run-summary.ps1` prints, computed (not
+    narrated) and each printed figure with its `source:`: wall-clock over the window (`caller-supplied`, or the labelled
+    `session start` fallback when `-StartTime`/`-SinceCommit` is absent - C4c); files touched as the
+    deduplicated union of committed + uncommitted + untracked, printed SPLIT, e.g. `files touched: 14 (11
+    committed, 3 uncommitted)`, no extension/directory filter (C4d); findings count (`doc-stats
+    -Findings`); and tokens as EITHER a measured figure with its transcript source and version OR C4a's
+    fallback line naming its reason, e.g. `tokens: not available (harness=copilot-cli: ...)` - never a
+    fabricated number and never a bare "not available" (C4a).
   - [ ] AC2: the summary's gate-interventions figure is pulled from S9's structured gate decision log, not
     from a human's manual count.
   - [ ] AC3: the summary generation does not require a human to watch and tally interventions by hand.
 - **Dev notes:** Inspired by claude-code-audit-gate (fotografvecerek-ai)'s STATISTIKA.html (lines of code,
-  screens, findings, time, exact token counts, generated at the end of every audit run). Pending a future
-  `/design` pass to fold into a formal Requirement.
+  screens, findings, time, exact token counts, generated at the end of every audit run).
 
-### Story S11: [SPIKE] Should high-stakes verification run as a separate process?   (Epic: Receipts)   <!-- Status: TODO -->
+### Story S11: [SPIKE] Should high-stakes verification run as a separate process?   (R32)   <!-- Status: TODO -->
 - **Type:** Research spike (no code) - **[human]** decision pending; do NOT implement anything for this
   story.
 - **Goal:** Produce a short, cited written recommendation on whether DrDad's grade-agent/librarian-agent (or
@@ -439,7 +451,7 @@
     commit to building either option.
 - **Dev notes:** Inspired by claude-code-audit-gate (fotografvecerek-ai)'s Kapitan/Auditor two-process
   (HANDOFF -> EVIDENCE -> VERDICT) architecture. This is a RESEARCH SPIKE, not a build story - flagged
-  **[human]** for decision; pending a future `/design` pass to fold into a formal Requirement if approved.
+  **[human]** for decision, still unresolved: nobody has picked option A, B or C yet.
 - **Recommendation (draft - pending human decision, satisfies AC1):**
   - **Option A - status quo (same-session Task-tool subagent, R32's discipline).** Pros: no new
     infrastructure; matches how every other agent in this kit already runs; R32's own evidence (11 graded
@@ -468,8 +480,8 @@
     process only for the named highest-stakes gate(s), same-session for the rest. This write-up does not
     pick for you; no build work follows from S11 until the human answers.
 
-<!-- S12 is NOT part of the "Epic: Receipts" grouping above - it is tagged to a real, LOCKED Requirement
-     (R37), like S1-S7. It appears after S11 only to keep story ids in numeric order. -->
+<!-- S12 is NOT part of the Receipts (R38) grouping above - it is tagged to R37, like S1-S7. It appears
+     after S11 only to keep story ids in numeric order. -->
 
 ### Story S12: GitHub Copilot CLI as a second harness (opt-in install target)   (R37)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the kit's two gates - the Stop guard (`dad-guard.ps1`) and the loop guard (`dad-loopguard.ps1`) -
@@ -495,7 +507,7 @@
   dev-path placeholder), `install.ps1` (step 9 + `$CopilotMeasuredVersion`), `uninstall.ps1` (`-CopilotDir`),
   `dad-doctor.ps1` (the R37 section), `test-kit.ps1` (4 cases). `dad-guard.ps1` and `dad-loopguard.ps1` are
   NOT modified - that is the point of C2's no-fork invariant.
-- **Dependencies:** none (R37 + C2 are LOCKED in `docs/DESIGN.md`).
+- **Dependencies:** none (R37 is `[x]` and contract C2 is MEASURED in `docs/DESIGN.md`).
 - **Acceptance (testable):**
   - [x] AC1: the installed hooks file matches the only shape Copilot actually loads - user-level path,
     `version: 1`, `bash`/`powershell` keys, PascalCase events registered EXACTLY ONCE, Stop routed through
@@ -521,3 +533,49 @@
   file and three probe agents) and scaffolded a throwaway project outside the kit. Both were removed
   afterwards and `~/.copilot/` was confirmed returned to stock. Verification mode: **live-sandboxed** for
   AC1-AC5; **deferred, not code-review-only** for AC6 (see above).
+
+### Story S13: gates-smoke proves the LOG is wired, not just the gate   (R38)   <!-- Status: TODO -->
+- **Goal:** `dad gates-smoke` gains a FOURTH assertion - after provoking each gate in its own throwaway
+  fixture, it asserts that a matching `"decision":"block"` line actually landed in that fixture's
+  `grades/gates-log.jsonl` - and `dad-doctor` gains a NEW report of a project's log (size, line count,
+  newest-entry age - C3d/C3f).
+- **Context:** S8 proves each gate FIRES; S9 gives each gate a log to write to. Neither proves the WRITER
+  WIRING between them. That is the one thing that can still fail silently: if a writer never gets the data
+  it needs to resolve the project (C3f's worked case - `dad-loopguard.ps1` has never read `cwd`, and a
+  writer that skips the append on an empty `cwd` simply never logs), the gate still intercepts, every test
+  still passes, and the log still looks clean. Under R38 a gate that cannot be SHOWN to have fired is not a
+  gate, so the proof has to be an active assertion, not the absence of an error. This is its OWN unit
+  because C3f pins it as new scope against a story that is already DONE/closed: S8 is not reopened and its
+  acceptance criteria are not edited after the fact.
+- **Behavior:**
+  - For each gate `gates-smoke` provokes in its throwaway fixture, read that fixture's
+    `grades/gates-log.jsonl` afterwards and require a matching `"decision":"block"` line for that gate.
+  - A gate that INTERCEPTED but did NOT log reports `SILENT-FAIL "<gate>-log"` and exits non-zero -
+    exactly the same shape as the three existing gate assertions.
+  - A gate already reported as SKIP stays a SKIP (never a false pass), and the runtime writers stay silent
+    and fail-open: nothing here makes a writer block, warn, or self-check mid-turn.
+  - `dad-doctor` gets a NEW gate-log report (T13.2; it has no gate-log code today): the log's size, line
+    count (C3d) and newest-entry AGE (C3f).
+- **Data / interfaces:** `gates-smoke` (S8's command), each fixture's `grades/gates-log.jsonl` (S9's
+  format), `dad-doctor.ps1` (the new C3d/C3f gate-log report, added here), `test-kit.ps1` (new `Test-Case`).
+  No gate script's verdict or exit code changes - C3's invariant (i).
+- **Dependencies:** **S9** (the log and its line format must exist before smoke can assert a line landed in
+  it). S8 is a PREDECESSOR, not a dependency to reopen - its command is extended, its card stays closed.
+- **Acceptance (testable):**
+  - [ ] AC1: a fixture where a gate fires AND logs is reported as intercepted-and-logged; `gates-smoke`
+    exits 0.
+  - [ ] AC2: a fixture where a gate fires but its line is MISSING from `grades/gates-log.jsonl` prints
+    `SILENT-FAIL "<gate>-log"` (naming the gate) and exits non-zero.
+  - [ ] AC3: the assertion matches on the gate name AND `"decision":"block"` - an `allow` line, or a block
+    line from a DIFFERENT gate, does not satisfy it.
+  - [ ] AC4: `dad-doctor` prints a project's log size, line count and newest-entry age (the new report),
+    and handles a project with no log at all without erroring.
+  - [ ] AC5: the full validation gate (`test-kit.ps1`) passes, with new `Test-Case`s covering AC2 and AC3
+    against sandbox fixtures (a fired-but-unlogged gate must be manufacturable in the test, not simulated
+    by editing the assertion).
+- **Dev notes:** ORDERING CONSTRAINT - S13 depends on S9 and must not be started before it; the log has to
+  exist, with a settled line shape, before smoke can assert a line landed in it. Cite **C3f** in
+  `docs/DESIGN.md` (read it directly) for the pinned split: runtime stays silent and fail-open, proof moves
+  to smoke/setup time. C3f also records a PREREQUISITE MEASUREMENT that blocks S9's loop-guard writer
+  (whether the real `PreToolUse` payload carries `cwd`) - if that measurement forces a fallback, that is a
+  NEW `/design` decision, not something to settle inside this story.
