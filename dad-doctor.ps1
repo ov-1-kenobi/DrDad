@@ -461,6 +461,50 @@ if ($ProjectDir) {
   }
 }
 
+# ---------------------------------------------------------------- copilot cli harness (R37)
+# Silent unless this machine actually uses the Copilot harness - either the hooks are installed or the CLI is
+# on PATH. Nobody running plain Claude Code should see a word about it.
+$copilotHookFile = Join-Path $env:USERPROFILE ".copilot\hooks\dad.json"
+$haveCopilot = [bool](Get-Command copilot -ErrorAction SilentlyContinue)
+if ((Test-Path $copilotHookFile) -or $haveCopilot) {
+  Write-Host "`n-- copilot cli harness (R37) --" -ForegroundColor Cyan
+  # C2f: ONE source of truth for the measured version - install.ps1's $CopilotMeasuredVersion. Read it back
+  # rather than duplicating the number here, or doctor and install can disagree about what was measured.
+  $measured = ""
+  try {
+    $instRaw = Get-Content (Join-Path $kit "install.ps1") -Raw
+    $mm = [regex]::Match($instRaw, '\$CopilotMeasuredVersion\s*=\s*"([^"]+)"')
+    if ($mm.Success) { $measured = $mm.Groups[1].Value }
+  } catch { }
+
+  if (-not (Test-Path $copilotHookFile)) {
+    Say "OK" "copilot hooks" "not installed (Claude Code only)" "install.cmd -CopilotCli   (to also gate Copilot CLI)"
+  } else {
+    try {
+      $cjson = Get-Content $copilotHookFile -Raw
+      if ($cjson -match 'dad-guard-copilot') { Say "OK" "copilot Stop hook" "dad-guard-copilot.ps1 (adapts the verdict to Copilot's JSON+exit-0 contract)" }
+      else { Say "WARN" "copilot Stop hook" "dad.json does not call dad-guard-copilot.ps1" "re-run install.cmd -CopilotCli" }
+      if ($cjson -match 'dad-loopguard') { Say "OK" "copilot PreToolUse hook" "dad-loopguard.ps1 (covers a SUBAGENT's own tool calls)" }
+      else { Say "WARN" "copilot PreToolUse hook" "dad.json does not call dad-loopguard.ps1" "re-run install.cmd -CopilotCli" }
+      # A hook pointing at a kit folder that has MOVED fires on every turn and fails - the stale-path trap.
+      if ($cjson -notmatch [regex]::Escape($kit.Replace('\','\\'))) {
+        Say "WARN" "copilot hook path" "dad.json does not point at THIS kit ($kit)" "re-run install.cmd -CopilotCli from this folder"
+      } else { Say "OK" "copilot hook path" "points at this kit" }
+    } catch { Say "WARN" "copilot hooks" "dad.json is not readable/valid JSON" "re-run install.cmd -CopilotCli" }
+  }
+
+  # C2f: version drift is LOUD at setup and silent at runtime. A changed harness breaks the gates with no
+  # error at all, so setup is the only honest place to say the contract may no longer hold.
+  if ($haveCopilot -and $measured) {
+    $cver = ""
+    try { $cver = ((copilot --version 2>&1 | Out-String) -split "`n" | Select-Object -First 1).Trim() } catch { }
+    if ($cver -and ($cver -notmatch [regex]::Escape($measured))) {
+      Say "WARN" "copilot version" "contract C2 was measured against $measured; you are on '$cver'" `
+          "re-measure DESIGN.md C2a-C2e (hook location, casing, block semantics) - a mismatch fails SILENTLY"
+    } elseif ($cver) { Say "OK" "copilot version" "matches the measured contract ($measured)" }
+  }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 if ($script:fails -eq 0 -and $script:warns -eq 0) { Write-Host "== all clear ==" -ForegroundColor Green }

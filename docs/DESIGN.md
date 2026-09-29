@@ -1,7 +1,10 @@
 # Technical Design Document - DrDad (Design Research Document, Agentic Development)
 
-Status: LOCKED
-Security review: NOT-REQUIRED (local-only dev CLI; no auth, no user data stored, no exposed service)
+Status: DRAFT
+Security review: NOT-REQUIRED (local-only dev CLI; no user data stored, no exposed service. The kit itself
+  handles no credentials: where a harness authenticates (R37's Copilot CLI default), that is the harness's
+  own login, and R37's supported offline path is BYOK against local Ollama - slower, but account-free, so
+  no path through this kit REQUIRES an account)
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
      Flip to DRAFT (and use /design or /proto) only to change the design itself. -->
 
@@ -397,6 +400,44 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       are pinned in `## Contracts` below by `architect-agent` - this requirement records the WHAT and the
       loop shape, not the formula.
 
+- [ ] R37: **A second HARNESS, not a fourth backend mode - the gates travel, the guard scripts do not fork.**
+      R34's three modes vary WHERE THE MODEL RUNS. This varies WHICH AGENT HARNESS ENFORCES THE GATES, which
+      is a different axis: R22's Stop guard and R32's loop guard are only worth anything if the harness the
+      human actually drives will run them. Claude Code stays the DEFAULT and the reference harness (R1, R22);
+      a second harness is OPT-IN and ADDITIVE - `install.ps1 -CopilotCli` leaves the Claude Code wiring
+      untouched and additionally wires the SAME guard scripts into GitHub Copilot CLI, so one machine runs both.
+      (a) **One guard, many harnesses.** `dad-guard.ps1` and `dad-loopguard.ps1` stay SINGLE-SOURCE: they keep
+      all project detection, git diffing, repeat-counting and fail-open policy. Per-harness difference is
+      confined to (i) a hooks file in that harness's own format and (ii) a thin ADAPTER where - and only
+      where - the harness's block contract differs. Forking a guard per harness is forbidden: two copies of
+      a gate drift, and the drifted one fails silently, which is the exact failure R22 exists to prevent.
+      (b) **The offline thesis survives, or the harness is out of scope.** Copilot CLI defaults to a GitHub
+      account billed in AI Credits, which would break R1's "no Anthropic account; offline after first setup"
+      thesis outright. It is in scope ONLY because it has a first-class BYOK escape - `COPILOT_PROVIDER_BASE_URL`
+      pointed at Ollama's OpenAI-compatible endpoint, where GitHub authentication is documented as not
+      required - verified against this kit's own local models with the hooks still firing. A candidate harness
+      with no offline path fails the thesis (Goal, R1) and is rejected on that ground, not on preference.
+      (c) **Harness contracts are MEASURED, never assumed - because a mismatch fails SILENTLY.** A hook that is
+      misnamed, wrongly cased, in the wrong location, or that signals a block in a shape the harness does not
+      honor produces NO error: the gate simply never fires and the run looks clean. That is R22's original
+      failure mode wearing a new hat. So a harness is only supported once its event names, config location,
+      payload shape and block contract are measured against the real binary and pinned in `## Contracts`
+      with the evidence and a dated version, and each load-bearing fact carries a `test-kit.ps1` case. Vendor
+      documentation is a starting hypothesis here, not a source of truth.
+      (d) **Subagent tool-call interception is a REQUIREMENT of a harness, not a bonus.** R32's one-agent-per-unit
+      rule and the loop guard both depend on seeing a SUBAGENT's OWN tool calls, not merely that a subagent
+      started and stopped. Lifecycle visibility without per-tool-call interception cannot carry these gates,
+      so it disqualifies a harness rather than earning it partial support. **Admission test - what counts as
+      proof:** before a harness may be wired, it must pass the MARKER TEST - a NAMED custom subagent (not the
+      harness's built-in general-purpose agent, which on Copilot CLI emits no lifecycle events at all) issues a
+      unique string no other session issues, and that string must be observed ARRIVING in the harness's
+      pre-tool-use payload. Lifecycle events alone do not pass. The RESULT is pinned in `## Contracts` with the
+      marker used, per R37(c) - C2d is the worked instance. "Someone reported that it works" is not proof; that
+      second-hand degradation is exactly what R37(c) exists to stop.
+      (e) **Teardown symmetry.** Whatever a harness target installs, `uninstall.ps1` removes, scoped so it is
+      testable against a sandbox rather than the real machine. A hook left pointing at a deleted kit folder
+      fires on every turn and fails - the same reason the Claude Code hook teardown already exists.
+
 ## Contracts (pin BEFORE locking - architect-agent writes these)
 ### C1: R36 planning-cost ratchet - thresholds, pricing message shape, worked examples
 - **Status: APPROVED 2026-09-22.** R36 names two mechanisms as one loop (SCOPE -> PRICE -> ASK ->
@@ -529,6 +570,171 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   false-negative report, the same way other WARN thresholds in this file already are (e.g. the `>= 5`
   uncommitted-done threshold at `doc-stats.ps1:595`).
 
+### C2: R37 GitHub Copilot CLI harness contract - hook location, event casing, block semantics, subagent coverage
+- **Status: MEASURED 2026-09-29 against GitHub Copilot CLI 1.0.89 on Windows.** Per R37(c) every fact in
+  C2 is an empirical measurement against that exact binary, NOT vendor documentation - and on two
+  load-bearing points (C2a location, C2c Stop block shape) the documented behavior and the measured
+  behavior DISAGREE, with no error either way. **Version stamp: these facts are true OF Copilot CLI
+  1.0.89, measured 2026-09-29.** A reader on any later version must re-measure before trusting them.
+- **Enforced by `test-kit.ps1`** (R37c's "each load-bearing fact carries a test case"):
+  `"copilot-hooks.json is the shape Copilot CLI actually loads"` (C2a + C2b, `test-kit.ps1:1338`),
+  `"dad-guard-copilot converts a BLOCK into Copilot's JSON+exit-0 contract"` (C2c, `test-kit.ps1:1382`),
+  `"uninstall removes the Copilot CLI hook file (sandboxed)"` (R37e teardown, `test-kit.ps1:1430`).
+
+#### C2a: Config location - USER level only; the DOCUMENTED repo-level path loads nothing
+- **Measured:** hooks load ONLY from the user-level dir `%USERPROFILE%\.copilot\hooks\*.json`. The
+  documented repo-level location `.github/hooks/*.json` silently loads NOTHING - no error, no log line.
+- **Evidence:** controlled comparison - identical files placed in BOTH locations, same event keys,
+  `version: 1`, cwd = repo root, tested both before and after the repo had a commit. Only the user-level
+  file ever fired.
+- **Consequence pinned into the kit:** `install.ps1 -CopilotCli` writes exactly one file,
+  `%USERPROFILE%\.copilot\hooks\dad.json` (`install.ps1:262-265`), and never writes `.github/hooks/`.
+  An installer that followed the docs would report success and wire a gate that never fires - R22's
+  original silent-failure mode wearing a new hat.
+- **Teardown (R37e):** `uninstall.ps1` removes that same single file, and only if its contents reference
+  our guards, so a same-named third-party file is never deleted (`uninstall.ps1:88-99`). The
+  `-CopilotDir` parameter exists so the removal is testable against a sandbox, not the real machine.
+
+#### C2b: File shape + event-name casing - PascalCase, registered ONCE
+- **File shape (measured):** `{"version":1,"hooks":{"<Event>":[{"type":"command","bash":"...",
+  "powershell":"...","timeoutSec":N}]}}`. `version: 1` is REQUIRED. Copilot reads the `bash` and
+  `powershell` keys; it does NOT read Claude Code's `command` key, and its parser skips unrecognised keys
+  without complaining - so a Claude-Code-shaped file installs cleanly and does nothing.
+- **Casing (measured):** Copilot accepts BOTH camelCase and PascalCase event names, but they are NOT
+  aliases - each dispatches INDEPENDENTLY. Registering both fires every hook TWICE. They also deliver
+  DIFFERENT payload schemas for the same event:
+  | registered as | payload fields | tool reported as |
+  |---|---|---|
+  | camelCase `preToolUse` | `{sessionId, timestamp (epoch ms), cwd, toolName, toolArgs}` | `"powershell"` / `"task"` |
+  | PascalCase `PreToolUse` | `{hook_event_name, session_id, timestamp (ISO), cwd, tool_name, tool_input}` | NORMALIZED to Claude Code's vocabulary: `"Bash"` / `"Agent"` |
+- **Decision: the kit standardizes on PascalCase, and registers each event exactly once.** Two reasons,
+  both load-bearing: the PascalCase payload is the snake_case shape `dad-loopguard.ps1` ALREADY parses
+  (so R37a's "one guard, many harnesses" holds with no fork and no translation layer), and
+  double-registration would fire the loop guard twice per tool call and corrupt its repeat count - a
+  guard that miscounts is worse than no guard.
+- **Known ragged edge (pinned as a fact, deliberately unused):** PascalCase `SubagentStart` DOES fire,
+  but its payload is NOT normalized - it arrives camelCase with no `hook_event_name` - unlike
+  `SubagentStop`, which IS normalized. The kit does not currently use `SubagentStart`; anything that
+  starts using it must not assume the C2b PascalCase schema.
+
+#### C2c: Block/deny contract - DIFFERS PER EVENT, and a mismatch fails SILENTLY
+- **Measured, `PreToolUse`:** exit code 2 IS honored as a deny. Therefore `dad-loopguard.ps1` works
+  UNCHANGED under Copilot - no adapter, no second copy (R37a).
+- **Measured, `Stop`:** exit code 2 is IGNORED. Full measured matrix:
+  | hook emits | Copilot's behavior |
+  |---|---|
+  | exit 2 alone | IGNORED - the turn ends |
+  | `{"decision":"block","reason":"..."}` on stdout + exit 0 | BLOCKS; the retry arrives with `stop_hook_active=true` |
+  | `{"decision":"block","reason":"..."}` on stdout + exit 2 | IGNORED - a nonzero exit is treated as "the hook errored" and stdout is discarded WITH it |
+- **The trap this exists to defuse (third row):** `dad-guard.ps1`'s `Block()` already emits the JSON
+  decision *and* exit 2 (both on purpose, so whichever a harness honors, the message lands). Under
+  Copilot that combination is discarded. Wiring `dad-guard.ps1` to Copilot's `Stop` therefore LOOKS
+  correct - right file, right event, right JSON - and silently does nothing: the close-out gates quietly
+  go back to being model-optional, with no error to say so.
+- **Decision:** a thin adapter, `dad-guard-copilot.ps1`, is the Copilot `Stop` hook. It runs
+  `dad-guard.ps1` unchanged on the verbatim stdin payload, keeps its verdict, and re-emits the JSON with
+  **exit 0**. `dad-guard.ps1` stays the single source of truth for project detection, git diffing,
+  `stop_hook_active` retry release and the fail-open policy (R37a - forking a guard is forbidden).
+- **Signature / pre + post:** `dad-guard-copilot.ps1` reads the Stop payload on stdin (Copilot's Stop
+  payload already carries the snake_case fields `dad-guard.ps1` reads: `session_id`, `cwd`,
+  `transcript_path`, `stop_hook_active`, so no translation is needed - only the exit code differs).
+  Post: if inner exit code == 2, write `{"decision":"block","reason":...}` to stdout and `exit 0`;
+  otherwise write nothing and `exit 0`. If the inner guard blocked but produced no parsable
+  `decision:"block"` JSON, the adapter SYNTHESIZES one from its stdout, so a block can never evaporate
+  (`dad-guard-copilot.ps1:62-77`).
+
+#### C2d: Subagent tool-call interception - covered, and attribution works
+- **Measured:** Copilot's `PreToolUse` DOES fire for a subagent's OWN tool calls, proven with a unique
+  marker string that only the subagent ever issued. This is what qualifies Copilot CLI as a harness at
+  all: R37(d) makes per-tool-call interception a REQUIREMENT, not a bonus.
+- **Attribution (measured):** the documented payload has no agent field, but a subagent's `PreToolUse`
+  carries its OWN `session_id`, distinct from the main session's, and that value EQUALS `agent_id` in the
+  matching `SubagentStop`. So subagent tool calls are attributable without any new payload field.
+- **Also measured:** the built-in `general-purpose` agent emits NO subagent lifecycle events - a NAMED
+  CUSTOM agent is required. Interception still held at nested subagent depth 2.
+
+#### C2e: Offline / BYOK path - the R37(b) thesis check
+- **Measured:** `COPILOT_PROVIDER_BASE_URL` activates BYOK, and GitHub authentication is then not
+  required; `COPILOT_PROVIDER_TYPE=openai` covers Ollama's OpenAI-compatible endpoint. Verified working
+  against this kit's local Ollama with the C2a/C2b/C2c hooks still firing. This is the only reason
+  Copilot CLI is in scope at all (R37b): without it the harness would break R1's offline thesis outright.
+
+#### C2f: Version drift policy - LOUD at setup, fail-open at runtime
+- **APPROVED 2026-09-29.** Everything in C2a-C2e is true of Copilot CLI 1.0.89 and of nothing else. A harness
+  that changes any of it breaks the gates SILENTLY (C2c's whole point), so the drift must surface somewhere -
+  but drift is a SETUP fact, not a per-turn fact, so it surfaces where setup is inspected and NOWHERE else.
+- **Runtime: unchanged, still fails OPEN.** Neither `dad-guard-copilot.ps1` nor `dad-loopguard.ps1` may block,
+  warn, or self-check on a version mismatch mid-turn. A guard that blocks on its own uncertainty eventually
+  blocks someone for no reason, which would violate C2's fail-open invariant and make the gate noise.
+- **Setup: LOUD.** `install.ps1 -CopilotCli` and `dad-doctor` compare the INSTALLED `copilot --version` against
+  the measured version and WARN on any mismatch, naming both numbers and telling the reader to re-measure
+  C2a-C2e before trusting the gates. A warn, never a hard stop: an unmeasured harness is a known-unknown, not
+  a known-broken, and refusing to install would be worse than saying so.
+- **One source of truth for the number:** `$CopilotMeasuredVersion` in `install.ps1`. `test-kit.ps1` asserts
+  that constant equals the version stamped in THIS contract, so the doc and the code cannot drift apart
+  silently - the failure mode this whole contract exists to prevent, applied to itself.
+- **Deliberately NOT done yet:** a `harnesses.json` manifest (the kit's usual "never hard-code a list in a
+  script" convention, cf. `models.json`). One harness does not justify the scaffolding; the moment a SECOND
+  non-Claude-Code harness is added, the constant becomes a manifest and this bullet is the reason why.
+
+#### C2 worked example - the exact file the kit installs, and the exact Stop block flow
+- **Worked example (1/2) - `%USERPROFILE%\.copilot\hooks\dad.json` as installed** (source template:
+  `copilot-hooks.json`; `install.ps1 -CopilotCli` rewrites the dev-path placeholder
+  `C:\Projects\Claude\MCP\DAD-kit` to the real install root on the PARSED object, because JSON doubles
+  backslashes and a text replace would match nothing - `install.ps1:266-284`):
+  ```json
+  {
+    "version": 1,
+    "hooks": {
+      "Stop": [
+        { "type": "command",
+          "bash":       "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-guard-copilot.ps1\"",
+          "powershell": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-guard-copilot.ps1\"",
+          "timeoutSec": 20 }
+      ],
+      "PreToolUse": [
+        { "type": "command",
+          "bash":       "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-loopguard.ps1\"",
+          "powershell": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Projects\\Claude\\MCP\\DAD-kit\\dad-loopguard.ps1\"",
+          "timeoutSec": 10 }
+      ]
+    }
+  }
+  ```
+  Every element of that file is a C2 decision: user-level path (C2a), `version: 1` + `bash`/`powershell`
+  keys (C2b), PascalCase event names each appearing EXACTLY ONCE (C2b), `dad-guard-copilot.ps1` on `Stop`
+  but bare `dad-loopguard.ps1` on `PreToolUse` (C2c - only Stop needs the adapter).
+- **Worked example (2/2) - the Stop block flow, traced end to end.** Model tries to end a turn with
+  uncommitted work in a DrDad project:
+  1. Copilot fires `Stop` -> runs `dad-guard-copilot.ps1`, stdin =
+     `{"hook_event_name":"Stop","session_id":"abc123","cwd":"D:\\projects\\DrDad","stop_hook_active":false}`.
+  2. The adapter writes that stdin verbatim to a temp file and runs `dad-guard.ps1` with it.
+  3. `dad-guard.ps1` decides BLOCK -> stdout `{"decision":"block","reason":"<gate text>"}`, exit **2**.
+  4. Adapter sees inner exit 2 -> re-emits `{"decision":"block","reason":"<gate text>"}` on stdout, exit **0**.
+  5. Copilot HONORS it (row 2 of the C2c matrix): the turn is blocked and the retry arrives with
+     `stop_hook_active=true`, which `dad-guard.ps1` already reads as its release condition.
+  Counter-example that MUST stay broken (this is the whole point of the adapter): skip step 4 and let
+  `dad-guard.ps1` talk to Copilot directly - identical JSON, but exit 2 -> row 3 of the matrix -> Copilot
+  discards stdout with the nonzero exit, the turn ends, and NOTHING is logged.
+- **Invariant(s):** (i) exactly ONE registration per event, PascalCase, in exactly ONE file at the
+  user-level path - any camelCase duplicate double-fires the guards and corrupts the loop guard's repeat
+  count; (ii) `dad-guard.ps1` and `dad-loopguard.ps1` are never copied or forked per harness (R37a) - the
+  only per-harness artifacts are the hooks file and `dad-guard-copilot.ps1`; (iii) the adapter FAILS OPEN
+  exactly like `dad-guard.ps1` - every error path ends in `exit 0` (allow the stop), because a guard that
+  blocks on its own bugs is worse than the problem it solves; (iv) whatever `-CopilotCli` installs,
+  `uninstall.ps1` removes (R37e); (v) a hook change only takes effect on Copilot CLI restart, since it
+  loads hooks at startup (`install.ps1:293`).
+- **Out of scope:** other Copilot surfaces (VS Code Copilot Chat, Agents View, cloud coding agent) - see
+  `## Out of scope`; `SubagentStart` (fires, but un-normalized per C2b, and unused); any attempt to make
+  the camelCase event family work; automatic detection of a Copilot CLI version other than 1.0.89.
+- **Open questions returned to the human - NOT decided here, do not implement either way yet:**
+  (i) harness-contract DRIFT policy (what the kit does when a future Copilot version changes one of these
+  contracts - fail open like `dad-guard.ps1`, or fail loud); (ii) how the supported harness version is
+  RECORDED and whether `install.ps1`/`dad-doctor` detects version drift at install time; (iii) whether
+  `SubagentStart`'s un-normalized payload should be defensively parsed now or left unused; (iv) whether a
+  future candidate harness must PROVE subagent interception (C2d-style marker test) before it may be
+  added, and where that proof lives.
+
 ## Components
 ### local-tools (C# MCP server)
 - Behavior: R2. `net8.0`, `RollForward=LatestMajor`. Config via env: `LOCALTOOLS_DOCS_DIR`, `OLLAMA_HOST`,
@@ -568,3 +774,7 @@ This design doc previously embedded the story backlog inline; it now lives in th
 - Cloud models as the DEFAULT. Offline-first is the default and the thesis; cloud and hybrid are opt-in
   alternate backends (R34), used for delivery or to clear a local-model ceiling, never the out-of-the-box path.
 - Additional Node/Python MCP servers (the single C# server is the design).
+- Other Copilot surfaces as harness targets - VS Code Copilot Chat, the Agents View, the cloud coding agent.
+  R37 covers Copilot CLI only. VS Code Copilot Chat is deliberately deferred and NOT measured: it is the
+  surface carrying the live upstream casing defect (microsoft/vscode#335244, camelCase `subagentStart`
+  silently ignored), and R37(c) forbids supporting a harness on unmeasured assumptions.

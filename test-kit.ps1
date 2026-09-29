@@ -1335,6 +1335,147 @@ Test-Case "settings.json wires dad-guard as a Stop hook, at a rewritable path" {
   } finally { Remove-Sandbox $sb2 }
 }
 
+Test-Case "copilot-hooks.json is the shape Copilot CLI actually loads" {
+  $p = Join-Path $kit "copilot-hooks.json"
+  Assert (Test-Path $p) "copilot-hooks.json is missing (install.ps1 -CopilotCli reads it)"
+  $bytes = [System.IO.File]::ReadAllBytes($p)
+  Assert (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) "copilot-hooks.json has a BOM"
+  $j = Get-Content $p -Raw | ConvertFrom-Json
+  Assert ($j.version -eq 1) "copilot-hooks.json must declare version 1 or Copilot skips it"
+  $evts = @($j.hooks.PSObject.Properties.Name)
+  # PascalCase ONLY. Copilot CLI accepts both casings but they are NOT aliases - each dispatches
+  # independently, so registering both fires every hook TWICE and corrupts dad-loopguard's repeat
+  # count (its whole job is counting identical calls). PascalCase is also the casing that delivers the
+  # snake_case payload (tool_name/session_id/tool_input) dad-loopguard already parses.
+  foreach ($e in $evts) {
+    Assert ($e -cmatch '^[A-Z]') "copilot-hooks.json event '$e' is not PascalCase - camelCase would double-fire alongside it"
+  }
+  Assert ($evts -contains "Stop") "no Stop hook - the close-out gates would be model-optional under Copilot"
+  Assert ($evts -contains "PreToolUse") "no PreToolUse hook - a subagent could repeat one failing command indefinitely"
+  # Stop MUST go through the adapter. dad-guard.ps1 wired directly emits the right JSON and is still
+  # ignored, because Copilot discards stdout on a nonzero exit - a silent downgrade with no error.
+  $stopCmds = @($j.hooks.Stop | ForEach-Object { @($_.bash) + @($_.powershell) }) -join " "
+  Assert ($stopCmds -match 'dad-guard-copilot') "Copilot's Stop hook must call dad-guard-copilot.ps1, not dad-guard.ps1 directly"
+  $preCmds = @($j.hooks.PreToolUse | ForEach-Object { @($_.bash) + @($_.powershell) }) -join " "
+  Assert ($preCmds -match 'dad-loopguard') "Copilot's PreToolUse hook does not call dad-loopguard.ps1"
+  # Copilot reads 'bash'/'powershell', not Claude Code's 'command'. A missing key = a silent no-op.
+  foreach ($e in $evts) {
+    foreach ($h in $j.hooks.$e) {
+      Assert ($h.type -eq "command") "copilot-hooks.json $e entry has type '$($h.type)', expected 'command'"
+      Assert ($h.bash)       "copilot-hooks.json $e entry has no 'bash' command"
+      Assert ($h.powershell) "copilot-hooks.json $e entry has no 'powershell' command"
+    }
+  }
+  # Same placeholder contract as settings.json: install.ps1 rewrites it on the PARSED object.
+  $devPath = 'C:\Projects\Claude\MCP\DAD-kit'
+  $all = @($evts | ForEach-Object { $j.hooks.$_ } | ForEach-Object { @($_.bash) + @($_.powershell) }) -join " "
+  Assert ($all -match [regex]::Escape($devPath)) "copilot-hooks.json does not use the dev-path placeholder"
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  Assert ($inst -match 'copilot-hooks\.json') "install.ps1 never reads copilot-hooks.json"
+  Assert ($inst -match '\$h\.bash\s*=\s*\$h\.bash\.Replace') "install.ps1 does not rewrite the Copilot hook's bash command"
+  Assert ($inst -match '\$h\.powershell\s*=\s*\$h\.powershell\.Replace') "install.ps1 does not rewrite the Copilot hook's powershell command"
+  # USER-level only: Copilot's DOCUMENTED repo-level .github/hooks/ location silently loads nothing on
+  # 1.0.89, so following the docs produces a hook that never fires and an installer that says it worked.
+  Assert ($inst -match '\.copilot\\hooks') "install.ps1 does not write to the user-level .copilot\hooks dir"
+}
+
+Test-Case "dad-guard-copilot converts a BLOCK into Copilot's JSON+exit-0 contract" {
+  # Measured on Copilot CLI 1.0.89 (2026-09-29), for its Stop hook:
+  #   exit 2 alone                  -> IGNORED, turn ends
+  #   {"decision":"block"} + exit 0 -> BLOCKS (retry arrives with stop_hook_active=true)
+  #   {"decision":"block"} + exit 2 -> IGNORED (nonzero exit = "hook errored", stdout discarded)
+  # dad-guard.ps1's Block() emits JSON *and* exit 2 - the third row - so pointing Copilot at it looks
+  # correct and silently does nothing. Run the real adapter over a STUB guard so this asserts the
+  # conversion itself, not dad-guard's project-detection.
+  $sb = New-Sandbox
+  try {
+    Copy-Item (Join-Path $kit "dad-guard-copilot.ps1") (Join-Path $sb "dad-guard-copilot.ps1") -Force
+    $adapter = Join-Path $sb "dad-guard-copilot.ps1"
+    $payload = '{"session_id":"t","cwd":"C:\\x","stop_hook_active":false}'
+
+    # 1) stub BLOCKS in dad-guard.ps1's real shape (JSON on stdout + stderr + exit 2)
+    $block = '$null = [Console]::In.ReadToEnd()' + "`r`n" +
+             '[Console]::Out.Write(''{"decision":"block","reason":"stub blocked"}'')' + "`r`n" +
+             '[Console]::Error.Write("stub blocked")' + "`r`n" + 'exit 2'
+    Set-Content (Join-Path $sb "dad-guard.ps1") $block -Encoding ASCII
+    $out = $payload | & powershell -NoProfile -ExecutionPolicy Bypass -File $adapter 2>$null
+    $code = $LASTEXITCODE
+    $text = ($out | Out-String).Trim()
+    Assert ($code -eq 0) "adapter exited $code on a block; Copilot discards stdout on a nonzero exit, so the block would be IGNORED"
+    Assert ($text -match '"decision"\s*:\s*"block"') "adapter did not re-emit a block decision (got: '$text')"
+    Assert ($text -match 'stub blocked') "adapter dropped dad-guard's reason text"
+
+    # 2) stub ALLOWS -> adapter must allow silently (no stray JSON that Copilot might read as a block)
+    Set-Content (Join-Path $sb "dad-guard.ps1") ('$null = [Console]::In.ReadToEnd()' + "`r`n" + 'exit 0') -Encoding ASCII
+    $out2 = $payload | & powershell -NoProfile -ExecutionPolicy Bypass -File $adapter 2>$null
+    $code2 = $LASTEXITCODE
+    Assert ($code2 -eq 0) "adapter exited $code2 on an allow"
+    Assert ((($out2 | Out-String).Trim()) -notmatch '"decision"') "adapter emitted a decision on an ALLOW - it would block every stop"
+
+    # 3) stub blocks but prints NO json (stderr only). The verdict must survive, or exit 2's message
+    #    would vanish entirely under Copilot.
+    Set-Content (Join-Path $sb "dad-guard.ps1") ('$null = [Console]::In.ReadToEnd()' + "`r`n" + '[Console]::Error.Write("no json here")' + "`r`n" + 'exit 2') -Encoding ASCII
+    $out3 = $payload | & powershell -NoProfile -ExecutionPolicy Bypass -File $adapter 2>$null
+    Assert ($LASTEXITCODE -eq 0) "adapter exited nonzero on a json-less block"
+    Assert ((($out3 | Out-String).Trim()) -match '"decision"\s*:\s*"block"') "adapter lost a block that produced no JSON"
+
+    # 4) fail OPEN when dad-guard.ps1 is absent, matching dad-guard's own policy
+    Remove-Item (Join-Path $sb "dad-guard.ps1") -Force
+    $out4 = $payload | & powershell -NoProfile -ExecutionPolicy Bypass -File $adapter 2>$null
+    Assert ($LASTEXITCODE -eq 0) "adapter did not fail open when dad-guard.ps1 was missing"
+    Assert ((($out4 | Out-String).Trim()) -notmatch '"decision"') "adapter blocked when dad-guard.ps1 was missing - it must fail open"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "uninstall removes the Copilot CLI hook file (sandboxed)" {
+  # A dad.json left behind fires on every Copilot tool call and every stop, and fails once the kit
+  # folder is gone - the same failure the Claude Code hook teardown above exists to prevent.
+  $sb = New-Sandbox
+  try {
+    $fakeHooks = Join-Path $sb "copilot-hooks-dir"
+    New-Item -ItemType Directory -Force $fakeHooks | Out-Null
+    Copy-Item (Join-Path $kit "copilot-hooks.json") (Join-Path $fakeHooks "dad.json") -Force
+    $fakeClaude = Join-Path $sb ".claude"
+    New-Item -ItemType Directory -Force $fakeClaude | Out-Null
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "uninstall.ps1") -ClaudeDir $fakeClaude -CopilotDir $fakeHooks 2>&1 | Out-Null
+    Assert (-not (Test-Path (Join-Path $fakeHooks "dad.json"))) "uninstall left the Copilot hook file behind - it would fail on every tool call once the folder is gone"
+    # A same-named file that is NOT ours must survive.
+    Set-Content (Join-Path $fakeHooks "dad.json") '{"version":1,"hooks":{}}' -Encoding ASCII
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "uninstall.ps1") -ClaudeDir $fakeClaude -CopilotDir $fakeHooks 2>&1 | Out-Null
+    Assert (Test-Path (Join-Path $fakeHooks "dad.json")) "uninstall deleted a dad.json that contained no DAD guard reference"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)" {
+  # Contract C2f names install.ps1's $CopilotMeasuredVersion the ONE source of truth for the version C2 was
+  # measured against, and requires this assertion so the doc and the code cannot disagree silently. That is
+  # the contract applying its own rule to itself: every OTHER silent-drift failure here (hook location,
+  # event casing, block semantics) is invisible at runtime, and so is this one - a stale number would keep
+  # claiming a contract had been verified against a harness nobody ever tested.
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  $m = [regex]::Match($inst, '\$CopilotMeasuredVersion\s*=\s*"([^"]+)"')
+  Assert $m.Success "install.ps1 has no `$CopilotMeasuredVersion constant (contract C2f requires one)"
+  $constant = $m.Groups[1].Value
+
+  $design = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
+  $d = [regex]::Match($design, 'MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+GitHub\s+Copilot\s+CLI\s+([0-9][0-9.]*)')
+  Assert $d.Success "DESIGN.md contract C2 carries no 'MEASURED <date> against GitHub Copilot CLI <version>' stamp"
+  $stamped = $d.Groups[1].Value
+
+  Assert ($constant -eq $stamped) "install.ps1 says Copilot $constant but DESIGN.md C2 is stamped $stamped - re-measure C2a-C2e, then update BOTH"
+
+  # dad-doctor must READ the constant, not carry its own copy: two hard-coded numbers is the drift C2f bans.
+  $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
+  Assert ($doc -match 'CopilotMeasuredVersion') "dad-doctor.ps1 does not read install.ps1's `$CopilotMeasuredVersion"
+  Assert ($doc -notmatch '"' + [regex]::Escape($constant) + '"') "dad-doctor.ps1 hard-codes the Copilot version instead of reading it from install.ps1"
+
+  # C2f: LOUD at setup, fail-open at runtime. The guards must NOT gain a version self-check.
+  foreach ($g in @("dad-guard-copilot.ps1","dad-loopguard.ps1")) {
+    $gs = Get-Content (Join-Path $kit $g) -Raw
+    Assert ($gs -notmatch '\$CopilotMeasuredVersion') "$g self-checks the harness version at runtime - C2f keeps drift detection at SETUP only, so a guard never blocks on its own uncertainty"
+  }
+}
+
 Test-Case "the guard counts WEB source as code (.cshtml, appsettings.json)" {
   # The extension list was C#/Python/JS-shaped and omitted .cshtml, .razor, .html, .css and .json. So for
   # the project types this kit is most likely to be pointed at - an ASP.NET Razor Pages site, or anything
