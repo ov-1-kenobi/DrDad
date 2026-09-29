@@ -46,9 +46,50 @@ $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 # No other shape is valid - the reporting loop below trusts these three strings exactly.
 
 function Test-LoopGuardGate {
-  # Stubbed in T8.1. T8.2 implements this by forcing 4 identical consecutive tool calls against
-  # dad-loopguard.ps1's real PreToolUse hook contract and confirming the 4th is blocked.
-  [pscustomobject]@{ Result = "SKIP"; Reason = "not yet implemented" }
+  # T8.2: dad-loopguard.ps1 is a KIT-level file (wired kit-wide as a PreToolUse hook in settings.json,
+  # not per-project state) - resolve it as a sibling of THIS script, not inside -ProjectDir.
+  $lg = Join-Path $PSScriptRoot "dad-loopguard.ps1"
+  if (-not (Test-Path -LiteralPath $lg)) {
+    return [pscustomobject]@{ Result = "SKIP"; Reason = "dad-loopguard.ps1 not found next to dad-gates-smoke.ps1" }
+  }
+
+  # A session id scoped to this run only, so this provocation never collides with a real Claude Code
+  # session's own streak state. Reset it first in case a prior crashed run left state behind.
+  $sid = "gates-smoke-$PID-$(Get-Random)"
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+
+  # Exact payload shape proven by test-kit.ps1's own already-passing loop-guard Test-Case
+  # (test-kit.ps1:2894-2898's Invoke-Guard helper) - reused unchanged, not invented.
+  function Invoke-LoopGuard($session) {
+    $j = @{ session_id = $session; tool_name = "Bash"; tool_input = @{ command = "ls -la nowhere-at-all-gates-smoke" } } | ConvertTo-Json -Compress
+    $j | & powershell -NoProfile -ExecutionPolicy Bypass -File $lg 2>&1 | Out-Null
+    return $LASTEXITCODE
+  }
+
+  # Send the identical payload up to 4 times in a row, nothing else run in between. Blocking as early
+  # as the 3rd call is fine (mirrors test-kit.ps1:2933-2939's own tolerance) - never blocking by the
+  # 4th is the bug.
+  # $ErrorActionPreference=Stop (set at the top of this script) turns the loop guard's own BLOCKED
+  # message - written to stderr, merged in via 2>&1 - into a terminating NativeCommandError. Relax it
+  # for just this provocation, same as test-kit.ps1 does around its own Invoke-Guard calls.
+  $prevEap = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $blocked = $false
+  try {
+    for ($i = 1; $i -le 4; $i++) {
+      $code = Invoke-LoopGuard $sid
+      if ($code -eq 2) { $blocked = $true; break }
+    }
+  } finally {
+    $ErrorActionPreference = $prevEap
+  }
+
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
+
+  if ($blocked) {
+    return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "4 identical consecutive Bash calls were blocked by attempt $i" }
+  }
+  return [pscustomobject]@{ Result = "SILENT-FAIL"; Reason = "loop-guard" }
 }
 
 function Test-RatchetCloseGate {

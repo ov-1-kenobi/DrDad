@@ -1891,19 +1891,18 @@ Test-Case "dad-gates-smoke: skeleton reports SKIP honestly, never a fabricated p
   & powershell -NoProfile -ExecutionPolicy Bypass -File $gs -ProjectDir $bogus 2>&1 | Out-Null
   Assert ($LASTEXITCODE -eq 2) "dad-gates-smoke.ps1 did not fail loudly on a missing -ProjectDir (got exit $LASTEXITCODE)"
 
-  # Running it TODAY, with all three real checks still stubbed, must report every gate as SKIP - never a
-  # fabricated INTERCEPTED - and the overall exit code must still be non-zero (an all-SKIP run proved
-  # nothing and must never look like success).
+  # T8.2 fills in loop-guard for real, so it must now report INTERCEPTED - never SKIP or a fabricated
+  # SILENT-FAIL - while ratchet-close-refusal and dad-guard-stop remain stubbed SKIP until T8.3/T8.4 land.
   $sb = New-Sandbox
   try {
     $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $gs -ProjectDir $sb 2>&1 | Out-String)
     $exit = $LASTEXITCODE
-    foreach ($gate in @("loop-guard", "ratchet-close-refusal", "dad-guard-stop")) {
-      Assert ($out -match [regex]::Escape("[gates-smoke] $gate`: SKIP")) "gate '$gate' was not reported as SKIP (real gates get filled in by T8.2/T8.3/T8.4):`n$out"
+    Assert ($out -match [regex]::Escape("[gates-smoke] loop-guard: INTERCEPTED")) "gate 'loop-guard' was not reported as INTERCEPTED now that T8.2 implements it:`n$out"
+    foreach ($gate in @("ratchet-close-refusal", "dad-guard-stop")) {
+      Assert ($out -match [regex]::Escape("[gates-smoke] $gate`: SKIP")) "gate '$gate' was not reported as SKIP (real gates get filled in by T8.3/T8.4):`n$out"
     }
-    Assert ($out -notmatch 'INTERCEPTED') "an all-stubbed run fabricated an INTERCEPTED result:`n$out"
-    Assert ($out -notmatch 'SILENT-FAIL') "an all-stubbed run fabricated a SILENT-FAIL result:`n$out"
-    Assert ($exit -ne 0) "an all-SKIP run exited 0 - that must never look like success"
+    Assert ($out -notmatch 'SILENT-FAIL') "loop-guard was reported as SILENT-FAIL - the 4th identical consecutive call was not blocked:`n$out"
+    Assert ($exit -eq 0) "at least one gate is INTERCEPTED and none is SILENT-FAIL, so the run should exit 0:`n$out"
   } finally { Remove-Sandbox $sb }
 }
 

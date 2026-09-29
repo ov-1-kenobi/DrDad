@@ -522,7 +522,7 @@ test-kit.ps1 coverage exercises the script plus both wiring points together, so 
   report/exit-code contract before any real gate provocation exists, so a half-finished `gates-smoke` can
   never be mistaken for a working one.
 
-### [ ] T8.2 - Provoke the loop guard: 4 identical consecutive calls, confirm the 4th is blocked   [research]   (Story S8)
+### [x] T8.2 - Provoke the loop guard: 4 identical consecutive calls, confirm the 4th is blocked   [research]   (Story S8)
 - **Goal:** Implement `Test-LoopGuardGate` in `dad-gates-smoke.ps1` so it actually forces 4+ identical
   consecutive tool calls against the kit's real `dad-loopguard.ps1` PreToolUse hook and confirms the 4th is
   blocked (exit 2), reporting `INTERCEPTED` - or naming `loop-guard` as `SILENT-FAIL` if it is not (S8 AC1).
