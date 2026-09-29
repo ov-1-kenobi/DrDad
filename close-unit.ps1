@@ -70,6 +70,25 @@ function Invoke-Verify([string]$cmd) {
   return [pscustomobject]@{ Output = $out; Code = $code }
 }
 
+# A file-lock build failure where the locked OUTPUT is already newer than every source input means the
+# build output is current (a running app holds it; nothing changed) - killing that app would be pointless.
+# True only when $lockedPath exists AND no source file under $projDir (excluding bin/ obj/ .git/ _tmp/)
+# has a LastWriteTime newer than it.
+function Test-BuildOutputCurrent([string]$lockedPath, [string]$projDir) {
+  if (-not $lockedPath -or -not (Test-Path -LiteralPath $lockedPath -PathType Leaf)) { return $false }
+  $stamp = (Get-Item -LiteralPath $lockedPath).LastWriteTime
+  $root = (Resolve-Path -LiteralPath $projDir).Path.TrimEnd('\','/')
+  $inc = '*.cs','*.csproj','*.props','*.targets','*.razor','*.xaml'
+  $files = Get-ChildItem -LiteralPath $root -Recurse -File -Include $inc -ErrorAction SilentlyContinue
+  foreach ($f in $files) {
+    $rel = $f.FullName.Substring($root.Length).TrimStart('\','/')
+    $segs = @($rel -split '[\\/]')
+    if ($segs.Count -gt 1 -and (@($segs[0..($segs.Count - 2)]) | Where-Object { $_ -in 'bin','obj','.git','_tmp' })) { continue }
+    if ($f.LastWriteTime -gt $stamp) { return $false }
+  }
+  return $true
+}
+
 function Show-Tail([string]$text) {
   foreach ($l in ($text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 15)) {
     Write-Host "    $l" -ForegroundColor DarkYellow
@@ -254,17 +273,31 @@ if (-not $SkipVerify) {
   } else {
     Write-Host "[close-unit] build: $cmd" -ForegroundColor Cyan
     $r = Invoke-Verify $cmd
+    $lockCurrent = $false
     # A FILE-LOCK failure is not a code failure: a left-over apphost (a `dotnet run` nobody stopped) holds
     # the output DLL/exe, so the build cannot overwrite it - MSB3026 / "being used by another process". A
     # real run hit this seven times and could not clear it. Clear the project-owned lock and retry ONCE
     # before declaring failure. free-locks is scoped to processes running from THIS project's own folder,
     # so it is safe to invoke automatically.
     if ($r.Code -ne 0 -and $r.Output -match '(?i)MSB3026|being used by another process|cannot access the file.{0,40}\.(dll|exe)|locked by') {
+      # Before killing anything: if the locked output is already newer than every source, it is current.
+      $lockedPaths = @([regex]::Matches($r.Output, "(?i)cannot access the file '([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+      $upToDate = $false
+      if ($lockedPaths.Count -gt 0) {
+        $upToDate = $true
+        foreach ($lp in $lockedPaths) { if (-not (Test-BuildOutputCurrent $lp $proj)) { $upToDate = $false; break } }
+      }
+      if ($upToDate) {
+        Write-Host "[close-unit] build up-to-date (output locked by a running app; no sources changed since it was built) - nothing killed" -ForegroundColor Green
+        $r = [pscustomobject]@{ Code = 0; Output = $r.Output }
+        $lockCurrent = $true
+      } else {
       Write-Host "[close-unit] build blocked by a FILE LOCK (a left-over app process holds the output). Clearing it..." -ForegroundColor Yellow
       $fl = Join-Path $kit "free-locks.ps1"
       if (Test-Path $fl) { & powershell -NoProfile -ExecutionPolicy Bypass -File $fl -ProjectDir $proj 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray } }
       Write-Host "[close-unit] retrying the build once..." -ForegroundColor Yellow
       $r = Invoke-Verify $cmd
+      }
     }
     if ($r.Code -ne 0) {
       Write-Host "[close-unit] BUILD FAILED (exit $($r.Code)) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
@@ -279,7 +312,8 @@ if (-not $SkipVerify) {
       Write-Host "             Fix the build, then re-run. (-SkipVerify overrides, but then 'done' means nothing.)" -ForegroundColor Red
       exit 1
     }
-    $notes.Add("build verified ($cmd)")
+    if ($lockCurrent) { $notes.Add("build up-to-date (output locked by a running app; no sources changed since it was built) - nothing killed") }
+    else { $notes.Add("build verified ($cmd)") }
     # The build just succeeded, so the assemblies are current: refresh the API surface while it is true.
     # Generated from the DLLs, so it cannot drift, and it lands in docs\ where the index already looks.
     try {

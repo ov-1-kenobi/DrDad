@@ -2189,6 +2189,30 @@ Test-Case "close-unit REFUSES to close over a shrink, and only ratchets on succe
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "close-unit Test-BuildOutputCurrent: lock-blocked build with current output is not killed" {
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $kit "close-unit.ps1"), [ref]$null, [ref]$null)
+  $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Test-BuildOutputCurrent' }, $true)
+  Assert ($null -ne $fn) "Test-BuildOutputCurrent is not defined in close-unit.ps1"
+  . ([scriptblock]::Create($fn.Extent.Text))
+  $root = Join-Path $kit "_tmp"; New-Item -ItemType Directory -Force $root | Out-Null
+  $d = Join-Path $root ("boc_" + [guid]::NewGuid().ToString("N").Substring(0,8))
+  try {
+    New-Item -ItemType Directory -Force "$d\src","$d\bin\Release","$d\obj" | Out-Null
+    "class A {}" | Set-Content "$d\src\a.cs"; "<Project/>" | Set-Content "$d\p.csproj"
+    "x" | Set-Content "$d\bin\Release\app.exe"
+    $old = (Get-Date).AddMinutes(-10)
+    (Get-Item "$d\src\a.cs").LastWriteTime = $old; (Get-Item "$d\p.csproj").LastWriteTime = $old
+    (Get-Item "$d\bin\Release\app.exe").LastWriteTime = (Get-Date).AddMinutes(-5)
+    Assert (Test-BuildOutputCurrent "$d\bin\Release\app.exe" $d) "older sources should mean current"
+    # a build-output/obj source-looking file that is newer is ignored
+    "class G {}" | Set-Content "$d\obj\gen.cs"; "class G {}" | Set-Content "$d\bin\Release\gen.cs"
+    Assert (Test-BuildOutputCurrent "$d\bin\Release\app.exe" $d) "newer files under bin/ obj/ must be ignored"
+    Assert (-not (Test-BuildOutputCurrent "$d\bin\Release\missing.exe" $d)) "a missing locked file must not be current"
+    "class B {}" | Set-Content "$d\src\b.cs"   # now, newer than the exe
+    Assert (-not (Test-BuildOutputCurrent "$d\bin\Release\app.exe" $d)) "a newer .cs must mean not current"
+  } finally { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 Test-Case "dad-gates-smoke: skeleton reports SKIP honestly, never a fabricated pass (T8.1)" {
   # T8.2/T8.3/T8.4 replaced the stub Test-*Gate functions one at a time with real provocations - this
   # case keeps asserting the report/exit-code contract itself (parse/ASCII/usage/loud-failure), which

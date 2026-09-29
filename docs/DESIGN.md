@@ -459,6 +459,36 @@ local-model ceiling, but every command, agent, and gate is identical across all 
           a RUN cost, which is today an after-the-fact human narration - and it is the real-numbers source
           R36's pricing loop needs in order to price scope against anything but an estimate.
 
+- [ ] R39: **Copilot CLI PARITY - the DrDad loop, not only its two gates, runs under the second harness -
+      MEASURED before it is promised.** R37 admitted Copilot CLI for exactly two things: the Stop guard and
+      the loop guard. That is scope, not a defect, but it leaves the harness half-supported: under Copilot
+      today the `local-tools` MCP server is not reachable (`copilot mcp list` shows only the built-in GitHub
+      server, although Copilot's own help documents a workspace `.mcp.json` source), the kit's slash commands
+      and `*-agent` subagents install to `%USERPROFILE%\.claude\` only, and the gate log (R38b) and its
+      proofs are written and tested against the Claude Code hook payload alone. Parity means one project can
+      be driven from either harness through the SAME docs, scripts and gates.
+      (a) **Measure first, promise second (R37c applies unchanged).** No parity story may be written against a
+          Copilot behaviour that is not pinned in `## Contracts` with the binary version and the evidence.
+          The FIRST story is a measurement spike whose output is a new contract (C5): (i) why Copilot's
+          workspace `.mcp.json` does not surface `local-tools` (schema, trust prompt, key names) and what
+          configuration does, at user or workspace level; (ii) where Copilot loads custom agents and skills
+          from, in what format, and whether the kit's `global\agents\*.md` and `global\commands\*.md` can be
+          served to it without a second hand-maintained copy; (iii) whether the real PreToolUse and Stop
+          payloads carry `cwd` and `session_id` (T9.5 measured Claude Code only) - the R38b writers skip
+          logging on an empty `cwd`, so an unmeasured answer here means a log that looks clean and is dead.
+      (b) **No fork (R37a extends).** Whatever parity ships is generated from, or points at, the Claude-side
+          single source - agents, commands, guards, the gate log. A second hand-edited copy of an agent or a
+          command drifts, and the drifted one fails silently.
+      (c) **Explicit, additive and reversible.** It rides the existing `install.ps1 -CopilotCli` opt-in,
+          leaves the Claude Code wiring untouched, and `uninstall.ps1` removes everything it adds, testable
+          against a sandbox (R37e). A per-project MCP entry must not put a machine path into a committed
+          file: the dev-path placeholder rule and its move-safety test still hold.
+      (d) **An honest boundary.** Anything the measurement shows Copilot cannot do (for example, no
+          equivalent of an orchestrating slash command) is recorded in `## Out of scope` with the evidence,
+          not papered over. Partial parity that says so beats claimed parity that fails silently.
+      (e) **Same offline thesis (R37b).** Nothing here may require a GitHub account beyond what R37b already
+          accepts: the BYOK-to-Ollama path stays the supported route.
+
 ## Contracts (pin BEFORE locking - architect-agent writes these)
 ### C1: R36 planning-cost ratchet - thresholds, pricing message shape, worked examples
 - **Status: APPROVED 2026-09-22.** R36 names two mechanisms as one loop (SCOPE -> PRICE -> ASK ->

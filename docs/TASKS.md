@@ -109,6 +109,15 @@ dependency to reopen: T13.1 extends the `dad-gates-smoke.ps1` command that Story
 stay closed. T13.1 (the fourth assertion) and T13.2 (dad-doctor's log report) touch two different files and
 are independent of each other; T13.3's test-kit.ps1 coverage exercises both, so it depends on both.)
 
+T14.1
+
+(Story S14 is a MEASUREMENT SPIKE (R39a) with no dependency on S1-S13 or any other task - it is sharded as
+EXACTLY ONE human-attended task, like T9.5 and unlike a build story. It changes no kit code and edits no
+DESIGN prose: its record is returned in the completion report/grade card, and contract C5 stays UNPINNED
+until a human runs the later `/design` step. It BLOCKS every other R39 story - no Copilot parity story or
+task may be written or sharded before C5 is pinned. It carries a consent guard: it must not write to
+`%USERPROFILE%\.copilot\` (R35b); if a measurement needs that, it STOPS and reports the exact write.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -1520,6 +1529,65 @@ are independent of each other; T13.3's test-kit.ps1 coverage exercises both, so 
   which is the shortcut that would make this whole case worthless. The existing gates-smoke `Test-Case`
   from T8.1/T8.4 and T9.4's gate-log coverage are the structural patterns to mirror (sandbox fixture -> run
   the script -> assert on output and exit code).
+
+### [ ] T14.1 - MEASURE Copilot CLI's MCP, agent/skill and hook-payload surfaces (feeds contract C5, BLOCKS all other R39 stories)   [research]   (Story S14)
+- **Goal:** Produce a version-stamped MEASURED-FACTS RECORD answering R39(a)'s three unknowns against the
+  installed Copilot CLI binary, so `/design` can later pin contract C5 from facts, not vendor docs (R37c).
+- **Touches:** NO kit code changes. The record is returned in the completion report / grade card for this
+  task. `docs/DESIGN.md` is NOT edited - C5 stays UNPINNED and is pinned only by a later human-approved
+  `/design` step. Scratch files live under `_tmp/` (gitignored) only.
+- **Do:**
+  1. **Stamp (AC1):** run `copilot --version` and record the exact string plus the OS. Say whether it
+     differs from 1.0.89 (the version C2 was measured against).
+  2. **MCP (Q1, AC2):** find out why this repo's `.mcp.json` does not surface `local-tools` in
+     `copilot mcp list` (schema/key names, trust or approval step, a `type` field, `env` handling). Then find
+     a config that makes `local-tools` appear in `copilot mcp list` AND answer one tool call. Use the
+     least-invasive route first: `--additional-mcp-config` and a scratch project dir under `_tmp/`; try a
+     workspace-level file (`.mcp.json` / `.github/mcp.json`) in that scratch dir before anything user-level.
+     Record whether a per-project docs path can be supplied without a machine path in a committed file
+     (R39c). If no route exists, say so plainly.
+  3. **Agents and skills (Q2, AC3):** determine where Copilot loads custom agents from and in what file
+     format; test whether `global\agents\*.md` (frontmatter `name`/`description`/`tools`) load as-is, need a
+     transform, or cannot load; test whether `global\commands\*.md` can be served as skills (discovery paths
+     `.claude/skills/`, `.agents/skills/`, `.github/skills/`, `~/.copilot/skills/` - use the scratch project's
+     project-level paths) and whether a skill can orchestrate subagents the way `/build` does. Give a
+     per-artifact verdict (loads as-is / needs transform / cannot load) for agents and for commands, and
+     name anything with NO Copilot equivalent.
+  4. **Hook payloads (Q3, AC4):** register a TEMPORARY payload-capturing hook (in the scratch project) that
+     dumps raw stdin verbatim to a file under `_tmp/`, for both `PreToolUse` and Stop. Trigger each with an
+     ordinary session. Record `cwd` and `session_id` (present/absent, value shape) and their behaviour after
+     an in-session `cd` and after launching from a subdirectory. Include one VERBATIM captured payload with
+     secrets redacted - never a hand-written fixture. Note the dependence of the loop-guard and dad-guard
+     gate-log writers (C3f, which skip logging on empty `cwd`) on the result. REMOVE the hook afterwards.
+  5. **Present each question as a measured table** in C2/T9.5 style (one row per fact: item, observed,
+     evidence/command), and end with a final line naming which verdicts feed C5 (AC5).
+  6. **Revert and confirm (AC5):** remove the temporary hook and scratch config; confirm nothing under
+     `%USERPROFILE%\.copilot\` was changed (or, if a human-approved change was made, that it is reverted to
+     stock, R35).
+  7. **CONSENT GUARD:** do NOT write to `%USERPROFILE%\.copilot\` (R35b) - not `mcp-config.json`, not
+     `skills\`, not `agents\`, not settings. If a measurement cannot be taken without a user-level write,
+     STOP that measurement and report EXACTLY which file/write is needed and why, rather than performing it.
+     Use no GitHub credentials beyond what is already logged in, do not log in or out, and put no secret
+     (token, header, auth value) in the record - redact env values and payload content.
+- **Acceptance:** a record exists (in the completion report/grade card) that (AC1) states the exact
+  `copilot --version` and OS; (AC2) ends Q1 in a reproducible command/config that makes `local-tools` appear
+  in `copilot mcp list` and answer one tool call, OR states no such route exists; (AC3) gives per-artifact
+  verdicts for agents and commands and names anything with no equivalent; (AC4) shows a verbatim redacted
+  captured payload and states whether `cwd` and `session_id` are present; (AC5) confirms all measurement
+  changes reverted and `%USERPROFILE%\.copilot\` untouched/stock, and names which verdicts feed C5. Any
+  measurement blocked by the consent guard is listed with the exact write it needs.
+- **Depends on:** none
+- **Refs:** Story S14 (AC1-AC5); `docs/DESIGN.md` R39 (a)-(e) and R37(c) (vendor docs are a hypothesis);
+  contract C2 (the measured-table style and the 1.0.89 baseline); C3f and T9.5 (the Claude-side `cwd`
+  measurement this repeats for Copilot, and why an empty `cwd` makes the gate log silently dead);
+  `docs/RECIPES.md` (the T9.5 capture recipe: forward-slash paths in hook commands, `< /dev/null` on the
+  command under test, and a FAILED hook is SILENT - so verify the capture file exists and is non-empty
+  before believing a "field absent" result).
+- **Context:** READ Story S14 and `docs/DESIGN.md` R39 directly. This is a spike: no kit code, no DESIGN
+  edit, no parity story is written until a human pins C5 via `/design` (R39a). Known starting facts to test,
+  not trust: `copilot mcp list` shows only the built-in GitHub server though `copilot mcp --help` documents a
+  workspace `.mcp.json` / `.github/mcp.json` source; the kit's commands and agents install to
+  `%USERPROFILE%\.claude\` only. Placeholder rule: no machine path in any committed file (R39c).
 
 ## Open questions
 - **[design] needs contract: the loop-guard writer's fallback if `PreToolUse` carries no `cwd`.** C3f's

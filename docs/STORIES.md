@@ -579,3 +579,50 @@
   to smoke/setup time. C3f also records a PREREQUISITE MEASUREMENT that blocks S9's loop-guard writer
   (whether the real `PreToolUse` payload carries `cwd`) - if that measurement forces a fallback, that is a
   NEW `/design` decision, not something to settle inside this story.
+
+### Story S14: [SPIKE] Measure Copilot CLI's MCP, agent/skill and hook-payload surfaces   (R39)   <!-- Status: TODO -->
+- **Type:** Measurement spike - no kit code changes. Its output is a MEASURED-FACTS RECORD that `/design`
+  turns into contract C5. **C5 stays UNPINNED until a human runs that `/design` step**; no parity story is
+  written before then (R39a).
+- **Goal:** Settle, against the installed Copilot CLI binary and with its version stamped, the three
+  unknowns R39(a) names, so parity stories can be written against facts instead of hypotheses.
+- **Context:** R37 admitted Copilot CLI for the two guards only. Under Copilot today `copilot mcp list`
+  shows only the built-in GitHub server even though `copilot mcp --help` documents a workspace `.mcp.json`
+  (or `.github/mcp.json`) source, the kit's commands and agents install to `%USERPROFILE%\.claude\` only,
+  and the R38b gate-log writers were measured against Claude Code's payload alone (T9.5). Vendor docs and
+  `--help` text are a starting hypothesis, not a source of truth (R37c). C2 (R37's contract) was measured
+  against Copilot CLI 1.0.89 - stamp the version actually measured here and say if it differs.
+- **Behavior:** Produce a record (a table per question, same style as C2/T9.5's measured tables) answering:
+  1. **MCP:** why this repo's `.mcp.json` does not surface `local-tools` in `copilot mcp list` (schema or
+     key names, a trust/approval step, a `type` field, `env` handling), and what configuration DOES make
+     the server load and answer a tool call - at user level (`~/.copilot/mcp-config.json`) and at
+     workspace level. Record whether a per-project docs path can be supplied without putting a machine
+     path in a committed file (R39c).
+  2. **Agents and skills:** where Copilot loads custom agents from and in what file format; whether the
+     kit's `global\agents\*.md` (frontmatter `name`/`description`/`tools`) load as-is, need a transform, or
+     cannot load; whether `global\commands\*.md` can be served as skills (Copilot discovers skills from
+     `.claude/skills/`, `.agents/skills/`, `.github/skills/` and `~/.copilot/skills/`) and whether a skill
+     can orchestrate subagents the way `/build` does. Record what has NO equivalent.
+  3. **Hook payloads:** the real `PreToolUse` and Stop payloads' `cwd` and `session_id` fields (present,
+     value shape, and behaviour after an in-session `cd` / launch from a subdirectory), captured from the
+     live binary with a temporary hook and then removed - never a hand-written fixture.
+- **Data / interfaces:** None in the kit. The record lives in this story's Dev notes (or a pointed-to
+  `_tmp/`-free location the human names); nothing is written into DESIGN by this story.
+- **Dependencies:** R37 / contract C2 (the measured baseline); R39 (the requirement). No dependency on S9-S13.
+- **Acceptance (testable, "record produced and stamped" - not code-tested):**
+  - [ ] AC1: the record states the exact `copilot --version` and OS it was measured on.
+  - [ ] AC2: question 1 ends in a reproducible command or config that makes `local-tools` appear in
+    `copilot mcp list` and answer one tool call, OR states plainly that no such route exists.
+  - [ ] AC3: question 2 ends in a per-artifact verdict (loads as-is / needs transform / cannot load) for the
+    agents and for the commands, and names anything with no Copilot equivalent.
+  - [ ] AC4: question 3 shows a verbatim captured payload (secrets redacted) and states whether `cwd` and
+    `session_id` are present, with the loop-guard/dad-guard gate-log writers' dependence on them noted.
+  - [ ] AC5: every real-machine change made to take the measurements under `%USERPROFILE%\.copilot\` is
+    reverted and confirmed back to stock (R35), and the final line names which verdicts feed C5.
+- **Dev notes:** ORDERING - this story blocks every other R39 story; the next `/stories` pass writes the
+  parity stories (MCP wiring, agent/skill delivery, gate-log under Copilot, install/uninstall symmetry)
+  only AFTER C5 is pinned via `/design`, and only for what was measured to be possible. Sharded into ONE
+  task, T14.1 (2026-09-29, at the human's request, so `/build` can reach it): a single human-attended
+  measurement like T9.5, not a decomposition. Consent: measuring
+  writes to `%USERPROFILE%\.copilot\` (R35b) - use the least-invasive route (`--additional-mcp-config`,
+  a scratch project dir) and back out every change.
