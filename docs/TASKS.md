@@ -618,7 +618,7 @@ test-kit.ps1 coverage exercises the script plus both wiring points together, so 
   this exact mechanism - reuse it rather than inventing a new one, since it is a proven-working shape, not a
   guess.
 
-### [ ] T8.4 - Provoke dad-guard's Stop-hook block; wire the full pass/fail/skip aggregate + test-kit case   [research]   (Story S8)
+### [x] T8.4 - Provoke dad-guard's Stop-hook block; wire the full pass/fail/skip aggregate + test-kit case   [research]   (Story S8)
 - **Goal:** Implement `Test-DadGuardStopGate` in `dad-gates-smoke.ps1` so it leaves uncommitted code with no
   fresh `.dad-verified` stamp in a throwaway fixture and confirms `dad-guard.ps1` (the Stop hook, R22) BLOCKS
   (S8 AC3); finish wiring the overall exit-code/report aggregate across all three gates (S8 AC4, AC5); add

@@ -326,7 +326,7 @@
      Requirements (proof a gate actually fires, a queryable record of every gate decision, and a real
      accounting of what a run costs). Do not treat "(Epic: Receipts)" as a locked Requirement id. -->
 
-### Story S8: dad gates-smoke - prove the gates actually fire   (Epic: Receipts)   <!-- Status: TODO -->
+### Story S8: dad gates-smoke - prove the gates actually fire   (Epic: Receipts)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** A standalone command that deliberately provokes a known violation against each of DrDad's real
   gates on a target project and confirms each one actually intercepts it - not that the hook file merely
   exists.

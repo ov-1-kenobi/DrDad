@@ -10,9 +10,9 @@
 # whether this run could not safely construct that violation (SKIP, with a reason - never a fabricated
 # pass in its place).
 #
-# THIS TASK (T8.1) ships only the skeleton: the report/exit-code contract, wired to three stub checks that
-# unconditionally return SKIP "not yet implemented". T8.2/T8.3/T8.4 fill in the real provocations one gate
-# at a time - each is free to change without touching this contract.
+# T8.1 shipped the skeleton (the report/exit-code contract, three stub checks that unconditionally
+# returned SKIP "not yet implemented"). T8.2 (loop-guard), T8.3 (ratchet-close-refusal) and T8.4
+# (dad-guard-stop) filled in the three real provocations one gate at a time - all three now real.
 #
 # Exit code: 0 only if every gate actually provoked was INTERCEPTED (zero SILENT-FAIL, at least one
 # INTERCEPTED). Non-zero if any gate is a SILENT-FAIL (named), or if every gate is SKIP (an all-SKIP run
@@ -170,9 +170,57 @@ function Test-RatchetCloseGate {
 }
 
 function Test-DadGuardStopGate {
-  # Stubbed in T8.1. T8.4 implements this by leaving uncommitted, unstamped code and confirming
-  # dad-guard.ps1 blocks the Stop hook.
-  [pscustomobject]@{ Result = "SKIP"; Reason = "not yet implemented" }
+  # T8.4: dad-guard.ps1 is a KIT-level file (wired kit-wide as the Stop hook in settings.json, not
+  # per-project state) - resolve it as a sibling of THIS script, same as the other two gates resolve
+  # their kit-level scripts.
+  $dg = Join-Path $PSScriptRoot "dad-guard.ps1"
+  if (-not (Test-Path -LiteralPath $dg)) {
+    return [pscustomobject]@{ Result = "SKIP"; Reason = "dad-guard.ps1 not found next to dad-gates-smoke.ps1" }
+  }
+  $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+  if (-not $gitCmd) {
+    return [pscustomobject]@{ Result = "SKIP"; Reason = "git not found on PATH - cannot construct the fixture" }
+  }
+
+  # A fresh, throwaway, self-constructed fixture in a TEMP directory - never the real -ProjectDir target
+  # (R35: never provoke a real-state-touching violation against a live target). Shape mirrors
+  # test-kit.ps1's own already-passing dad-guard Test-Cases (e.g. "dad-guard BLOCKS unverified code..."
+  # and "the guard names commands that can actually be RUN"): docs\DESIGN.md so dad-guard.ps1 recognizes
+  # it as a DAD project, a clean committed baseline, then ONE new untracked .cs file with no
+  # .claude\.dad-verified stamp at all.
+  $fixture = Join-Path $env:TEMP "dad-gates-smoke-guard-$PID-$(Get-Random)"
+  New-Item -ItemType Directory -Force -Path (Join-Path $fixture "docs") | Out-Null
+  New-Item -ItemType Directory -Force -Path (Join-Path $fixture "src") | Out-Null
+  try {
+    "# Design`n`nStatus: LOCKED" | Set-Content (Join-Path $fixture "docs\DESIGN.md") -Encoding UTF8
+
+    $prevLoc = Get-Location
+    $prevEap = $ErrorActionPreference
+    try {
+      Set-Location $fixture
+      $ErrorActionPreference = "Continue"
+      git init -q
+      git config core.autocrlf false
+      git add -A
+      git -c user.name=gates-smoke -c user.email=gates-smoke@dad commit -q -m base
+    } finally {
+      $ErrorActionPreference = $prevEap
+      Set-Location $prevLoc
+    }
+
+    # ONE new, UNTRACKED .cs file - never staged, never committed, never stamped as verified.
+    "public class GatesSmokeThing { }" | Set-Content (Join-Path $fixture "src\GatesSmokeThing.cs") -Encoding UTF8
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Check -ProjectDir $fixture 2>&1 | Out-Null
+    $code = $LASTEXITCODE
+
+    if ($code -eq 1) {
+      return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "dad-guard.ps1 -Check blocked (exit 1) on an uncommitted, unverified .cs file" }
+    }
+    return [pscustomobject]@{ Result = "SILENT-FAIL"; Reason = "dad-guard-stop" }
+  } finally {
+    Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
+  }
 }
 
 # --- run the ordered gate list ---------------------------------------------------------------------
@@ -201,18 +249,25 @@ foreach ($name in $gates.Keys) {
 }
 
 # --- compute the overall result --------------------------------------------------------------------
+# S8 AC4/AC5: exit 0 ONLY if every gate actually provoked was INTERCEPTED (zero SILENT-FAIL, at least
+# one INTERCEPTED); non-zero AND naming the gate on any SILENT-FAIL; a SKIP is reported plainly and
+# never counted as a pass; an all-SKIP run proved nothing and must never look like success either.
 $silentFails  = @($results.Keys | Where-Object { $results[$_].Result -eq "SILENT-FAIL" })
 $intercepted  = @($results.Keys | Where-Object { $results[$_].Result -eq "INTERCEPTED" })
 $skipped      = @($results.Keys | Where-Object { $results[$_].Result -eq "SKIP" })
 
 Write-Host ""
+$summary = "gates-smoke: $($intercepted.Count) intercepted, $($silentFails.Count) silent, $($skipped.Count) skipped"
 if ($silentFails.Count -gt 0) {
   Write-Host "[gates-smoke] SILENT-FAIL on: $($silentFails -join ', ') - a real violation got through unnoticed." -ForegroundColor Red
+  Write-Host "$summary -> FAIL (silent-fail: $($silentFails -join ', '))" -ForegroundColor Red
   exit 1
 }
 if ($skipped.Count -eq $gates.Count) {
   Write-Host "[gates-smoke] every gate was SKIPPED - nothing was actually verified this run." -ForegroundColor Yellow
+  Write-Host "$summary -> FAIL (all gates skipped)" -ForegroundColor Yellow
   exit 1
 }
 Write-Host "[gates-smoke] all provoked gates intercepted their violation ($($intercepted.Count) intercepted, $($skipped.Count) skipped)." -ForegroundColor Green
+Write-Host "$summary -> PASS" -ForegroundColor Green
 exit 0
