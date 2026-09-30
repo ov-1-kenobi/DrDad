@@ -33,6 +33,9 @@ function Get-ProjectJunk([string]$root) {
   $strayRx = '(?i)(^|[_.-])(summary|complete|completed|notes?|results?|implementation|handoff|scratch|build_summary)([_.-]|\.md$|\.txt$)'
   $stray = @($rootFiles | Where-Object { $_.Name -match $strayRx -and $_.Name -notmatch '(?i)^(CHANGELOG|CONTRIBUTING)\b' } | ForEach-Object { $_.Name })
   $stray = @($stray | Where-Object { $_ -notmatch '(?i)run.*\.txt$|.*run\.txt$|.*run\d*\.txt$' })  # user run exports are not junk
+  # the kit's own scripts (dad-*.ps1 / dad-*.cmd) ARE the kit, never stray; only script extensions are
+  # exempt, so dad-notes.md or dad-summary.txt is still junk
+  $stray = @($stray | Where-Object { $_ -notmatch '(?i)^dad-.+\.(ps1|cmd)$' })
   $leaf = (Split-Path $root -Leaf)
   $mangled = @(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Where-Object {
     $n = $_.Name

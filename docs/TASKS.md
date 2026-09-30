@@ -1631,7 +1631,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
   workspace `.mcp.json` / `.github/mcp.json` source; the kit's commands and agents install to
   `%USERPROFILE%\.claude\` only. Placeholder rule: no machine path in any committed file (R39c).
 
-### [ ] T15.1 - Get-ProjectJunk must not report the kit's own dad-*.ps1 / dad-*.cmd scripts as stray   (Story S15)
+### [x] T15.1 - Get-ProjectJunk must not report the kit's own dad-*.ps1 / dad-*.cmd scripts as stray   (Story S15)
 - **Goal:** `doc-stats -Findings`' `[hygiene]` ad-hoc-file check and `dad tidy -Fix` stop treating
   `dad-run-summary.ps1` / `dad-run-summary.cmd` (and any future `dad-*` kit script) as stray summary files.
 - **Touches:** `doc-stats.ps1` (function `Get-ProjectJunk`, the `$stray` computation, about lines 31-35).
