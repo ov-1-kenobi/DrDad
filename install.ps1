@@ -102,6 +102,7 @@ else {
   $ccLatest = Get-LatestVersion "@anthropic-ai/claude-code"
   Write-HarnessReport -Name "claude-code" -Installed $ccInstalled -Latest $ccLatest -Measured $ClaudeCodeMeasuredVersion
   $ccUpdated = $false
+  $ccPrevious = $ccInstalled   # captured BEFORE any npm install (T17.4: the way-back version)
   if (-not $ccInstalled) {
     if (Read-Consent "  install Claude Code now? [Y/n]" $true) { npm install -g @anthropic-ai/claude-code; $ccUpdated = $true }
   } elseif ($ccLatest -and ((Compare-HarnessVersion $ccInstalled $ccLatest) -lt 0)) {
@@ -111,8 +112,8 @@ else {
   if ($ccUpdated) {
     $ccNow = Get-HarnessVersion claude
     if ($ccNow) { Write-HarnessReport -Name "claude-code" -Installed $ccNow -Latest $ccLatest -Measured $ClaudeCodeMeasuredVersion | Out-Null }
-    # HOOK (T17.4): post-update smoke. No-op until T17.4 defines Invoke-PostUpdateSmoke.
-    if (Get-Command Invoke-PostUpdateSmoke -ErrorAction SilentlyContinue) { Invoke-PostUpdateSmoke }
+    # T17.4: post-update smoke (only when an update ran). Loud, never blocking: exit code stays 0.
+    if (Get-Command Invoke-PostUpdateSmoke -ErrorAction SilentlyContinue) { $null = Invoke-PostUpdateSmoke -Name "claude-code" -Previous $ccPrevious -Package "@anthropic-ai/claude-code" }
   }
 }
 if ($haveCode) { code --install-extension anthropic.claude-code } else { Write-Host "  [warn] 'code' CLI missing - install the Claude Code extension from the VS Code marketplace" -ForegroundColor Yellow }

@@ -1784,7 +1784,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S17 (Behavior "dad-doctor prints the same", AC4); `docs/DESIGN.md` R40(c), C2f.
 - **Context:** doctor may take up to the helper's ~10 s npm timeout when the registry is slow; that is accepted. Use only read-only commands; no writes to the machine.
 
-### [ ] T17.4 - Post-update smoke check and the way back   (Story S17)   [needs T16.1]
+### [x] T17.4 - Post-update smoke check and the way back   (Story S17)   [needs T16.1]
 - **Goal:** After install.ps1 updates a harness, run a cheap smoke check and, if it fails, print the previous version and the exact command to return to it - without rolling back or lowering any security setting.
 - **Touches:** `harness-versions.ps1` (add `Invoke-PostUpdateSmoke` and `Test-LocalModelResolves`); `install.ps1` (call it at the T17.2 hook point, passing the previous version).
 - **Do:**
