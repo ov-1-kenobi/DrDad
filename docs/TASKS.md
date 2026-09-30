@@ -1227,7 +1227,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   to their owners." - this task inserts the `dad run-summary` step into that existing sequence, it does not
   restructure the rest of `/build`'s loop.
 
-### [ ] T10.3 - Wire dad-run-summary.ps1 into /audit's full-audit run   [research]   (Story S10)
+### [x] T10.3 - Wire dad-run-summary.ps1 into /audit's full-audit run   [research]   (Story S10)
 - **Goal:** `global\commands\audit.md`'s full-audit path actually captures a baseline and calls T10.1's
   `dad-run-summary.ps1`, relaying its output, so a full `/audit` also produces the computed summary S10
   requires, not just a `/build` scope.

@@ -6166,6 +6166,39 @@ Test-Case "T10.2: build.md records the scope baseline after Gate 3 and runs dad 
   Assert ($t -notmatch '5-line') "build.md makes a literal '5-line' claim"
 }
 
+Test-Case "T10.3: audit.md records the baseline before the first doc-stats step and runs dad run-summary after UpdateStatus, before the librarian (C4c)" {
+  $p = Join-Path $kit "global\commands\audit.md"
+  $bytes = [System.IO.File]::ReadAllBytes($p)
+  Assert (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) "audit.md has a BOM"
+  Assert (-not (@($bytes | Where-Object { $_ -gt 127 }).Count)) "audit.md has non-ASCII bytes"
+  $t = [System.IO.File]::ReadAllText($p)
+  $bl = $t.IndexOf("Record this audit's baseline")
+  $f1 = $t.IndexOf("dad doc-stats -Findings")
+  $us = $t.IndexOf("dad doc-stats -UpdateStatus")
+  $rsx = [regex]::Match($t, 'dad run-summary[^`]*-SinceCommit[^`]*-StartTime')
+  $lib = $t.IndexOf("Run the **librarian-agent**")
+  Assert ($bl -ge 0) "audit.md lacks the baseline-capture paragraph"
+  Assert ($f1 -gt $bl) "baseline is not before the first 'dad doc-stats -Findings' step"
+  Assert ($us -gt $f1) "no 'dad doc-stats -UpdateStatus' after the Findings step"
+  Assert ($rsx.Success) "audit.md lacks 'dad run-summary ... -SinceCommit ... -StartTime'"
+  Assert ($rsx.Index -gt $us) "run-summary is not after the UpdateStatus paragraph"
+  Assert ($lib -gt $rsx.Index) "run-summary is not before the librarian-agent paragraph"
+  $blk = $t.Substring($bl, $f1 - $bl)
+  Assert ($blk -match 'git rev-parse HEAD') "baseline block lacks 'git rev-parse HEAD'"
+  Assert ($blk -match 'ToUniversalTime\(\)\.ToString\(''yyyy-MM-ddTHH:mm:ss\.fffZ''\)') "baseline block lacks the ISO UTC ...fffZ command"
+  Assert ($blk -match 'now') "baseline block does not say the baseline is 'now'"
+  Assert ($blk -match 'only what happens DURING this audit') "baseline block does not scope the summary to the audit run"
+  Assert ($t.Substring($rsx.Index) -match 'source: session start') "audit.md lacks the 'source: session start' fallback label"
+  Assert ($t.Substring($rsx.Index) -match 'never a gate') "audit.md lacks 'never a gate'"
+  Assert ($t -match 'verbatim') "audit.md lacks verbatim relay wording"
+  Assert ($t -notmatch '5-line') "audit.md makes a literal '5-line' claim"
+  $cmdRe = 'powershell -NoProfile -Command "\(Get-Date\)[^"]*"'
+  $ma = [regex]::Match($t, $cmdRe)
+  $mb = [regex]::Match([System.IO.File]::ReadAllText((Join-Path $kit "global\commands\build.md")), $cmdRe)
+  Assert ($ma.Success -and $mb.Success) "could not extract the baseline time command from both audit.md and build.md"
+  Assert ($ma.Value -ceq $mb.Value) "baseline command differs:`naudit: $($ma.Value)`nbuild: $($mb.Value)"
+}
+
 Test-Case "T10.2: the baseline shell command exactly as written in build.md yields values dad-run-summary accepts (caller-supplied)" {
   $t = [System.IO.File]::ReadAllText((Join-Path $kit "global\commands\build.md"))
   $m = [regex]::Match($t, 'powershell -NoProfile -Command "\(Get-Date\)[^"]*"')

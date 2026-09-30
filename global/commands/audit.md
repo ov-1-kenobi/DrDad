@@ -2,6 +2,14 @@
 description: Audit cross-document consistency (DESIGN/STORIES/TASKS/grades/index) via the librarian-agent, then route each finding to its owner agent on your OK. Also triages git recovery for a mangled file.
 argument-hint: [empty = full audit | status = refresh docs/STATUS.md | recover <file> = git triage]
 ---
+**Record this audit's baseline BEFORE anything else.** In the target project run `git rev-parse HEAD` and
+take the current UTC time as ISO 8601 with a Z, e.g.
+`powershell -NoProfile -Command "(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')"`.
+Hold both for the rest of the run as `$sinceCommit` / `$startTime`. Unlike `/build`'s scope, a full
+`/audit` has no natural "start of work" range, so the baseline is simply "now" at audit start: the
+files-touched / gate-interventions figures in the run summary reflect only what happens DURING this audit
+run (routing fixes to owner agents), not prior history - and the summary should say so.
+
 **FIRST, before spawning anything, GENERATE the state half of the audit:**
 ```
 dad doc-stats -Findings
@@ -33,6 +41,15 @@ That writes the `## Snapshot` block of `docs/STATUS.md` deterministically and pr
 them verbatim from here on. A real audit once reported "STATUS.md refreshed with current progress
 metrics" without ever running this - the dashboard said 1/1 stories on a project with 14. The librarian
 owns the PROSE sections of STATUS; it does not compute counts and must not overwrite the Snapshot block.
+
+**THEN produce the run summary:**
+```
+dad run-summary -ProjectDir <project> -SinceCommit <baseline sha> -StartTime <baseline time>
+```
+(the baseline recorded at audit start). Relay its output verbatim in the audit report, noting that it covers
+only this audit run. If the baseline was forgotten, the script falls back to the session pointer window and
+labels it `source: session start` - a labelled default, not an error. The summary is descriptive only and
+never a gate.
 
 Run the **librarian-agent** to keep the document set honest. Spawn it via the **Task tool**
 (subagent_type: "librarian-agent") - it is an AGENT, not a skill; calling the Skill tool with an agent
