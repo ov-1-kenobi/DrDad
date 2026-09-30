@@ -233,7 +233,7 @@ function Test-GradeCard([string]$unitId) {
       }
     }
   }
-  if (-not $cites) { return 'grade card cites no test name, test-kit.ps1 line range or resolvable file:line' }
+  if (-not $cites) { return 'grade card cites no test name, test-kit.ps1 line range or resolvable file:line (expected form: test-kit.ps1:<n>, or a backtick/double-quoted Test-Case name, or a full-relative-path file:line such as global/commands/build.md:150)' }
   return $null
 }
 
