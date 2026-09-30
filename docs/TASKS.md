@@ -1510,7 +1510,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
   cannot be SHOWN to have fired is not a gate, so the proof has to be an ACTIVE assertion, not the absence
   of an error.
 
-### [ ] T13.2 - dad-doctor reports the gate log's size, line count and newest-entry age (C3d/C3f)   (Story S13)
+### [x] T13.2 - dad-doctor reports the gate log's size, line count and newest-entry age (C3d/C3f)   (Story S13)
 - **Goal:** `dad-doctor` reports a project's `grades/gates-log.jsonl` size, line count and newest-entry
   AGE, WARNing past 5 MB and naming the manual roll as the fix - and handles a project with no log at all
   without erroring (S13 AC4).

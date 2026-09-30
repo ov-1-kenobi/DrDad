@@ -17,6 +17,7 @@
 param([string]$ProjectDir = "")
 $ErrorActionPreference = "Continue"     # this script probes things that are ALLOWED to be missing
 $kit = $PSScriptRoot
+$GATES_LOG_WARN_BYTES = 5MB   # C3d: WARN past this size; the roll is a HUMAN rename, never automatic
 $script:fails = 0
 $script:warns = 0
 $script:fixes = New-Object System.Collections.Generic.List[string]
@@ -457,6 +458,35 @@ if ($ProjectDir) {
         Say "WARN" "stop guard state" "uncommitted code that nothing has built or tested" `
             "powershell -File `"$kit\close-unit.ps1`" -Id <id> -Title `"...`" -ProjectDir `"$p`"   (or dad-guard.ps1 -Ack)"
       }
+    }
+
+    # Gate-decision log (C3d/C3f). REPORT ONLY - never creates, trims or renames the log; the roll is a human act.
+    $glog = Join-Path $p "grades\gates-log.jsonl"
+    if (-not (Test-Path -LiteralPath $glog)) {
+      Say "OK" "gate log" "none yet (grades\gates-log.jsonl is created by the first gate decision)"
+    } else {
+      try {
+        $glBytes = (Get-Item -LiteralPath $glog).Length
+        $glLines = 0; $glLast = ""
+        foreach ($ln in [System.IO.File]::ReadLines($glog)) { if ($ln.Trim()) { $glLines++; $glLast = $ln } }
+        $glAge = "newest entry age unknown"
+        if ($glLast) {
+          try {
+            $ts = [datetime]::ParseExact(([string]($glLast | ConvertFrom-Json).ts), "yyyy-MM-ddTHH:mm:ss.fffZ",
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+            $span = [datetime]::UtcNow - $ts
+            if ($span.TotalDays -ge 1) { $glAge = "newest entry {0:N1} day(s) old" -f $span.TotalDays }
+            elseif ($span.TotalHours -ge 1) { $glAge = "newest entry {0:N1} hour(s) old" -f $span.TotalHours }
+            else { $glAge = "newest entry {0:N0} minute(s) old" -f [math]::Max(0, $span.TotalMinutes) }
+          } catch { }
+        }
+        $glDetail = "{0:N1} KB, {1} line(s), {2}" -f ($glBytes / 1KB), $glLines, $glAge
+        if ($glBytes -gt $GATES_LOG_WARN_BYTES) {
+          Say "WARN" "gate log" "$glDetail - over 5 MB; roll by hand: rename to grades/gates-log-<yyyy-MM-dd>.jsonl" `
+              "roll the gate log by hand: rename grades/gates-log.jsonl to grades/gates-log-<yyyy-MM-dd>.jsonl (next append starts a fresh log with a genesis record; nothing rolls it automatically)"
+        } else { Say "OK" "gate log" $glDetail }
+      } catch { Say "WARN" "gate log" "could not read grades\gates-log.jsonl: $($_.Exception.Message)" }
     }
   }
 }
