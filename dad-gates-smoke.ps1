@@ -49,6 +49,10 @@ $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 # grades\gates-log.jsonl must hold a line whose gate id matches AND whose decision is "block". Parsed per line
 # with ConvertFrom-Json (no substring match); an allow line or another gate's block line does not count.
 # Read-only, runs at smoke time only - no runtime writer is changed (C3f: runtime stays silent and fail-open).
+# Coupling notes: (1) the ratchet smoke path accepts TWO gate ids, "ratchet" or "close-unit-refusal", because
+# either script's writer can refuse the close - a block line from either passes, so the check cannot tell which
+# wrote it. (2) Smoke now needs dad-gates-log.ps1 (and its dependency scan-secrets.ps1) beside it; if the writer
+# is missing the gate is reported SILENT-FAIL "<gate>-log", not SKIP.
 function Test-BlockLogged([string]$fixtureDir, [string[]]$gateIds) {
   $log = Join-Path $fixtureDir "grades\gates-log.jsonl"
   if (-not (Test-Path -LiteralPath $log)) { return $false }

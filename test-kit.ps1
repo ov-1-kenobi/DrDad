@@ -2336,7 +2336,9 @@ Test-Case "dad-gates-smoke reports a genuine per-gate SKIP when one sibling scri
     Copy-Item (Join-Path $kit "dad-gates-smoke.ps1") $isolated
     Copy-Item (Join-Path $kit "dad-loopguard.ps1") $isolated
     Copy-Item (Join-Path $kit "dad-guard.ps1") $isolated
-    # the gate-log writer (T13.1 fourth assertion needs the block lines to land) and its redaction dependency
+    # the gate-log writer (T13.1 fourth assertion needs the block lines to land) and its redaction dependency.
+    # Without these two siblings loop-guard/dad-guard-stop become SILENT-FAIL "<gate>-log", not SKIP, so the
+    # "one SKIP + two INTERCEPTED exits 0" expectation below would break (see the no-writer case after it).
     Copy-Item (Join-Path $kit "dad-gates-log.ps1") $isolated
     Copy-Item (Join-Path $kit "scan-secrets.ps1") $isolated
 
@@ -2410,6 +2412,7 @@ Test-Case "dad-doctor reports the gate log: size, lines, newest-entry age; or pl
     $l2 = '{"ts":"2026-09-02T10:00:00.000Z","gate":"loop-guard","decision":"block","reason":"x"}'
     Set-Content -LiteralPath (Join-Path $with "grades\gates-log.jsonl") -Value @($l1, $l2) -Encoding ASCII
     $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $with 2>&1 | Out-String)
+    Assert (($LASTEXITCODE -eq 0) -or ($LASTEXITCODE -eq 1)) "dad-doctor (with-log run) exited $LASTEXITCODE - expected 0 or 1"
     $m = [regex]::Match($out, '\[\w+\s*\]\s+gate log\s+(.*)')
     Assert $m.Success "dad-doctor printed no 'gate log' line for a project with a log:`n$out"
     Assert ($m.Groups[1].Value -match 'KB') "gate log line lacks a size: $($m.Value)"
@@ -2418,12 +2421,59 @@ Test-Case "dad-doctor reports the gate log: size, lines, newest-entry age; or pl
     Assert ($out -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on a fixture with a gate log:`n$out"
 
     $out2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $none 2>&1 | Out-String)
+    $code2 = $LASTEXITCODE
     $m2 = [regex]::Match($out2, '\[\w+\s*\]\s+gate log\s+(.*)')
     Assert $m2.Success "dad-doctor printed no 'gate log' line for a project with no log:`n$out2"
     Assert ($m2.Groups[1].Value -match 'none yet') "no-log case is not reported plainly: $($m2.Value)"
     Assert ($out2 -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on a fixture with no gate log:`n$out2"
     Assert (-not (Test-Path (Join-Path $none "grades\gates-log.jsonl"))) "dad-doctor must never create the log"
+    # Exit-code convention (dad-doctor.ps1 header): 0 = no FAILs, 1 = at least one FAIL. A bare sandbox may
+    # legitimately FAIL unrelated checks, so the exit code is only pinned to {0,1}; any other value (or the
+    # error text asserted above) means a crash rather than a verdict.
+    Assert (($code2 -eq 0) -or ($code2 -eq 1)) "dad-doctor (no-log run) exited $code2 - expected 0 or 1"
   } finally { Remove-Sandbox $with; Remove-Sandbox $none }
+}
+
+Test-Case "dad-doctor gate log: with-log run exits 0/1 (no crash); over 5 MB WARNs with the manual-roll hint (T13.3)" {
+  $doctor = Join-Path $kit "dad-doctor.ps1"
+  $sb = New-Sandbox
+  try {
+    New-Item -ItemType Directory -Force (Join-Path $sb "grades") | Out-Null
+    $l1 = '{"ts":"2026-09-01T10:00:00.000Z","gate":"loop-guard","decision":"allow","reason":"armed"}'
+    $l2 = '{"ts":"2026-09-02T10:00:00.000Z","gate":"loop-guard","decision":"block","reason":"x"}'
+    # a whitespace-only line is not counted (Trim) but pads the file past 5 MB cheaply
+    $pad = [string]::new(' ', 5600000)
+    [System.IO.File]::WriteAllText((Join-Path $sb "grades\gates-log.jsonl"), ($l1 + "`n" + $pad + "`n" + $l2 + "`n"))
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $sb 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    Assert (($code -eq 0) -or ($code -eq 1)) "dad-doctor (with-log run) exited $code - expected 0 or 1"
+    $m = [regex]::Match($out, '\[\w+\s*\]\s+gate log\s+(.*)')
+    Assert $m.Success "dad-doctor printed no 'gate log' line for an oversized log:`n$out"
+    Assert ($out -match '\[WARN\s*\]\s+gate log') "an over-5-MB log must be a WARN: $($m.Value)"
+    Assert ($m.Groups[1].Value -match 'over 5 MB') "WARN lacks 'over 5 MB': $($m.Value)"
+    Assert ($m.Groups[1].Value -match 'gates-log-<yyyy-MM-dd>\.jsonl') "WARN lacks the manual-roll name: $($m.Value)"
+    Assert ($m.Groups[1].Value -match '2 line\(s\)') "whitespace padding must not be counted as a line: $($m.Value)"
+    Assert ($out -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on an oversized log:`n$out"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-doctor gate log: unparseable newest ts reports 'newest entry age unknown' (T13.3)" {
+  $doctor = Join-Path $kit "dad-doctor.ps1"
+  $sb = New-Sandbox
+  try {
+    New-Item -ItemType Directory -Force (Join-Path $sb "grades") | Out-Null
+    $l1 = '{"ts":"2026-09-01T10:00:00.000Z","gate":"loop-guard","decision":"allow","reason":"armed"}'
+    $bad = '{"ts":"not-a-timestamp","gate":"loop-guard","decision":"block","reason":"x"}'
+    Set-Content -LiteralPath (Join-Path $sb "grades\gates-log.jsonl") -Value @($l1, $bad) -Encoding ASCII
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $sb 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    Assert (($code -eq 0) -or ($code -eq 1)) "dad-doctor exited $code - expected 0 or 1"
+    $m = [regex]::Match($out, '\[\w+\s*\]\s+gate log\s+(.*)')
+    Assert $m.Success "dad-doctor printed no 'gate log' line:`n$out"
+    Assert ($m.Groups[1].Value -match 'newest entry age unknown') "unparseable ts not reported as age unknown: $($m.Value)"
+    Assert ($m.Groups[1].Value -match '2 line\(s\)') "line count missing: $($m.Value)"
+    Assert ($out -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on an unparseable ts:`n$out"
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "grade-trends reads the STATED grade, not a capital letter in prose" {
