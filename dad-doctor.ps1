@@ -496,6 +496,34 @@ if ($ProjectDir) {
   }
 }
 
+# ---------------------------------------------------------------- harness versions (R40, C2f)
+# Read-only: installed vs latest vs measured. Newer than measured is a WARN, never a FAIL. Nothing installs.
+Write-Host "`n-- harness versions (R40) --" -ForegroundColor Cyan
+try {
+  . (Join-Path $kit "harness-versions.ps1")
+  $hvRaw = ""
+  try { $hvRaw = Get-Content (Join-Path $kit "install.ps1") -Raw } catch { }
+  $hvMeasured = @{}
+  $hvCc = [regex]::Match($hvRaw, '\$ClaudeCodeMeasuredVersion\s*=\s*"([^"]+)"')
+  if ($hvCc.Success) { $hvMeasured['claude-code'] = $hvCc.Groups[1].Value }
+  $hvCp = [regex]::Match($hvRaw, '\$CopilotMeasuredVersion\s*=\s*"([^"]+)"')
+  if ($hvCp.Success) { $hvMeasured['copilot-cli'] = $hvCp.Groups[1].Value }
+  $hvNames = @('claude-code')
+  if (Get-Exe "copilot") { $hvNames += 'copilot-cli' }
+  foreach ($hvName in $hvNames) {
+    $hvTable = Get-Variable -Name HarnessTable -ValueOnly   # defined by harness-versions.ps1 (dot-sourced)
+    $hvT = $hvTable[$hvName]
+    $hvInst = Get-HarnessVersion -Cli $hvT.Cli
+    $hvLatest = $null
+    if ($hvInst) { $hvLatest = Get-LatestVersion -Package $hvT.Package }
+    $hvM = "$($hvMeasured[$hvName])"
+    Write-HarnessReport -Name $hvName -Installed $hvInst -Latest $hvLatest -Measured $hvM
+    if ($hvInst -and $hvM -and ((Compare-HarnessVersion $hvInst $hvM) -gt 0)) {
+      Say "WARN" "$hvName newer than measured" "$hvInst > $hvM" "re-check $hvName against hooks/payload (C2, T9.5), usage fields (C4a), local model catalog"
+    }
+  }
+} catch { Say "WARN" "harness versions" "could not read: $($_.Exception.Message)" }
+
 # ---------------------------------------------------------------- copilot cli harness (R37)
 # Silent unless this machine actually uses the Copilot harness - either the hooks are installed or the CLI is
 # on PATH. Nobody running plain Claude Code should see a word about it.

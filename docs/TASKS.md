@@ -1772,7 +1772,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S17 (Behavior, AC2, AC3, AC5); `docs/DESIGN.md` R40(a),(b), R37 (`-CopilotCli` stays opt-in).
 - **Context:** Current step 3 (line 87-89) also runs `code --install-extension anthropic.claude-code`; leave that line untouched. `install.cmd` mutates real machine state (npm global, PATH): NEVER run it or `install.ps1` for real to check this; verify only with stubs in a sandbox (or by reading the diff). Keep ASCII; keep the dev-path placeholder untouched.
 
-### [ ] T17.3 - dad-doctor prints the same harness drift report   (Story S17)
+### [x] T17.3 - dad-doctor prints the same harness drift report   (Story S17)
 - **Goal:** `dad-doctor` shows the R40 `[harness]` lines (installed / latest / measured, and the newer-than-measured warning) for Claude Code and for Copilot CLI when present.
 - **Touches:** `dad-doctor.ps1` (near the existing Copilot section, lines ~464-515; also `Say` helper usage).
 - **Do:**
