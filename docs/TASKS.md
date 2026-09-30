@@ -1467,7 +1467,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
   Closing S11 closes the write-up only; the A/B/C decision itself stays open, and any later work toward it
   needs its own story after the human decides.
 
-### [ ] T13.1 - gates-smoke's FOURTH assertion: the block line actually LANDED in the fixture's log   (Story S13)
+### [x] T13.1 - gates-smoke's FOURTH assertion: the block line actually LANDED in the fixture's log   (Story S13)
 - **Goal:** After provoking each gate in its own throwaway fixture, `dad-gates-smoke.ps1` reads that
   fixture's `grades/gates-log.jsonl` and REQUIRES a matching `"decision":"block"` line for that gate -
   reporting `SILENT-FAIL "<gate>-log"` and exiting non-zero otherwise (S13 AC1, AC2, AC3).
@@ -1709,7 +1709,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
      cannot be scripted. Say exactly which of the headless results transfer, and mark every interactive
      row "NEEDS HUMAN" with the exact keystrokes/commands for the human to run and what to report.
   7. **Present a measured table** (C2/T9.5 style: item, observed, evidence/command) covering: version, `-cc`
-     models present, use-model route, env var, `--model`, `/model` (NEEDS HUMAN), config route, newest known
+     models present, the route via `use-model.cmd` (its own name), env var, `--model`, `/model` (NEEDS HUMAN), config route, newest known
      good version. End with a **Recommendation for /design** (contract amendment vs new story vs "not
      broken"; what "local model resolves" should mean for R40's smoke check) and a final line naming which
      rows feed S17.

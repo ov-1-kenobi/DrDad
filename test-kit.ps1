@@ -2270,6 +2270,9 @@ Test-Case "dad-gates-smoke reports a genuine per-gate SKIP when one sibling scri
     Copy-Item (Join-Path $kit "dad-gates-smoke.ps1") $isolated
     Copy-Item (Join-Path $kit "dad-loopguard.ps1") $isolated
     Copy-Item (Join-Path $kit "dad-guard.ps1") $isolated
+    # the gate-log writer (T13.1 fourth assertion needs the block lines to land) and its redaction dependency
+    Copy-Item (Join-Path $kit "dad-gates-log.ps1") $isolated
+    Copy-Item (Join-Path $kit "scan-secrets.ps1") $isolated
 
     $gs = Join-Path $isolated "dad-gates-smoke.ps1"
     $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $gs -ProjectDir $sb 2>&1 | Out-String)
