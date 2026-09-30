@@ -683,7 +683,7 @@
 - **Dev notes:** the same mistake is possible for any future kit script with "status"/"summary"/"notes" in
   its name - prefer a rule that survives new kit scripts over adding names one at a time.
 
-### Story S16: [SPIKE] Does current Claude Code still run the kit's local models?   (R1, R40)   <!-- Status: TODO -->
+### Story S16: [SPIKE] Does current Claude Code still run the kit's local models?   (R1, R40)   <!-- Status: DONE closed:close-unit -->
 - **Type:** Measurement spike - no kit code changes; its output is a measured record and, if the answer is
   "broken", a proposal for `/design` (a contract amendment or a new story), not a fix made here.
 - **Goal:** Settle, against the installed Claude Code and its version stamped, whether the kit's local

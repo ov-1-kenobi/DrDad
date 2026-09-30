@@ -1675,7 +1675,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
   variable and `$ds`/`$tidy` are the script paths, as used at about lines 3011 and 3115. Keep all text
   ASCII. AC3's "this repo" check is only valid once no other real stray file sits at the kit root.
 
-### [ ] T16.1 - MEASURE whether current Claude Code still runs the kit's local `-cc` models (feeds /design and Story S17's smoke check)   [research]   (Story S16)
+### [x] T16.1 - MEASURE whether current Claude Code still runs the kit's local `-cc` models (feeds /design and Story S17's smoke check)   [research]   (Story S16)
 - **Goal:** Produce a version-stamped MEASURED-FACTS RECORD of what the installed Claude Code does with the
   kit's local Ollama models (R1), why 2.1.285 rejected `--model qwen3-14b-cc`, and end with a recommendation
   for `/design`.
