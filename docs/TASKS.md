@@ -118,6 +118,39 @@ until a human runs the later `/design` step. It BLOCKS every other R39 story - n
 task may be written or sharded before C5 is pinned. It carries a consent guard: it must not write to
 `%USERPROFILE%\.copilot\` (R35b); if a measurement needs that, it STOPS and reports the exact write.)
 
+T15.1 -> T15.2
+
+(Story S15 has no dependency on any other story (its own Dependencies line says none). It is a code fix to a
+computed gate plus its regression test, per CLAUDE.md "add a Test-Case for any bug": T15.1 narrows the
+`$strayRx` result in `Get-ProjectJunk` (doc-stats.ps1) so the kit's own `dad-*.ps1`/`dad-*.cmd` scripts are
+not stray; `tidy.ps1` needs no edit because it only acts on `doc-stats -Junk`, i.e. the same helper. T15.2
+depends on T15.1 because its assertions exercise the rule. Two tasks, not one: the code change and the
+test-kit.ps1 change are two files with two different acceptance checks.)
+
+T16.1
+
+(Story S16 is a measurement spike: ONE human-attended task, no kit code, no dependency (its Dependencies
+line says none). It feeds Story S17 (R40's smoke check needs its definition of "local model resolves") but
+S17 is sharded below (T17.x).)
+
+T17.1 -> T17.2
+T17.1 -> T17.3
+T17.2 -> T17.4 (also needs T16.1) -> T17.5
+T17.3 -> T17.5
+
+(Story S17 (R40): T17.1 is the pure helper, T17.2 wires install.ps1, T17.3 wires dad-doctor (independent of
+T17.2, both only need T17.1), T17.4 adds the post-update smoke check and needs T16.1's record for its
+local-model rule, T17.5 is the sandboxed test-kit coverage. Every install.ps1 test uses stubs on a sandbox
+PATH - never the real installer or npm (R35b).)
+
+T18.1 -> T18.3 (needs T18.1 and T18.2) ; T15.1 -> T18.2 (needs T15.1) -> T18.3
+
+(Story S18 (R32, R24): T18.1 is the close-unit computed citation check and fixes the two existing test
+fixtures it would break; T18.2 is the build.md text (post-hygiene doc-stats re-check + neutral grading
+prompts) and depends on T15.1 so the junk false positive is fixed before a `[hygiene]` finding is trusted
+to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade cards S1-S12 are GRANDFATHERED
+(see T18.1). After T18.2, `install.cmd` must be re-run by the human - the executor must NOT run it.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -1593,7 +1626,232 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   workspace `.mcp.json` / `.github/mcp.json` source; the kit's commands and agents install to
   `%USERPROFILE%\.claude\` only. Placeholder rule: no machine path in any committed file (R39c).
 
+### [ ] T15.1 - Get-ProjectJunk must not report the kit's own dad-*.ps1 / dad-*.cmd scripts as stray   (Story S15)
+- **Goal:** `doc-stats -Findings`' `[hygiene]` ad-hoc-file check and `dad tidy -Fix` stop treating
+  `dad-run-summary.ps1` / `dad-run-summary.cmd` (and any future `dad-*` kit script) as stray summary files.
+- **Touches:** `doc-stats.ps1` (function `Get-ProjectJunk`, the `$stray` computation, about lines 31-35).
+- **Do:** 1. In `Get-ProjectJunk`, after the existing `$stray` filters (the `$strayRx` match and the user
+  run-export filter), add one more `Where-Object` that drops any name matching `(?i)^dad-.+\.(ps1|cmd)$`.
+  2. Put a comment above it stating the rule: "the kit's own scripts (dad-*.ps1 / dad-*.cmd) ARE the kit,
+  never stray; only script extensions are exempt, so dad-notes.md or dad-summary.txt is still junk". 3. Do
+  NOT touch `$strayRx`, the mangled-dir, binlog or solution logic, `tidy.ps1`, or the `[hygiene]` message
+  text at about line 434. 4. Run `dad doc-stats -Junk` on this repo: `StrayFiles` must be empty.
+- **Acceptance:** `powershell -NoProfile -File doc-stats.ps1 -ProjectDir . -Junk` prints `StrayFiles` empty
+  on this repo (S15 AC3, first half), and `-Findings` no longer prints `[hygiene] ... ad-hoc status/summary`.
+  A root with `IMPLEMENTATION_SUMMARY.md` still lists it (AC2).
+- **Depends on:** none
+- **Refs:** Story S15 (Behavior, AC1-AC3, Dev notes); R24 (computed checks must be right); Story S11
+  Decision item 2 (the false positive that motivated this).
+- **Context:** `tidy.ps1` line 38 obtains its list from `doc-stats.ps1 -Junk`, so fixing the shared helper
+  fixes both surfaces with no tidy change. The exemption is a name-prefix-plus-extension rule chosen to
+  survive new kit scripts (S15 Dev notes) instead of an allow-list of names. Kit text must be ASCII.
+
+### [ ] T15.2 - test-kit.ps1 Test-Case: kit scripts not flagged, real junk classes still flagged   (Story S15)
+- **Goal:** lock the S15 fix with a regression case covering AC1, AC2 and AC3.
+- **Touches:** `test-kit.ps1` (extend the existing junk-class Test-Case near line 3108-3134, the one that
+  plants `IMPLEMENTATION_SUMMARY.md`, `STORY_S2_COMPLETE.md`, `completed_tasks.txt`, `msbuild.binlog`,
+  `App.sln`/`App.slnx` and the mangled dir; or add a new `Test-Case` beside it using the same
+  `New-Sandbox` / `Remove-Sandbox` pattern).
+- **Do:** 1. AC1: in a fresh sandbox project with a `docs\DESIGN.md`, create ONLY `dad-run-summary.ps1` and
+  `dad-run-summary.cmd` at the root; run `doc-stats.ps1 -ProjectDir $p -Findings` and assert the output does
+  NOT match `ad-hoc status/summary file`; run `tidy.ps1 -ProjectDir $p` (dry run) and assert the output does
+  NOT match `dad-run-summary` and the two files still exist. 2. AC2: in the existing junk-class case (which
+  already asserts `ad-hoc status/summary file` is flagged), also plant `dad-run-summary.ps1` and add an
+  assertion that the finding line does not name it while still naming `IMPLEMENTATION_SUMMARY.md`; plus
+  plant `dad-notes.md` and assert it IS named (the exemption is script-extensions only). 3. AC3: assert
+  `doc-stats.ps1 -ProjectDir $kit -Findings` (the kit repo itself) does not match `ad-hoc status/summary`.
+  4. Run the full `.\test-kit.ps1`.
+- **Acceptance:** `test-kit.ps1` prints `0 failed` with the new assertions present; temporarily reverting
+  T15.1's filter makes the AC1 assertion fail (proving the test bites).
+- **Depends on:** T15.1
+- **Refs:** Story S15 (AC1, AC2, AC3); CLAUDE.md "Add a Test-Case for any bug you fix here".
+- **Context:** existing pattern: `$out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds
+  -ProjectDir $p -Findings 2>&1 | Out-String` then `Assert (<bool>) "message"`; `$kit` is the kit root
+  variable and `$ds`/`$tidy` are the script paths, as used at about lines 3011 and 3115. Keep all text
+  ASCII. AC3's "this repo" check is only valid once no other real stray file sits at the kit root.
+
+### [ ] T16.1 - MEASURE whether current Claude Code still runs the kit's local `-cc` models (feeds /design and Story S17's smoke check)   [research]   (Story S16)
+- **Goal:** Produce a version-stamped MEASURED-FACTS RECORD of what the installed Claude Code does with the
+  kit's local Ollama models (R1), why 2.1.285 rejected `--model qwen3-14b-cc`, and end with a recommendation
+  for `/design`.
+- **Touches:** NO kit code changes. The record is returned in the completion report / grade card and
+  appended to Story S16's Dev notes in `docs/STORIES.md` only if the human asks. `docs/DESIGN.md` is NOT
+  edited. Scratch files live under `_tmp/` (gitignored) only.
+- **Do:**
+  1. **Stamp (AC1):** run `claude --version`; record the exact string and the OS. Say whether it differs
+     from 2.1.285 (T10.6's failing run) and 2.1.191 (older transcripts where `-cc` models worked; C4a's
+     MEASURED-LOCAL note in `docs/DESIGN.md`).
+  2. **Read the kit setup (no changes):** `models.json` maps aliases to `-cc` names (dev=devstral-cc,
+     coder=qwen3-coder-30b-cc, oss=gpt-oss-20b-cc, gemma=gemma4-cc, quality=qwen3-coder-next-cc,
+     fast=qwen3-14b-cc); `sync-models.ps1` generates each Modelfile (`FROM <base>` + `PARAMETER num_ctx`);
+     `use-model.ps1` only edits `env.ANTHROPIC_MODEL` in `%USERPROFILE%\.claude\settings.json`, and local
+     mode = an Ollama `env.ANTHROPIC_BASE_URL` there. READ the user's settings.json and `ollama list` to
+     record (names only, no values that look like secrets) which `-cc` models exist and whether the base URL
+     is set. Do NOT run `use-model`, `install`, or `sync-models` (they write user-level state).
+  3. **Headless matrix (per-process env vars only):** from a scratch dir under `_tmp/`, run with forward-slash
+     paths and `< /dev/null` (RECIPES.md capture recipe), one row per attempt, using a model that exists in
+     `ollama list` (prefer `qwen3-14b-cc`): (a) `ANTHROPIC_BASE_URL=<the Ollama URL from step 2>
+     ANTHROPIC_MODEL=qwen3-14b-cc claude -p "Reply with the single word: pong" --max-turns 1 < /dev/null`;
+     (b) same env plus `--model qwen3-14b-cc`; (c) same with the tag used by the Modelfile's base. Record per
+     row: the exact command (env values redacted), exit code, the verbatim error or reply, and which model
+     the transcript/output says answered. Also test whether `ANTHROPIC_MODEL` is overridden (the 2.1.285
+     symptom).
+  4. **Configuration attempt (smallest first):** the error text names `modelOverrides` / `modelPicker`. Read
+     `claude --help` and the error text; try a PROJECT-level `.claude/settings.json` in the scratch dir
+     (and `--settings <scratch file>` or `--setting-sources` if the CLI offers them) before anything
+     user-level. Record the smallest config that makes a local model load and answer one prompt, where it
+     lives (user vs project settings), and whether the kit's installer could write it. If no route works,
+     say plainly that no route exists on this version.
+  5. **Version bisect (only if broken and cheap):** state the newest version known to work without config
+     (2.1.191 is known from transcripts; do not install other versions globally - if bisecting needs
+     `npm install -g`, STOP and report the exact command). Otherwise write "unknown".
+  6. **Interactive:** an interactive session (`use-model` then `claude`, and `/model qwen3-14b-cc` inside it)
+     cannot be scripted. Say exactly which of the headless results transfer, and mark every interactive
+     row "NEEDS HUMAN" with the exact keystrokes/commands for the human to run and what to report.
+  7. **Present a measured table** (C2/T9.5 style: item, observed, evidence/command) covering: version, `-cc`
+     models present, use-model route, env var, `--model`, `/model` (NEEDS HUMAN), config route, newest known
+     good version. End with a **Recommendation for /design** (contract amendment vs new story vs "not
+     broken"; what "local model resolves" should mean for R40's smoke check) and a final line naming which
+     rows feed S17.
+  8. **Revert and confirm (AC3):** delete the scratch dir contents; confirm `%USERPROFILE%\.claude\
+     settings.json` and the machine PATH are byte-identical / unchanged (compare a hash taken before step 2
+     with one after), and no global model config changed.
+  9. **CONSENT GUARD (R35):** scratch runs under `_tmp/` with per-process env vars only. Do NOT change global
+     model configuration, `%USERPROFILE%\.claude` settings, or the machine PATH. If a configuration attempt
+     needs a user-level write, STOP that attempt and report the EXACT file and write needed and why. No
+     secret (token, auth header) goes into the record.
+- **Acceptance:** a record exists (in the completion report/grade card) that (AC1) states the exact
+  `claude --version` and OS; (AC2) states plainly whether a local `-cc` model can answer a prompt headless
+  and (marked NEEDS HUMAN if untested) interactively, by what exact command or config, OR that no route
+  exists on this version; (AC3) confirms `%USERPROFILE%\.claude\settings.json` hash and PATH unchanged and
+  scratch removed; and ends with a recommendation for `/design`. Any attempt blocked by the consent guard
+  lists the exact write it needs.
+- **Depends on:** none
+- **Refs:** Story S16 (Behavior, AC1-AC3); `docs/DESIGN.md` R1, R34, R35, R40 and C4a's MEASURED-LOCAL note
+  (T10.6 finding: 2.1.285 rejected `--model qwen3-14b-cc`, "isn't described by this version's model
+  catalog", and overrode `ANTHROPIC_MODEL`); `docs/RECIPES.md` (the `claude -p` capture recipe: forward-slash
+  paths, `< /dev/null`); `models.json`, `use-model.ps1`, `sync-models.ps1`; T9.5 and T14.1 (same measurement
+  shape).
+- **Context:** READ Story S16 directly. Spike: no kit code, no DESIGN edit; if local is broken the outcome
+  is a proposal for `/design`, not a fix here. Do this before Story S17's smoke check is finalized. Kit
+  text stays ASCII.
+
+### [ ] T17.1 - Harness-version helper: installed vs latest vs measured, printed as [harness] lines   (Story S17)
+- **Goal:** One helper script that, for a named harness, reads installed version, latest registry version and the measured-against stamp, compares them, and prints the R40 `[harness]` lines - with no install side effects.
+- **Touches:** `harness-versions.ps1` (new, kit root); `install.ps1` (ONLY add the constant `$ClaudeCodeMeasuredVersion = "2.1.285"` next to `$CopilotMeasuredVersion` at ~line 32).
+- **Do:**
+  1. In `install.ps1` line ~32 add `$ClaudeCodeMeasuredVersion = "2.1.285"` (ONE constant; must equal C4a's `MEASURED <date> against Claude Code 2.1.285` stamp and `$MeasuredClaudeCodeVersion` in `dad-run-summary.ps1`). Do not hard-code it anywhere else.
+  2. `harness-versions.ps1` exports functions (dot-sourceable, no work at load): `Get-HarnessVersion -Cli <name>` (runs `<name> --version`, first line, extracts `\d+(\.\d+)+` with a regex like install.ps1 ~line 273; returns `""` if the CLI is absent or errors); `Get-LatestVersion -Package <npm pkg>` (runs `npm view <pkg> version` with a timeout of about 10 s via `Start-Job`/`Wait-Job -Timeout`, returns `""` on timeout, non-zero exit, npm absent or empty output - never throws); `Compare-HarnessVersion $a $b` (numeric per-segment compare, returns -1/0/1; NEVER a string compare or substring match - "2.1.9" < "2.1.285", and "1.0.890" is not "1.0.89", see install.ps1 ~lines 269-274); `Write-HarnessReport -Name -Installed -Latest -Measured` printing the lines below.
+  3. Line format (exact, from R40's worked example): `[harness] <name>   installed <v>   latest <v|unknown (registry unreachable)>   measured against <v>` plus a trailing `   (current)` when installed == latest. If installed < latest also print `[harness]   update available - update now? [y/N]` ONLY when the caller passes `-AskLine` (the prompt itself is T17.2's job; this helper only prints the line text, it does not read input). If installed is not empty and > measured print `[harness] <name> now <installed> (newer than measured <measured>) - re-check: hooks/payload (C2, T9.5), usage fields (C4a), local model catalog` (warn colour, never throws, never sets a failing exit code). If installed is empty print `[harness] <name>   not installed   latest <v>`.
+  4. Names and packages: `claude-code` / cli `claude` / pkg `@anthropic-ai/claude-code`; `copilot-cli` / cli `copilot` / pkg `@github/copilot`. Keep them in one small hashtable at the top (not a manifest: C2f defers `harnesses.json` until a second non-Claude harness).
+  5. Testability: the functions must call `claude`, `copilot` and `npm` by bare name so a stub on PATH is used; take NO dependency on the real machine. Keep ASCII.
+- **Acceptance:** in a sandbox with stub `claude`/`npm`/`copilot` (e.g. .cmd files printing `2.1.285`, `2.1.301`, `1.0.89`), dot-sourcing the helper and calling `Write-HarnessReport` prints `[harness] claude-code   installed 2.1.285   latest 2.1.301   measured against 2.1.285` (R40's worked line); with `npm` absent or exiting 1 it prints `latest unknown (registry unreachable)` and returns normally; `Compare-HarnessVersion "1.0.890" "1.0.89"` is 1 and `"2.1.9" "2.1.285"` is -1.
+- **Depends on:** none
+- **Refs:** Story S17 (Behavior, AC1, AC3, AC4); `docs/DESIGN.md` R40(a),(c), worked example; R37, C2f, C4a MEASURED stamps.
+- **Context:** Existing: `$CopilotMeasuredVersion = "1.0.89"` in install.ps1 line 32, `Have()` at line 34; Copilot version extract + equality compare at lines 267-283 (the warning wording there stays for `-CopilotCli`; this helper is the new general report). This task must not run npm install or touch the machine - it only READS versions. Any test of it uses sandbox stubs (R35b).
+
+### [ ] T17.2 - install.ps1: replace the unconditional Claude Code npm install with report + ask-before-update   (Story S17)
+- **Goal:** Step 3 of install.ps1 reports harness versions and installs/updates Claude Code only with consent; Copilot CLI is reported only when present (or `-CopilotCli`) and never installed by default.
+- **Touches:** `install.ps1` (param block line 20; step 3 at line 88; Copilot block lines 256-320).
+- **Do:**
+  1. Param block: add `[switch]$Yes` -> `param([switch]$Cloud, [switch]$Hybrid, [switch]$CopilotCli, [switch]$Yes)`. Dot-source `harness-versions.ps1` (from `$root`) near the top after `Have`.
+  2. Replace line 88 `if ($haveNode) { npm install -g @anthropic-ai/claude-code } else {...}` with: if `$haveNode` is false keep the existing `[warn] node missing` line. Else get installed (`Get-HarnessVersion claude`), latest (`Get-LatestVersion`), print via `Write-HarnessReport` with `$ClaudeCodeMeasuredVersion`.
+     - Not installed: offer the first-time install (`install Claude Code now? [Y/n]`, or straight yes with `-Yes`); on yes run `npm install -g @anthropic-ai/claude-code` ONCE. This is the only case not preceded by an update question.
+     - Installed and installed < latest (latest known): print the update line and ask `update now? [y/N]`; on `y`/`-Yes` run `npm install -g @anthropic-ai/claude-code` exactly once; on `N`, empty or no input (`Read-Host` returns empty or throws non-interactive -> treat as N) run NOTHING and continue.
+     - Installed == latest or latest unknown: run NOTHING (no npm install); print the report only.
+     - After a real update, print `[harness] claude-code now <v>` via the helper's newer-than-measured line (T17.1) and leave a clearly marked hook call `Invoke-PostUpdateSmoke` to be added by T17.4 (do NOT implement the smoke here).
+  3. Copilot: keep `-CopilotCli` block (step 9) as is for hooks. Add a report before/inside it: when `Have copilot` OR `$CopilotCli`, print the copilot report line with `$CopilotMeasuredVersion`; when `Have copilot` and copilot < latest, ask the same `update now? [y/N]` (update command `npm install -g @github/copilot`) - never install it when absent (existing text at line 262 already tells the user the command). When `copilot` absent and no `-CopilotCli`: print exactly one line `[harness] copilot-cli   skipped (not installed; use -CopilotCli to opt in)` and do nothing else.
+  4. The string `npm install -g @anthropic-ai/claude-code` may still appear, but ONLY inside the consent branches above - never at top level of step 3.
+- **Acceptance:** with stub `npm`/`claude`/`copilot` on a sandbox PATH and a sandboxed `$env:USERPROFILE`/HOME, an install run with stdin `N` leaves the stub npm's call log empty for the update; with `-Yes` the log shows exactly one `install -g @anthropic-ai/claude-code`; absent `copilot` without `-CopilotCli` prints the single skipped line and the log has no `@github/copilot` call. (T17.5 asserts these; do NOT run the real install.ps1 here - R35b.)
+- **Depends on:** T17.1
+- **Refs:** Story S17 (Behavior, AC2, AC3, AC5); `docs/DESIGN.md` R40(a),(b), R37 (`-CopilotCli` stays opt-in).
+- **Context:** Current step 3 (line 87-89) also runs `code --install-extension anthropic.claude-code`; leave that line untouched. `install.cmd` mutates real machine state (npm global, PATH): NEVER run it or `install.ps1` for real to check this; verify only with stubs in a sandbox (or by reading the diff). Keep ASCII; keep the dev-path placeholder untouched.
+
+### [ ] T17.3 - dad-doctor prints the same harness drift report   (Story S17)
+- **Goal:** `dad-doctor` shows the R40 `[harness]` lines (installed / latest / measured, and the newer-than-measured warning) for Claude Code and for Copilot CLI when present.
+- **Touches:** `dad-doctor.ps1` (near the existing Copilot section, lines ~464-515; also `Say` helper usage).
+- **Do:**
+  1. Dot-source `harness-versions.ps1` from the kit dir (`$kit`). Read `$ClaudeCodeMeasuredVersion` from `install.ps1` by regex exactly as lines ~471-478 read `$CopilotMeasuredVersion` (never hard-code the number - `test-kit.ps1` line ~1580 forbids it for Copilot and T17.5 extends that to Claude Code).
+  2. Add a `-- harness versions (R40) --` section before the Copilot section: call `Write-HarnessReport` for claude-code, and for copilot-cli only when `copilot` is on PATH. Newer-than-measured is a `Say "WARN"` (never FAIL) naming hooks/payload (C2, T9.5), usage fields (C4a), local model catalog. Registry unreachable -> `latest: unknown (registry unreachable)`, no error. Nothing here installs or updates anything (doctor is read-only).
+  3. Leave the existing Copilot version check (lines 498-511) unchanged.
+- **Acceptance:** `dad-doctor.ps1` on a sandbox PATH with stub `claude` printing `2.1.301` (stub `npm` printing `2.1.301`) prints a line matching `[harness] claude-code   installed 2.1.301   latest 2.1.301   measured against 2.1.285` and a WARN naming `local model catalog`; with no `claude` it prints `not installed` and does not throw; exit behaviour is unchanged.
+- **Depends on:** T17.1
+- **Refs:** Story S17 (Behavior "dad-doctor prints the same", AC4); `docs/DESIGN.md` R40(c), C2f.
+- **Context:** doctor may take up to the helper's ~10 s npm timeout when the registry is slow; that is accepted. Use only read-only commands; no writes to the machine.
+
+### [ ] T17.4 - Post-update smoke check and the way back   (Story S17)   [needs T16.1]
+- **Goal:** After install.ps1 updates a harness, run a cheap smoke check and, if it fails, print the previous version and the exact command to return to it - without rolling back or lowering any security setting.
+- **Touches:** `harness-versions.ps1` (add `Invoke-PostUpdateSmoke` and `Test-LocalModelResolves`); `install.ps1` (call it at the T17.2 hook point, passing the previous version).
+- **Do:**
+  1. `Invoke-PostUpdateSmoke -Name -Previous -Package`: run the kit's guard smoke `dad gates-smoke` (via the `dad` shim or `powershell -File` of the script it maps to in `dad.ps1`; find its exact entry with `Grep gates-smoke dad.ps1` - if there is no such command, STOP and report it as an open question; do not invent one). For claude-code also call `Test-LocalModelResolves`.
+  2. `Test-LocalModelResolves`: a SMALL function that returns `$true`/`$false` and a reason string. **Its exact rule is filled in from T16.1's MEASURED record** (what "a `-cc` model resolves" means on current Claude Code: the command or config used, and what output counts as success). Until T16.1 is `[x]` do NOT write the rule; the dev copies it verbatim from T16.1's record into a comment plus code. If T16.1 concludes no route exists, the function returns `$false` with a reason naming that, so the failure is reported, not hidden. It must use per-process env vars only and never change `settings.json`, `use-model` state, or any security/permission setting.
+  3. On any failure print: `[harness] <name> smoke check FAILED (<reason>). Previous version was <Previous>. To return to it: npm install -g <Package>@<Previous>` (exact form; only the printed text, never executed). Exit code of install.ps1 stays 0 (drift is loud, never blocking - R40c). Never call npm from the failure path; never touch settings.
+  4. On pass print `[harness] <name> smoke check passed`. Skip the smoke entirely when no update ran (no new npm install in this run).
+- **Acceptance:** with stubs (stub `npm` recording calls, stub `claude` printing versions, smoke forced to fail via a stub/hook the function honours), the output contains `Previous version was 2.1.285` and `npm install -g @anthropic-ai/claude-code@2.1.285`; the npm stub's call log shows NO further `install` call after the failure; settings files in the sandbox are byte-identical before and after. (Real install.ps1 is never run - R35b.)
+- **Depends on:** T17.2, T16.1
+- **Refs:** Story S17 (Behavior "After an update", AC6); `docs/DESIGN.md` R40(d), R35, R1; Story S16 / T16.1 (the local-model rule).
+- **Context:** Do not start until T16.1 is ticked. If T16.1's recommendation is a `/design` amendment, take only the smoke rule it states. The previous version is the installed version captured BEFORE `npm install`. The rollback text names the pinned-version command; running it is the human's decision.
+
+### [ ] T17.5 - test-kit cases for R40 (AC1-AC7), all stubbed and sandboxed   (Story S17)
+- **Goal:** `test-kit.ps1` proves the harness-version report, ask-before-update, offline safety, drift warning, Copilot opt-in, smoke-failure message, and the stamp<->C4a lock.
+- **Touches:** `test-kit.ps1` (new `Test-Case` blocks after `"dad-doctor's Copilot harness section renders without erroring"`, ~line 1589-1610).
+- **Do:** Add cases, each using a temp sandbox dir with stub `.cmd` files (`claude`, `npm` logging its args to a file, `copilot`) put FIRST on a child process PATH, and a sandbox `USERPROFILE`/`HOME` (see how the existing `"uninstall removes the Copilot CLI hook file (sandboxed)"` case at ~line 1540 sandboxes). NEVER run the real `install.ps1`, `install.cmd` or real `npm` against the machine (R35b). Prefer testing `harness-versions.ps1` functions directly (child `powershell -File` with the stub PATH); for `install.ps1` behaviour, run only a stubbed/sandboxed child and assert the npm stub log.
+  1. AC1: three columns printed for each present CLI (worked line from R40).
+  2. AC2: installed 2.1.285 < latest 2.1.301 with stdin `N` -> npm stub log has no `install`; with `-Yes` (or stdin `y`) exactly one `install -g @anthropic-ai/claude-code`.
+  3. AC3: `npm` stub exits 1 -> output has `latest: unknown` and exit code 0.
+  4. AC4: installed newer than measured -> warning text names `hooks/payload (C2, T9.5)`, `usage fields (C4a)`, `local model catalog`; exit 0.
+  5. AC5: no `copilot` on PATH and no `-CopilotCli` -> exactly one `skipped` line and no `@github/copilot` in the npm log.
+  6. AC6: forced smoke failure -> output contains the previous version and the `npm install -g ...@<previous>` text; no rollback call in the npm log; sandbox settings unchanged.
+  7. AC7 drift: assert `install.ps1`'s `$ClaudeCodeMeasuredVersion` equals the first `MEASURED <date> against Claude Code <v>` stamp in `docs/DESIGN.md` C4a (regex `MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+Claude\s+Code\s+([0-9][0-9.]*)`, first match - NOT `MEASURED-LOCAL`) and equals `$MeasuredClaudeCodeVersion` in `dad-run-summary.ps1`; `dad-doctor.ps1` must not hard-code that number (same shape as the C2f case at ~line 1559). Also assert `install.ps1` has no top-level unconditional `npm install -g @anthropic-ai/claude-code` (the string may appear only inside an `if`/consent branch: e.g. assert the text of step 3 contains `Yes` and `[y/N]`, and that no line matching `^\s*npm install -g @anthropic-ai/claude-code` exists).
+  8. Then run the full suite `.\test-kit.ps1` and confirm `0 failed`.
+- **Acceptance:** `.\test-kit.ps1` prints `0 failed` and the new cases appear in its output; deliberately changing `$ClaudeCodeMeasuredVersion` to another number makes the drift case fail (verify, then restore).
+- **Depends on:** T17.1, T17.2, T17.3, T17.4
+- **Refs:** Story S17 (AC1-AC7); `docs/DESIGN.md` R40(e), C2f, C4a MEASURED stamp (line ~1115: `MEASURED 2026-09-30 against Claude Code 2.1.285`); R35b.
+- **Context:** existing pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root (see the C2f case at ~line 1559). Keep ASCII, restore any temporary edit. The suite must not depend on the machine having claude/copilot installed - stubs only.
+
+### [ ] T18.1 - close-unit -RequireGrade: computed citation check on the grade card   (Story S18)
+- **Goal:** a grade card that cites nothing checkable FAILS `close-unit -RequireGrade`; a card citing a real test name or `test-kit.ps1` line range, with every `file:line` resolvable, passes.
+- **Touches:** `close-unit.ps1` (function `Test-GradeCard`, ~line 197-204; caller at ~line 502-508 needs no change); `test-kit.ps1` (fixture cards at ~line 4463 in "close-unit refuses a STORY close when tests run zero tests" and ~line 4534 in "close-unit -RequireGrade refuses a story with no real grade card").
+- **Do:** In `Test-GradeCard`, after the existing size and `## Grade history` checks (keep them unchanged), read the card text and add two computed checks, returning a one-line problem string like the existing ones:
+  1. CITES SOMETHING: the card must contain at least one of (a) a `test-kit.ps1:<n>` or `test-kit.ps1:<n>-<m>` reference, or (b) a backtick- or double-quote-quoted name that exactly equals the name of a `Test-Case "<name>"` in the project's `test-kit.ps1`, or (c) a `file:line` citation that passes check 2 (any file). If none: `grade card cites no test name, test-kit.ps1 line range or resolvable file:line`.
+  2. EVERY `file:line` RESOLVES: match `([\w./\\-]+\.(ps1|cmd|md|cs|json|py|ts|js|yml|yaml|csproj|sln)):(\d+)(?:-(\d+))?`. Resolve the path relative to `$proj` (forward or back slashes); if not found there, accept a UNIQUE file of that name found under `$proj` excluding `.git`, `_tmp`, `bin`, `obj`, `node_modules`; else FAIL `grade card cites missing file <path>`. Line count = number of lines in the file; the largest cited number (n, or m of a range) must be <= line count, else FAIL `grade card cites <path>:<n> but the file has <count> lines`. Report the first failure only.
+  3. Deterministic, cheap, no quality judgement, no network. If the project has no `test-kit.ps1`, skip (a) and (b) only.
+  4. GRANDFATHER DECISION (state it in a comment above the function): the check runs only inside `close-unit -RequireGrade` at the moment a story is closed. It never rescans `grades\`, so the existing cards `S1_GRADE.md` to `S12_GRADE.md` are grandfathered and need NO backfill; `doc-stats` is unchanged (it only checks a card exists). A re-grade of an old story does go through the new check.
+  5. The two existing test fixtures use a card whose body is `'detail. ' * 120` and would now FAIL: add one resolvable citation to each, e.g. append `` `close-unit.ps1:1` `` to the Assessment text (kit file, line 1 exists). Do not weaken the check.
+- **Acceptance:** with a sandbox project, a >=800 byte card with the three headings but no citation exits non-zero from `close-unit -Id S1 -RequireGrade` with the message above; the same card plus `close-unit.ps1:1` (file present in sandbox) exits 0; the two edited fixtures still pass. Informational: running the check function over `grades\S1..S12` is not required to pass.
+- **Depends on:** none
+- **Refs:** Story S18 (Behavior 1, AC1, AC2, AC4, Dev notes); Story S11 Decision (2026-09-30); `docs/DESIGN.md` R24, R32.
+- **Context:** current `Test-GradeCard` only checks existence, `>=800` bytes and `## Grade history`. `$proj` is the project dir variable in close-unit.ps1. `-RequireGrade` turns the returned string into a blocking `$problems` entry; without it it is only a warning. `build.md` step 5's gate names `## Assessment` and `## Suggestions` too, but close-unit does not check them today - leave that as is. ASCII only.
+
+### [ ] T18.2 - build.md: post-hygiene doc-stats re-check + neutral grading prompts   (Story S18)
+- **Goal:** `/build` re-runs `dad doc-stats -Findings` after hygiene-agent and treats a clean claim contradicted by a `[hygiene]`/`[integrity]` finding as CONTRADICTED and blocking; grading prompts are neutral; step 5 tells graders the card is computed-checked.
+- **Touches:** `global\commands\build.md` (per-STORY steps 5-7, ~lines 148-162; small insertions only).
+- **Do:**
+  1. Step 5: append a sentence: the gate now also requires the card to cite at least one test name or `test-kit.ps1` line range and every `file:line` to resolve (close-unit `-RequireGrade` enforces it); a card that cites nothing checkable is sent back.
+  2. Step 5 (new "Neutral prompt" sentence, also stated as a convention): give grade-agent ONLY the story id and evidence pointers (STORIES.md section, TASKS.md, `grades/` card path, the test command). Do NOT pass your own list of suspected defects or known issues - it biases the grade.
+  3. Step 6: after hygiene-agent returns, run `dad doc-stats -Findings` and the project's test command yourself and compare. If hygiene reported the project clean but a `[hygiene]` or `[integrity]` finding is present (or the suite fails), relay the disagreement as `CONTRADICTED` with the finding text; a CONTRADICTED report BLOCKS the story close (step 7) until resolved (fix, or a human-approved explanation).
+  4. Keep the file ASCII and keep all other steps unchanged.
+  5. Do NOT run `install.cmd`. In your completion report tell the human: installed global commands are copies, so `install.cmd` must be re-run for the change to take effect.
+- **Acceptance:** `Select-String global\commands\build.md` finds `doc-stats -Findings` inside steps 5-7 text, the word `CONTRADICTED` next to `blocks`/`BLOCKS`, and `Neutral prompt` (or `neutral`); the file has no non-ASCII bytes.
+- **Depends on:** T15.1 (the `Get-ProjectJunk` false positive must be fixed before a `[hygiene]` finding may block a close)
+- **Refs:** Story S18 (Behavior 2 and 3, AC3); Story S11 Decision (failures 2 and 3: S10 hygiene reported clean while `doc-stats` flagged two files; graders biased by known-issue lists); `docs/DESIGN.md` R24, R32.
+- **Context:** current step 5 text: "grade-agent -> grade the completed STORY. It writes `grades/<story id>_GRADE.md` ... Gate ... at least 800 bytes ... `## Grade history`, `## Assessment`, `## Suggestions`". Step 6: "hygiene-agent (give it the story id) -> applies the card's `[mechanical]` items ... then rebuilds." Step 7 runs `dad close-unit -Id <story id> -Title "<story> polish" -RequireGrade`. `doc-stats -Findings` emits tagged findings; there are 9 `[hygiene]`/`[integrity]` mentions in `doc-stats.ps1`. Do not edit grade-agent.md or hygiene-agent.md.
+
+### [ ] T18.3 - test-kit cases for S18 (AC1-AC4)   (Story S18)
+- **Goal:** `test-kit.ps1` proves the citation gate and that the build.md text landed.
+- **Touches:** `test-kit.ps1` (new `Test-Case` blocks immediately after `"close-unit -RequireGrade refuses a story with no real grade card"`, ~line 4540).
+- **Do:** Copy that test's sandbox shape (`New-Sandbox`, git init, `Remove-Sandbox`, `if (-not $haveGit) { return }`, `-SkipVerify -NoReindex -RequireGrade`). Cases:
+  1. AC1: stub-with-headings card (>=800 bytes, `## Grade history`/`## Assessment`/`## Suggestions`, no citation) -> exit non-zero and story not DONE; then a card citing `` `close-unit.ps1:1` `` after copying a small `close-unit.ps1` stub into the sandbox project root -> exit 0 and DONE. Add a variant citing an exact existing `Test-Case "<name>"` in a sandbox `test-kit.ps1` -> exit 0.
+  2. AC2: card citing `close-unit.ps1:99999` -> non-zero; card citing `nosuchfile.ps1:3` -> non-zero.
+  3. AC3: read `global\commands\build.md` raw and assert it contains `doc-stats -Findings`, `CONTRADICTED`, and the neutral-prompt sentence (assert on the literal phrases T18.2 wrote).
+  4. AC4: run the full suite `.\test-kit.ps1` and confirm `0 failed`.
+- **Acceptance:** `.\test-kit.ps1` prints `0 failed` and the new case names appear in its output; reverting T18.1's check makes the AC1/AC2 cases fail (verify, then restore).
+- **Depends on:** T18.1, T18.2
+- **Refs:** Story S18 (AC1-AC4); CLAUDE.md "Add a Test-Case for any bug".
+- **Context:** existing pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, `$cu = Join-Path $kit "close-unit.ps1"`. Suite must run without network and without touching the real `%USERPROFILE%\.claude`. ASCII only.
+
 ## Open questions
+- **[design] S18 file:line resolution rule is not pinned in DESIGN.** T18.1 uses: path relative to project root, else a unique same-name file under the project (excluding .git, _tmp, bin, obj, node_modules); the largest number of a `a-b` range must be <= line count. If the human wants a different rule (e.g. root-relative only), amend T18.1 before building.
 - **[design] needs contract: the loop-guard writer's fallback if `PreToolUse` carries no `cwd`.** C3f's
   PREREQUISITE MEASUREMENT (sharded as T9.5) may come back NO. C3f deliberately does not pre-decide the
   fallback - "a machine-level log, or resolving the project another way - is a NEW decision to be taken
@@ -1612,3 +1870,10 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   (stay same-session), B (fully separate-process), or C (hybrid). `doc-stats -Findings`'s `[taskmap]`
   finding will keep reporting S11 as having no tasks - that is correct and expected, not a gap to fill,
   until a human picks an option and a follow-up story/task is scoped for whichever one is chosen.
+- **[design] Story S17 / T17.4: `dad gates-smoke` may not exist.** R40(d) and S17 name it, but the task
+  author did not confirm a `gates-smoke` entry in `dad.ps1`. T17.4 tells the dev to grep for it and STOP and
+  ask if absent, rather than invent one.
+- **[design] Story S17 / T17.4: the local-model rule is unknown until T16.1 is done.** `Test-LocalModelResolves`
+  is deliberately left to be filled from T16.1's record; if T16.1 finds no route on current Claude Code, R40's
+  smoke check will always fail after an update and `/design` may need to say whether that should warn or be
+  reworded.

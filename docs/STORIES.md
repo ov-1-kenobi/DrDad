@@ -654,3 +654,132 @@
   measurement like T9.5, not a decomposition. Consent: measuring
   writes to `%USERPROFILE%\.copilot\` (R35b) - use the least-invasive route (`--additional-mcp-config`,
   a scratch project dir) and back out every change.
+
+### Story S15: doc-stats' root-junk check must not flag the kit's own scripts   (R24)   <!-- Status: TODO -->
+- **Goal:** `doc-stats -Findings`' `[hygiene]` ad-hoc-file check (and `dad tidy -Fix`, which acts on it) stops
+  treating the kit's own `dad-*.ps1` / `dad-*.cmd` scripts as stray summary files.
+- **Context:** S10 shipped `dad-run-summary.ps1` and `dad-run-summary.cmd`. `Get-ProjectJunk` (doc-stats.ps1,
+  the `$rootJunk` block under "PROJECT-ROOT JUNK") matches names containing "summary", so on THIS repo
+  `doc-stats -Findings` now prints `[hygiene] 2 ad-hoc status/summary file(s) at the project root ...
+  dad-run-summary.cmd, dad-run-summary.ps1`, and the finding's own remedy, `dad tidy -Fix`, would act on
+  legitimate kit scripts. The S10 hygiene pass reported "no stray files" and missed it - a computed check
+  gave the wrong answer and an agent repeated it (S11 Decision, item 2). This is a false positive in a
+  computed gate, so the fix is a code fix plus a `Test-Case`, per CLAUDE.md ("add a Test-Case for any bug").
+- **Behavior:** files that ARE the kit (a `dad-*.ps1`/`dad-*.cmd` script, or any file listed as tracked kit
+  content in the kit's own repo root) are never reported as stray; the real junk classes still are
+  (IMPLEMENTATION_SUMMARY.md, STORY_S2_COMPLETE.md, completed_tasks.txt, msbuild.binlog, extra .sln/.slnx,
+  path-mangled directories). Decide the narrowest rule that holds (for example: an allow-list of the kit's
+  own script prefix, or "only flag when the file is untracked or not a script") and state it in the code.
+- **Data / interfaces:** `doc-stats.ps1` (`Get-ProjectJunk`), `tidy` if it shares the helper,
+  `test-kit.ps1` (new `Test-Case`).
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [ ] AC1: a fixture root holding `dad-run-summary.ps1` and `dad-run-summary.cmd` yields NO `[hygiene]`
+    ad-hoc finding, and `dad tidy` (dry run) lists nothing to remove for them.
+  - [ ] AC2: the existing junk-class fixture (IMPLEMENTATION_SUMMARY.md, STORY_S2_COMPLETE.md,
+    completed_tasks.txt, ...) is STILL flagged - the fix narrows the pattern, it does not disable it.
+  - [ ] AC3: `dad doc-stats -Findings` on this repo no longer prints the `[hygiene]` line; the full
+    validation gate (`test-kit.ps1`) prints `0 failed`.
+- **Dev notes:** the same mistake is possible for any future kit script with "status"/"summary"/"notes" in
+  its name - prefer a rule that survives new kit scripts over adding names one at a time.
+
+### Story S16: [SPIKE] Does current Claude Code still run the kit's local models?   (R1, R40)   <!-- Status: TODO -->
+- **Type:** Measurement spike - no kit code changes; its output is a measured record and, if the answer is
+  "broken", a proposal for `/design` (a contract amendment or a new story), not a fix made here.
+- **Goal:** Settle, against the installed Claude Code and its version stamped, whether the kit's local
+  Ollama path (R1: `-cc` model aliases from `models.json`, `use-model`, `ANTHROPIC_MODEL`) still works, and
+  why a headless run on 2.1.285 failed.
+- **Context:** T10.6 tried a fresh local measurement and Claude Code 2.1.285 rejected
+  `--model qwen3-14b-cc` ("isn't described by this version's model catalog") and overrode the
+  `ANTHROPIC_MODEL` env var. Older transcripts (2.1.191) show local `-cc` models working. It is unknown
+  whether INTERACTIVE use is affected, whether a config key (`modelOverrides` / `modelPicker`, per the
+  error text) restores it, and which version introduced the change. This bears on the project's thesis
+  (offline by default, R1) and on R40's rule that "latest" must not silently break it.
+- **Behavior:** produce a record covering: (1) the exact `claude --version`; (2) what interactive and
+  headless `claude` do with a `-cc` alias selected via `use-model`, the env var, `--model` and `/model`;
+  (3) the smallest configuration that makes a local model load and answer one prompt, if one exists
+  (where it lives - user or project settings, and whether the kit's installer could write it); (4) the
+  newest version that still works without configuration, if known; (5) a recommendation for `/design`.
+  Scratch runs stay under `_tmp/`; change no global model configuration without consent (R35).
+- **Data / interfaces:** none in the kit; the record lives in this story's Dev notes.
+- **Dependencies:** none. Feeds Story S17 (R40's smoke check needs to know what "local model resolves"
+  means) and any later contract amendment.
+- **Acceptance (testable, "record produced and stamped" - not code-tested):**
+  - [ ] AC1: the record states `claude --version` and the OS.
+  - [ ] AC2: it states plainly whether a local `-cc` model can answer a prompt, interactively and
+    headless, and by what exact command or config - or that no route exists on this version.
+  - [ ] AC3: any real-machine change made to take the measurement is reverted and confirmed (R35).
+- **Dev notes:** ORDERING - do this before Story S17's smoke check is finalized; if the record says local
+  is broken on current Claude Code, R40's post-update check must catch exactly that.
+
+### Story S17: Install reports harness versions and asks before updating   (R40)   <!-- Status: TODO -->
+- **Goal:** each `install.cmd` run prints, for Claude Code and (when present) Copilot CLI, installed vs
+  latest vs measured-against versions, asks before updating, warns loudly when the version is newer than the
+  contracts were measured against, and runs a smoke check after any update - replacing today's silent
+  unconditional `npm install -g @anthropic-ai/claude-code`.
+- **Context:** `docs/DESIGN.md` R40 pins the behaviour, including its worked example; read it directly. The
+  human chose: check-report-ask (not auto-update), warn-and-continue on drift (not block), and Copilot
+  updated only when `copilot` is on PATH and never installed by a default run (`-CopilotCli` stays the
+  opt-in). The current code is install.ps1 step 3 (unconditional npm install) and the Copilot version block
+  (`$CopilotMeasuredVersion`, C2f). `install.cmd` mutates real machine state (npm global, PATH), so live
+  runs need explicit consent (R35b); tests use sandboxes and stubs.
+- **Behavior:**
+  - Latest version comes from the package registry (`npm view <pkg> version`); an unreachable registry
+    prints `latest: unknown (registry unreachable)` and never fails the install.
+  - Installed < latest -> ask `update now? [y/N]`; `N` (default) leaves the machine untouched and the
+    install continues; `-Yes` is the explicit non-interactive consent flag.
+  - No Claude Code installed -> offer the install (first-time). Existing install -> never overwritten
+    without the question. Copilot CLI: only if on PATH (or `-CopilotCli`).
+  - Installed newer than measured -> print `[harness] ... (newer than measured X) - re-check: hooks/payload
+    (C2, T9.5), usage fields (C4a), local model catalog` (warn, never block); `dad-doctor` prints the same.
+  - After an update: smoke check (`dad gates-smoke`; the configured local model alias still resolves - per
+    Story S16's finding) and, on failure, print the previous version and the exact command to return to it.
+    Never auto-roll-back; never lower a security setting to pass a check.
+  - A version stamp for Claude Code lives in ONE constant in `install.ps1`, tied to the C4a stamp by a
+    `test-kit.ps1` case (the C2f/C4a drift device).
+- **Data / interfaces:** `install.ps1` (step 3 + a new harness-versions section), `dad-doctor.ps1`,
+  `test-kit.ps1`, docs. No gate script's behaviour changes.
+- **Dependencies:** Story S16 (what "local model resolves" means); R40.
+- **Acceptance (testable):**
+  - [ ] AC1: with stubbed `claude`/`npm`/`copilot` on a sandbox PATH, a run prints the three version columns
+    for each present CLI.
+  - [ ] AC2: with installed < latest and input `N` (or no answer), nothing is installed and the install
+    continues; with `-Yes` or `y`, the update command runs exactly once.
+  - [ ] AC3: an unreachable registry prints `latest: unknown` and the install still completes.
+  - [ ] AC4: an installed version newer than measured prints the warning naming what to re-check, exits 0.
+  - [ ] AC5: `copilot` absent and no `-CopilotCli` -> one skipped line, no install attempt.
+  - [ ] AC6: a failing post-update smoke check prints the previous version and the return command, and the
+    script does NOT roll back or change any security setting.
+  - [ ] AC7: the full validation gate passes; the Claude Code stamp constant and the C4a stamp cannot drift.
+
+### Story S18: Verifier claims are computed or cross-checked, not taken on report   (R32, R24)   <!-- Status: TODO -->
+- **Goal:** the failure class S11's decision named - a same-session verifier's unreliable self-report - is
+  closed by computed checks, so the kit no longer depends on an agent's word for what a script can settle.
+- **Context:** S11 (Decision, 2026-09-30) kept same-session subagents (Option A) because the observed
+  failures were not runaway loops but wrong or shallow reports: a grade card that admitted it never read the
+  test bodies and doubted a line that exists, and a hygiene pass that reported a clean root while
+  `doc-stats` flagged two files. R24's rule is "never accept an assertion a script can settle"; this story
+  applies it to grade cards and hygiene reports.
+- **Behavior:**
+  - The grade-card gate in `/build` (and `close-unit -RequireGrade`) also checks, mechanically, that the
+    card cites at least one TEST name or `test-kit.ps1` line range for the story, and that every
+    `file:line` it cites resolves to an existing file with at least that many lines. A card that cites
+    nothing checkable FAILS the gate (today: size and three headings only).
+  - After hygiene-agent reports, `/build` re-runs `dad doc-stats -Findings` and the suite and compares:
+    a clean claim with a `[hygiene]`/`[integrity]` finding present is relayed as CONTRADICTED and blocks the
+    close until resolved.
+  - Grading prompts stay neutral: the orchestrator passes the story and its evidence pointers, not its own
+    list of suspected defects (recorded as a convention in `build.md`).
+- **Data / interfaces:** `close-unit.ps1` (`-RequireGrade` check), `global\commands\build.md` (gate text and
+  the neutral-prompt convention), `test-kit.ps1`. Re-run `install.cmd` after editing global commands.
+- **Dependencies:** none (Story S15 fixes the false positive this check would otherwise inherit).
+- **Acceptance (testable):**
+  - [ ] AC1: a stub-with-headings card citing no test or file:line FAILS the `-RequireGrade` gate; a card
+    citing a real test name and resolvable file:line passes.
+  - [ ] AC2: a card citing `file.ps1:99999` (beyond EOF) or a missing file FAILS.
+  - [ ] AC3: `build.md` instructs the re-check of `doc-stats -Findings` after hygiene and names a
+    CONTRADICTED report as blocking; a prompt-content `Test-Case` proves the text landed.
+  - [ ] AC4: the full validation gate passes and existing grade cards still pass (or are listed as needing a
+    one-line backfill - decide and state which).
+- **Dev notes:** keep the check cheap and deterministic; it must not judge quality, only that the card
+  points at things a script can verify.
