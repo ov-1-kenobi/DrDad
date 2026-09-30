@@ -17,7 +17,7 @@
 # writes %USERPROFILE%\.copilot\hooks\dad.json so the SAME two guard scripts run under GitHub Copilot CLI.
 # Combine it with -Cloud/-Hybrid or use it on its own.
 [CmdletBinding()]
-param([switch]$Cloud, [switch]$Hybrid, [switch]$CopilotCli)
+param([switch]$Cloud, [switch]$Hybrid, [switch]$CopilotCli, [switch]$Yes)
 $ErrorActionPreference = "Stop"
 # -Hybrid runs the cloud AGENT LOOP (base-URL dropped) like -Cloud, and additionally lights up the local GPU
 # tools. $cloudLoop = "the agent talks to Anthropic, not Ollama" and drives the settings.json edit + labels.
@@ -33,6 +33,15 @@ $CopilotMeasuredVersion = "1.0.89"
 $ClaudeCodeMeasuredVersion = "2.1.285"
 
 function Have($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }
+. (Join-Path $root "harness-versions.ps1")   # S17/R40: Get-HarnessVersion, Get-LatestVersion, Write-HarnessReport
+# Consent prompt. -Yes = consent. Empty input, or no usable stdin (Read-Host throws/returns nothing) = the DEFAULT.
+function Read-Consent($prompt, [bool]$defaultYes) {
+  if ($Yes) { return $true }
+  $ans = ""
+  try { $ans = "$(Read-Host $prompt)".Trim() } catch { $ans = "" }
+  if (-not $ans) { return $defaultYes }
+  return ($ans -match '^(y|yes)$')
+}
 function Write-NoBom($path, $content) {
   [System.IO.File]::WriteAllText($path, $content, (New-Object System.Text.UTF8Encoding($false)))
 }
@@ -86,7 +95,26 @@ if ($cloudLoop) {
 } else { Write-Host "  skipped (need ollama)" -ForegroundColor Yellow }
 
 Write-Host "`n== 3) Claude Code engine + VS Code extension ==" -ForegroundColor Cyan
-if ($haveNode) { npm install -g @anthropic-ai/claude-code } else { Write-Host "  [warn] node missing - install Claude Code manually" -ForegroundColor Yellow }
+if (-not $haveNode) { Write-Host "  [warn] node missing - install Claude Code manually" -ForegroundColor Yellow }
+else {
+  # R40(a): report first; npm install runs ONLY inside a consent branch, at most once.
+  $ccInstalled = Get-HarnessVersion claude
+  $ccLatest = Get-LatestVersion "@anthropic-ai/claude-code"
+  Write-HarnessReport -Name "claude-code" -Installed $ccInstalled -Latest $ccLatest -Measured $ClaudeCodeMeasuredVersion
+  $ccUpdated = $false
+  if (-not $ccInstalled) {
+    if (Read-Consent "  install Claude Code now? [Y/n]" $true) { npm install -g @anthropic-ai/claude-code; $ccUpdated = $true }
+  } elseif ($ccLatest -and ((Compare-HarnessVersion $ccInstalled $ccLatest) -lt 0)) {
+    Write-Host "  [harness] update available: $ccInstalled -> $ccLatest"
+    if (Read-Consent "  update now? [y/N]" $false) { npm install -g @anthropic-ai/claude-code; $ccUpdated = $true }
+  }
+  if ($ccUpdated) {
+    $ccNow = Get-HarnessVersion claude
+    if ($ccNow) { Write-HarnessReport -Name "claude-code" -Installed $ccNow -Latest $ccLatest -Measured $ClaudeCodeMeasuredVersion | Out-Null }
+    # HOOK (T17.4): post-update smoke. No-op until T17.4 defines Invoke-PostUpdateSmoke.
+    if (Get-Command Invoke-PostUpdateSmoke -ErrorAction SilentlyContinue) { Invoke-PostUpdateSmoke }
+  }
+}
 if ($haveCode) { code --install-extension anthropic.claude-code } else { Write-Host "  [warn] 'code' CLI missing - install the Claude Code extension from the VS Code marketplace" -ForegroundColor Yellow }
 
 Write-Host "`n== 4) Build the C# local-tools server ==" -ForegroundColor Cyan
@@ -256,6 +284,18 @@ if (-not $Cloud) {
 
 # GitHub Copilot CLI is a SECOND harness that runs the same two guard scripts. Opt-in, additive: the
 # Claude Code wiring above is untouched, so a machine can run both.
+# R40(b): report when copilot is present or opted in; ask before updating; NEVER install it when absent.
+if ((Have copilot) -or $CopilotCli) {
+  $cpInstalled = Get-HarnessVersion copilot
+  $cpLatest = Get-LatestVersion "@github/copilot"
+  Write-HarnessReport -Name "copilot-cli" -Installed $cpInstalled -Latest $cpLatest -Measured $CopilotMeasuredVersion
+  if ($cpInstalled -and $cpLatest -and ((Compare-HarnessVersion $cpInstalled $cpLatest) -lt 0)) {
+    Write-Host "  [harness] update available: $cpInstalled -> $cpLatest"
+    if (Read-Consent "  update Copilot CLI now? [y/N]" $false) { npm install -g @github/copilot }
+  }
+} else {
+  Write-Host "[harness] copilot-cli   skipped (not installed; use -CopilotCli to opt in)"
+}
 if ($CopilotCli) {
   Write-Host "`n== 9) Install GitHub Copilot CLI hooks ==" -ForegroundColor Cyan
   if (-not (Have copilot)) {

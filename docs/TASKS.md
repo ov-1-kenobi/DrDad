@@ -1755,7 +1755,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S17 (Behavior, AC1, AC3, AC4); `docs/DESIGN.md` R40(a),(c), worked example; R37, C2f, C4a MEASURED stamps.
 - **Context:** Existing: `$CopilotMeasuredVersion = "1.0.89"` in install.ps1 line 32, `Have()` at line 34; Copilot version extract + equality compare at lines 267-283 (the warning wording there stays for `-CopilotCli`; this helper is the new general report). This task must not run npm install or touch the machine - it only READS versions. Any test of it uses sandbox stubs (R35b).
 
-### [ ] T17.2 - install.ps1: replace the unconditional Claude Code npm install with report + ask-before-update   (Story S17)
+### [x] T17.2 - install.ps1: replace the unconditional Claude Code npm install with report + ask-before-update   (Story S17)
 - **Goal:** Step 3 of install.ps1 reports harness versions and installs/updates Claude Code only with consent; Copilot CLI is reported only when present (or `-CopilotCli`) and never installed by default.
 - **Touches:** `install.ps1` (param block line 20; step 3 at line 88; Copilot block lines 256-320).
 - **Do:**
