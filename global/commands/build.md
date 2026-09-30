@@ -44,6 +44,11 @@ denied, no such file - **STOP and tell me the shell is unavailable.** Do not pro
 below this line depends on running the build, the tests and `close-unit`; a `/build` that cannot reach a
 shell can only produce unverified code, and it will produce a great deal of it before anyone notices.
 
+**Record the scope baseline BEFORE any unit work.** Right after Gate 3 passes, in the target project run
+`git rev-parse HEAD` and take the current UTC time as ISO 8601 with a Z, e.g.
+`powershell -NoProfile -Command "(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')"`.
+Hold both for the rest of the scope as `$sinceCommit` / `$startTime` - the End of scope step needs them.
+
 **If close-unit or qa-agent reports an ENVIRONMENT BLOCK (App Control / AppLocker / WDAC / policy /
 access-denied on a .dll):** relay it to me verbatim and STOP. Do NOT send dev-agent back to 'fix' it - the
 code is not the problem - and do NOT let any agent disable a service, add a Defender exclusion, or change
@@ -157,8 +162,12 @@ its dependencies satisfied, STOP and report the blocked tasks.
 8. Present any manual steps + the human-verification checklist and WAIT for my confirmation.
 
 ## End of scope
-Run CLAUDE.md's build command once more and report the result, then spawn **librarian-agent** (AUDIT) and
-route approved fixes to their owners. `grades/` + `docs/STATUS.md` are the running record.
+Run CLAUDE.md's build command once more and report the result. Then run
+`dad run-summary -ProjectDir <project> -SinceCommit <baseline sha> -StartTime <baseline time>` (the
+baseline recorded after Gate 3) and relay its output verbatim in the end-of-scope report. If the baseline
+was forgotten, the script falls back to the session pointer window and labels it `source: session start` -
+a labelled default, not an error. The summary is descriptive only and never a gate. Then spawn
+**librarian-agent** (AUDIT) and route approved fixes to their owners. `grades/` + `docs/STATUS.md` are the running record.
 
 **Be decisive - act, don't narrate.** Spawn each subagent immediately and relay its result; never just
 describe the plan, and never re-print this command instead of running it. Do NOT ask permission for

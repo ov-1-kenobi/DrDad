@@ -319,14 +319,11 @@
   the static content test. Keep the wording close to C1c's pinned sentences (read `docs/DESIGN.md` directly)
   so the shipped mechanism does not drift from what the human approved in `/design`.
 
-## Epic: Receipts
-<!-- These 4 stories (S8-S11) do NOT yet correspond to any docs/DESIGN.md Requirement - DESIGN.md is
-     LOCKED and stays LOCKED this session. Tagged "(Epic: Receipts)" in place of an (R#) tag as a
-     placeholder grouping; a human will run a separate /design pass later to fold these into formal
-     Requirements (proof a gate actually fires, a queryable record of every gate decision, and a real
-     accounting of what a run costs). Do not treat "(Epic: Receipts)" as a locked Requirement id. -->
+<!-- The /design pass happened: S8/S9/S10 are now tagged to R38 (gate activity leaves EVIDENCE -
+     R38a active proof, R38b a durable queryable record, R38c computed run cost). S11 moved to R32:
+     it interrogates R32's same-session-subagent mitigation, not R38's evidence thesis. -->
 
-### Story S8: dad gates-smoke - prove the gates actually fire   (Epic: Receipts)   <!-- Status: DONE closed:close-unit -->
+### Story S8: dad gates-smoke - prove the gates actually fire   (R38)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** A standalone command that deliberately provokes a known violation against each of DrDad's real
   gates on a target project and confirms each one actually intercepts it - not that the hook file merely
   exists.
@@ -357,11 +354,12 @@
   - [ ] AC5: any gate whose violation cannot be safely constructed is reported as SKIP, never fabricated as a
     pass.
 - **Dev notes:** Inspired by claude-gates (DevRik99)'s `smoke` command, which does exactly this across its 50
-  gates. Pending a future `/design` pass to fold into a formal Requirement.
+  gates.
 
-### Story S9: Structured gate decision log   (Epic: Receipts)   <!-- Status: TODO -->
-- **Goal:** Every deny/warn/block a DrDad gate produces (loop guard, ratchet, dad-guard, a close-unit
-  refusal) gets appended as one structured, machine-readable line - not just printed to console and lost.
+### Story S9: Structured gate decision log   (R38)   <!-- Status: DONE closed:close-unit -->
+- **Goal:** Every `block` a DrDad gate produces (loop guard, ratchet, dad-guard, a close-unit refusal),
+  plus C3b's `allow` heartbeats, gets appended as one structured, machine-readable line - not just printed
+  to console and lost. WARN findings are not gate decisions and are never logged (C3 header).
 - **Context:** Gate decisions today are ephemeral console output. Making them a durable, queryable record is
   what would let `grade-trends.ps1` / `/retro` (R27) mine real data instead of parsing prose after the fact.
 - **Behavior:**
@@ -369,20 +367,26 @@
     40%+ of cards is a convention problem") instead of parsing prose after the fact.
   - Would let a head-to-head model comparison count gate interventions automatically instead of a human
     watching and noting them by hand.
-- **Data / interfaces:** A new structured log file (one line per gate decision: timestamp, gate id, tool,
-  reason, session), written by the loop guard, ratchet, dad-guard, and close-unit's refusal path.
+- **Data / interfaces:** Contract: C3 (C3a-C3f) in docs/DESIGN.md. One committed file per project,
+  `grades/gates-log.jsonl` (C3a); one compact JSON object per line, UTF-8 no BOM, LF, SEVEN required fields
+  `v, ts, gate, decision, tool, reason, session` (C3b); `decision` is `allow` or `block` only. Written by
+  `dad-loopguard.ps1`, `dad-guard.ps1`'s Stop hook, `ratchet.ps1`, and `close-unit.ps1`'s refusal paths;
+  queried via `dad-gates-log.ps1 -Query` (C3e).
 - **Dependencies:** none; feeds S10 (per-run stats) as a data source for its gate-interventions figure.
 - **Acceptance (testable):**
-  - [ ] AC1: a deny/warn/block from the loop guard, the ratchet, dad-guard, or a close-unit refusal each
-    appends one structured, machine-readable line (timestamp, gate id, tool, reason, session) to the log.
-  - [ ] AC2: the log is queryable (e.g. filterable by gate id / deny-only) without hand-parsing console
-    output or prose.
+  - [ ] AC1: per C3b's per-gate table, `loop-guard` and `dad-guard-stop` each write ONE `allow` "armed" line
+    on the session's first invocation (first Stop, for `dad-guard-stop`), then every `block`; `ratchet` and
+    `close-unit-refusal` write EVERY invocation (`allow` or `block`). Each line lands in
+    `grades/gates-log.jsonl` with all seven C3b fields present (`""` when not applicable) and no `warn`
+    decision.
+  - [ ] AC2: the log is queryable per C3e (`-Query [-Gate <id>] [-Decision <allow|block>] [-Since] [-Last]
+    [-Count]`, e.g. `-Decision block` for deny-only) with stdout verbatim JSONL only - no hand-parsing of
+    console output or prose.
   - [ ] AC3: `grade-trends.ps1` / `/retro` (R27) can read this log as a data source instead of parsing prose.
 - **Dev notes:** Inspired by claude-gates (DevRik99)'s `.ai/gates-log.jsonl` (timestamp, gate, tool, reason,
-  session - queryable via `claude-gates log --deny --gate <id>`). Pending a future `/design` pass to fold
-  into a formal Requirement.
+  session - queryable via `claude-gates log --deny --gate <id>`).
 
-### Story S10: Per-run stats summary   (Epic: Receipts)   <!-- Status: TODO -->
+### Story S10: Per-run stats summary   (R38)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** At the end of a `/build` scope or a full `/audit`, auto-generate a short, computed-not-narrated
   summary: tokens used, wall-clock time, files touched, findings count, gate interventions (pulled from S9's
   log).
@@ -392,21 +396,29 @@
   - Directly serves cost/reliability comparisons already underway elsewhere in this kit.
   - Depends on S9 (the gate decision log) as its data source for the gate-interventions figure - note this
     dependency explicitly.
-- **Data / interfaces:** A generated per-run summary (tokens, wall-clock time, files touched, findings
-  count, gate interventions), produced at the end of a `/build` scope or a full `/audit` run.
+- **Data / interfaces:** Contract: C4 (C4a-C4d) in docs/DESIGN.md. `dad-run-summary.ps1` prints
+  `[run-summary]` lines (tokens, wall-clock, files touched, findings, gate interventions) at the end of a
+  `/build` scope or a full `/audit`; every figure names its `source:` (C4c invariant). Window from
+  `-StartTime` / `-SinceCommit` (caller-supplied) else `.claude\.dad-session.json`'s `first_seen_utc`
+  (C4b). READ-ONLY and never blocks: writes no project state, no gate depends on it.
 - **Dependencies:** S9 (the structured gate decision log) - required as the data source for the
   gate-interventions figure in the summary.
 - **Acceptance (testable):**
-  - [ ] AC1: at the end of a `/build` scope or a full `/audit`, a summary is generated containing tokens
-    used, wall-clock time, files touched, and findings count, computed (not narrated) from run data.
+  - [ ] AC1: at the end of a `/build` scope or a full `/audit`, `dad-run-summary.ps1` prints, computed (not
+    narrated) and each printed figure with its `source:`: wall-clock over the window (`caller-supplied`, or the labelled
+    `session start` fallback when `-StartTime`/`-SinceCommit` is absent - C4c); files touched as the
+    deduplicated union of committed + uncommitted + untracked, printed SPLIT, e.g. `files touched: 14 (11
+    committed, 3 uncommitted)`, no extension/directory filter (C4d); findings count (`doc-stats
+    -Findings`); and tokens as EITHER a measured figure with its transcript source and version OR C4a's
+    fallback line naming its reason, e.g. `tokens: not available (harness=copilot-cli: ...)` - never a
+    fabricated number and never a bare "not available" (C4a).
   - [ ] AC2: the summary's gate-interventions figure is pulled from S9's structured gate decision log, not
     from a human's manual count.
   - [ ] AC3: the summary generation does not require a human to watch and tally interventions by hand.
 - **Dev notes:** Inspired by claude-code-audit-gate (fotografvecerek-ai)'s STATISTIKA.html (lines of code,
-  screens, findings, time, exact token counts, generated at the end of every audit run). Pending a future
-  `/design` pass to fold into a formal Requirement.
+  screens, findings, time, exact token counts, generated at the end of every audit run).
 
-### Story S11: [SPIKE] Should high-stakes verification run as a separate process?   (Epic: Receipts)   <!-- Status: TODO -->
+### Story S11: [SPIKE] Should high-stakes verification run as a separate process?   (R32)   <!-- Status: DONE closed:close-unit -->
 - **Type:** Research spike (no code) - **[human]** decision pending; do NOT implement anything for this
   story.
 - **Goal:** Produce a short, cited written recommendation on whether DrDad's grade-agent/librarian-agent (or
@@ -433,33 +445,48 @@
   or a linked doc).
 - **Dependencies:** R32 (same-session subagent isolation discipline) as the baseline being evaluated against.
 - **Acceptance (testable, "deliverable produced" not code-tested):**
-  - [ ] AC1: a written recommendation exists (in this story's Dev notes / a Context subsection, or points to
+  - [x] AC1: a written recommendation exists (in this story's Dev notes / a Context subsection, or points to
     where it should be written) citing R32 and claude-code-audit-gate's Kapitan/Auditor architecture.
-  - [ ] AC2: the recommendation explicitly states it is a **[human]** decision pending approval, and does not
-    commit to building either option.
+  - [x] AC2: the recommendation explicitly states it is a **[human]** decision pending approval, and does not
+    commit to building either option. (Satisfied; the human then DECIDED on 2026-09-30 - see "Decision" below.)
 - **Dev notes:** Inspired by claude-code-audit-gate (fotografvecerek-ai)'s Kapitan/Auditor two-process
   (HANDOFF -> EVIDENCE -> VERDICT) architecture. This is a RESEARCH SPIKE, not a build story - flagged
-  **[human]** for decision; pending a future `/design` pass to fold into a formal Requirement if approved.
+  **[human]** for decision, still unresolved: nobody has picked option A, B or C yet.
 - **Recommendation (draft - pending human decision, satisfies AC1):**
   - **Option A - status quo (same-session Task-tool subagent, R32's discipline).** Pros: no new
-    infrastructure; matches how every other agent in this kit already runs; R32's own evidence (11 graded
-    runs, zero loops) shows the discipline mitigation works empirically for ordinary units today. Cons:
-    does NOT structurally close R32's stated gap - while a Task call is in flight the orchestrator is
-    suspended (cannot poll, cannot read a progress file, cannot interrupt), so the "unguarded, unobservable
-    region" remains real, just rare so far.
+    infrastructure; matches how the kit's other subagents already run (unverified - would need measurement;
+    neither R32 nor S11's Context says so). Evidence (R32): eleven graded runs in the MAIN loop produced zero
+    loops, and bounded one-agent-per-unit spawns succeeded (`taskmap-agent` in 5 and 9 calls); note the
+    eleven runs are main-loop runs, not evidence about subagents. R32's remedy for subagents is discipline
+    (one agent per unit, orchestrator regains control and runs `doc-stats -Findings` between spawns, retry
+    limit of one) plus DETECTION via `dad watch` (R33). Cons: does NOT structurally close R32's gap - inside
+    a subagent (R32) the `PreToolUse` hook does not fire (R32(a)), `tools:` frontmatter does not restrain it
+    (R32(b)), and its transcript cannot reliably be exported (R32(c)); "nothing can interrupt a spawn"
+    (R32), so the "unguarded, unobservable region" remains real. Three consecutive runs died inside a
+    subagent (R32: `taskmap-agent` 920 calls, `scribe-agent` 947 and 1023) - those were whole-job spawns, now
+    bounded by the discipline. That the orchestrator also cannot poll or read a progress file while a Task
+    call is in flight is not stated by R32 (unverified - would need measurement).
   - **Option B - fully separate OS process (Kapitan/Auditor pattern, claude-code-audit-gate).**
     grade-agent/librarian-agent (or a future high-stakes gate) runs as a second, independent Claude Code
     process with its own workspace, read-only repo access, and a file/message bus back to the main session
-    (HANDOFF -> EVIDENCE -> VERDICT). Pros: cannot share contaminated context by construction (separate
-    process, separate context window) - closes R32's gap structurally instead of by discipline; a runaway
-    auditor can be observed/killed from OUTSIDE the session that spawned it; read-only repo access becomes
-    an OS/filesystem-level guarantee, not just a tool-allowlist promise. Cons: real, ongoing cost of
-    coordinating two live sessions (process lifecycle, and the file/message bus itself becomes new surface
-    to design, gate, and maintain); loses this kit's current single-session continuation model; adds
-    latency/friction to the common case, where most units are NOT the highest-stakes case.
-  - **Where the tradeoff actually bites:** R32's discipline is empirically holding for ordinary
-    dev/qa/hygiene units today - this is not a currently-observed recurring failure, so Option B's
-    structural fix is insurance against a rare-but-real class of failure, not a fix for an active one. That
+    (HANDOFF -> EVIDENCE -> VERDICT). In claude-code-audit-gate (fotografvecerek-ai) the two processes are two
+    separate Claude Code windows, "Kapitan" building and "Auditor" reviewing (S11 Context); nothing further
+    about that project is asserted here. Pros: cannot share contaminated context with the agent under review
+    (S11 Context) - addresses R32's gap structurally instead of by discipline. Whether the second process's
+    OWN hooks (`PreToolUse` loop guard) and `tools:` list would govern its tool calls is unverified - would
+    need measurement (R32(a)/(b) only establish the gap for a same-session SUBAGENT; R37(c) is the precedent
+    that vendor behavior is a hypothesis until measured). Also unverified - would need measurement: that a
+    runaway auditor can be observed/killed from outside the main session, and that read-only repo access
+    would be an OS/filesystem-level guarantee rather than a tool-allowlist promise. Cons: the cost of
+    coordinating two live sessions instead of one (S11 Context) - process lifecycle, and the bus itself
+    becomes new surface to design, gate and maintain; loses the kit's single-session continuation model and
+    adds friction to the common, non-highest-stakes case (both kit-side judgment, unverified - would need
+    measurement).
+  - **Where the tradeoff actually bites:** R32 records three deaths inside subagents, then success once
+    spawns were bounded to one unit (R32: 5 and 9 calls); it holds no measurements for dev/qa/hygiene or
+    grade/librarian subagents (unverified - would need measurement). If that holds, Option B's structural
+    fix is insurance against a rare class of failure rather than a fix for an active one; the gain
+    (structural closure of R32's gap) is weighed against the two-live-session coordination cost. That
     argues against an all-or-nothing swap and toward a **hybrid** (Option C): separate-process ONLY for the
     single highest-stakes verification point (e.g. grade-agent's final LOCK-adjacent verdict, or a future
     audit-gate signoff), same-session for everything else.
@@ -467,9 +494,22 @@
     for all agents: (B) go fully separate-process for all high-stakes agents; or (C) hybrid - separate-
     process only for the named highest-stakes gate(s), same-session for the rest. This write-up does not
     pick for you; no build work follows from S11 until the human answers.
+- **Decision ([human], 2026-09-30): Option A - keep same-session subagents - PLUS computed checks on
+  verifier claims. Options B and C are NOT built.** Evidence recorded at decision time (this run, measured,
+  replacing the "unverified" marks above for dev/qa/hygiene/grade units): about 35 subagent spawns across
+  dev, qa, grade, hygiene, scribe, taskmap and measurement agents, the longest at 67 tool calls, none looped,
+  none needed killing, every one returned. The failures actually observed were NOT runaway loops but
+  unreliable SELF-REPORTS by a same-session verifier: (1) the S9 grade-agent claimed it could not confirm
+  dad-guard's first-Stop armed line (it exists at dad-guard.ps1:168) and admitted it had not read the test
+  bodies; (2) the S10 hygiene pass reported no stray root files while `doc-stats` flagged two; (3) graders
+  were biased by the orchestrator's own known-issues lists. A separate process would not have fixed (1) or
+  (2) - what caught them was the orchestrator re-checking with a computed source (grep, `doc-stats`, the
+  suite). So the response is to make verifier claims COMPUTED or cross-checked (R24: never accept an
+  assertion a script can settle) - tracked as Story S18. Revisit B/C only if a MEASURED same-session
+  verifier failure recurs AFTER S18, and measure first whether a second `claude` process's own hooks fire.
 
-<!-- S12 is NOT part of the "Epic: Receipts" grouping above - it is tagged to a real, LOCKED Requirement
-     (R37), like S1-S7. It appears after S11 only to keep story ids in numeric order. -->
+<!-- S12 is NOT part of the Receipts (R38) grouping above - it is tagged to R37, like S1-S7. It appears
+     after S11 only to keep story ids in numeric order. -->
 
 ### Story S12: GitHub Copilot CLI as a second harness (opt-in install target)   (R37)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the kit's two gates - the Stop guard (`dad-guard.ps1`) and the loop guard (`dad-loopguard.ps1`) -
@@ -495,7 +535,7 @@
   dev-path placeholder), `install.ps1` (step 9 + `$CopilotMeasuredVersion`), `uninstall.ps1` (`-CopilotDir`),
   `dad-doctor.ps1` (the R37 section), `test-kit.ps1` (4 cases). `dad-guard.ps1` and `dad-loopguard.ps1` are
   NOT modified - that is the point of C2's no-fork invariant.
-- **Dependencies:** none (R37 + C2 are LOCKED in `docs/DESIGN.md`).
+- **Dependencies:** none (R37 is `[x]` and contract C2 is MEASURED in `docs/DESIGN.md`).
 - **Acceptance (testable):**
   - [x] AC1: the installed hooks file matches the only shape Copilot actually loads - user-level path,
     `version: 1`, `bash`/`powershell` keys, PascalCase events registered EXACTLY ONCE, Stop routed through
@@ -521,3 +561,225 @@
   file and three probe agents) and scaffolded a throwaway project outside the kit. Both were removed
   afterwards and `~/.copilot/` was confirmed returned to stock. Verification mode: **live-sandboxed** for
   AC1-AC5; **deferred, not code-review-only** for AC6 (see above).
+
+### Story S13: gates-smoke proves the LOG is wired, not just the gate   (R38)   <!-- Status: TODO -->
+- **Goal:** `dad gates-smoke` gains a FOURTH assertion - after provoking each gate in its own throwaway
+  fixture, it asserts that a matching `"decision":"block"` line actually landed in that fixture's
+  `grades/gates-log.jsonl` - and `dad-doctor` gains a NEW report of a project's log (size, line count,
+  newest-entry age - C3d/C3f).
+- **Context:** S8 proves each gate FIRES; S9 gives each gate a log to write to. Neither proves the WRITER
+  WIRING between them. That is the one thing that can still fail silently: if a writer never gets the data
+  it needs to resolve the project (C3f's worked case - `dad-loopguard.ps1` has never read `cwd`, and a
+  writer that skips the append on an empty `cwd` simply never logs), the gate still intercepts, every test
+  still passes, and the log still looks clean. Under R38 a gate that cannot be SHOWN to have fired is not a
+  gate, so the proof has to be an active assertion, not the absence of an error. This is its OWN unit
+  because C3f pins it as new scope against a story that is already DONE/closed: S8 is not reopened and its
+  acceptance criteria are not edited after the fact.
+- **Behavior:**
+  - For each gate `gates-smoke` provokes in its throwaway fixture, read that fixture's
+    `grades/gates-log.jsonl` afterwards and require a matching `"decision":"block"` line for that gate.
+  - A gate that INTERCEPTED but did NOT log reports `SILENT-FAIL "<gate>-log"` and exits non-zero -
+    exactly the same shape as the three existing gate assertions.
+  - A gate already reported as SKIP stays a SKIP (never a false pass), and the runtime writers stay silent
+    and fail-open: nothing here makes a writer block, warn, or self-check mid-turn.
+  - `dad-doctor` gets a NEW gate-log report (T13.2; it has no gate-log code today): the log's size, line
+    count (C3d) and newest-entry AGE (C3f).
+- **Data / interfaces:** `gates-smoke` (S8's command), each fixture's `grades/gates-log.jsonl` (S9's
+  format), `dad-doctor.ps1` (the new C3d/C3f gate-log report, added here), `test-kit.ps1` (new `Test-Case`).
+  No gate script's verdict or exit code changes - C3's invariant (i).
+- **Dependencies:** **S9** (the log and its line format must exist before smoke can assert a line landed in
+  it). S8 is a PREDECESSOR, not a dependency to reopen - its command is extended, its card stays closed.
+- **Acceptance (testable):**
+  - [ ] AC1: a fixture where a gate fires AND logs is reported as intercepted-and-logged; `gates-smoke`
+    exits 0.
+  - [ ] AC2: a fixture where a gate fires but its line is MISSING from `grades/gates-log.jsonl` prints
+    `SILENT-FAIL "<gate>-log"` (naming the gate) and exits non-zero.
+  - [ ] AC3: the assertion matches on the gate name AND `"decision":"block"` - an `allow` line, or a block
+    line from a DIFFERENT gate, does not satisfy it.
+  - [ ] AC4: `dad-doctor` prints a project's log size, line count and newest-entry age (the new report),
+    and handles a project with no log at all without erroring.
+  - [ ] AC5: the full validation gate (`test-kit.ps1`) passes, with new `Test-Case`s covering AC2 and AC3
+    against sandbox fixtures (a fired-but-unlogged gate must be manufacturable in the test, not simulated
+    by editing the assertion).
+- **Dev notes:** ORDERING CONSTRAINT - S13 depends on S9 and must not be started before it; the log has to
+  exist, with a settled line shape, before smoke can assert a line landed in it. Cite **C3f** in
+  `docs/DESIGN.md` (read it directly) for the pinned split: runtime stays silent and fail-open, proof moves
+  to smoke/setup time. C3f also records a PREREQUISITE MEASUREMENT that blocks S9's loop-guard writer
+  (whether the real `PreToolUse` payload carries `cwd`) - if that measurement forces a fallback, that is a
+  NEW `/design` decision, not something to settle inside this story.
+
+### Story S14: [SPIKE] Measure Copilot CLI's MCP, agent/skill and hook-payload surfaces   (R39)   <!-- Status: TODO -->
+- **Type:** Measurement spike - no kit code changes. Its output is a MEASURED-FACTS RECORD that `/design`
+  turns into contract C5. **C5 stays UNPINNED until a human runs that `/design` step**; no parity story is
+  written before then (R39a).
+- **Goal:** Settle, against the installed Copilot CLI binary and with its version stamped, the three
+  unknowns R39(a) names, so parity stories can be written against facts instead of hypotheses.
+- **Context:** R37 admitted Copilot CLI for the two guards only. Under Copilot today `copilot mcp list`
+  shows only the built-in GitHub server even though `copilot mcp --help` documents a workspace `.mcp.json`
+  (or `.github/mcp.json`) source, the kit's commands and agents install to `%USERPROFILE%\.claude\` only,
+  and the R38b gate-log writers were measured against Claude Code's payload alone (T9.5). Vendor docs and
+  `--help` text are a starting hypothesis, not a source of truth (R37c). C2 (R37's contract) was measured
+  against Copilot CLI 1.0.89 - stamp the version actually measured here and say if it differs.
+- **Behavior:** Produce a record (a table per question, same style as C2/T9.5's measured tables) answering:
+  1. **MCP:** why this repo's `.mcp.json` does not surface `local-tools` in `copilot mcp list` (schema or
+     key names, a trust/approval step, a `type` field, `env` handling), and what configuration DOES make
+     the server load and answer a tool call - at user level (`~/.copilot/mcp-config.json`) and at
+     workspace level. Record whether a per-project docs path can be supplied without putting a machine
+     path in a committed file (R39c).
+  2. **Agents and skills:** where Copilot loads custom agents from and in what file format; whether the
+     kit's `global\agents\*.md` (frontmatter `name`/`description`/`tools`) load as-is, need a transform, or
+     cannot load; whether `global\commands\*.md` can be served as skills (Copilot discovers skills from
+     `.claude/skills/`, `.agents/skills/`, `.github/skills/` and `~/.copilot/skills/`) and whether a skill
+     can orchestrate subagents the way `/build` does. Record what has NO equivalent.
+  3. **Hook payloads:** the real `PreToolUse` and Stop payloads' `cwd` and `session_id` fields (present,
+     value shape, and behaviour after an in-session `cd` / launch from a subdirectory), captured from the
+     live binary with a temporary hook and then removed - never a hand-written fixture.
+- **Data / interfaces:** None in the kit. The record lives in this story's Dev notes (or a pointed-to
+  `_tmp/`-free location the human names); nothing is written into DESIGN by this story.
+- **Dependencies:** R37 / contract C2 (the measured baseline); R39 (the requirement). No dependency on S9-S13.
+- **Acceptance (testable, "record produced and stamped" - not code-tested):**
+  - [ ] AC1: the record states the exact `copilot --version` and OS it was measured on.
+  - [ ] AC2: question 1 ends in a reproducible command or config that makes `local-tools` appear in
+    `copilot mcp list` and answer one tool call, OR states plainly that no such route exists.
+  - [ ] AC3: question 2 ends in a per-artifact verdict (loads as-is / needs transform / cannot load) for the
+    agents and for the commands, and names anything with no Copilot equivalent.
+  - [ ] AC4: question 3 shows a verbatim captured payload (secrets redacted) and states whether `cwd` and
+    `session_id` are present, with the loop-guard/dad-guard gate-log writers' dependence on them noted.
+  - [ ] AC5: every real-machine change made to take the measurements under `%USERPROFILE%\.copilot\` is
+    reverted and confirmed back to stock (R35), and the final line names which verdicts feed C5.
+- **Dev notes:** ORDERING - this story blocks every other R39 story; the next `/stories` pass writes the
+  parity stories (MCP wiring, agent/skill delivery, gate-log under Copilot, install/uninstall symmetry)
+  only AFTER C5 is pinned via `/design`, and only for what was measured to be possible. Sharded into ONE
+  task, T14.1 (2026-09-29, at the human's request, so `/build` can reach it): a single human-attended
+  measurement like T9.5, not a decomposition. Consent: measuring
+  writes to `%USERPROFILE%\.copilot\` (R35b) - use the least-invasive route (`--additional-mcp-config`,
+  a scratch project dir) and back out every change.
+
+### Story S15: doc-stats' root-junk check must not flag the kit's own scripts   (R24)   <!-- Status: TODO -->
+- **Goal:** `doc-stats -Findings`' `[hygiene]` ad-hoc-file check (and `dad tidy -Fix`, which acts on it) stops
+  treating the kit's own `dad-*.ps1` / `dad-*.cmd` scripts as stray summary files.
+- **Context:** S10 shipped `dad-run-summary.ps1` and `dad-run-summary.cmd`. `Get-ProjectJunk` (doc-stats.ps1,
+  the `$rootJunk` block under "PROJECT-ROOT JUNK") matches names containing "summary", so on THIS repo
+  `doc-stats -Findings` now prints `[hygiene] 2 ad-hoc status/summary file(s) at the project root ...
+  dad-run-summary.cmd, dad-run-summary.ps1`, and the finding's own remedy, `dad tidy -Fix`, would act on
+  legitimate kit scripts. The S10 hygiene pass reported "no stray files" and missed it - a computed check
+  gave the wrong answer and an agent repeated it (S11 Decision, item 2). This is a false positive in a
+  computed gate, so the fix is a code fix plus a `Test-Case`, per CLAUDE.md ("add a Test-Case for any bug").
+- **Behavior:** files that ARE the kit (a `dad-*.ps1`/`dad-*.cmd` script, or any file listed as tracked kit
+  content in the kit's own repo root) are never reported as stray; the real junk classes still are
+  (IMPLEMENTATION_SUMMARY.md, STORY_S2_COMPLETE.md, completed_tasks.txt, msbuild.binlog, extra .sln/.slnx,
+  path-mangled directories). Decide the narrowest rule that holds (for example: an allow-list of the kit's
+  own script prefix, or "only flag when the file is untracked or not a script") and state it in the code.
+- **Data / interfaces:** `doc-stats.ps1` (`Get-ProjectJunk`), `tidy` if it shares the helper,
+  `test-kit.ps1` (new `Test-Case`).
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [ ] AC1: a fixture root holding `dad-run-summary.ps1` and `dad-run-summary.cmd` yields NO `[hygiene]`
+    ad-hoc finding, and `dad tidy` (dry run) lists nothing to remove for them.
+  - [ ] AC2: the existing junk-class fixture (IMPLEMENTATION_SUMMARY.md, STORY_S2_COMPLETE.md,
+    completed_tasks.txt, ...) is STILL flagged - the fix narrows the pattern, it does not disable it.
+  - [ ] AC3: `dad doc-stats -Findings` on this repo no longer prints the `[hygiene]` line; the full
+    validation gate (`test-kit.ps1`) prints `0 failed`.
+- **Dev notes:** the same mistake is possible for any future kit script with "status"/"summary"/"notes" in
+  its name - prefer a rule that survives new kit scripts over adding names one at a time.
+
+### Story S16: [SPIKE] Does current Claude Code still run the kit's local models?   (R1, R40)   <!-- Status: TODO -->
+- **Type:** Measurement spike - no kit code changes; its output is a measured record and, if the answer is
+  "broken", a proposal for `/design` (a contract amendment or a new story), not a fix made here.
+- **Goal:** Settle, against the installed Claude Code and its version stamped, whether the kit's local
+  Ollama path (R1: `-cc` model aliases from `models.json`, `use-model`, `ANTHROPIC_MODEL`) still works, and
+  why a headless run on 2.1.285 failed.
+- **Context:** T10.6 tried a fresh local measurement and Claude Code 2.1.285 rejected
+  `--model qwen3-14b-cc` ("isn't described by this version's model catalog") and overrode the
+  `ANTHROPIC_MODEL` env var. Older transcripts (2.1.191) show local `-cc` models working. It is unknown
+  whether INTERACTIVE use is affected, whether a config key (`modelOverrides` / `modelPicker`, per the
+  error text) restores it, and which version introduced the change. This bears on the project's thesis
+  (offline by default, R1) and on R40's rule that "latest" must not silently break it.
+- **Behavior:** produce a record covering: (1) the exact `claude --version`; (2) what interactive and
+  headless `claude` do with a `-cc` alias selected via `use-model`, the env var, `--model` and `/model`;
+  (3) the smallest configuration that makes a local model load and answer one prompt, if one exists
+  (where it lives - user or project settings, and whether the kit's installer could write it); (4) the
+  newest version that still works without configuration, if known; (5) a recommendation for `/design`.
+  Scratch runs stay under `_tmp/`; change no global model configuration without consent (R35).
+- **Data / interfaces:** none in the kit; the record lives in this story's Dev notes.
+- **Dependencies:** none. Feeds Story S17 (R40's smoke check needs to know what "local model resolves"
+  means) and any later contract amendment.
+- **Acceptance (testable, "record produced and stamped" - not code-tested):**
+  - [ ] AC1: the record states `claude --version` and the OS.
+  - [ ] AC2: it states plainly whether a local `-cc` model can answer a prompt, interactively and
+    headless, and by what exact command or config - or that no route exists on this version.
+  - [ ] AC3: any real-machine change made to take the measurement is reverted and confirmed (R35).
+- **Dev notes:** ORDERING - do this before Story S17's smoke check is finalized; if the record says local
+  is broken on current Claude Code, R40's post-update check must catch exactly that.
+
+### Story S17: Install reports harness versions and asks before updating   (R40)   <!-- Status: TODO -->
+- **Goal:** each `install.cmd` run prints, for Claude Code and (when present) Copilot CLI, installed vs
+  latest vs measured-against versions, asks before updating, warns loudly when the version is newer than the
+  contracts were measured against, and runs a smoke check after any update - replacing today's silent
+  unconditional `npm install -g @anthropic-ai/claude-code`.
+- **Context:** `docs/DESIGN.md` R40 pins the behaviour, including its worked example; read it directly. The
+  human chose: check-report-ask (not auto-update), warn-and-continue on drift (not block), and Copilot
+  updated only when `copilot` is on PATH and never installed by a default run (`-CopilotCli` stays the
+  opt-in). The current code is install.ps1 step 3 (unconditional npm install) and the Copilot version block
+  (`$CopilotMeasuredVersion`, C2f). `install.cmd` mutates real machine state (npm global, PATH), so live
+  runs need explicit consent (R35b); tests use sandboxes and stubs.
+- **Behavior:**
+  - Latest version comes from the package registry (`npm view <pkg> version`); an unreachable registry
+    prints `latest: unknown (registry unreachable)` and never fails the install.
+  - Installed < latest -> ask `update now? [y/N]`; `N` (default) leaves the machine untouched and the
+    install continues; `-Yes` is the explicit non-interactive consent flag.
+  - No Claude Code installed -> offer the install (first-time). Existing install -> never overwritten
+    without the question. Copilot CLI: only if on PATH (or `-CopilotCli`).
+  - Installed newer than measured -> print `[harness] ... (newer than measured X) - re-check: hooks/payload
+    (C2, T9.5), usage fields (C4a), local model catalog` (warn, never block); `dad-doctor` prints the same.
+  - After an update: smoke check (`dad gates-smoke`; the configured local model alias still resolves - per
+    Story S16's finding) and, on failure, print the previous version and the exact command to return to it.
+    Never auto-roll-back; never lower a security setting to pass a check.
+  - A version stamp for Claude Code lives in ONE constant in `install.ps1`, tied to the C4a stamp by a
+    `test-kit.ps1` case (the C2f/C4a drift device).
+- **Data / interfaces:** `install.ps1` (step 3 + a new harness-versions section), `dad-doctor.ps1`,
+  `test-kit.ps1`, docs. No gate script's behaviour changes.
+- **Dependencies:** Story S16 (what "local model resolves" means); R40.
+- **Acceptance (testable):**
+  - [ ] AC1: with stubbed `claude`/`npm`/`copilot` on a sandbox PATH, a run prints the three version columns
+    for each present CLI.
+  - [ ] AC2: with installed < latest and input `N` (or no answer), nothing is installed and the install
+    continues; with `-Yes` or `y`, the update command runs exactly once.
+  - [ ] AC3: an unreachable registry prints `latest: unknown` and the install still completes.
+  - [ ] AC4: an installed version newer than measured prints the warning naming what to re-check, exits 0.
+  - [ ] AC5: `copilot` absent and no `-CopilotCli` -> one skipped line, no install attempt.
+  - [ ] AC6: a failing post-update smoke check prints the previous version and the return command, and the
+    script does NOT roll back or change any security setting.
+  - [ ] AC7: the full validation gate passes; the Claude Code stamp constant and the C4a stamp cannot drift.
+
+### Story S18: Verifier claims are computed or cross-checked, not taken on report   (R32, R24)   <!-- Status: TODO -->
+- **Goal:** the failure class S11's decision named - a same-session verifier's unreliable self-report - is
+  closed by computed checks, so the kit no longer depends on an agent's word for what a script can settle.
+- **Context:** S11 (Decision, 2026-09-30) kept same-session subagents (Option A) because the observed
+  failures were not runaway loops but wrong or shallow reports: a grade card that admitted it never read the
+  test bodies and doubted a line that exists, and a hygiene pass that reported a clean root while
+  `doc-stats` flagged two files. R24's rule is "never accept an assertion a script can settle"; this story
+  applies it to grade cards and hygiene reports.
+- **Behavior:**
+  - The grade-card gate in `/build` (and `close-unit -RequireGrade`) also checks, mechanically, that the
+    card cites at least one TEST name or `test-kit.ps1` line range for the story, and that every
+    `file:line` it cites resolves to an existing file with at least that many lines. A card that cites
+    nothing checkable FAILS the gate (today: size and three headings only).
+  - After hygiene-agent reports, `/build` re-runs `dad doc-stats -Findings` and the suite and compares:
+    a clean claim with a `[hygiene]`/`[integrity]` finding present is relayed as CONTRADICTED and blocks the
+    close until resolved.
+  - Grading prompts stay neutral: the orchestrator passes the story and its evidence pointers, not its own
+    list of suspected defects (recorded as a convention in `build.md`).
+- **Data / interfaces:** `close-unit.ps1` (`-RequireGrade` check), `global\commands\build.md` (gate text and
+  the neutral-prompt convention), `test-kit.ps1`. Re-run `install.cmd` after editing global commands.
+- **Dependencies:** none (Story S15 fixes the false positive this check would otherwise inherit).
+- **Acceptance (testable):**
+  - [ ] AC1: a stub-with-headings card citing no test or file:line FAILS the `-RequireGrade` gate; a card
+    citing a real test name and resolvable file:line passes.
+  - [ ] AC2: a card citing `file.ps1:99999` (beyond EOF) or a missing file FAILS.
+  - [ ] AC3: `build.md` instructs the re-check of `doc-stats -Findings` after hygiene and names a
+    CONTRADICTED report as blocking; a prompt-content `Test-Case` proves the text landed.
+  - [ ] AC4: the full validation gate passes and existing grade cards still pass (or are listed as needing a
+    one-line backfill - decide and state which).
+- **Dev notes:** keep the check cheap and deterministic; it must not judge quality, only that the card
+  points at things a script can verify.

@@ -9,14 +9,36 @@ This folder IS the **DrDad** kit (local, offline Claude Code). Editing it here m
 - PowerShell + `.cmd` - the installer and helper scripts.
 - Markdown - templates, global commands/agents, and docs.
 
-## Design doc
-- Design doc: `docs/DESIGN.md` (Status: LOCKED). It defines what the kit must do.
-- Indexed in `local-tools`; use `search_datasheets` / the `doc-researcher` subagent to pull from it.
+## Design docs
+- Contract: `docs/DESIGN.md` (created by `/scaffold`; Status starts DRAFT) - requirements, epics, stack.
+- Stories: `docs/STORIES.md` (created by `/stories`).  Tasks: `docs/TASKS.md` (created by `/taskmap`).
+- Visual contract: `docs/STYLE.md` - palette / type / tone / branding for a UI project (`/design` fills it;
+  ux-agent reviews surfaces against it; `doc-stats` WARNs when CSS drifts off the palette).
+- Dashboard: `docs/STATUS.md` - done / next ready / blockers at a glance. READ IT FIRST when starting or
+  resuming work. DERIVED (librarian-agent is its only writer; TASKS/STORIES/grades win on conflict) -
+  refresh with `/audit status`; never hand-edit it or treat it as the source of truth.
+- All indexed in `local-tools`; use `search_datasheets` / `doc-researcher`, cite them.
 
-## Modes
-- Use `/spec` or `/build` to implement/maintain against `docs/DESIGN.md` (it's LOCKED).
-- Use `/design` or `/proto` only after flipping `docs/DESIGN.md` to DRAFT to change the design itself.
-- Use `dev` (Devstral) for edits; `quality` (Next) for a genuinely hard change.
+## Modes / flow  <- read this
+If I haven't said which, ASK first. DESIGN's `Status:` header is the source of truth (it is the contract).
+- `/design` - design-first: shape DESIGN - the STACK first (step 2), then the security review,
+  requirements, epics, and contracts. No stories, no code.
+- `/proto` - co-design: greybox + record dated decisions into DESIGN (DRAFT).
+- `/stories` - manage STORIES.md: expand epics into stories, normalize, migrate. Write ONE story at a time
+  as a succinct block. Stories are managed ATOMICALLY - the whole story lands or none of it; never
+  overwrite/delete parts of other stories; keep numbering and ordering sequential and sensible.
+- `/taskmap` - shard STORIES.md into `docs/TASKS.md` (bite-sized tasks + deps), reindexed. Optional.
+- `/spec` - implement the LOCKED design faithfully (works a task/story); gaps -> questions.
+- `/build [scope]` - per TASK: dev -> qa -> `close-unit.ps1` (which verifies the build, ticks, commits);
+  per STORY: grade -> hygiene. Gated on DESIGN LOCKED and on CLAUDE.md having real build/test commands.
+Docs: DESIGN.md/TEDD.md = contract (lockable) | STORIES.md = story backlog | TASKS.md = task map.
+Lock scope: only DESIGN carries `Status:`; `/design` and `/proto` flip DRAFT <-> LOCKED on your confirmation.
+STORIES.md and TASKS.md stay editable even while DESIGN is LOCKED. Never edit DESIGN prose when LOCKED; never `/spec` a DRAFT DESIGN.
+Flow: /scaffold (DRAFT DESIGN) -> /design -> /stories -> (optional) /taskmap -> lock DESIGN -> /spec or /build.
+**Invoking agents:** anything named `*-agent` (scribe-agent, taskmap-agent, dev-agent, librarian-agent, ...)
+is a SUBAGENT - launch it with the **Task tool**, subagent_type = the agent's exact name. Agents are NOT
+skills; NEVER call the Skill tool with an agent name (it will fail with "Unknown skill"). Do not enter
+plan mode to run these commands - execute their steps directly; if you land in plan mode, exit it first.
 
 ## Build
 - Build: `dotnet build local-tools\local-tools.csproj -c Release`
@@ -60,5 +82,51 @@ Add a `Test-Case` for any bug you fix here - that is how this gate stays useful.
 - **One C# server only** - do not add Node/Python MCP servers; native Claude Code + `local-tools` is the design.
 
 ## Working agreement
-- After any change, run the full validation gate; report its results.
-- Keep changes small and scoped. Confirm behavior against `docs/DESIGN.md`; cite it.
+- Confirm values against the design doc; cite it. Never invent - missing info is a question.
+- After each change: build + test. Don't say "done" until they pass. Keep changes small and scoped.
+- **Git checkpoints:** the scaffold made an initial commit; every passing `/build`/`/spec` unit is
+  committed. If a file gets mangled, restore it from git (`/audit recover <file>`) - NEVER
+  hand-reconstruct a broken file from memory.
+- **Scratch work goes in _tmp/** (gitignored, and dad tidy empties it) - NEVER scatter ad-hoc
+SUMMARY/COMPLETE/NOTES files at the project root; state belongs in TASKS/STORIES/STATUS.
+- **ONE status file:** `docs/STATUS.md` (librarian-written). NEVER create ad-hoc status/summary/notes
+  files (root STATUS.md, BUILD_SUMMARY.md, NOTES.md, ...). Summaries go in chat; state goes in
+  TASKS/STORIES/STATUS via their owners.
+
+## Proven recipes (docs/RECIPES.md - all sessions AND subagents follow this)
+- **Consult first:** before an unfamiliar shell operation, `search_datasheets` for it - RECIPES.md holds
+  syntax that actually WORKED on this machine (models guess shell syntax differently; do not re-guess).
+- **Record on success:** when a NEW command works - especially one that failed first and you found the
+  working syntax - append a small entry (Command / Does / When / Gotcha / Verified date+model) to
+  `docs/RECIPES.md`, then reindex (`index_datasheets`). Don't log routine re-runs; update entries instead.
+- Never record secrets/tokens in it.
+
+## Secrets (hard rules - a pre-commit hook enforces the last one)
+- **Never put a real credential in this repo.** Not in `docs/` (everything there is chunked into a
+  PLAINTEXT search index), not in `RECIPES.md`, not in a story/task/contract, not in a comment, not in
+  chat. Reference secrets **by NAME only**: `AWS_PROFILE`, `AZURE_CLIENT_ID`, `MYAPI_TOKEN`.
+- Real values live in **environment variables** or a **gitignored `.env`** (commit `.env.example` with
+  empty values instead). Config files that hold secrets belong in `.gitignore`.
+- Prefer platform-native auth over long-lived keys: AWS `aws sso login` + profiles / IAM roles;
+  Azure `az login` + `DefaultAzureCredential` / Managed Identity; Windows Credential Manager or DPAPI for
+  local API keys.
+- If you (the agent) encounter what looks like a real secret in this repo or in output: **STOP, do not
+  echo it, tell me** - it must be treated as exposed and rotated.
+- `scan-secrets.ps1` runs as a pre-commit hook. If it blocks a commit, fix the file - do not
+  `--no-verify` around it without telling me.
+
+## Web / grounding
+- Web search / URL lookup: use the `local-tools` `web_search` / `ingest_url` tools, NOT the built-in
+  WebSearch/WebFetch (those need Anthropic and don't work against local Ollama). For grounding,
+  `web_search` to find, then `ingest_url` to fetch + persist into the RAG.
+
+## Hybrid: the local co-processor
+- If this session is running in HYBRID mode (`dad doctor` reports it), an extra MCP tool exists:
+  `local_generate`. It runs a LOCAL model on this machine's GPU - delegate BOUNDED, low-stakes generation
+  to it to keep drudge-work off the cloud budget: a first-pass implementation guess you will review,
+  synthetic test data / fixtures, throwaway boilerplate. It does not exist outside hybrid mode - never
+  assume it is there; if the tool is absent, you are not in hybrid, and that is fine.
+- Its output is a DRAFT, always prefixed `[LOCAL DRAFT - verify before use]`. Read it, correct it, or throw
+  it away - never bank or ship it unverified, and never reach for it on reasoning that has to be right
+  (a design decision, security-sensitive logic, anything a test cannot catch if it is subtly wrong). The
+  gates in this project do not get a local-model exception.

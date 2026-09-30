@@ -228,37 +228,63 @@ Test-Case "scaffold never leaves a repo with NO commits" {
   } finally { Remove-Sandbox $sb }
 }
 
-Test-Case "every kit file the docs tell you to RUN actually exists" {
-  # /research's last step said `-File "...\DAD-kit\reindex.ps1" docs`. There is no reindex.ps1 - only
-  # reindex.cmd, which takes an absolute path. So the final step of the kit's ONLY online mode failed with
-  # "no such file", and the model, having just been told the gate passed, reported the corpus was
-  # searchable. Every later offline command then queried an index missing the sources just captured.
-  # The existing "every executable a command tells the model to run is permitted" test checks that
-  # `powershell` is allow-listed - it never checked that the -File TARGET resolves. This does.
+# TASKS.md legitimately NAMES a not-yet-built deliverable, inside an UNCHECKED task's own "Do:" text
+# AND in the Build-order section's prose describing that same task - it is describing what the task
+# will create, not telling the model to run it now (taskmap shards a story's whole task set up front,
+# per R32/S8-S10; the file a task creates does not exist until that task is actually built). Collect
+# every filename named inside an UNCHECKED "### [ ]" task body; the caller treats those as
+# forward-declared, so planned-but-not-yet-built work does not trip a check meant to catch STALE prose
+# about files that no longer, or never, existed. A CHECKED "[x]" task's files are still required to exist.
+function Get-PendingScriptNames([string]$TasksPath) {
+  $set = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  if (-not $TasksPath -or -not (Test-Path $TasksPath)) { return ,$set }
+  $t = Get-Content $TasksPath -Raw
+  foreach ($body in [regex]::Matches($t, '(?ms)^### \[ \].*?(?=^### |\z)')) {
+    foreach ($pm in [regex]::Matches($body.Value, '(?i)([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
+      [void]$set.Add($pm.Groups[1].Value)
+    }
+  }
+  # , so PowerShell hands back the HashSet itself instead of unrolling it into loose strings (an empty
+  # set would otherwise come back as $null and silently exempt nothing - or everything, on a typo).
+  return ,$set
+}
+
+# Lifted out of the Test-Case below so the detection can be run against a FIXTURE directory as well as
+# against the live kit: an exemption nobody can test in both directions is an exemption that quietly
+# turns the gate off. $ScriptRoot is where a named script would have to live (the kit is flat).
+function Find-MissingRunnableScripts([object[]]$Docs, [string]$ScriptRoot) {
   $missing = @()
   $checked = 0
-  $docs = @(Get-KitFiles @("*.md")) + @(Get-ChildItem (Join-Path $kit "global") -Recurse -Filter *.md -File)
-  foreach ($f in ($docs | Sort-Object FullName -Unique)) {
+  # one pending-set per DIRECTORY, computed once: the exemption below is a property of the folder's task
+  # map, not of the individual doc, and the scan now consults it for every .md in the tree.
+  $pendingByDir = @{}
+  foreach ($f in ($Docs | Sort-Object FullName -Unique)) {
     # CHANGELOG is HISTORY: it must be free to name the broken thing it is recording the fix for.
     if ($f.Name -eq "CHANGELOG.md") { continue }
     $text = Get-Content $f.FullName -Raw
-    # TASKS.md legitimately NAMES a not-yet-built deliverable, inside an UNCHECKED task's own "Do:" text
-    # AND in the Build-order section's prose describing that same task - it is describing what the task
-    # will create, not telling the model to run it now (taskmap shards a story's whole task set up front,
-    # per R32/S8-S10; the file a task creates does not exist until that task is actually built). Collect
-    # every filename named inside an UNCHECKED "### [ ]" task body and treat it as forward-declared
-    # ANYWHERE in this one file (Build-order commentary included), so planned-but-not-yet-built work does
-    # not trip a check meant to catch STALE prose about files that no longer, or never, existed. A CHECKED
-    # "[x]" task's files (and every other doc) are still required to exist, unchanged.
-    $pendingNames = $null
-    if ($f.Name -eq "TASKS.md") {
-      $pendingNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-      foreach ($body in [regex]::Matches($text, '(?ms)^### \[ \].*?(?=^### |\z)')) {
-        foreach ($pm in [regex]::Matches($body.Value, '(?i)([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
-          [void]$pendingNames.Add($pm.Groups[1].Value)
-        }
-      }
+    # THE RULE: any .md sitting in the same directory as a TASKS.md may name that map's forward-declared
+    # deliverables (see Get-PendingScriptNames). Docs beside a task map are written against the PLAN, so
+    # they legitimately name files the plan has not built yet.
+    # This started as an exemption for TASKS.md plus STATUS.md by name: STATUS.md:24 read "NEXT: T9.1 -
+    # ... ship `dad-gates-log.ps1`" and reddened this suite over a file T9.1 has not been built to create
+    # yet, and its "NEXT:" line is DERIVED from the next unchecked task, so rewording it would have broken
+    # again at T10.1 (dad-run-summary.ps1) and at every task after it that ships a script. Enumerating the
+    # two filenames was still too narrow: a /design pass then pinned contracts C3 and C4, which SPECIFY
+    # dad-gates-log.ps1 and dad-run-summary.ps1 before either exists, and DESIGN.md went red for five
+    # lines at once. Pinning a contract ahead of the build is the whole point of the contracts step, so a
+    # contract necessarily names an unbuilt script - DESIGN.md was simply the third file to hit a rule that
+    # was never about STATUS.md in particular.
+    # The exemption is scoped BY DIRECTORY - a doc is excused only by the TASKS.md sitting beside it, never
+    # by the kit's own docs\TASKS.md - because the kit carries several TASKS/STATUS pairs (templates,
+    # examples) and one global set would let any of them excuse a stale name in any other. A doc with no
+    # sibling TASKS.md gets NO exemption at all, and even with one the excuse covers only names found in an
+    # UNCHECKED "### [ ]" task body: a CHECKED task's files, and any name the map never mentions, must
+    # still exist.
+    $dir = $f.DirectoryName
+    if (-not $pendingByDir.ContainsKey($dir)) {
+      $pendingByDir[$dir] = Get-PendingScriptNames (Join-Path $dir "TASKS.md")
     }
+    $pendingNames = $pendingByDir[$dir]
     # any reference to a kit script, however it is written: via the dev-path placeholder, or bare
     foreach ($m in [regex]::Matches($text, '(?i)(?:DAD-kit[\\/])?([A-Za-z0-9_.-]+\.(?:ps1|cmd))')) {
       $name = $m.Groups[1].Value
@@ -268,14 +294,85 @@ Test-Case "every kit file the docs tell you to RUN actually exists" {
       if (-not $isKitish) { continue }
       if ($pendingNames -and $pendingNames.Contains($name)) { continue }
       $checked++
-      if (-not (Test-Path (Join-Path $kit $name))) {
+      if (-not (Test-Path (Join-Path $ScriptRoot $name))) {
         $line = ($text.Substring(0, $m.Index) -split "`n").Count
         $missing += "$($f.Name):$line -> $name"
       }
     }
   }
-  Assert ($checked -gt 20) "this test found only $checked kit-script references - the pattern stopped matching, so it is proving nothing"
-  Assert ($missing.Count -eq 0) "the docs tell the model to run files that do not exist: $(($missing | Sort-Object -Unique) -join '; ')"
+  return [pscustomobject]@{ Checked = $checked; Missing = $missing }
+}
+
+Test-Case "every kit file the docs tell you to RUN actually exists" {
+  # /research's last step said `-File "...\DAD-kit\reindex.ps1" docs`. There is no reindex.ps1 - only
+  # reindex.cmd, which takes an absolute path. So the final step of the kit's ONLY online mode failed with
+  # "no such file", and the model, having just been told the gate passed, reported the corpus was
+  # searchable. Every later offline command then queried an index missing the sources just captured.
+  # The existing "every executable a command tells the model to run is permitted" test checks that
+  # `powershell` is allow-listed - it never checked that the -File TARGET resolves. This does.
+  $docs = @(Get-KitFiles @("*.md")) + @(Get-ChildItem (Join-Path $kit "global") -Recurse -Filter *.md -File)
+  $scan = Find-MissingRunnableScripts $docs $kit
+  Assert ($scan.Checked -gt 20) "this test found only $($scan.Checked) kit-script references - the pattern stopped matching, so it is proving nothing"
+  Assert ($scan.Missing.Count -eq 0) "the docs tell the model to run files that do not exist: $(($scan.Missing | Sort-Object -Unique) -join '; ')"
+}
+
+Test-Case "the forward-declaration exemption stays narrow: sibling TASKS.md only, and every doc beside it is still checked" {
+  # The risk in exempting a doc is not that it stays red - it is that the exemption goes WIDE and the gate
+  # silently stops checking that doc at all, which no green suite would ever reveal. So assert both
+  # directions on a fixture: a name that IS an unchecked task's deliverable passes, and a kit-ish name that
+  # is NOT (and does not exist) is still reported. The lonely dir proves the scoping is per-DIRECTORY: one
+  # folder's task map must never excuse another folder's docs. Both directions are asserted for STATUS.md
+  # AND for a doc that is neither TASKS.md nor STATUS.md (a fixture DESIGN.md), because the rule is "any .md
+  # beside a task map" and a by-name enumeration would pass the STATUS.md halves while failing these.
+  $sb = New-Sandbox
+  try {
+    $pair   = Join-Path $sb "pair";   New-Item -ItemType Directory -Force $pair   | Out-Null
+    $bogus  = Join-Path $sb "bogus";  New-Item -ItemType Directory -Force $bogus  | Out-Null
+    $lonely = Join-Path $sb "lonely"; New-Item -ItemType Directory -Force $lonely | Out-Null
+
+    # (a) STATUS.md's NEXT line names the deliverable of an UNCHECKED task in its OWN sibling TASKS.md
+    @("# Task map", "", "### [ ] T9.1 - pin the gate log   (Story S9)", "- **Do:** ship ``dad-gates-log.ps1`` (append + query)") -join "`n" |
+      Set-Content (Join-Path $pair "TASKS.md") -Encoding UTF8
+    @("# Status", "", "- NEXT: T9.1 - ship ``dad-gates-log.ps1`` (append + query), Story S9.") -join "`n" |
+      Set-Content (Join-Path $pair "STATUS.md") -Encoding UTF8
+    # (a2) a THIRD doc name, exercising the general rule rather than the two enumerated ones: a contract
+    #      pinned in DESIGN.md before the build necessarily names the script the build will create.
+    @("# Design", "", "## C3: the gate log", "- Appended by ``dad-gates-log.ps1`` (T9.1).") -join "`n" |
+      Set-Content (Join-Path $pair "DESIGN.md") -Encoding UTF8
+
+    # (b) same shape, plus a name no task declares - and a CHECKED task's deliverable, which TASKS.md
+    #     itself must still be held to (proving the TASKS.md behaviour did not widen either).
+    @("# Task map", "", "### [x] T8.1 - done   (Story S8)", "- **Do:** ship ``dad-checked-only.ps1``",
+      "", "### [ ] T10.1 - later   (Story S10)", "- **Do:** ship ``dad-run-summary.ps1``") -join "`n" |
+      Set-Content (Join-Path $bogus "TASKS.md") -Encoding UTF8
+    @("# Status", "", "- NEXT: T10.1 - ship ``dad-run-summary.ps1``.", "- Also run ``dad-nonexistent.ps1`` first.") -join "`n" |
+      Set-Content (Join-Path $bogus "STATUS.md") -Encoding UTF8
+    # (b2) the same both-directions pair for the third doc name: the unchecked deliverable is excused, a
+    #      kit-ish name no task declares is NOT - a design doc does not get a blanket pass just for being
+    #      one, or a contract could keep citing a script that was renamed away.
+    @("# Design", "", "## C4: the run summary", "- Rendered by ``dad-run-summary.ps1`` (T10.1).",
+      "- Older prose still says ``dad-contract-only.ps1``.") -join "`n" |
+      Set-Content (Join-Path $bogus "DESIGN.md") -Encoding UTF8
+
+    # (c) no sibling TASKS.md -> no exemption, even though the pair dir's task map declares that very name
+    @("# Status", "", "- NEXT: T9.1 - ship ``dad-gates-log.ps1``.") -join "`n" |
+      Set-Content (Join-Path $lonely "STATUS.md") -Encoding UTF8
+
+    $docs = @(Get-ChildItem $sb -Recurse -File -Filter *.md)
+    $scan = Find-MissingRunnableScripts $docs $sb
+    $found = @($scan.Missing | Sort-Object -Unique)
+    $joined = ($found -join '; ')
+    # the specific assertions come FIRST: the Checked canary also trips on a too-wide exemption, and when
+    # it does it says only "proving nothing", which is the least useful sentence available at that moment.
+    Assert ($joined -notmatch 'dad-run-summary\.ps1') "an unchecked task's OWN deliverable was reported for a doc beside the map: $joined"
+    Assert ($joined -notmatch 'DESIGN\.md:\d+ -> dad-gates-log\.ps1') "the exemption is still enumerated by filename: a DESIGN.md beside the map was not excused its own task's deliverable: $joined"
+    Assert ($joined -match 'DESIGN\.md:\d+ -> dad-contract-only\.ps1') "the exemption went WIDE: a DESIGN.md beside a task map is no longer checked at all: $joined"
+    Assert ($joined -match 'STATUS\.md:\d+ -> dad-nonexistent\.ps1') "the exemption went WIDE: STATUS.md is no longer checked at all: $joined"
+    Assert ($joined -match 'STATUS\.md:\d+ -> dad-gates-log\.ps1') "a STATUS.md with no sibling TASKS.md was exempted by another folder's task map: $joined"
+    Assert ($joined -match 'TASKS\.md:\d+ -> dad-checked-only\.ps1') "a CHECKED task's deliverable stopped being required to exist: $joined"
+    Assert ($found.Count -eq 4) "expected exactly 4 findings from the fixture, got $($found.Count): $joined"
+    Assert ($scan.Checked -ge 3) "the scanner matched almost nothing on the fixture ($($scan.Checked)) - it is proving nothing"
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "prose never names a model alias or roster count that is not real" {
@@ -2092,6 +2189,30 @@ Test-Case "close-unit REFUSES to close over a shrink, and only ratchets on succe
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "close-unit Test-BuildOutputCurrent: lock-blocked build with current output is not killed" {
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $kit "close-unit.ps1"), [ref]$null, [ref]$null)
+  $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Test-BuildOutputCurrent' }, $true)
+  Assert ($null -ne $fn) "Test-BuildOutputCurrent is not defined in close-unit.ps1"
+  . ([scriptblock]::Create($fn.Extent.Text))
+  $root = Join-Path $kit "_tmp"; New-Item -ItemType Directory -Force $root | Out-Null
+  $d = Join-Path $root ("boc_" + [guid]::NewGuid().ToString("N").Substring(0,8))
+  try {
+    New-Item -ItemType Directory -Force "$d\src","$d\bin\Release","$d\obj" | Out-Null
+    "class A {}" | Set-Content "$d\src\a.cs"; "<Project/>" | Set-Content "$d\p.csproj"
+    "x" | Set-Content "$d\bin\Release\app.exe"
+    $old = (Get-Date).AddMinutes(-10)
+    (Get-Item "$d\src\a.cs").LastWriteTime = $old; (Get-Item "$d\p.csproj").LastWriteTime = $old
+    (Get-Item "$d\bin\Release\app.exe").LastWriteTime = (Get-Date).AddMinutes(-5)
+    Assert (Test-BuildOutputCurrent "$d\bin\Release\app.exe" $d) "older sources should mean current"
+    # a build-output/obj source-looking file that is newer is ignored
+    "class G {}" | Set-Content "$d\obj\gen.cs"; "class G {}" | Set-Content "$d\bin\Release\gen.cs"
+    Assert (Test-BuildOutputCurrent "$d\bin\Release\app.exe" $d) "newer files under bin/ obj/ must be ignored"
+    Assert (-not (Test-BuildOutputCurrent "$d\bin\Release\missing.exe" $d)) "a missing locked file must not be current"
+    "class B {}" | Set-Content "$d\src\b.cs"   # now, newer than the exe
+    Assert (-not (Test-BuildOutputCurrent "$d\bin\Release\app.exe" $d)) "a newer .cs must mean not current"
+  } finally { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 Test-Case "dad-gates-smoke: skeleton reports SKIP honestly, never a fabricated pass (T8.1)" {
   # T8.2/T8.3/T8.4 replaced the stub Test-*Gate functions one at a time with real provocations - this
   # case keeps asserting the report/exit-code contract itself (parse/ASCII/usage/loud-failure), which
@@ -2149,6 +2270,9 @@ Test-Case "dad-gates-smoke reports a genuine per-gate SKIP when one sibling scri
     Copy-Item (Join-Path $kit "dad-gates-smoke.ps1") $isolated
     Copy-Item (Join-Path $kit "dad-loopguard.ps1") $isolated
     Copy-Item (Join-Path $kit "dad-guard.ps1") $isolated
+    # the gate-log writer (T13.1 fourth assertion needs the block lines to land) and its redaction dependency
+    Copy-Item (Join-Path $kit "dad-gates-log.ps1") $isolated
+    Copy-Item (Join-Path $kit "scan-secrets.ps1") $isolated
 
     $gs = Join-Path $isolated "dad-gates-smoke.ps1"
     $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $gs -ProjectDir $sb 2>&1 | Out-String)
@@ -4121,6 +4245,57 @@ Test-Case "doc-stats -UpdateStatus writes the Snapshot; the model never counts" 
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "doc-stats -UpdateStatus writes LF, not CRLF (it used to break the kit's own gate)" {
+  # doc-stats.ps1's single write path hard-coded "`r`n" for BOTH the join and the trailing terminator, so
+  # every -UpdateStatus rewrote docs\STATUS.md as CRLF - and .gitattributes mandates LF for *.md (only
+  # *.cmd/*.bat keep CRLF). Because /audit MANDATES -UpdateStatus, running an audit broke this suite every
+  # single time: "== 166 passed, 1 failed ==  STATUS.md is CRLF but should be LF".
+  # The existing "line endings are consistent per file" case only caught it by LUCK: it scans the WORKING
+  # TREE, so it fires only when STATUS.md happens to be dirty at scan time - on a committed-clean tree the
+  # bug is invisible. This case is BEHAVIOURAL instead: run the writer on a fixture and assert the bytes.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: DONE -->`n`n### Story S2: Two   <!-- Status: TODO -->" |
+      Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Task map`n`n## Tasks`n`n### [x] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T2.1 - b   (Story S2)`n- **Goal:** y" |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+
+    # the fixture STATUS.md is written LF-ONLY and on purpose carries a STALE Snapshot plus a prose
+    # section after it, so we can tell a real replace from a write that quietly no-opped.
+    $statusPath = Join-Path $p "docs\STATUS.md"
+    $seed = @(
+      "# Status",
+      "",
+      "## Snapshot",
+      "- As of: 1999-01-01  (counts generated by doc-stats.ps1 - do not hand-edit this section)",
+      "- DESIGN: UNKNOWN   Stories: 9/9   Tasks: 9/9",
+      "- NEXT: T9.9",
+      "",
+      "## Issues & blockers",
+      "- librarian-owned prose that must survive",
+      ""
+    ) -join "`n"
+    [System.IO.File]::WriteAllText($statusPath, $seed, (New-Object System.Text.UTF8Encoding($false)))
+    Assert (([regex]::Matches([System.IO.File]::ReadAllText($statusPath), "`r`n")).Count -eq 0) `
+      "the fixture itself was not written LF-only - this case would prove nothing"
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -UpdateStatus | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-UpdateStatus exited $LASTEXITCODE"
+
+    $raw = [System.IO.File]::ReadAllText($statusPath)
+    $crlf = ([regex]::Matches($raw, "`r`n")).Count
+    Assert ($crlf -eq 0) "-UpdateStatus wrote $crlf CRLF into a *.md file; .gitattributes mandates LF"
+    # a write that no-opped would pass the line-ending assertion trivially, so prove the block CHANGED
+    Assert ($raw -notmatch '1999-01-01') "the stale Snapshot survived - -UpdateStatus did not replace the block"
+    Assert ($raw -notmatch 'Stories: 9/9') "the stale Snapshot counts survived - nothing was regenerated"
+    Assert ($raw -match 'Stories: 1/2') "the regenerated Snapshot has the wrong story count:`n$raw"
+    Assert ($raw -match 'librarian-owned prose that must survive') "-UpdateStatus destroyed the prose section"
+    Assert ($raw.EndsWith("`n") -and -not $raw.EndsWith("`n`n")) "-UpdateStatus did not end the file with exactly one LF"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-guard fails OPEN and cannot loop" {
   # A guard that blocks on its own bugs is worse than the problem. And a Stop hook that blocks its own
   # retry deadlocks the session - the harness sets stop_hook_active on that pass and we must let it go.
@@ -4806,6 +4981,181 @@ Test-Case "S7's pricing-sentence language landed in both stories.md and design.m
   Assert ($design -match "aren't\s+priced yet") "design.md is missing the T7.2 pricing sentence's 'aren't priced yet' phrasing"
 }
 
+# ---------------------------------------------------------------- gates log (T9.1, C3)
+Write-Host "-- gates log --" -ForegroundColor Cyan
+
+function Invoke-GatesLog([string[]]$ArgList) {
+  # Runs dad-gates-log.ps1 as a child process; returns exit code + raw stdout + raw stderr.
+  $so = [System.IO.Path]::GetTempFileName(); $se = [System.IO.Path]::GetTempFileName()
+  try {
+    $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + (Join-Path $kit "dad-gates-log.ps1") + '"')) + $ArgList
+    $pr = Start-Process powershell -ArgumentList $a -Wait -PassThru -NoNewWindow -RedirectStandardOutput $so -RedirectStandardError $se
+    return [pscustomobject]@{ Exit = $pr.ExitCode; Out = [System.IO.File]::ReadAllText($so); Err = [System.IO.File]::ReadAllText($se) }
+  } finally { Remove-Item $so, $se -Force -ErrorAction SilentlyContinue }
+}
+function Test-GenesisLine([string]$line) {
+  # C3d genesis: gate "gates-log", reason begins "log created".
+  try { $o = $line | ConvertFrom-Json } catch { return $false }
+  return (([string]$o.gate -eq "gates-log") -and ([string]$o.reason).StartsWith("log created"))
+}
+function Get-CallerLines([string]$log) {
+  # Raw non-empty log lines with the C3d genesis line filtered out (callers' own lines only).
+  if (-not (Test-Path -LiteralPath $log)) { return @() }
+  return @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ -and -not (Test-GenesisLine $_) })
+}
+function New-GatesSandbox {
+  $root = Join-Path $kit "_tmp"; New-Item -ItemType Directory -Force $root | Out-Null
+  $p = Join-Path $root ("gl_" + [guid]::NewGuid().ToString("N").Substring(0,8)); New-Item -ItemType Directory -Force $p | Out-Null
+  return $p
+}
+
+Test-Case "dad-gates-log: acceptance scenario (append, schema, order, ts, second append, -Gate filter, -Count on missing log)" {
+  $sb = New-GatesSandbox
+  try {
+    $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", "`"test block`"", "-Session", "s1")
+    Assert ($r.Exit -eq 0) "append exit $($r.Exit)"
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    Assert (Test-Path $log) "grades\gates-log.jsonl not created"
+    Assert (@([System.IO.File]::ReadAllLines($log)).Count -eq 2) "expected genesis + 1 caller line"
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq 1) "expected 1 caller line, got $($lines.Count)"
+    $o = $lines[0] | ConvertFrom-Json
+    $keys = @($o.PSObject.Properties.Name) -join ","
+    Assert ($keys -eq "v,ts,gate,decision,tool,reason,session") "keys/order wrong: $keys"
+    Assert ($o.v -eq 1) "v != 1"
+    Assert ($o.ts -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') "ts format: $($o.ts)"
+    Assert (($o.gate -eq "loop-guard") -and ($o.decision -eq "block") -and ($o.tool -eq "Bash") -and ($o.reason -eq "test block") -and ($o.session -eq "s1")) "field values wrong: $($lines[0])"
+    $raw = [System.IO.File]::ReadAllBytes($log)
+    Assert (-not ($raw.Length -ge 3 -and $raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF)) "log has a UTF-8 BOM"
+    Assert ($raw[$raw.Length - 1] -eq 10) "line does not end in LF"
+    Assert (-not ($raw -contains 13)) "log contains CR"
+
+    $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "ratchet", "-Decision", "allow", "-Tool", "`"`"", "-Reason", "`"ok`"", "-Session", "s1")
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq 2) "second append: expected 2 caller lines, got $($lines.Count)"
+
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Gate", "loop-guard")
+    Assert ($q.Exit -eq 0) "query exit $($q.Exit)"
+    $ql = @($q.Out -split "`r?`n" | Where-Object { $_ })
+    Assert ($ql.Count -eq 1) "-Query -Gate loop-guard returned $($ql.Count) lines"
+    Assert ($ql[0] -eq $lines[0]) "query line not verbatim"
+
+    $fresh = New-GatesSandbox
+    try {
+      $c = Invoke-GatesLog @("-ProjectDir", "`"$fresh`"", "-Query", "-Count")
+      Assert ($c.Exit -eq 0) "count exit $($c.Exit)"
+      Assert ($c.Out -eq "0`r`n" -or $c.Out -eq "0`n") "stdout not exactly 0: [$($c.Out)]"
+      Assert ($c.Err -match "no gate log yet") "stderr lacks the 'no gate log yet' note: [$($c.Err)]"
+    } finally { Remove-Sandbox $fresh }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-gates-log: redacts a structural token inside a curl reason (C3a worked example)" {
+  $sb = New-GatesSandbox
+  try {
+    $tok = "gh" + "p_" + ('a' * 40)
+    $reason = 'curl   -H "Authorization: Bearer ' + $tok + '"   https://api.example.com/v1/x'
+    $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", ('"' + ($reason -replace '"', '\"') + '"'), "-Session", "s1")
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    Assert (Test-Path $log) "no log written"
+    $txt = [System.IO.File]::ReadAllText($log)
+    Assert ($txt -notmatch [regex]::Escape($tok)) "the raw token reached the log"
+    $cl = @(Get-CallerLines $log)
+    Assert ($cl.Count -eq 1) "expected 1 caller line, got $($cl.Count)"
+    $o = ($cl[0] | ConvertFrom-Json)
+    $want = 'curl -H "Authorization: Bearer [REDACTED]" https://api.example.com/v1/x'
+    Assert ($o.reason -eq $want) "reason was [$($o.reason)], wanted [$want]"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-gates-log: two concurrent writers lose no lines" {
+  $sb = New-GatesSandbox
+  try {
+    $script = Join-Path $kit "dad-gates-log.ps1"
+    $n = 12
+    $procs = @()
+    foreach ($w in @("wa", "wb")) {
+      $cmd = "for (`$i = 0; `$i -lt $n; `$i++) { & '$script' -ProjectDir '$sb' -Gate $w -Decision block -Tool Bash -Reason ('r' + `$i) -Session s }"
+      $procs += Start-Process powershell -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ('"' + $cmd + '"')) -PassThru -WindowStyle Hidden
+    }
+    foreach ($p in $procs) { $p.WaitForExit() }
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    $all = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })
+    Assert (Test-GenesisLine $all[0]) "line 1 is not the genesis line"
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq (2 * $n)) "expected $(2 * $n) caller lines, got $($lines.Count) - a concurrent line was lost"
+    Assert ($all.Count -eq (2 * $n + 1)) "expected exactly 1 genesis + $(2 * $n) lines, got $($all.Count) total"
+    foreach ($l in $all) { $null = $l | ConvertFrom-Json }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.4: all four gate ids in one sandbox -> 4 lines/7 keys; -Query -Gate/-Decision/-Count; 4096-byte invariant with a huge -Reason" {
+  $sb = New-GatesSandbox
+  try {
+    $ids = @("loop-guard", "ratchet", "dad-guard-stop", "close-unit-refusal")
+    foreach ($g in $ids) {
+      $dec = if ($g -eq "ratchet") { "allow" } else { "block" }
+      $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", $g, "-Decision", $dec, "-Tool", "Bash", "-Reason", "`"r-$g`"", "-Session", "s1")
+      Assert ($r.Exit -eq 0) "append $g exit $($r.Exit)"
+    }
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq 4) "expected 4 caller lines, got $($lines.Count)"
+    $want = @("v", "ts", "gate", "decision", "tool", "reason", "session")
+    for ($i = 0; $i -lt 4; $i++) {
+      $o = $lines[$i] | ConvertFrom-Json
+      $names = @($o.PSObject.Properties.Name)
+      foreach ($k in $want) { Assert ($names -contains $k) "line $i missing key $k" }
+      Assert ($o.v -eq 1) "line $i v != 1"
+      Assert ($o.ts -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') "line $i ts format: $($o.ts)"
+      Assert ($o.gate -eq $ids[$i]) "line $i gate $($o.gate)"
+    }
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Gate", "loop-guard")
+    $ql = @($q.Out -split "`r?`n" | Where-Object { $_ })
+    Assert ($ql.Count -eq 1 -and $ql[0] -eq $lines[0]) "-Query -Gate loop-guard did not return only the loop-guard line: [$($q.Out)]"
+    foreach ($l in $ql) { Assert ($l.StartsWith("{")) "prose in query stdout: $l" }
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Decision", "block")
+    $ql = @($q.Out -split "`r?`n" | Where-Object { $_ })
+    Assert ($ql.Count -eq 3) "-Query -Decision block returned $($ql.Count) lines, expected 3"
+    foreach ($l in $ql) { Assert (($l | ConvertFrom-Json).decision -eq "block") "non-block line in -Decision block: $l" }
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Count")
+    Assert ($q.Exit -eq 0) "count exit $($q.Exit)"
+    Assert ($q.Out.Trim() -eq "5") "-Query -Count not bare 5 (genesis + 4): [$($q.Out)]"
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Count", "-Gate", "gates-log")
+    Assert ($q.Out.Trim() -eq "1") "-Query -Gate gates-log -Count not bare 1: [$($q.Out)]"
+    # C3c invariant: huge reason -> line still under 4096 bytes (300-char truncation)
+    $huge = 'x' * 20000
+    $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", "`"$huge`"", "-Session", "s1")
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq 5) "huge-reason append: expected 5 caller lines, got $($lines.Count)"
+    foreach ($l in @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })) { Assert ([System.Text.Encoding]::UTF8.GetByteCount($l) -lt 4096) "a line is >= 4096 bytes" }
+    $o = $lines[4] | ConvertFrom-Json
+    Assert ($o.reason.Length -le 300) "huge reason not truncated to 300: $($o.reason.Length)"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-gates-log: missing -ProjectDir exits 0 silently and creates nothing" {
+  $ghost = Join-Path $kit ("_tmp\gl_missing_" + [guid]::NewGuid().ToString("N").Substring(0,8))
+  $r = Invoke-GatesLog @("-ProjectDir", "`"$ghost`"", "-Gate", "loop-guard", "-Decision", "block", "-Reason", "x")
+  Assert ($r.Exit -eq 0) "exit $($r.Exit)"
+  Assert ($r.Out -eq "" -and $r.Err -eq "") "not silent: out=[$($r.Out)] err=[$($r.Err)]"
+  Assert (-not (Test-Path $ghost)) "created the missing project dir"
+}
+
+Test-Case "dad-gates-log: .cmd wrapper exists and scan-secrets -PatternsOnly leaves normal scanning unchanged" {
+  $cmdTxt = Get-Content (Join-Path $kit "dad-gates-log.cmd") -Raw
+  Assert ($cmdTxt -match 'dad-gates-log\.ps1') "dad-gates-log.cmd does not call the .ps1"
+  $sb = New-Sandbox
+  try {
+    Set-Content "$sb\f.txt" ("gh" + "p_" + ('a' * 40)) -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "scan-secrets.ps1") -Path $sb -Quiet | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "scan-secrets no longer flags a planted token (exit $LASTEXITCODE)"
+    Set-Content "$sb\f.txt" "nothing secret here" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "scan-secrets.ps1") -Path $sb -Quiet | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "scan-secrets flags a clean file (exit $LASTEXITCODE)"
+  } finally { Remove-Sandbox $sb }
+}
+
 # ---------------------------------------------------------------- server
 if (-not $SkipBuild) {
   Write-Host "-- server --" -ForegroundColor Cyan
@@ -4956,6 +5306,1142 @@ if (-not $SkipBuild) {
       Assert ($roslyn.Count -eq 0) "examples\cms3 contains Roslyn DLLs - the RuntimeCompilation bloat fix (S21) regressed, or this was republished from an unfixed cms3"
     }
   }
+}
+
+# ---------------------------------------------------------------- gates log wiring (T9.2, C3b)
+Write-Host "-- gates log wiring (loop-guard, dad-guard-stop) --" -ForegroundColor Cyan
+
+function Invoke-HookScript([string]$script, [string]$json, [string[]]$extra = @()) {
+  # Pipes $json to a hook script on stdin in a child powershell; returns the exit code.
+  $json | & powershell -NoProfile -ExecutionPolicy Bypass -File $script @extra 2>$null | Out-Null
+  return $LASTEXITCODE
+}
+function Get-GateLines([string]$proj) {
+  $l = Join-Path $proj "grades\gates-log.jsonl"
+  if (-not (Test-Path -LiteralPath $l)) { return @() }
+  # the C3d genesis line is filtered: these cases count the gate's own lines
+  return @([System.IO.File]::ReadAllLines($l) | Where-Object { $_ -and -not (Test-GenesisLine $_) } | ForEach-Object { $_ | ConvertFrom-Json })
+}
+function New-GuardFixture {
+  $p = New-GatesSandbox
+  New-Item -ItemType Directory -Force (Join-Path $p "docs") | Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $p "docs\DESIGN.md"), "# d`n")
+  & git -C $p init -q 2>$null | Out-Null
+  & git -C $p config user.email t@t.t 2>$null | Out-Null
+  & git -C $p config user.name t 2>$null | Out-Null
+  & git -C $p add -A 2>$null | Out-Null
+  & git -C $p commit -q -m init 2>$null | Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $p "a.cs"), "class A {}`n")
+  return $p
+}
+
+Test-Case "T9.2 (a): loop-guard 4 identical calls with payload cwd -> exactly 2 log lines (armed allow, block); subdir cwd resolves to project" {
+  $lg = Join-Path $kit "dad-loopguard.ps1"
+  $sids = @()
+  try {
+    foreach ($variant in @("root", "subdir")) {
+      $sb = New-GatesSandbox
+      New-Item -ItemType Directory -Force (Join-Path $sb "docs") | Out-Null
+      $cwd = $sb
+      if ($variant -eq "subdir") { $cwd = Join-Path $sb "src\deep"; New-Item -ItemType Directory -Force $cwd | Out-Null }
+      $sid = "t92a-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+      $esc = $cwd.Replace('\', '\\')
+      $json = '{"session_id":"' + $sid + '","cwd":"' + $esc + '","tool_name":"Read","tool_input":{"file_path":"same.md"}}'
+      $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript $lg $json) }
+      Assert (($codes -join ",") -eq "0,0,0,2") "$variant exit codes changed by logging: $($codes -join ',')"
+      $rows = Get-GateLines $sb
+      Assert ($rows.Count -eq 2) "$variant expected exactly 2 lines, got $($rows.Count)"
+      Assert (($rows[0].gate -eq "loop-guard") -and ($rows[0].decision -eq "allow") -and ($rows[0].reason -eq "armed") -and ($rows[0].session -eq $sid)) "$variant line 1 not the armed allow"
+      Assert (($rows[1].gate -eq "loop-guard") -and ($rows[1].decision -eq "block") -and ($rows[1].tool -eq "Read")) "$variant line 2 not the block"
+      if ($variant -eq "subdir") { Assert (-not (Test-Path (Join-Path $cwd "grades"))) "subdir got its own grades\ instead of the project's" }
+      Remove-Item $sb -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  } finally {
+    foreach ($sid in $sids) { Get-ChildItem (Join-Path $env:TEMP "dad-loopguard") -Filter "$sid*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+Test-Case "T9.2 (a): loop-guard empty/missing cwd -> no log, exit codes unchanged; helper missing or grades unwritable -> still exit 2" {
+  $lg = Join-Path $kit "dad-loopguard.ps1"
+  $sids = @()
+  try {
+    $sb = New-GatesSandbox; New-Item -ItemType Directory -Force (Join-Path $sb "docs") | Out-Null
+    $sid = "t92n-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+    $json = '{"session_id":"' + $sid + '","tool_name":"Read","tool_input":{"file_path":"nocwd.md"}}'
+    $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript $lg $json) }
+    Assert (($codes -join ",") -eq "0,0,0,2") "no-cwd exit codes: $($codes -join ',')"
+    Assert (-not (Test-Path (Join-Path $sb "grades"))) "a log was written with no cwd"
+    $sid = "t92e-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+    $json = '{"session_id":"' + $sid + '","cwd":"","tool_name":"Read","tool_input":{"file_path":"emptycwd.md"}}'
+    $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript $lg $json) }
+    Assert (($codes -join ",") -eq "0,0,0,2") "empty-cwd exit codes: $($codes -join ',')"
+
+    # helper missing: copy the guard alone into a folder with no dad-gates-log.ps1
+    $iso = New-GatesSandbox; Copy-Item $lg $iso
+    $sid = "t92m-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+    $json = '{"session_id":"' + $sid + '","cwd":"' + $sb.Replace('\','\\') + '","tool_name":"Read","tool_input":{"file_path":"nohelper.md"}}'
+    $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript (Join-Path $iso "dad-loopguard.ps1") $json) }
+    Assert (($codes -join ",") -eq "0,0,0,2") "helper-missing exit codes: $($codes -join ',')"
+
+    # grades\ unwritable: a FILE named grades blocks directory creation
+    [System.IO.File]::WriteAllText((Join-Path $sb "grades"), "x")
+    $sid = "t92u-" + [guid]::NewGuid().ToString("N").Substring(0,8); $sids += $sid
+    $json = '{"session_id":"' + $sid + '","cwd":"' + $sb.Replace('\','\\') + '","tool_name":"Read","tool_input":{"file_path":"unwritable.md"}}'
+    $codes = @(); for ($i = 1; $i -le 4; $i++) { $codes += (Invoke-HookScript $lg $json) }
+    Assert (($codes -join ",") -eq "0,0,0,2") "unwritable-grades exit codes: $($codes -join ',')"
+    Remove-Item $sb, $iso -Recurse -Force -ErrorAction SilentlyContinue
+  } finally {
+    foreach ($sid in $sids) { Get-ChildItem (Join-Path $env:TEMP "dad-loopguard") -Filter "$sid*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+Test-Case "T9.2 (b): dad-guard real hook mode -> armed allow + block; second Stop adds only a block; retry pass logs nothing" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $fx = New-GuardFixture
+  try {
+    $esc = $fx.Replace('\', '\\')
+    $json = '{"session_id":"t92b-sess","cwd":"' + $esc + '","stop_hook_active":false}'
+    $c1 = Invoke-HookScript $dg $json
+    Assert ($c1 -eq 2) "first Stop exit $c1 (block must stay 2)"
+    $rows = Get-GateLines $fx
+    Assert ($rows.Count -eq 2) "after 1st Stop expected 2 lines, got $($rows.Count)"
+    Assert (($rows[0].gate -eq "dad-guard-stop") -and ($rows[0].decision -eq "allow") -and ($rows[0].reason -eq "armed") -and ($rows[0].session -eq "t92b-sess")) "line 1 not armed allow"
+    Assert (($rows[1].gate -eq "dad-guard-stop") -and ($rows[1].decision -eq "block")) "line 2 not block"
+    # the block reason embeds double quotes (close-unit command) and newlines - it must have logged anyway
+    Assert ($rows[1].reason.Length -gt 10) "block reason empty"
+    $c2 = Invoke-HookScript $dg $json
+    Assert ($c2 -eq 2) "second Stop exit $c2"
+    $rows = Get-GateLines $fx
+    Assert ($rows.Count -eq 3) "after 2nd Stop expected 3 lines (one more block only), got $($rows.Count)"
+    Assert (@($rows | Where-Object { $_.reason -eq "armed" }).Count -eq 1) "a second armed line was written"
+    Assert ($rows[2].decision -eq "block") "third line not a block"
+    # stop_hook_active retry: exits 0, logs nothing
+    $c3 = Invoke-HookScript $dg ('{"session_id":"t92b-sess","cwd":"' + $esc + '","stop_hook_active":true}')
+    Assert ($c3 -eq 0) "stop_hook_active retry exit $c3"
+    Assert ((Get-GateLines $fx).Count -eq 3) "retry pass wrote a line"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case "T9.2 (b): dad-guard -Check and -Ack write nothing; empty cwd -> no log in fixture; unwritable grades -> exit still 2" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $fx = New-GuardFixture
+  try {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Check -ProjectDir $fx 2>$null | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "-Check on dirty fixture exit $LASTEXITCODE (expected 1)"
+    Assert (-not (Test-Path (Join-Path $fx "grades"))) "-Check wrote a gate log"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Ack -ProjectDir $fx -Reason "t92 test" 2>$null | Out-Null
+    Assert (-not (Test-Path (Join-Path $fx "grades\gates-log.jsonl"))) "-Ack wrote a gate log"
+    Remove-Item (Join-Path $fx ".dad-verified") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $fx ".claude") -Recurse -Force -ErrorAction SilentlyContinue
+
+    # empty cwd: falls back to the process cwd - only assert nothing lands in the fixture
+    $empty = New-GatesSandbox; Push-Location $empty   # empty cwd falls back to the PROCESS cwd - keep that out of the kit's own repo
+    try { $c = Invoke-HookScript $dg '{"session_id":"t92b-empty","cwd":"","stop_hook_active":false}' } finally { Pop-Location; Remove-Item $empty -Recurse -Force -ErrorAction SilentlyContinue }
+    Assert (($c -eq 0) -or ($c -eq 2)) "empty-cwd exit $c"
+    Assert (-not (Test-Path (Join-Path $fx "grades\gates-log.jsonl"))) "empty-cwd payload wrote into the fixture"
+
+    # unwritable grades: a FILE named grades
+    [System.IO.File]::WriteAllText((Join-Path $fx "grades"), "x")
+    $c = Invoke-HookScript $dg ('{"session_id":"t92b-unw","cwd":"' + $fx.Replace('\','\\') + '","stop_hook_active":false}')
+    Assert ($c -eq 2) "unwritable grades changed the block exit to $c"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# ---------------------------------------------------------------- session pointer (T10.5, C4b)
+Write-Host "-- session pointer (dad-guard Stop hook) --" -ForegroundColor Cyan
+
+function New-StopPayload([string]$cwd, [string]$sid, [string]$tp, [bool]$active = $false) {
+  $o = [ordered]@{}
+  if ($sid) { $o.session_id = $sid }
+  if ($tp) { $o.transcript_path = $tp }
+  $o.cwd = $cwd
+  $o.stop_hook_active = $active
+  return ($o | ConvertTo-Json -Compress)
+}
+
+Test-Case "T10.5 (C4b): Stop writes .dad-session.json (3 keys in order, no BOM); same session keeps first_seen_utc; new session replaces; exit code unchanged; no leftovers" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $fx = New-GuardFixture
+  try {
+    $tp = "C:\Users\me\.claude\projects\D--x\abc123.jsonl"
+    $ptr = Join-Path $fx ".claude\.dad-session.json"
+    $c1 = Invoke-HookScript $dg (New-StopPayload $fx "t105-a" $tp)
+    Assert ($c1 -eq 2) "dirty fixture Stop exit $c1 (must stay 2)"
+    Assert (Test-Path -LiteralPath $ptr) "pointer not written"
+    $b = [System.IO.File]::ReadAllBytes($ptr)
+    Assert (-not (($b.Length -ge 3) -and ($b[0] -eq 0xEF) -and ($b[1] -eq 0xBB) -and ($b[2] -eq 0xBF))) "pointer has a BOM"
+    $raw1 = [System.IO.File]::ReadAllText($ptr)
+    $o = $raw1 | ConvertFrom-Json
+    $names = @($o.PSObject.Properties | ForEach-Object { $_.Name })
+    Assert (($names -join ",") -eq "session_id,transcript_path,first_seen_utc") "keys/order: $($names -join ',')"
+    Assert ($o.session_id -eq "t105-a") "session_id $($o.session_id)"
+    Assert ($o.transcript_path -eq $tp) "transcript_path $($o.transcript_path)"
+    Assert ($o.first_seen_utc -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') "first_seen_utc format: $($o.first_seen_utc)"
+    Start-Sleep -Milliseconds 120
+    $c2 = Invoke-HookScript $dg (New-StopPayload $fx "t105-a" $tp)
+    Assert ($c2 -eq 2) "second Stop exit $c2"
+    Assert ([System.IO.File]::ReadAllText($ptr) -ceq $raw1) "same-session second Stop changed the pointer"
+    Start-Sleep -Milliseconds 120
+    $tp2 = "C:\other\def456.jsonl"
+    $c3 = Invoke-HookScript $dg (New-StopPayload $fx "t105-b" $tp2)
+    Assert ($c3 -eq 2) "new-session Stop exit $c3"
+    $o2 = [System.IO.File]::ReadAllText($ptr) | ConvertFrom-Json
+    Assert (($o2.session_id -eq "t105-b") -and ($o2.transcript_path -eq $tp2)) "different session did not replace the pointer"
+    Assert (($o2.first_seen_utc -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') -and ($o2.first_seen_utc -ne $o.first_seen_utc)) "new session first_seen_utc not fresh"
+    $left = @(Get-ChildItem -LiteralPath (Join-Path $fx ".claude") -Force | Where-Object { $_.Name -ne ".dad-session.json" -and $_.Name -match '\.(tmp|bak)$' })
+    Assert ($left.Count -eq 0) "leftover tmp/bak: $($left.Name -join ',')"
+    # clean fixture still exits 0
+    Remove-Item (Join-Path $fx "a.cs") -Force
+    $c4 = Invoke-HookScript $dg (New-StopPayload $fx "t105-b" $tp2)
+    Assert ($c4 -eq 0) "clean fixture Stop exit $c4 (must stay 0)"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case "T10.5 (C4b): no pointer for -Check, -Ack, missing transcript_path, missing session_id, stop_hook_active retry" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $fx = New-GuardFixture
+  try {
+    $ptr = Join-Path $fx ".claude\.dad-session.json"
+    $tp = "C:\t\x.jsonl"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Check -ProjectDir $fx 2>$null | Out-Null
+    Assert (-not (Test-Path -LiteralPath $ptr)) "-Check wrote pointer"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Ack -ProjectDir $fx -Reason "t105" 2>$null | Out-Null
+    Assert (-not (Test-Path -LiteralPath $ptr)) "-Ack wrote pointer"
+    Remove-Item (Join-Path $fx ".dad-verified") -Force -ErrorAction SilentlyContinue
+    [void](Invoke-HookScript $dg (New-StopPayload $fx "t105-nt" ""))
+    Assert (-not (Test-Path -LiteralPath $ptr)) "missing transcript_path wrote pointer"
+    [void](Invoke-HookScript $dg (New-StopPayload $fx "" $tp))
+    Assert (-not (Test-Path -LiteralPath $ptr)) "missing session_id wrote pointer"
+    $c = Invoke-HookScript $dg (New-StopPayload $fx "t105-r" $tp $true)
+    Assert ($c -eq 0) "retry pass exit $c"
+    Assert (-not (Test-Path -LiteralPath $ptr)) "stop_hook_active retry wrote pointer"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case "T10.5 (C4b): non-DAD dir gets no .claude; .claude occupied by a FILE -> exit code unchanged; .claude/ is gitignored by new-project and upgrade-project" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $nd = New-GatesSandbox
+  try {
+    & git -C $nd init -q 2>$null | Out-Null
+    [void](Invoke-HookScript $dg (New-StopPayload $nd "t105-nd" "C:\t\x.jsonl"))
+    Assert (-not (Test-Path -LiteralPath (Join-Path $nd ".claude"))) "non-DAD dir got a .claude"
+  } finally { Remove-Item $nd -Recurse -Force -ErrorAction SilentlyContinue }
+  $fx = New-GuardFixture
+  try {
+    [System.IO.File]::WriteAllText((Join-Path $fx ".claude"), "x")
+    $c = Invoke-HookScript $dg (New-StopPayload $fx "t105-f" "C:\t\x.jsonl")
+    Assert ($c -eq 2) ".claude-as-file changed the block exit to $c"
+    Assert ((Get-Item -LiteralPath (Join-Path $fx ".claude")).PSIsContainer -eq $false) ".claude file was clobbered"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+  $np = Get-Content -Raw (Join-Path $kit "new-project.ps1")
+  Assert ($np -match '"\.claude/"') "new-project.ps1 .gitignore template lacks .claude/"
+  $up = Get-Content -Raw (Join-Path $kit "upgrade-project.ps1")
+  Assert ($up -match '\$noiseIgnores\s*=\s*@\("\.claude/"\)') "upgrade-project.ps1 does not add .claude/"
+}
+
+# ---------------------------------------------------------------- gates log genesis (T9.6, C3d)
+Write-Host "-- gates log genesis --" -ForegroundColor Cyan
+
+function New-PriorLog([string]$sb, [string]$name, [int]$n, [string]$d1, [string]$d2) {
+  # A predecessor log with $n lines whose first ts is $d1 and last ts is $d2.
+  $g = Join-Path $sb "grades"; New-Item -ItemType Directory -Force $g | Out-Null
+  $sbld = New-Object System.Text.StringBuilder
+  for ($i = 0; $i -lt $n; $i++) {
+    $d = if ($i -eq ($n - 1)) { $d2 } else { $d1 }
+    [void]$sbld.Append('{"v":1,"ts":"' + $d + 'T10:00:00.000Z","gate":"loop-guard","decision":"block","tool":"Bash","reason":"r","session":"s"}' + "`n")
+  }
+  [System.IO.File]::WriteAllText((Join-Path $g $name), $sbld.ToString(), (New-Object System.Text.UTF8Encoding($false)))
+}
+function Add-GateLine([string]$sb, [string]$reason = "x") {
+  return (Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", "`"$reason`"", "-Session", "s1"))
+}
+
+Test-Case "T9.6 (C3d worked example 1): predecessor of 12,481 lines -> genesis names it exactly; caller's line is line 2" {
+  $sb = New-GatesSandbox
+  try {
+    New-PriorLog $sb "gates-log-2026-04-02.jsonl" 12481 "2026-04-02" "2026-09-29"
+    $r = Add-GateLine $sb "first"
+    Assert ($r.Exit -eq 0) "append exit $($r.Exit)"
+    $lines = @([System.IO.File]::ReadAllLines((Join-Path $sb "grades\gates-log.jsonl")))
+    Assert ($lines.Count -eq 2) "expected genesis + 1 caller line, got $($lines.Count)"
+    $o = $lines[0] | ConvertFrom-Json
+    $want = "log created; prior history in grades/gates-log-2026-04-02.jsonl (12,481 lines, 2026-04-02..2026-09-29)"
+    Assert ($o.reason -ceq $want) "genesis reason was [$($o.reason)], wanted [$want]"
+    Assert (($lines[1] | ConvertFrom-Json).reason -eq "first") "caller's line is not line 2: $($lines[1])"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.6 (C3d): brand-new sandbox -> 'no prior history' genesis, normal 7-key line, written once, -Query parseable from line 1" {
+  $sb = New-GatesSandbox
+  try {
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    $r = Add-GateLine $sb "one"
+    Assert ($r.Exit -eq 0) "append exit $($r.Exit)"
+    $lines = @([System.IO.File]::ReadAllLines($log))
+    Assert ($lines.Count -eq 2) "expected 2 lines, got $($lines.Count)"
+    $o = $lines[0] | ConvertFrom-Json
+    Assert ($o.reason -ceq "log created; no prior history found - this log begins here") "genesis reason: [$($o.reason)]"
+    $keys = @($o.PSObject.Properties.Name) -join ","
+    Assert ($keys -eq "v,ts,gate,decision,tool,reason,session") "genesis keys/order: $keys"
+    Assert ($o.v -eq 1) "genesis v != 1"
+    Assert ($o.ts -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') "genesis ts: $($o.ts)"
+    Assert (($o.gate -eq "gates-log") -and ($o.decision -eq "allow") -and ($o.tool -eq "") -and ($o.session -eq "")) "genesis fields: $($lines[0])"
+    $r = Add-GateLine $sb "two"
+    $lines = @([System.IO.File]::ReadAllLines($log))
+    Assert ($lines.Count -eq 3) "second append: expected 3 lines, got $($lines.Count)"
+    Assert (@($lines | Where-Object { Test-GenesisLine $_ }).Count -eq 1) "a second genesis was written"
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query")
+    $ql = @($q.Out -split "`r?`n" | Where-Object { $_ })
+    Assert ($ql.Count -eq 3) "-Query returned $($ql.Count) lines, expected 3"
+    Assert ($ql[0] -eq $lines[0]) "-Query line 1 is not the verbatim genesis"
+    foreach ($l in $ql) { $null = $l | ConvertFrom-Json }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.6 (C3d): several predecessors -> the newest by name date is named" {
+  $sb = New-GatesSandbox
+  try {
+    New-PriorLog $sb "gates-log-2026-09-01.jsonl" 3 "2026-09-01" "2026-09-02"
+    New-PriorLog $sb "gates-log-2026-04-02.jsonl" 5 "2026-04-02" "2026-05-01"
+    New-PriorLog $sb "gates-log-2026-07-15.jsonl" 4 "2026-07-15" "2026-08-01"
+    # make the OLDEST-by-name file the newest by mtime: the name must win
+    (Get-Item (Join-Path $sb "grades\gates-log-2026-04-02.jsonl")).LastWriteTimeUtc = [datetime]::UtcNow.AddDays(1)
+    $null = Add-GateLine $sb
+    $o = @([System.IO.File]::ReadAllLines((Join-Path $sb "grades\gates-log.jsonl")))[0] | ConvertFrom-Json
+    Assert ($o.reason -ceq "log created; prior history in grades/gates-log-2026-09-01.jsonl (3 lines, 2026-09-01..2026-09-02)") "newest by name not chosen: [$($o.reason)]"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.6 (C3d): a live log that already exists (no genesis) gets none inserted" {
+  $sb = New-GatesSandbox
+  try {
+    $g = Join-Path $sb "grades"; New-Item -ItemType Directory -Force $g | Out-Null
+    $pre = '{"v":1,"ts":"2026-01-01T00:00:00.000Z","gate":"ratchet","decision":"allow","tool":"","reason":"old","session":"s"}'
+    [System.IO.File]::WriteAllText((Join-Path $g "gates-log.jsonl"), $pre + "`n", (New-Object System.Text.UTF8Encoding($false)))
+    New-PriorLog $sb "gates-log-2026-04-02.jsonl" 2 "2026-04-02" "2026-04-03"
+    $null = Add-GateLine $sb "new"
+    $lines = @([System.IO.File]::ReadAllLines((Join-Path $g "gates-log.jsonl")))
+    Assert ($lines.Count -eq 2) "expected 2 lines, got $($lines.Count)"
+    Assert ($lines[0] -ceq $pre) "line 1 was altered"
+    Assert (@($lines | Where-Object { Test-GenesisLine $_ }).Count -eq 0) "a genesis was inserted into an existing log"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.6 (C3d): 2-process burst x5 -> exactly one genesis, and it is line 1" {
+  $script = Join-Path $kit "dad-gates-log.ps1"
+  for ($rep = 1; $rep -le 5; $rep++) {
+    $sb = New-GatesSandbox
+    try {
+      $n = 3
+      $procs = @()
+      foreach ($w in @("wa", "wb")) {
+        $cmd = "for (`$i = 0; `$i -lt $n; `$i++) { & '$script' -ProjectDir '$sb' -Gate $w -Decision block -Tool Bash -Reason ('r' + `$i) -Session s }"
+        $procs += Start-Process powershell -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ('"' + $cmd + '"')) -PassThru -WindowStyle Hidden
+      }
+      foreach ($p in $procs) { $p.WaitForExit() }
+      $all = @([System.IO.File]::ReadAllLines((Join-Path $sb "grades\gates-log.jsonl")) | Where-Object { $_ })
+      Assert ($all.Count -eq (2 * $n + 1)) "burst $rep : expected $(2 * $n + 1) lines, got $($all.Count)"
+      Assert (@($all | Where-Object { Test-GenesisLine $_ }).Count -eq 1) "burst $rep : not exactly one genesis"
+      Assert (Test-GenesisLine $all[0]) "burst $rep : genesis is not line 1"
+    } finally { Remove-Sandbox $sb }
+  }
+}
+
+Test-Case "T9.6 (C3a-i): creating the gates log leaves ratchet's counts (incl. gradeBytes) unchanged" {
+  $sb = New-GatesSandbox
+  try {
+    New-Item -ItemType Directory -Force (Join-Path $sb "grades") | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $sb "grades\S1_GRADE.md"), "grade card`n")
+    $rt = Join-Path $kit "ratchet.ps1"
+    $before = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $rt -ProjectDir $sb -Json 2>$null) -join "`n" | ConvertFrom-Json).current
+    $null = Add-GateLine $sb
+    Assert (Test-Path (Join-Path $sb "grades\gates-log.jsonl")) "log not created"
+    $after = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $rt -ProjectDir $sb -Json 2>$null) -join "`n" | ConvertFrom-Json).current
+    Assert ($before.gradeBytes -gt 0) "fixture grade card not counted"
+    foreach ($k in @("tests","requirements","contracts","stories","tasks","sources","gradeBytes","hasBuildCommand","hasTestCommand")) {
+      Assert ($before.$k -eq $after.$k) "ratchet $k changed after log creation: $($before.$k) -> $($after.$k)"
+    }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.2 (characterization): dad-loopguard Unescape-Json replaces \t before \\ (known pre-existing bug; flips when fixed)" {
+  $src = Get-Content (Join-Path $kit "dad-loopguard.ps1") -Raw
+  $iT = $src.IndexOf(".Replace('\t'")
+  $iBs = $src.IndexOf(".Replace('\\'")
+  Assert (($iT -ge 0) -and ($iBs -ge 0)) "could not locate the Unescape-Json replacement chain"
+  Assert ($iT -lt $iBs) "Unescape-Json now handles \\ before \t - the known bug looks FIXED; update this characterization"
+}
+
+# ---------------------------------------------------------------- T9.3: ratchet + close-unit gate-log wiring
+function New-CuGateFixture([string]$sb, [string]$buildCmd = "exit 0") {
+  $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\tests" | Out-Null
+  "# Task map`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T1.2 - b   (Story S1)`n- **Goal:** y`n`n### [ ] T1.3 - c   (Story S1)`n- **Goal:** z" |
+    Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+  "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+  "# Project: t`n`n## Build / test`n- Build: ``$buildCmd```n- Test:  ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+  $tests = (1..10 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+  "public class T {`r`n$tests`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+  Push-Location $p
+  $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  git init -q; git config core.autocrlf false
+  git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+  $ErrorActionPreference = $prev; Pop-Location
+  return $p
+}
+function Get-GL([string]$p, [string]$gate = "") {
+  $l = Join-Path $p "grades\gates-log.jsonl"
+  if (-not (Test-Path -LiteralPath $l -PathType Leaf)) { return @() }
+  $rows = @([System.IO.File]::ReadAllLines($l) | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+  if ($gate) { $rows = @($rows | Where-Object { $_.gate -eq $gate }) }
+  return $rows
+}
+function Invoke-Cu([string]$script, [string]$p, [string[]]$more) {
+  $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $p -NoReindex @more 2>&1 | Out-String)
+  return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
+}
+
+Test-Case "T9.3 (a): ratchet logs one block line on a shrink and one allow line (with counts) on a clean run" {
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    $r = Join-Path $kit "ratchet.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Update | Out-Null
+    $n0 = @(Get-GL $p "ratchet").Count
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "clean ratchet exit $LASTEXITCODE"
+    $l = @(Get-GL $p "ratchet")
+    Assert ($l.Count -eq $n0 + 1) "clean run added $($l.Count - $n0) ratchet lines, expected 1"
+    Assert ($l[-1].decision -eq "allow") "clean run decision '$($l[-1].decision)'"
+    Assert ($l[-1].reason -match '^no shrink \(tests \d+, stories \d+, tasks \d+\)$') "allow reason '$($l[-1].reason)'"
+    Assert ($l[-1].reason -match 'tests 10, stories 1, tasks 3') "allow reason counts wrong: '$($l[-1].reason)'"
+    # -Json mode also logs exactly once
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Json | Out-Null
+    Assert (@(Get-GL $p "ratchet").Count -eq $n0 + 2) "-Json clean run did not log exactly once"
+
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $n1 = @(Get-GL $p "ratchet").Count
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "shrink exit $LASTEXITCODE"
+    $l = @(Get-GL $p "ratchet")
+    Assert ($l.Count -eq $n1 + 1) "shrink added $($l.Count - $n1) lines, expected 1"
+    Assert ($l[-1].decision -eq "block") "shrink decision '$($l[-1].decision)'"
+    Assert ($l[-1].reason -match 'tests: 10->1') "block reason '$($l[-1].reason)'"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.3 (b): close-unit refusals (failing build, unknown id, quoted/newline id) log block; exit codes stay 1" {
+  if (-not $haveGit) { return }
+  $cu = Join-Path $kit "close-unit.ps1"
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb "exit 1"
+    $x = Invoke-Cu $cu $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 1) "failing build exit $($x.Code)"
+    $l = @(Get-GL $p "close-unit-refusal")
+    Assert ($l.Count -eq 1) "failing build wrote $($l.Count) close-unit-refusal lines"
+    Assert ($l[0].decision -eq "block" -and $l[0].reason -match 'T1\.1' -and $l[0].reason -match 'build failed') "build-fail line wrong: $($l[0] | ConvertTo-Json -Compress)"
+    Assert ($l[0].tool -eq "" -and $l[0].session -eq "") "tool/session not empty"
+  } finally { Remove-Sandbox $sb }
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    $x = Invoke-Cu $cu $p @("-Id","T9.9")
+    Assert ($x.Code -eq 1) "unknown id exit $($x.Code)"
+    $l = @(Get-GL $p "close-unit-refusal")
+    Assert (($l.Count -eq 1) -and ($l[0].decision -eq "block") -and ($l[0].reason -match 'T9\.9 not found')) "unknown-id line wrong (count $($l.Count))"
+    # (i) confirm: -SkipVerify + unknown id is unlogged
+    $x = Invoke-Cu $cu $p @("-Id","T9.8","-SkipVerify")
+    Assert ($x.Code -eq 1) "skipverify unknown id exit $($x.Code)"
+    Assert (@(Get-GL $p "close-unit-refusal").Count -eq 1) "(i) -SkipVerify + unknown id was logged"
+    # quotes + newline in the refusal reason: still logged, still exit 1, valid JSON line
+    $bad = "T`"7`"`nX"
+    $x = Invoke-Cu $cu $p @("-Id",$bad)
+    Assert ($x.Code -eq 1) "quoted id exit $($x.Code)"
+    $l = @(Get-GL $p "close-unit-refusal")
+    Assert ($l.Count -eq 2) "quoted/newline refusal was not logged (count $($l.Count))"
+    Assert ($l[-1].decision -eq "block" -and $l[-1].reason -match 'not found') "quoted line reason '$($l[-1].reason)'"
+    Assert ($l[-1].reason -notmatch "[\r\n]") "reason still contains a newline"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.3 (b): clean close logs allow INTO its own commit; ratchet logs once per close; -SkipVerify logs nothing; -AcceptShrink characterized" {
+  if (-not $haveGit) { return }
+  $cu = Join-Path $kit "close-unit.ps1"
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    $x = Invoke-Cu $cu $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 0) "clean close exit $($x.Code):`n$($x.Out)"
+    $l = @(Get-GL $p "close-unit-refusal")
+    Assert (($l.Count -eq 1) -and ($l[0].decision -eq "allow") -and ($l[0].reason -eq "clean close: T1.1")) "allow line wrong (count $($l.Count))"
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $tree = (& git -C $p ls-tree -r --name-only HEAD 2>&1 | Out-String)
+    $show = (& git -C $p show --stat --format=%s HEAD 2>&1 | Out-String)
+    $status = (& git -C $p status --porcelain 2>&1 | Out-String)
+    $ErrorActionPreference = $prev
+    Assert ($tree -match 'grades/gates-log\.jsonl') "gates-log.jsonl not in HEAD tree"
+    Assert ($show -match 'gates-log\.jsonl') "gates-log.jsonl not in the unit's own commit stat:`n$show"
+    Assert ($status -notmatch 'gates-log') "gates-log.jsonl left dirty after the close:`n$status"
+    # characterization: with NO baseline yet ratchet measures nothing and logs nothing on the first close
+    Assert (@(Get-GL $p "ratchet").Count -eq 0) "first close (no baseline) now logs a ratchet line - update this characterization"
+    $x = Invoke-Cu $cu $p @("-Id","T1.2","-Title","b")
+    Assert ($x.Code -eq 0) "second close exit $($x.Code)"
+    $rat = @(Get-GL $p "ratchet")
+    Assert ($rat.Count -eq 1) "ratchet logged $($rat.Count) times for one baselined close (expected exactly 1)"
+    Assert ($rat[0].decision -eq "allow") "ratchet line via close-unit decision $($rat[0].decision)"
+
+    # -SkipVerify: no log lines at all (allow path included)
+    $before = @(Get-GL $p).Count
+    $x = Invoke-Cu $cu $p @("-Id","T1.3","-Title","c","-SkipVerify")
+    Assert ($x.Code -eq 0) "skipverify close exit $($x.Code):`n$($x.Out)"
+    Assert (@(Get-GL $p).Count -eq $before) "-SkipVerify wrote log lines ($before -> $(@(Get-GL $p).Count))"
+  } finally { Remove-Sandbox $sb }
+
+  # (ii) -AcceptShrink characterization: ratchet does not know the flag, so a shrink block line is still written
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    $x = Invoke-Cu $cu $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 0) "setup close exit $($x.Code)"
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $x = Invoke-Cu $cu $p @("-Id","T1.2","-Title","b","-AcceptShrink")
+    Assert ($x.Code -eq 0) "-AcceptShrink close exit $($x.Code)"
+    $rb = @(Get-GL $p "ratchet" | Where-Object { $_.decision -eq "block" })
+    Assert ($rb.Count -eq 1) "(ii) characterization changed: ratchet block lines under -AcceptShrink = $($rb.Count) (was 1)"
+    $ca = @(Get-GL $p "close-unit-refusal" | Where-Object { $_.reason -eq "clean close: T1.2" })
+    Assert ($ca.Count -eq 1) "-AcceptShrink close did not log its clean-close allow"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.3: gate-log failure never changes ratchet/close-unit exit codes (helper missing; grades is a file)" {
+  if (-not $haveGit) { return }
+  # helper missing: run a COPY of the kit scripts without dad-gates-log.ps1
+  $sb = New-Sandbox
+  try {
+    $k2 = Join-Path $sb "kit"; New-Item -ItemType Directory -Force $k2 | Out-Null
+    Get-ChildItem $kit -File -Filter *.ps1 | Where-Object { $_.Name -ne "dad-gates-log.ps1" } | Copy-Item -Destination $k2
+    $p = New-CuGateFixture $sb
+    $x = Invoke-Cu (Join-Path $k2 "close-unit.ps1") $p @("-Id","T9.9")
+    Assert ($x.Code -eq 1) "helper missing: refusal exit $($x.Code)"
+    $x = Invoke-Cu (Join-Path $k2 "close-unit.ps1") $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 0) "helper missing: clean close exit $($x.Code):`n$($x.Out)"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $k2 "ratchet.ps1") -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "helper missing: clean ratchet exit $LASTEXITCODE"
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $k2 "ratchet.ps1") -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "helper missing: shrink ratchet exit $LASTEXITCODE"
+    Assert (@(Get-GL $p).Count -eq 0) "lines appeared with no helper"
+  } finally { Remove-Sandbox $sb }
+  # grades is a FILE: unwritable log path
+  $sb = New-Sandbox
+  try {
+    $p = New-CuGateFixture $sb
+    [System.IO.File]::WriteAllText((Join-Path $p "grades"), "x")
+    $x = Invoke-Cu (Join-Path $kit "close-unit.ps1") $p @("-Id","T9.9")
+    Assert ($x.Code -eq 1) "grades-file: refusal exit $($x.Code)"
+    $x = Invoke-Cu (Join-Path $kit "close-unit.ps1") $p @("-Id","T1.1","-Title","a")
+    Assert ($x.Code -eq 0) "grades-file: clean close exit $($x.Code):`n$($x.Out)"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "ratchet.ps1") -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "grades-file: clean ratchet exit $LASTEXITCODE"
+    "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "ratchet.ps1") -ProjectDir $p | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "grades-file: shrink ratchet exit $LASTEXITCODE"
+  } finally { Remove-Sandbox $sb }
+}
+
+# ---------------------------------------------------------------- C3a adjacent globs stay narrow (T9.7)
+function Get-RatchetGradeFilterProblem([string]$text) {
+  # Finds the grade-card byte total (Get-ChildItem ... -Filter X ... $gradeBytes) and requires X = *_GRADE.md.
+  $m = [regex]::Matches($text, '(?m)^[^#\r\n]*\$gradeBytes\s*=.*$')
+  if ($m.Count -eq 0) { return "no gradeBytes assignment found in ratchet.ps1" }
+  foreach ($x in $m) {
+    if ($x.Value -match 'Get-ChildItem') {
+      if ($x.Value -match '-Filter\s+\*_GRADE\.md(\s|\))') { return $null }
+      return "ratchet.ps1 gradeBytes no longer uses the narrow -Filter *_GRADE.md: widening it to all of grades/ would put gates-log.jsonl in the byte total, so a deliberate manual roll (C3d) would read as a SHRINK and REFUSE the next close (R28)"
+    }
+  }
+  return "no Get-ChildItem grade-card total found for gradeBytes in ratchet.ps1"
+}
+function Get-GuardCodeExtProblem([string]$text) {
+  $lines = $text -split "\r?\n"
+  $start = -1
+  for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\s*\$codeExt\s*=\s*@\(') { $start = $i; break } }
+  if ($start -lt 0) { return "no `$codeExt list found in dad-guard.ps1" }
+  $exts = New-Object System.Collections.Generic.List[string]
+  for ($i = $start; $i -lt $lines.Count; $i++) {
+    $code = ($lines[$i] -replace '^\s*#.*$', '') -replace '\s#.*$', ''
+    foreach ($q in [regex]::Matches($code, '"(\.[^"]*)"')) { $exts.Add($q.Groups[1].Value.ToLowerInvariant()) }
+    if ($code -match '\)\s*$') { break }
+  }
+  if ($exts -notcontains ".json") { return "dad-guard.ps1 `$codeExt no longer lists .json (list parse sanity check failed)" }
+  if ($exts -contains ".jsonl") { return "dad-guard.ps1 `$codeExt now lists .jsonl: that creates a feedback loop in which the Stop hook blocks on the gate-log line it just wrote, on the very turn it reports (C3a/R22)" }
+  if ($text -notmatch '\$codeExt\s+-(not)?contains\s+\[System\.IO\.Path\]::GetExtension\(') { return "dad-guard.ps1 no longer matches `$codeExt on GetExtension (exact extension match is what keeps .jsonl out)" }
+  return $null
+}
+Write-Host "-- C3a adjacent globs (T9.7) --"
+Test-Case "C3a: ratchet.ps1 grade-card total keeps narrow -Filter *_GRADE.md (gates-log.jsonl excluded)" {
+  $t = [System.IO.File]::ReadAllText((Join-Path $kit "ratchet.ps1"))
+  $r = Get-RatchetGradeFilterProblem $t
+  Assert ($null -eq $r) $r
+  # prove the check FAILS when widened (in-memory copy; real script never touched)
+  $wide = $t -replace '-Filter\s+\*_GRADE\.md', '-Filter *.md'
+  Assert ($wide -ne $t) "widen mutation did not change the text (check is not anchored to the real filter)"
+  Assert ($null -ne (Get-RatchetGradeFilterProblem $wide)) "check did NOT fail when the filter was widened to *.md"
+}
+Test-Case "C3a: dad-guard.ps1 keeps .jsonl out of `$codeExt (no Stop-hook feedback loop)" {
+  $t = [System.IO.File]::ReadAllText((Join-Path $kit "dad-guard.ps1"))
+  $r = Get-GuardCodeExtProblem $t
+  Assert ($null -eq $r) $r
+  $wide = $t -replace '(\$codeExt\s*=\s*@\()', '$1".jsonl",'
+  Assert ($wide -ne $t) "widen mutation did not change the text"
+  Assert ($null -ne (Get-GuardCodeExtProblem $wide)) "check did NOT fail when .jsonl was added to `$codeExt"
+}
+
+# ---------------------------------------------------------------- run summary (T10.1, C4)
+Write-Host "-- run summary (dad-run-summary) --" -ForegroundColor Cyan
+
+function Invoke-RunSummary([string[]]$ArgList) {
+  $so = [System.IO.Path]::GetTempFileName(); $se = [System.IO.Path]::GetTempFileName()
+  try {
+    $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + (Join-Path $kit "dad-run-summary.ps1") + '"')) + $ArgList
+    $pr = Start-Process powershell -ArgumentList $a -Wait -PassThru -NoNewWindow -RedirectStandardOutput $so -RedirectStandardError $se
+    return [pscustomobject]@{ Exit = $pr.ExitCode; Out = [System.IO.File]::ReadAllText($so); Err = [System.IO.File]::ReadAllText($se) }
+  } finally { Remove-Item $so, $se -Force -ErrorAction SilentlyContinue }
+}
+function Get-RsLine([string]$out, [string]$label) {
+  return @($out -split "`r?`n" | Where-Object { $_ -match ('^\[run-summary\] ' + [regex]::Escape($label) + ':') })
+}
+function Invoke-RsGit([string]$dir, [string[]]$gitArgs) {
+  $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try { $o = @(& git -C $dir -c core.autocrlf=false -c user.name=t -c user.email=t@example.com @gitArgs 2>&1) } finally { $ErrorActionPreference = $old }
+  return $o
+}
+function Write-RsFile([string]$dir, [string]$rel, [string]$text) {
+  $full = Join-Path $dir $rel
+  New-Item -ItemType Directory -Force (Split-Path $full -Parent) | Out-Null
+  [System.IO.File]::WriteAllText($full, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+function Add-RsGateLine([string]$dir, [string]$gate, [string]$decision, [string]$reason) {
+  $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + (Join-Path $kit "dad-gates-log.ps1") + '"'),
+         "-ProjectDir", ('"' + $dir + '"'), "-Gate", $gate, "-Decision", $decision, "-Tool", '""', "-Reason", ('"' + $reason + '"'), "-Session", "rs1")
+  $pr = Start-Process powershell -ArgumentList $a -Wait -PassThru -NoNewWindow
+  if ($pr.ExitCode -ne 0) { throw "dad-gates-log append exit $($pr.ExitCode)" }
+}
+# Fixture: baseline commit dated 2h ago; 11 distinct files committed after it; 3 uncommitted (2 tracked-modified,
+# 1 untracked); docs\DESIGN.md is LOCKED with an empty Contracts section and no Security review header, so
+# doc-stats -Findings reports 2 [design] findings. grades/ and .claude/ are excluded via .git/info/exclude
+# (unless -TrackLog: then the genesis-only gate log is COMMITTED in the baseline and only .claude is excluded).
+# Gate log: genesis + 1 block + 2 armed + 1 non-armed allow ("clean close: T1.1").
+function New-RsFixture([switch]$TrackLog) {
+  $d = New-Sandbox
+  $utc2h = (Get-Date).ToUniversalTime().AddHours(-2).ToString("yyyy-MM-ddTHH:mm:ss") + "Z"
+  Invoke-RsGit $d @("init", "-q") | Out-Null
+  $ex = if ($TrackLog) { ".claude/`n" } else { "grades/`n.claude/`n" }
+  [System.IO.File]::WriteAllText((Join-Path $d ".git\info\exclude"), $ex, (New-Object System.Text.UTF8Encoding($false)))
+  Write-RsFile $d "base.txt" "base`n"
+  Write-RsFile $d "tracked1.txt" "one`n"
+  Write-RsFile $d "tracked2.txt" "two`n"
+  Write-RsFile $d "docs\DESIGN.md" "# Design`n`nStatus: LOCKED`n`n## Contracts`n`n(none pinned)`n"
+  if ($TrackLog) { Add-RsGateLine $d "gates-log" "allow" "seed genesis" }
+  $env:GIT_AUTHOR_DATE = $utc2h; $env:GIT_COMMITTER_DATE = $utc2h
+  try {
+    Invoke-RsGit $d @("add", "-A") | Out-Null
+    Invoke-RsGit $d @("commit", "-q", "-m", "baseline") | Out-Null
+  } finally { Remove-Item Env:\GIT_AUTHOR_DATE, Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue }
+  $base = [string](@(Invoke-RsGit $d @("rev-parse", "HEAD"))[0])
+  1..11 | ForEach-Object { Write-RsFile $d ("c{0:00}.txt" -f $_) "c$_`n" }
+  Invoke-RsGit $d @("add", "-A") | Out-Null
+  Invoke-RsGit $d @("commit", "-q", "-m", "eleven files") | Out-Null
+  Write-RsFile $d "tracked1.txt" "one modified`n"
+  Write-RsFile $d "tracked2.txt" "two modified`n"
+  Write-RsFile $d "untracked-new.txt" "new`n"
+  Add-RsGateLine $d "loop-guard" "block" "blocked once"
+  Add-RsGateLine $d "dad-guard" "allow" "armed"
+  Add-RsGateLine $d "dad-guard" "allow" "armed"
+  Add-RsGateLine $d "close-unit" "allow" "clean close: T1.1"
+  return [pscustomobject]@{ Dir = $d; Base = $base; Start1h = ((Get-Date).ToUniversalTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss") + "Z") }
+}
+function Write-RsSession([string]$dir, [string]$transcript) {
+  $o = [ordered]@{ session_id = "s1"; first_seen_utc = (Get-Date).ToUniversalTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
+  if ($transcript) { $o["transcript_path"] = $transcript }
+  Write-RsFile $dir ".claude\.dad-session.json" (($o | ConvertTo-Json))
+}
+function Get-RsOverrideArgs($fx) { return @("-ProjectDir", ('"' + $fx.Dir + '"'), "-SinceCommit", $fx.Base, "-StartTime", $fx.Start1h) }
+
+Test-Case "dad-run-summary: acceptance scenario (14 files 11+3, gate 1 block 2 armed, findings, tokens reason, every figure has (source:)" {
+  $fx = New-RsFixture
+  try {
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($r.Exit -eq 0) "exit $($r.Exit); stderr: $($r.Err)"
+    Assert ($r.Out -match 'files touched: 14 \(11 committed, 3 uncommitted\)') "files touched line wrong:`n$($r.Out)"
+    Assert ($r.Out -match 'gate interventions: 1 block, 2 armed') "gate interventions line wrong (genesis or non-armed allow counted?):`n$($r.Out)"
+    Assert (@(Get-RsLine $r.Out "findings").Count -eq 1) "no findings line:`n$($r.Out)"
+    $tk = @(Get-RsLine $r.Out "tokens")
+    Assert ($tk.Count -eq 1) "no tokens line"
+    Assert ($tk[0] -match 'not available \(.{8,}\)') "tokens line does not name a reason: $($tk[0])"
+    $fig = @($r.Out -split "`r?`n" | Where-Object { $_ -match '^\[run-summary\] (wall-clock|files touched|findings|gate interventions): \d' })
+    Assert ($fig.Count -eq 4) "expected 4 numeric figure lines, got $($fig.Count):`n$($r.Out)"
+    foreach ($l in $fig) { Assert ($l -match '\(source:') "numeric figure without (source: -> $l" }
+    Assert ($r.Out -match 'caller-supplied') "override labels do not say caller-supplied"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: findings figure equals a direct count of [tag] lines from doc-stats -Findings (and 2 seeded)" {
+  $fx = New-RsFixture
+  try {
+    $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try { $ds = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $fx.Dir -Findings 2>$null) } finally { $ErrorActionPreference = $old }
+    $direct = @($ds | Where-Object { ([string]$_) -match '^\s*\[[a-z]+\]' }).Count
+    Assert ($direct -ge 2) "fixture did not seed 2 findings (direct count $direct): $($ds -join ' | ')"
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    $fl = @(Get-RsLine $r.Out "findings")
+    Assert ($fl.Count -eq 1 -and $fl[0] -match ('^\[run-summary\] findings: ' + $direct + '\s')) "findings line != direct count $direct : $($fl -join ' / ')"
+    Assert ($fl[0] -match '\(source:') "findings line lacks (source:"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: overrides omitted + .dad-session.json -> same figures, labels say session start, no error" {
+  $fx = New-RsFixture
+  try {
+    $a = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Write-RsSession $fx.Dir ""
+    $b = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'))
+    Assert ($b.Exit -eq 0) "exit $($b.Exit); stderr: $($b.Err)"
+    Assert ([string]::IsNullOrWhiteSpace($b.Err)) "stderr not empty: $($b.Err)"
+    foreach ($lab in @("files touched", "findings", "gate interventions")) {
+      $va = (@(Get-RsLine $a.Out $lab)[0] -replace '\s*\(source:.*$', '')
+      $vb = (@(Get-RsLine $b.Out $lab)[0] -replace '\s*\(source:.*$', '')
+      Assert ($va -eq $vb) "$lab figure differs: override [$va] vs session [$vb]"
+    }
+    foreach ($lab in @("wall-clock", "files touched", "gate interventions")) {
+      $l = @(Get-RsLine $b.Out $lab)[0]
+      Assert ($l -match 'session start') "$lab label does not say session start: $l"
+    }
+    Assert ($b.Out -match 'files touched: 14 \(11 committed, 3 uncommitted\)') "session-derived files touched wrong:`n$($b.Out)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: neither overrides nor session file -> labelled 'not available (no window', exit 0, no crash" {
+  $fx = New-RsFixture
+  try {
+    $r = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'))
+    Assert ($r.Exit -eq 0) "exit $($r.Exit); stderr: $($r.Err)"
+    foreach ($lab in @("wall-clock", "files touched", "gate interventions")) {
+      $l = @(Get-RsLine $r.Out $lab)
+      Assert ($l.Count -eq 1 -and $l[0] -match 'not available \(no window') "$lab not labelled 'not available (no window': $($l -join ' / ')"
+    }
+    Assert (@(Get-RsLine $r.Out "tokens").Count -eq 1) "tokens line missing"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: a path both committed and dirty is counted once" {
+  $fx = New-RsFixture
+  try {
+    Write-RsFile $fx.Dir "c01.txt" "c1 dirtied again`n"   # committed in the range AND now modified
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($r.Out -match 'files touched: 14 \(11 committed, 3 uncommitted\)') "duplicate path double-counted (want 14 = 11+3):`n$($r.Out)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: a COMMITTED gates-log.jsonl that is dirty counts as one uncommitted file" {
+  $fx = New-RsFixture -TrackLog
+  try {
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($r.Exit -eq 0) "exit $($r.Exit)"
+    Assert ($r.Out -match 'files touched: 15 \(11 committed, 4 uncommitted\)') "dirty tracked gate log not counted as one uncommitted file:`n$($r.Out)"
+    Assert ($r.Out -match 'gate interventions: 1 block, 2 armed') "gate counts wrong with tracked log:`n$($r.Out)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: gate log window excludes lines older than the window start" {
+  $fx = New-RsFixture
+  try {
+    $log = Join-Path $fx.Dir "grades\gates-log.jsonl"
+    $old = '{"v":1,"ts":"2020-01-01T00:00:00.000Z","gate":"loop-guard","decision":"block","tool":"","reason":"ancient","session":"x"}' + "`n" +
+           '{"v":1,"ts":"2020-01-01T00:00:01.000Z","gate":"dad-guard","decision":"allow","tool":"","reason":"armed","session":"x"}' + "`n"
+    [System.IO.File]::AppendAllText($log, $old, (New-Object System.Text.UTF8Encoding($false)))
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($r.Out -match 'gate interventions: 1 block, 2 armed') "old lines leaked into the window:`n$($r.Out)"
+    # and a start time before them DOES include them (proves the lines are seen at all)
+    $r2 = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'), "-SinceCommit", $fx.Base, "-StartTime", "2019-12-31T00:00:00Z")
+    Assert ($r2.Out -match 'gate interventions: 2 block, 3 armed') "wide window did not include the 2020 lines:`n$($r2.Out)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: tokens has three reasoned states; 'does not expose' never appears (output or source)" {
+  $fx = New-RsFixture
+  try {
+    $args1 = Get-RsOverrideArgs $fx
+    $r1 = Invoke-RunSummary $args1                       # no pointer
+    $t1 = @(Get-RsLine $r1.Out "tokens")[0]
+    Assert ($t1 -match 'not available \(.*(no session pointer|absent)') "state 1 (no pointer) reason missing: $t1"
+    $missing = Join-Path $fx.Dir "no-such-transcript.jsonl"
+    Write-RsSession $fx.Dir $missing                     # pointer, transcript missing
+    $r2 = Invoke-RunSummary $args1
+    $t2 = @(Get-RsLine $r2.Out "tokens")[0]
+    Assert ($t2 -match 'not available \(.*missing') "state 2 (missing transcript) reason missing: $t2"
+    $real = Join-Path $fx.Dir "transcript.jsonl"
+    Write-RsFile $fx.Dir "transcript.jsonl" ('{"type":"user"}' + "`n")
+    Write-RsSession $fx.Dir $real                        # transcript exists
+    $r3 = Invoke-RunSummary $args1
+    $t3 = @(Get-RsLine $r3.Out "tokens")[0]
+    Assert ($t3 -match 'not available \(.*\)|tokens: \d') "state 3 (transcript exists) neither a figure nor a reasoned fallback: $t3"
+    Assert ($t3 -ne $t1 -and $t3 -ne $t2) "state 3 line identical to another state: $t3"
+    foreach ($o in @($r1.Out, $r2.Out, $r3.Out)) { Assert ($o -notmatch '(?i)does not expose') "superseded phrase in output: $o" }
+    $src = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.ps1"))
+    Assert ($src -notmatch '(?i)does not expose') "superseded phrase 'does not expose' is in dad-run-summary.ps1"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: tokens measured branch dedupes by message.id, windows, and names source+version; unmeasured model falls back (T10.6)" {
+  $fx = New-RsFixture
+  try {
+    $a = '{"type":"assistant","version":"2.1.285","sessionId":"s1","timestamp":"{T}","message":{"id":"{I}","model":"{M}","usage":{"input_tokens":{X},"output_tokens":{Y},"cache_read_input_tokens":{Z}}}}'
+    $now = (Get-Date).ToUniversalTime()
+    function Mk($id, $model, $x, $y, $z, $t) { return $a.Replace("{T}", $t.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")).Replace("{I}", $id).Replace("{M}", $model).Replace("{X}", "$x").Replace("{Y}", "$y").Replace("{Z}", "$z") }
+    $lines = @((Mk "old" "claude-sonnet-5-5" 900 900 900 $now.AddHours(-3)), (Mk "m1" "claude-sonnet-5-5" 10 20 1000 $now.AddMinutes(-30)),
+               (Mk "m1" "claude-sonnet-5-5" 10 20 1000 $now.AddMinutes(-30)), (Mk "m2" "claude-sonnet-5-5" 5 7 2000 $now.AddMinutes(-20)))
+    Write-RsFile $fx.Dir "t.jsonl" (($lines -join "`n") + "`n")
+    Write-RsFile $fx.Dir "u.jsonl" ((Mk "z" "some-other-model" 1 1 1 $now.AddMinutes(-5)) + "`n")
+    $r = Invoke-RunSummary ((Get-RsOverrideArgs $fx) + @("-TranscriptPath", ('"' + (Join-Path $fx.Dir "t.jsonl") + '"')))
+    $t = @(Get-RsLine $r.Out "tokens")[0]
+    Assert ($t -match 'tokens: 15 in / 27 out / 3,000 cache read\s+\(source: transcript t\.jsonl, 2 assistant entries, Claude Code \d') "measured line wrong (dedupe/window/source): $t"
+    $r2 = Invoke-RunSummary ((Get-RsOverrideArgs $fx) + @("-TranscriptPath", ('"' + (Join-Path $fx.Dir "u.jsonl") + '"')))
+    $t2 = @(Get-RsLine $r2.Out "tokens")[0]
+    Assert ($t2 -match 'not available \(backend UNMEASURED') "unmeasured model did not fall back with a reason: $t2"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: the stamped Claude Code version constant cannot drift from DESIGN C4a (T10.6, C2f device)" {
+  $src = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.ps1"))
+  $m = [regex]::Match($src, '\$MeasuredClaudeCodeVersion\s*=\s*"([0-9][0-9.]*)"')
+  Assert $m.Success "dad-run-summary.ps1 has no `$MeasuredClaudeCodeVersion constant (C4a requires one)"
+  $design = [System.IO.File]::ReadAllText((Join-Path $kit "docs\DESIGN.md"))
+  $c4a = [regex]::Match($design, '(?s)#### C4a:.*?(?=\r?\n#### C4b:)')
+  Assert $c4a.Success "DESIGN.md has no C4a section"
+  $d = [regex]::Match($c4a.Value, 'MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+Claude\s+Code\s+([0-9][0-9.]*)')
+  if ($d.Success) {
+    Assert ($m.Groups[1].Value -eq $d.Groups[1].Value) "dad-run-summary.ps1 says Claude Code $($m.Groups[1].Value) but DESIGN C4a is stamped $($d.Groups[1].Value) - re-measure, then update BOTH"
+  } else {
+    # PENDING (T10.6): C4a is LOCKED and does not yet carry a 'MEASURED <date> against Claude Code <version>'
+    # line; that is a /design amendment. Until it lands this case only checks the constant is well-formed
+    # and FAILS the moment the stamp appears and differs - then the comparison above takes over.
+    Write-Host "    (pending: DESIGN C4a has no 'MEASURED <date> against Claude Code <version>' stamp yet - /design amendment)" -ForegroundColor Yellow
+  }
+}
+
+# ---- T10.6 hardening: measured-tokens branch (C4a) ----
+function New-RsEntry([string]$type, [string]$id, [string]$model, $usage, [string]$ts, [switch]$NoStamp) {
+  $st = if ($NoStamp) { "" } else { '"version":"2.1.285","sessionId":"s1",' }
+  $u = if ($null -ne $usage) { ',"usage":{' + $usage + '}' } else { "" }
+  return ('{"type":"' + $type + '",' + $st + '"timestamp":"' + $ts + '","message":{"id":"' + $id + '","model":"' + $model + '"' + $u + '}}')
+}
+function Get-RsTokenLine($fx, [string]$file, [string]$start = "2026-01-01T12:00:00Z") {
+  $r = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'), "-SinceCommit", $fx.Base, "-StartTime", $start, "-TranscriptPath", ('"' + (Join-Path $fx.Dir $file) + '"'))
+  return [pscustomobject]@{ R = $r; Line = [string]@(Get-RsLine $r.Out "tokens")[0] }
+}
+function Get-RsSnap($d) {
+  return (@(Get-ChildItem $d -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } | Sort-Object FullName | ForEach-Object { $_.FullName + "|" + $_.Length + "|" + (Get-FileHash $_.FullName).Hash }) -join "`n")
+}
+
+Test-Case "dad-run-summary: tokens dedupe (3x identical, growing output = max), window boundary, absent cache_read, synthetic/user/corrupt/usage-less skipped, read-only (T10.6)" {
+  $fx = New-RsFixture
+  try {
+    $c = "claude-sonnet-5-5"
+    $L = @(
+      (New-RsEntry "assistant" "before" $c '"input_tokens":900,"output_tokens":900,"cache_read_input_tokens":900' "2026-01-01T11:59:59.999Z"),
+      (New-RsEntry "assistant" "eq"     $c '"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3' "2026-01-01T12:00:00.000Z"),
+      (New-RsEntry "assistant" "a1"     $c '"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":1000' "2026-01-01T12:00:05.000Z"),
+      (New-RsEntry "assistant" "a1"     $c '"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":1000' "2026-01-01T12:00:05.000Z"),
+      '{"type":"assistant","version":"2.1.285","sessionId":"s1","timestamp":"2026-01-01T12:00:06.000Z","message":{"id":"broken","model":"claude-sonnet-5-5","usage":{"input_tokens":99,',
+      (New-RsEntry "assistant" "a1"     $c '"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":1000' "2026-01-01T12:00:05.000Z"),
+      (New-RsEntry "assistant" "g"      $c '"input_tokens":4,"output_tokens":5' "2026-01-01T12:00:10.000Z"),
+      (New-RsEntry "assistant" "g"      $c '"input_tokens":4,"output_tokens":12,"cache_read_input_tokens":50' "2026-01-01T12:00:10.000Z"),
+      (New-RsEntry "assistant" "g"      $c '"input_tokens":4,"output_tokens":30,"cache_read_input_tokens":50' "2026-01-01T12:00:10.000Z"),
+      (New-RsEntry "assistant" "nc"     $c '"input_tokens":2,"output_tokens":3' "2026-01-01T12:00:11.000Z"),
+      (New-RsEntry "assistant" "syn"    "<synthetic>" '"input_tokens":7777,"output_tokens":7777,"cache_read_input_tokens":7777' "2026-01-01T12:00:12.000Z"),
+      (New-RsEntry "user"      "usr"    $c '"input_tokens":5555,"output_tokens":5555' "2026-01-01T12:00:13.000Z"),
+      (New-RsEntry "assistant" "nou"    $c $null "2026-01-01T12:00:14.000Z"),
+      'this line is not json at all'
+    )
+    Write-RsFile $fx.Dir "t.jsonl" (($L -join "`n") + "`n")
+    $before = Get-RsSnap $fx.Dir
+    $x = Get-RsTokenLine $fx "t.jsonl"
+    Assert ($x.R.Exit -eq 0) "exit $($x.R.Exit) with corrupt lines; stderr: $($x.R.Err)"
+    # eq + a1 + g + nc = 4 messages: in 1+10+4+2=17, out 2+20+30+3=55, cache 3+1000+50+0=1053
+    Assert ($x.Line -match 'tokens: 17 in / 55 out / 1,053 cache read') "wrong totals (want 17/55/1,053): $($x.Line)"
+    Assert ($x.Line -match 'source: transcript t\.jsonl, 4 assistant entries, Claude Code 2\.1\.285') "label wrong (file/count/version): $($x.Line)"
+    Assert ($x.Line -notmatch '\(local model\)') "cloud model labelled local: $($x.Line)"
+    $after = Get-RsSnap $fx.Dir
+    Assert ($before -eq $after) "run-summary modified files in the project dir (must be read-only)"
+    $y = Get-RsTokenLine $fx "t.jsonl" "2026-01-01T12:00:06Z"
+    Assert ($y.Line -match 'tokens: 6 in / 33 out / 50 cache read' -and $y.Line -match ', 2 assistant entries,') "later window wrong (want g+nc = 6/33/50, 2 entries): $($y.Line)"
+    $z = Get-RsTokenLine $fx "t.jsonl" "2026-01-01T12:00:05Z"
+    Assert ($z.Line -match 'tokens: 16 in / 53 out / 1,050 cache read') "boundary (a1 at exactly window start) not included once: $($z.Line)"
+    $w = Get-RsTokenLine $fx "t.jsonl" "2027-01-01T00:00:00Z"
+    Assert ($w.R.Exit -eq 0 -and $w.Line -match 'not available \(transcript has no assistant entries at or after window start') "empty window fallback wrong: $($w.Line)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: tokens label picks the right version constant for cloud vs local -cc model; unknown model UNMEASURED; no version/sessionId -> not-a-Claude-Code-transcript; no bare 'not available' (T10.6)" {
+  $fx = New-RsFixture
+  try {
+    $mj = [System.IO.File]::ReadAllText((Join-Path $kit "models.json"))
+    $ln = [regex]::Match($mj, '"name"\s*:\s*"([^"]+-cc)"').Groups[1].Value
+    Assert ($ln) "no -cc model name found in models.json"
+    $src = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.ps1"))
+    $vc = [regex]::Match($src, '\$MeasuredClaudeCodeVersion\s*=\s*"([0-9][0-9.]*)"').Groups[1].Value
+    $vl = [regex]::Match($src, '\$MeasuredLocalClaudeCodeVersion\s*=\s*"([0-9][0-9.]*)"').Groups[1].Value
+    Assert ($vc -and $vl -and $vc -ne $vl) "cloud/local version constants missing or identical ($vc / $vl)"
+    $ts = "2026-01-01T12:30:00.000Z"; $u = '"input_tokens":3,"output_tokens":4,"cache_read_input_tokens":5'
+    Write-RsFile $fx.Dir "cloud.jsonl" ((New-RsEntry "assistant" "c1" "claude-opus-4-1" $u $ts) + "`n")
+    Write-RsFile $fx.Dir "local.jsonl" ((New-RsEntry "assistant" "l1" $ln $u $ts) + "`n")
+    Write-RsFile $fx.Dir "unk.jsonl"   ((New-RsEntry "assistant" "u1" "mystery-model-9" $u $ts) + "`n")
+    Write-RsFile $fx.Dir "foreign.jsonl" ((New-RsEntry "assistant" "f1" "claude-opus-4-1" $u $ts -NoStamp) + "`n")
+    Write-RsFile $fx.Dir "empty.jsonl" ""
+    $all = @()
+    $c = Get-RsTokenLine $fx "cloud.jsonl";  $all += $c
+    Assert ($c.Line -match 'tokens: 3 in / 4 out / 5 cache read' -and $c.Line -match ('source: transcript cloud\.jsonl, 1 assistant entries, Claude Code ' + [regex]::Escape($vc) + '\)?\s*$') -and $c.Line -notmatch [regex]::Escape($vl)) "cloud label wrong (want $vc only): $($c.Line)"
+    $l = Get-RsTokenLine $fx "local.jsonl";  $all += $l
+    Assert ($l.Line -match 'tokens: 3 in / 4 out / 5 cache read' -and $l.Line -match ('Claude Code ' + [regex]::Escape($vl) + ' \(local model\)') -and $l.Line -notmatch ('Claude Code ' + [regex]::Escape($vc) + '\b')) "local label wrong for $ln (want $vl local only): $($l.Line)"
+    $k = Get-RsTokenLine $fx "unk.jsonl";    $all += $k
+    Assert ($k.Line -match 'not available \(backend UNMEASURED for model mystery-model-9') "unknown model line wrong: $($k.Line)"
+    Assert ($k.Line -notmatch 'tokens: \d') "unknown model printed a number: $($k.Line)"
+    $f = Get-RsTokenLine $fx "foreign.jsonl"; $all += $f
+    Assert ($f.Line -match 'not available \(transcript is not a Claude Code transcript') "no version/sessionId fallback wrong: $($f.Line)"
+    $e = Get-RsTokenLine $fx "empty.jsonl";  $all += $e
+    $m = Get-RsTokenLine $fx "nope.jsonl";   $all += $m
+    $nw = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'), "-TranscriptPath", ('"' + (Join-Path $fx.Dir "cloud.jsonl") + '"'))
+    $all += [pscustomobject]@{ R = $nw; Line = [string]@(Get-RsLine $nw.Out "tokens")[0] }
+    foreach ($a in $all) {
+      Assert ($a.R.Exit -eq 0) "exit $($a.R.Exit) (want 0): $($a.Line)"
+      Assert ($a.Line) "no tokens line emitted"
+      Assert ($a.Line -notmatch '(?i)does not expose') "superseded phrase: $($a.Line)"
+      if ($a.Line -match 'tokens: not available') {
+        Assert ($a.Line -match 'not available \([^)\s][^)]{9,}\)') "fallback without a named reason: $($a.Line)"
+      } else { Assert ($a.Line -match 'tokens: \d' -and $a.Line -match '\(source: transcript ') "figure without source: $($a.Line)" }
+    }
+    Assert ($e.Line -match 'not available \(transcript has no assistant entries') "empty transcript reason wrong: $($e.Line)"
+    Assert ($m.Line -match 'not available \(transcript path recorded but file missing') "missing transcript reason wrong: $($m.Line)"
+    Assert ($nw.Out -match 'tokens: not available \(no window') "no-window reason wrong: $($nw.Out)"
+    $bare = @($src -split "`r?`n" | Where-Object { $_ -match 'Emit "tokens" "not available"' -or $_ -match 'Emit "tokens" "not available\s*"' })
+    Assert ($bare.Count -eq 0) "script emits a bare 'not available': $($bare -join ' | ')"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: tokens branch streams the transcript (code inspection) and a 20k-entry transcript finishes in < 20 s (T10.6)" {
+  $src = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.ps1"))
+  $fn = [regex]::Match($src, '(?s)function Get-TranscriptTokens.*?\r?\ntry \{')
+  Assert $fn.Success "Get-TranscriptTokens not found"
+  Assert ($fn.Value -match 'StreamReader|ReadLines') "Get-TranscriptTokens does not stream (no StreamReader/ReadLines)"
+  Assert ($fn.Value -notmatch 'ReadAllText|ReadAllLines|Get-Content') "Get-TranscriptTokens loads the whole transcript (ReadAllText/ReadAllLines/Get-Content)"
+  $fx = New-RsFixture
+  try {
+    $sb = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt 20000; $i++) {
+      [void]$sb.Append((New-RsEntry "assistant" ("id$i") "claude-sonnet-5-5" '"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3' "2026-01-01T13:00:00.000Z")).Append("`n")
+      if ($i % 5000 -eq 2500) { [void]$sb.Append("{ corrupt partial line`n") }
+    }
+    Write-RsFile $fx.Dir "big.jsonl" $sb.ToString()
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $x = Get-RsTokenLine $fx "big.jsonl"
+    $sw.Stop()
+    Assert ($x.R.Exit -eq 0) "exit $($x.R.Exit) on big transcript"
+    Assert ($x.Line -match 'tokens: 20,000 in / 40,000 out / 60,000 cache read' -and $x.Line -match '20000 assistant entries') "big transcript totals wrong: $($x.Line)"
+    Assert ($sw.Elapsed.TotalSeconds -lt 20) "20k-entry transcript took $([int]$sw.Elapsed.TotalSeconds) s (limit 20)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: exit 2 for a nonexistent -ProjectDir, exit 0 otherwise" {
+  $r = Invoke-RunSummary @("-ProjectDir", ('"' + (Join-Path $env:TEMP ("dadkit_nope_" + [guid]::NewGuid().ToString("N"))) + '"'))
+  Assert ($r.Exit -eq 2) "nonexistent -ProjectDir exit $($r.Exit), want 2"
+  Assert ($r.Err -match 'does not exist') "no loud error on stderr: $($r.Err)"
+  $d = New-Sandbox   # not even a git repo: still exit 0
+  try {
+    $r2 = Invoke-RunSummary @("-ProjectDir", ('"' + $d + '"'))
+    Assert ($r2.Exit -eq 0) "plain empty dir exit $($r2.Exit); stderr: $($r2.Err)"
+  } finally { Remove-Sandbox $d }
+}
+
+Test-Case "dad-run-summary: read-only (tracked contents, git status and gate log byte-identical before/after)" {
+  $fx = New-RsFixture
+  try {
+    Write-RsSession $fx.Dir ""
+    $snap = {
+      param($dir)
+      $h = @(Get-ChildItem $dir -Recurse -File -Force | Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+             Sort-Object FullName | ForEach-Object { $_.FullName.Substring($dir.Length) + "=" + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join "`n"
+      $st = (@(Invoke-RsGit $dir @("status", "--porcelain", "--ignored")) -join "`n")
+      return $h + "`n--`n" + $st
+    }
+    $before = & $snap $fx.Dir
+    $r1 = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    $r2 = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'))
+    Assert ($r1.Exit -eq 0 -and $r2.Exit -eq 0) "runs failed"
+    $after = & $snap $fx.Dir
+    Assert ($before -ceq $after) "fixture changed during a run:`nBEFORE:`n$before`nAFTER:`n$after"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: dad.cmd usage lists run-summary; .cmd wrapper has the same CRLF shape as dad-gates-log.cmd" {
+  $dad = [System.IO.File]::ReadAllText((Join-Path $kit "dad.cmd"))
+  Assert ($dad -match 'dad run-summary') "dad.cmd usage does not list 'dad run-summary'"
+  $rs = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.cmd"))
+  $gl = [System.IO.File]::ReadAllText((Join-Path $kit "dad-gates-log.cmd"))
+  Assert ($rs -match 'dad-run-summary\.ps1') "dad-run-summary.cmd does not call the .ps1"
+  Assert (-not ($rs -match "(?<!`r)`n")) "dad-run-summary.cmd has bare LF (not CRLF)"
+  Assert ($rs.EndsWith("`r`n")) "dad-run-summary.cmd does not end in CRLF"
+  $norm = { param($t, $n) (($t -replace $n, 'NAME') -split "`r`n" | Where-Object { $_ -notmatch '^REM ' }) -join "|" }
+  $sh1 = & $norm $rs 'dad-run-summary'
+  $sh2 = & $norm $gl 'dad-gates-log'
+  Assert ($sh1 -ceq $sh2) "wrapper shape differs:`n$sh1`nvs`n$sh2"
+}
+
+Test-Case "T10.2: build.md records the scope baseline after Gate 3 and runs dad run-summary in End of scope (C4c)" {
+  $p = Join-Path $kit "global\commands\build.md"
+  $bytes = [System.IO.File]::ReadAllBytes($p)
+  Assert (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) "build.md has a BOM"
+  Assert (-not (@($bytes | Where-Object { $_ -gt 127 }).Count)) "build.md has non-ASCII bytes"
+  $t = [System.IO.File]::ReadAllText($p)
+  $g3 = $t.IndexOf("Gate 3 - PROVE THE SHELL WORKS")
+  $bl = $t.IndexOf("Record the scope baseline")
+  $env = $t.IndexOf("ENVIRONMENT BLOCK")
+  $pt = $t.IndexOf("## Per TASK")
+  Assert ($g3 -ge 0 -and $bl -gt $g3) "baseline instruction is not after the Gate 3 text"
+  Assert ($env -gt $bl) "baseline instruction is not before the ENVIRONMENT BLOCK paragraph"
+  Assert ($pt -gt $bl) "baseline instruction is not before '## Per TASK'"
+  $blk = $t.Substring($bl, $env - $bl)
+  Assert ($blk -match 'git rev-parse HEAD') "baseline block lacks 'git rev-parse HEAD'"
+  Assert ($blk -match 'ToUniversalTime\(\)\.ToString\(''yyyy-MM-ddTHH:mm:ss\.fffZ''\)') "baseline block lacks the ISO UTC ...fffZ command"
+  $eos = $t.IndexOf("## End of scope")
+  Assert ($eos -gt $pt) "no '## End of scope' section after Per TASK"
+  $tail = $t.Substring($eos)
+  $once = $tail.IndexOf("build command once more")
+  $rsx = [regex]::Match($tail, 'dad run-summary[^`]*-SinceCommit[^`]*-StartTime')
+  $lib = $tail.IndexOf("librarian-agent")
+  Assert ($once -ge 0) "End of scope lost 'build command once more'"
+  Assert ($rsx.Success) "End of scope lacks 'dad run-summary ... -SinceCommit ... -StartTime'"
+  Assert ($rsx.Index -gt $once) "run-summary is not after the build re-run"
+  Assert ($lib -gt $rsx.Index) "run-summary is not before the librarian-agent spawn"
+  Assert ($tail -match 'source: session start') "End of scope lacks the 'source: session start' fallback label"
+  Assert ($tail -match 'never a gate') "End of scope lacks 'never a gate'"
+  Assert ($t -notmatch '5-line') "build.md makes a literal '5-line' claim"
+}
+
+Test-Case "T10.3: audit.md records the baseline before the first doc-stats step and runs dad run-summary after UpdateStatus, before the librarian (C4c)" {
+  $p = Join-Path $kit "global\commands\audit.md"
+  $bytes = [System.IO.File]::ReadAllBytes($p)
+  Assert (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) "audit.md has a BOM"
+  Assert (-not (@($bytes | Where-Object { $_ -gt 127 }).Count)) "audit.md has non-ASCII bytes"
+  $t = [System.IO.File]::ReadAllText($p)
+  $bl = $t.IndexOf("Record this audit's baseline")
+  $f1 = $t.IndexOf("dad doc-stats -Findings")
+  $us = $t.IndexOf("dad doc-stats -UpdateStatus")
+  $rsx = [regex]::Match($t, 'dad run-summary[^`]*-SinceCommit[^`]*-StartTime')
+  $lib = $t.IndexOf("Run the **librarian-agent**")
+  Assert ($bl -ge 0) "audit.md lacks the baseline-capture paragraph"
+  Assert ($f1 -gt $bl) "baseline is not before the first 'dad doc-stats -Findings' step"
+  Assert ($us -gt $f1) "no 'dad doc-stats -UpdateStatus' after the Findings step"
+  Assert ($rsx.Success) "audit.md lacks 'dad run-summary ... -SinceCommit ... -StartTime'"
+  Assert ($rsx.Index -gt $us) "run-summary is not after the UpdateStatus paragraph"
+  Assert ($lib -gt $rsx.Index) "run-summary is not before the librarian-agent paragraph"
+  $blk = $t.Substring($bl, $f1 - $bl)
+  Assert ($blk -match 'git rev-parse HEAD') "baseline block lacks 'git rev-parse HEAD'"
+  Assert ($blk -match 'ToUniversalTime\(\)\.ToString\(''yyyy-MM-ddTHH:mm:ss\.fffZ''\)') "baseline block lacks the ISO UTC ...fffZ command"
+  Assert ($blk -match 'now') "baseline block does not say the baseline is 'now'"
+  Assert ($blk -match 'only what happens DURING this audit') "baseline block does not scope the summary to the audit run"
+  Assert ($t.Substring($rsx.Index) -match 'source: session start') "audit.md lacks the 'source: session start' fallback label"
+  Assert ($t.Substring($rsx.Index) -match 'never a gate') "audit.md lacks 'never a gate'"
+  Assert ($t -match 'verbatim') "audit.md lacks verbatim relay wording"
+  Assert ($t -notmatch '5-line') "audit.md makes a literal '5-line' claim"
+  $cmdRe = 'powershell -NoProfile -Command "\(Get-Date\)[^"]*"'
+  $ma = [regex]::Match($t, $cmdRe)
+  $mb = [regex]::Match([System.IO.File]::ReadAllText((Join-Path $kit "global\commands\build.md")), $cmdRe)
+  Assert ($ma.Success -and $mb.Success) "could not extract the baseline time command from both audit.md and build.md"
+  Assert ($ma.Value -ceq $mb.Value) "baseline command differs:`naudit: $($ma.Value)`nbuild: $($mb.Value)"
+}
+
+Test-Case "T10.2: the baseline shell command exactly as written in build.md yields values dad-run-summary accepts (caller-supplied)" {
+  $t = [System.IO.File]::ReadAllText((Join-Path $kit "global\commands\build.md"))
+  $m = [regex]::Match($t, 'powershell -NoProfile -Command "\(Get-Date\)[^"]*"')
+  Assert $m.Success "could not extract the baseline time command from build.md"
+  $fx = New-RsFixture
+  try {
+    $time = [string](@(Invoke-Expression $m.Value)[0])
+    Assert ($time -match '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$') "baseline time not ISO ...fffZ: '$time'"
+    $sha = [string](@(Invoke-RsGit $fx.Dir @("rev-parse", "HEAD"))[0])
+    Assert ($sha -match '^[0-9a-f]{40}$') "git rev-parse HEAD gave '$sha'"
+    $r = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'), "-SinceCommit", $sha, "-StartTime", $time)
+    Assert ($r.Exit -eq 0) "run-summary exit $($r.Exit): $($r.Err)"
+    Assert ($r.Out -match 'caller-supplied') "output lacks caller-supplied labels: $($r.Out)"
+    Assert ($r.Out -match '\[run-summary\] wall-clock: ') "no wall-clock figure: $($r.Out)"
+    Assert ($r.Out -match '\[run-summary\] files touched: ') "no files touched figure: $($r.Out)"
+  } finally { Remove-Item $fx.Dir -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case "T10.4: every numeric figure's (source: ...) label starts with a member of C4c's fixed set (override run and session-fallback run)" {
+  $fx = New-RsFixture
+  try {
+    $set = @("caller-supplied", "session start", "git range", "gate log", "transcript", "doc-stats -Findings")
+    $chk = {
+      param($out, $tag)
+      $fig = @($out -split "`r?`n" | Where-Object { $_ -match '^\[run-summary\] (wall-clock|files touched|findings|gate interventions): \d' })
+      Assert ($fig.Count -eq 4) "$tag : expected 4 numeric figure lines, got $($fig.Count):`n$out"
+      foreach ($l in $fig) {
+        $m = [regex]::Match($l, '\(source: (.*)\)\s*$')
+        Assert $m.Success "$tag : no trailing (source: ...) -> $l"
+        $s = $m.Groups[1].Value
+        $ok = @($set | Where-Object { $s.StartsWith($_) }).Count -gt 0
+        Assert $ok "$tag : source '$s' is not in C4c's fixed set -> $l"
+      }
+    }
+    $a = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($a.Exit -eq 0) "override run exit $($a.Exit)"
+    & $chk $a.Out "override"
+    Write-RsSession $fx.Dir ""
+    $b = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'))
+    Assert ($b.Exit -eq 0) "no-override run exit $($b.Exit)"
+    & $chk $b.Out "no-override"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "T10.4: C4d regression - 12 files changed, NOTHING committed since baseline -> 'files touched: 12 (0 committed, 12 uncommitted)', never 0" {
+  $d = New-Sandbox
+  try {
+    $utc2h = (Get-Date).ToUniversalTime().AddHours(-2).ToString("yyyy-MM-ddTHH:mm:ss") + "Z"
+    Invoke-RsGit $d @("init", "-q") | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $d ".git\info\exclude"), "grades/`n.claude/`n", (New-Object System.Text.UTF8Encoding($false)))
+    1..5 | ForEach-Object { Write-RsFile $d ("t{0:00}.txt" -f $_) "t$_`n" }
+    $env:GIT_AUTHOR_DATE = $utc2h; $env:GIT_COMMITTER_DATE = $utc2h
+    try {
+      Invoke-RsGit $d @("add", "-A") | Out-Null
+      Invoke-RsGit $d @("commit", "-q", "-m", "baseline") | Out-Null
+    } finally { Remove-Item Env:\GIT_AUTHOR_DATE, Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue }
+    $base = [string](@(Invoke-RsGit $d @("rev-parse", "HEAD"))[0])
+    1..5 | ForEach-Object { Write-RsFile $d ("t{0:00}.txt" -f $_) "modified $_`n" }   # 5 tracked-modified
+    1..7 | ForEach-Object { Write-RsFile $d ("new{0:00}.txt" -f $_) "n$_`n" }        # 7 untracked
+    $start = (Get-Date).ToUniversalTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss") + "Z"
+    $r = Invoke-RunSummary @("-ProjectDir", ('"' + $d + '"'), "-SinceCommit", $base, "-StartTime", $start)
+    Assert ($r.Exit -eq 0) "exit $($r.Exit); stderr: $($r.Err)"
+    Assert ($r.Out -match 'files touched: 12 \(0 committed, 12 uncommitted\)') "want 'files touched: 12 (0 committed, 12 uncommitted)':`n$($r.Out)"
+    Assert ($r.Out -notmatch 'files touched: 0\b') "reported 'files touched: 0' for a dirty tree with no commits (R22 regression):`n$($r.Out)"
+  } finally { Remove-Sandbox $d }
+}
+
+Test-Case "T10.4: static wiring - build.md '## End of scope' contains run-summary; audit.md run-summary sits after the UpdateStatus step, near it" {
+  $b = [System.IO.File]::ReadAllText((Join-Path $kit "global\commands\build.md"))
+  $eos = $b.IndexOf("## End of scope")
+  Assert ($eos -ge 0) "build.md has no '## End of scope'"
+  $rest = $b.Substring($eos + 5)
+  $nx = $rest.IndexOf("`n## ")
+  $sec = if ($nx -ge 0) { $rest.Substring(0, $nx) } else { $rest }
+  Assert ($sec -match 'run-summary') "build.md '## End of scope' section does not mention run-summary"
+  $a = [System.IO.File]::ReadAllText((Join-Path $kit "global\commands\audit.md"))
+  $us = $a.IndexOf("dad doc-stats -UpdateStatus")
+  Assert ($us -ge 0) "audit.md lacks the -UpdateStatus step"
+  $rs = $a.IndexOf("run-summary", $us)
+  Assert ($rs -gt $us) "audit.md has no run-summary after the -UpdateStatus step"
+  Assert (($rs - $us) -lt 1500) "audit.md run-summary is not near the -UpdateStatus step ($($rs - $us) chars away)"
 }
 
 # ---------------------------------------------------------------- summary

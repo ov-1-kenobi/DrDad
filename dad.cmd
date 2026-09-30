@@ -68,6 +68,7 @@ echo     dad docs-find "question"      search the indexed corpus from the shell
 echo     dad source-stats              citation integrity for /research
 echo     dad data-stats                dataset integrity: do the files match docs\DATASETS.md?
 echo     dad grade-trends              grade direction over time
+echo     dad run-summary               wall-clock, files touched, findings, gate interventions, tokens - each with its source
 echo     dad doctor                    readiness check; prints the fix commands
 echo.
 echo   While a long pass runs (SECOND terminal):

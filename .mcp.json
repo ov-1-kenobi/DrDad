@@ -1,13 +1,13 @@
 {
-  "mcpServers": {
-    "local-tools": {
-      "command": "C:\\Projects\\Claude\\MCP\\DAD-kit\\local-tools\\bin\\Release\\net8.0\\local-tools.exe",
-      "env": {
-        "LOCALTOOLS_DOCS_DIR": "C:\\Projects\\Claude\\MCP\\DAD-kit\\docs",
-        "OLLAMA_HOST": "http://localhost:11434",
-        "RAG_EMBED_MODEL": "nomic-embed-text",
-        "LOCALTOOLS_AUTO_REINDEX": "1"
-      }
-    }
-  }
+    "mcpServers":  {
+                       "local-tools":  {
+                                           "command":  "D:\\projects\\DrDad\\local-tools\\bin\\Release\\net8.0\\local-tools.exe",
+                                           "env":  {
+                                                       "LOCALTOOLS_DOCS_DIR":  "C:\\Projects\\Claude\\MCP\\DAD-kit\\docs",
+                                                       "OLLAMA_HOST":  "http://localhost:11434",
+                                                       "RAG_EMBED_MODEL":  "nomic-embed-text",
+                                                       "LOCALTOOLS_AUTO_REINDEX":  "1"
+                                                   }
+                                       }
+                   }
 }

@@ -47,6 +47,17 @@ $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 $docs = Join-Path $proj "docs"
 $baselineFile = Join-Path $proj ".claude\.dad-ratchet.json"
 
+# Gate log (DESIGN C3/C3b): one line per verdict via dad-gates-log.ps1. Fail-open - logging never changes the
+# verdict or exit code. Empty args are omitted (a native call drops them); reason is flattened and capped.
+# NOTE: arg-cleanup here is deliberately duplicated in ratchet.ps1, close-unit.ps1, dad-guard.ps1, dad-loopguard.ps1 (hot path, no shared dot-source); keep the four copies in sync.
+function Write-GateLog([string]$decision, [string]$why) {
+  try {
+    $why = ([regex]::Replace([string]$why, '\s+', ' ')).Replace([string][char]34, "'").Trim()
+    if ($why.Length -gt 300) { $why = $why.Substring(0, 300) }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "dad-gates-log.ps1") -ProjectDir $proj -Gate "ratchet" -Decision $decision -Reason $why 2>$null | Out-Null
+  } catch { }
+}
+
 function Count-Pattern([string]$file, [string]$pattern) {
   # A project with no design doc yields an empty path here, and Test-Path "" THROWS. A counter that
   # crashes on a legitimately empty project would block every close in it.
@@ -180,7 +191,11 @@ foreach ($k in $current.Keys) {
   if ($now -lt $was) { $drops += [pscustomobject]@{ what = $k; was = $was; now = $now; why = $labels[$k] } }
 }
 
-if ($Json) { [pscustomobject]@{ baseline = $base; current = $current; drops = $drops } | ConvertTo-Json -Depth 5; exit $(if ($drops.Count) { 1 } else { 0 }) }
+$dropReason = (($drops | ForEach-Object { "$($_.what): $($_.was)->$($_.now)" }) -join "; ")
+$allowReason = "no shrink (tests $($current.tests), stories $($current.stories), tasks $($current.tasks))"
+if ($Json) {
+  if ($drops.Count) { Write-GateLog "block" $dropReason } else { Write-GateLog "allow" $allowReason }
+  [pscustomobject]@{ baseline = $base; current = $current; drops = $drops } | ConvertTo-Json -Depth 5; exit $(if ($drops.Count) { 1 } else { 0 }) }
 
 Write-Host "== ratchet: $proj ==" -ForegroundColor Cyan
 foreach ($k in $current.Keys) {
@@ -192,7 +207,7 @@ foreach ($k in $current.Keys) {
   Write-Host ("  {0,-4} {1,-16} {2} -> {3}" -f $mark, $k, $was, $now) -ForegroundColor $col
 }
 Write-Host ""
-if ($drops.Count -eq 0) { Write-Host "nothing shrank." -ForegroundColor Green; exit 0 }
+if ($drops.Count -eq 0) { Write-Host "nothing shrank." -ForegroundColor Green; Write-GateLog "allow" $allowReason; exit 0 }
 Write-Host "$($drops.Count) THING(S) SHRANK:" -ForegroundColor Red
 foreach ($d in $drops) { Write-Host "  $($d.what): $($d.was) -> $($d.now)  - $($d.why)" -ForegroundColor Red }
 Write-Host ""
@@ -228,4 +243,5 @@ Write-Host ""
 Write-Host "A drop is not always wrong - an obsolete story deleted on purpose is fine. It is never something" -ForegroundColor Yellow
 Write-Host "a run gets to do SILENTLY. Restore it, or acknowledge the removal deliberately:" -ForegroundColor Yellow
 Write-Host "  close-unit.ps1 ... -AcceptShrink      (records the smaller number as the new baseline)" -ForegroundColor Yellow
+Write-GateLog "block" $dropReason
 exit 1

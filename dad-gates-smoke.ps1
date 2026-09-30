@@ -45,6 +45,25 @@ $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 #           (but encouraged) for INTERCEPTED.
 # No other shape is valid - the reporting loop below trusts these three strings exactly.
 
+# T13.1 (C3f): the FOURTH assertion. After a gate INTERCEPTED, its own throwaway fixture's
+# grades\gates-log.jsonl must hold a line whose gate id matches AND whose decision is "block". Parsed per line
+# with ConvertFrom-Json (no substring match); an allow line or another gate's block line does not count.
+# Read-only, runs at smoke time only - no runtime writer is changed (C3f: runtime stays silent and fail-open).
+function Test-BlockLogged([string]$fixtureDir, [string[]]$gateIds) {
+  $log = Join-Path $fixtureDir "grades\gates-log.jsonl"
+  if (-not (Test-Path -LiteralPath $log)) { return $false }
+  foreach ($ln in [System.IO.File]::ReadAllLines($log)) {
+    if (-not $ln.Trim()) { continue }
+    try { $o = $ln | ConvertFrom-Json } catch { continue }
+    if (($gateIds -contains [string]$o.gate) -and ([string]$o.decision -eq "block")) { return $true }
+  }
+  return $false
+}
+
+function New-LogSilentFail([string]$gate) {
+  return [pscustomobject]@{ Result = "SILENT-FAIL"; Reason = "`"$gate-log`" - INTERCEPTED but NOT LOGGED (no decision=block line for this gate in the fixture's grades\gates-log.jsonl)" }
+}
+
 function Test-LoopGuardGate {
   # T8.2: dad-loopguard.ps1 is a KIT-level file (wired kit-wide as a PreToolUse hook in settings.json,
   # not per-project state) - resolve it as a sibling of THIS script, not inside -ProjectDir.
@@ -58,10 +77,15 @@ function Test-LoopGuardGate {
   $sid = "gates-smoke-$PID-$(Get-Random)"
   & powershell -NoProfile -ExecutionPolicy Bypass -File $lg -Reset | Out-Null
 
+  # Throwaway fixture that owns THIS gate's log (docs\ marks it a project root for the writer). The payload
+  # cwd points at it so the writer logs here, never into the real project.
+  $lgFixture = Join-Path $env:TEMP "dad-gates-smoke-loop-$PID-$(Get-Random)"
+  New-Item -ItemType Directory -Force -Path (Join-Path $lgFixture "docs") | Out-Null
+
   # Exact payload shape proven by test-kit.ps1's own already-passing loop-guard Test-Case
   # (test-kit.ps1:2894-2898's Invoke-Guard helper) - reused unchanged, not invented.
   function Invoke-LoopGuard($session) {
-    $j = @{ session_id = $session; tool_name = "Bash"; tool_input = @{ command = "ls -la nowhere-at-all-gates-smoke" } } | ConvertTo-Json -Compress
+    $j = @{ session_id = $session; cwd = $lgFixture; tool_name = "Bash"; tool_input = @{ command = "ls -la nowhere-at-all-gates-smoke" } } | ConvertTo-Json -Compress
     $j | & powershell -NoProfile -ExecutionPolicy Bypass -File $lg 2>&1 | Out-Null
     return $LASTEXITCODE
   }
@@ -88,10 +112,15 @@ function Test-LoopGuardGate {
 
   # $i is intentionally read here after the loop's `break` - PowerShell for-loop variables are not
   # scoped to the loop body, so $i still holds the attempt number that triggered $blocked = $true.
-  if ($blocked) {
-    return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "4 identical consecutive Bash calls were blocked by attempt $i" }
+  try {
+    if ($blocked) {
+      if (-not (Test-BlockLogged $lgFixture @("loop-guard"))) { return (New-LogSilentFail "loop-guard") }
+      return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "4 identical consecutive Bash calls were blocked by attempt $i, and the block line landed in the fixture's gate log" }
+    }
+    return [pscustomobject]@{ Result = "SILENT-FAIL"; Reason = "loop-guard" }
+  } finally {
+    Remove-Item -LiteralPath $lgFixture -Recurse -Force -ErrorAction SilentlyContinue
   }
-  return [pscustomobject]@{ Result = "SILENT-FAIL"; Reason = "loop-guard" }
 }
 
 function Test-RatchetCloseGate {
@@ -163,6 +192,9 @@ function Test-RatchetCloseGate {
     $code = $LASTEXITCODE
 
     if ($code -ne 0 -and $out -match 'SHRANK') {
+      # The shrink is refused by ratchet.ps1 (gate "ratchet"); close-unit.ps1's own gate id is
+      # "close-unit-refusal". Either id's block line proves the refusal was logged.
+      if (-not (Test-BlockLogged $fixture @("ratchet", "close-unit-refusal"))) { return (New-LogSilentFail "ratchet-close-refusal") }
       return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "close-unit.ps1 refused the second close (exit $code) after 9 of 10 [Fact] markers were deleted" }
     }
     return [pscustomobject]@{ Result = "SILENT-FAIL"; Reason = "ratchet-close-refusal" }
@@ -217,7 +249,13 @@ function Test-DadGuardStopGate {
     $code = $LASTEXITCODE
 
     if ($code -eq 1) {
-      return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "dad-guard.ps1 -Check blocked (exit 1) on an uncommitted, unverified .cs file" }
+      # -Check never writes the gate log (T9.2), so also fire the REAL Stop-hook path against the same
+      # fixture (stdin payload with cwd; exit 2 = block) and see whether its block line lands.
+      $hookJson = @{ session_id = "gates-smoke-guard-$PID"; cwd = $fixture; stop_hook_active = $false } | ConvertTo-Json -Compress
+      $prevEap2 = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+      try { $hookJson | & powershell -NoProfile -ExecutionPolicy Bypass -File $dg 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevEap2 }
+      if (-not (Test-BlockLogged $fixture @("dad-guard-stop"))) { return (New-LogSilentFail "dad-guard-stop") }
+      return [pscustomobject]@{ Result = "INTERCEPTED"; Reason = "dad-guard.ps1 -Check blocked (exit 1) on an uncommitted, unverified .cs file, and the Stop-hook block line landed in the fixture's gate log" }
     }
     return [pscustomobject]@{ Result = "SILENT-FAIL"; Reason = "dad-guard-stop" }
   } finally {

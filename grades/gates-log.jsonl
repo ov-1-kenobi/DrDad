@@ -1,0 +1,28 @@
+{"v":1,"ts":"2026-09-29T23:34:24.767Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-29T23:34:29.825Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T9.3","session":""}
+{"v":1,"ts":"2026-09-29T23:42:50.398Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-29T23:42:55.468Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T9.4","session":""}
+{"v":1,"ts":"2026-09-30T00:01:33.861Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T00:01:38.919Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T9.6","session":""}
+{"v":1,"ts":"2026-09-30T00:23:00.643Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T00:23:05.919Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T9.7","session":""}
+{"v":1,"ts":"2026-09-30T00:32:52.418Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T00:32:57.548Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S9","session":""}
+{"v":1,"ts":"2026-09-30T02:51:44.669Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T02:51:49.714Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.5","session":""}
+{"v":1,"ts":"2026-09-30T03:11:56.020Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T03:12:01.050Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.1","session":""}
+{"v":1,"ts":"2026-09-30T03:32:56.863Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T03:33:01.901Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.2","session":""}
+{"v":1,"ts":"2026-09-30T03:49:05.714Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T03:49:10.763Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.3","session":""}
+{"v":1,"ts":"2026-09-30T04:00:38.476Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T04:00:43.510Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.4","session":""}
+{"v":1,"ts":"2026-09-30T04:34:46.800Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T04:34:52.075Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.6","session":""}
+{"v":1,"ts":"2026-09-30T04:47:45.633Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T04:47:50.729Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S10","session":""}
+{"v":1,"ts":"2026-09-30T15:21:43.052Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T15:21:48.199Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T11.1","session":""}
+{"v":1,"ts":"2026-09-30T15:27:56.639Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T15:28:02.011Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T11.2","session":""}

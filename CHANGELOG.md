@@ -2,6 +2,34 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
 
+## 0.52.0 - 2026-09-29
+
+### Added - R38(a): `dad gates-smoke` proves the gates actually FIRE (Story S8)
+A gate that cannot be shown to have fired is not a gate. `dad gates-smoke` provokes a known violation
+against each real gate on a throwaway fixture - the loop guard (4 identical consecutive calls), the
+ratchet / `close-unit` shrink refusal, and `dad-guard`'s Stop-hook block - and reports pass/fail/SKIP per
+gate with an aggregate exit code. A SKIP is reported as a SKIP, never faked into a pass.
+
+### Added - R37: GitHub Copilot CLI as a second, opt-in harness (Story S12)
+`install.ps1 -CopilotCli` writes the USER-level `%USERPROFILE%\.copilot\hooks\dad.json` (the documented
+repo-level path loads nothing - contract C2a, measured against Copilot CLI 1.0.89). `dad-guard-copilot.ps1`
+re-emits the UNMODIFIED `dad-guard` verdict in Copilot's JSON + exit-0 contract; `dad-guard.ps1` and
+`dad-loopguard.ps1` are not forked. Version drift is loud at setup and fail-open at runtime (C2f).
+
+### Design - R38(b)/(c) pinned and LOCKED (implementation is Stories S9, S10, S13)
+- **C3 - gate-decision log:** `grades/gates-log.jsonl`, committed; seven-field JSONL lines, `decision` is
+  `allow` or `block` (block decisions plus per-gate `allow` heartbeats, never WARN); manual rotation with a
+  genesis record; a machine-clean `-Query` interface.
+- **C4 - run summary:** `dad-run-summary.ps1` - wall-clock, files touched (committed + uncommitted, split),
+  findings and gate interventions, each naming its source; tokens only when measured, otherwise a labelled
+  fallback line, never a fabricated number.
+
+### Fixed
+- `doc-stats.ps1 -UpdateStatus` wrote `docs\STATUS.md` with CRLF line endings, so every `/audit` (which
+  mandates it) broke the kit's own line-ending gate. It now writes LF; covered by a `test-kit.ps1` case.
+- `test-kit.ps1`: new cases that every kit file the docs tell you to RUN exists, and that the
+  forward-declaration exemption stays narrow.
+
 ## 0.51.0 - 2026-09-22
 
 ### Added - R36: planning-cost ratchet (ask-time scope pricing + a walking-skeleton ratchet)
