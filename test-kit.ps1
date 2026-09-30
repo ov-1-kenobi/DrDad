@@ -4886,7 +4886,7 @@ Test-Case "close-unit refuses a STORY close when tests run zero tests" {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
     "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
     New-Item -ItemType Directory -Force "$p\grades" | Out-Null
-    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | init |`n`n## Assessment`n" + ('detail. ' * 120) + "`n## Suggestions`n1. none") |
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | init |`n`n## Assessment`n" + ('detail. ' * 120) + " See docs/STORIES.md:1.`n## Suggestions`n1. none") |
       Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
     Push-Location $p
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
@@ -4957,7 +4957,7 @@ Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
     Assert ($LASTEXITCODE -ne 0) "accepted a stub grade card"
 
     # real card -> accept
-    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + ('detail. ' * 120) + "`n## Suggestions`n1. none") |
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + ('detail. ' * 120) + " See docs/STORIES.md:1.`n## Suggestions`n1. none") |
       Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
     & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
     Assert ($LASTEXITCODE -eq 0) "rejected a real grade card"

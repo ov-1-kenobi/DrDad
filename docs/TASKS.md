@@ -1814,7 +1814,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S17 (AC1-AC7); `docs/DESIGN.md` R40(e), C2f, C4a MEASURED stamp (line ~1115: `MEASURED 2026-09-30 against Claude Code 2.1.285`); R35b.
 - **Context:** existing pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root (see the C2f case at ~line 1559). Keep ASCII, restore any temporary edit. The suite must not depend on the machine having claude/copilot installed - stubs only.
 
-### [ ] T18.1 - close-unit -RequireGrade: computed citation check on the grade card   (Story S18)
+### [x] T18.1 - close-unit -RequireGrade: computed citation check on the grade card   (Story S18)
 - **Goal:** a grade card that cites nothing checkable FAILS `close-unit -RequireGrade`; a card citing a real test name or `test-kit.ps1` line range, with every `file:line` resolvable, passes.
 - **Touches:** `close-unit.ps1` (function `Test-GradeCard`, ~line 197-204; caller at ~line 502-508 needs no change); `test-kit.ps1` (fixture cards at ~line 4463 in "close-unit refuses a STORY close when tests run zero tests" and ~line 4534 in "close-unit -RequireGrade refuses a story with no real grade card").
 - **Do:** In `Test-GradeCard`, after the existing size and `## Grade history` checks (keep them unchanged), read the card text and add two computed checks, returning a one-line problem string like the existing ones:
