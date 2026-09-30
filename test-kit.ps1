@@ -5444,6 +5444,98 @@ Test-Case "T9.2 (b): dad-guard -Check and -Ack write nothing; empty cwd -> no lo
   } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
+# ---------------------------------------------------------------- session pointer (T10.5, C4b)
+Write-Host "-- session pointer (dad-guard Stop hook) --" -ForegroundColor Cyan
+
+function New-StopPayload([string]$cwd, [string]$sid, [string]$tp, [bool]$active = $false) {
+  $o = [ordered]@{}
+  if ($sid) { $o.session_id = $sid }
+  if ($tp) { $o.transcript_path = $tp }
+  $o.cwd = $cwd
+  $o.stop_hook_active = $active
+  return ($o | ConvertTo-Json -Compress)
+}
+
+Test-Case "T10.5 (C4b): Stop writes .dad-session.json (3 keys in order, no BOM); same session keeps first_seen_utc; new session replaces; exit code unchanged; no leftovers" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $fx = New-GuardFixture
+  try {
+    $tp = "C:\Users\me\.claude\projects\D--x\abc123.jsonl"
+    $ptr = Join-Path $fx ".claude\.dad-session.json"
+    $c1 = Invoke-HookScript $dg (New-StopPayload $fx "t105-a" $tp)
+    Assert ($c1 -eq 2) "dirty fixture Stop exit $c1 (must stay 2)"
+    Assert (Test-Path -LiteralPath $ptr) "pointer not written"
+    $b = [System.IO.File]::ReadAllBytes($ptr)
+    Assert (-not (($b.Length -ge 3) -and ($b[0] -eq 0xEF) -and ($b[1] -eq 0xBB) -and ($b[2] -eq 0xBF))) "pointer has a BOM"
+    $raw1 = [System.IO.File]::ReadAllText($ptr)
+    $o = $raw1 | ConvertFrom-Json
+    $names = @($o.PSObject.Properties | ForEach-Object { $_.Name })
+    Assert (($names -join ",") -eq "session_id,transcript_path,first_seen_utc") "keys/order: $($names -join ',')"
+    Assert ($o.session_id -eq "t105-a") "session_id $($o.session_id)"
+    Assert ($o.transcript_path -eq $tp) "transcript_path $($o.transcript_path)"
+    Assert ($o.first_seen_utc -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') "first_seen_utc format: $($o.first_seen_utc)"
+    Start-Sleep -Milliseconds 120
+    $c2 = Invoke-HookScript $dg (New-StopPayload $fx "t105-a" $tp)
+    Assert ($c2 -eq 2) "second Stop exit $c2"
+    Assert ([System.IO.File]::ReadAllText($ptr) -ceq $raw1) "same-session second Stop changed the pointer"
+    Start-Sleep -Milliseconds 120
+    $tp2 = "C:\other\def456.jsonl"
+    $c3 = Invoke-HookScript $dg (New-StopPayload $fx "t105-b" $tp2)
+    Assert ($c3 -eq 2) "new-session Stop exit $c3"
+    $o2 = [System.IO.File]::ReadAllText($ptr) | ConvertFrom-Json
+    Assert (($o2.session_id -eq "t105-b") -and ($o2.transcript_path -eq $tp2)) "different session did not replace the pointer"
+    Assert (($o2.first_seen_utc -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') -and ($o2.first_seen_utc -ne $o.first_seen_utc)) "new session first_seen_utc not fresh"
+    $left = @(Get-ChildItem -LiteralPath (Join-Path $fx ".claude") -Force | Where-Object { $_.Name -ne ".dad-session.json" -and $_.Name -match '\.(tmp|bak)$' })
+    Assert ($left.Count -eq 0) "leftover tmp/bak: $($left.Name -join ',')"
+    # clean fixture still exits 0
+    Remove-Item (Join-Path $fx "a.cs") -Force
+    $c4 = Invoke-HookScript $dg (New-StopPayload $fx "t105-b" $tp2)
+    Assert ($c4 -eq 0) "clean fixture Stop exit $c4 (must stay 0)"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case "T10.5 (C4b): no pointer for -Check, -Ack, missing transcript_path, missing session_id, stop_hook_active retry" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $fx = New-GuardFixture
+  try {
+    $ptr = Join-Path $fx ".claude\.dad-session.json"
+    $tp = "C:\t\x.jsonl"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Check -ProjectDir $fx 2>$null | Out-Null
+    Assert (-not (Test-Path -LiteralPath $ptr)) "-Check wrote pointer"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dg -Ack -ProjectDir $fx -Reason "t105" 2>$null | Out-Null
+    Assert (-not (Test-Path -LiteralPath $ptr)) "-Ack wrote pointer"
+    Remove-Item (Join-Path $fx ".dad-verified") -Force -ErrorAction SilentlyContinue
+    [void](Invoke-HookScript $dg (New-StopPayload $fx "t105-nt" ""))
+    Assert (-not (Test-Path -LiteralPath $ptr)) "missing transcript_path wrote pointer"
+    [void](Invoke-HookScript $dg (New-StopPayload $fx "" $tp))
+    Assert (-not (Test-Path -LiteralPath $ptr)) "missing session_id wrote pointer"
+    $c = Invoke-HookScript $dg (New-StopPayload $fx "t105-r" $tp $true)
+    Assert ($c -eq 0) "retry pass exit $c"
+    Assert (-not (Test-Path -LiteralPath $ptr)) "stop_hook_active retry wrote pointer"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case "T10.5 (C4b): non-DAD dir gets no .claude; .claude occupied by a FILE -> exit code unchanged; .claude/ is gitignored by new-project and upgrade-project" {
+  $dg = Join-Path $kit "dad-guard.ps1"
+  $nd = New-GatesSandbox
+  try {
+    & git -C $nd init -q 2>$null | Out-Null
+    [void](Invoke-HookScript $dg (New-StopPayload $nd "t105-nd" "C:\t\x.jsonl"))
+    Assert (-not (Test-Path -LiteralPath (Join-Path $nd ".claude"))) "non-DAD dir got a .claude"
+  } finally { Remove-Item $nd -Recurse -Force -ErrorAction SilentlyContinue }
+  $fx = New-GuardFixture
+  try {
+    [System.IO.File]::WriteAllText((Join-Path $fx ".claude"), "x")
+    $c = Invoke-HookScript $dg (New-StopPayload $fx "t105-f" "C:\t\x.jsonl")
+    Assert ($c -eq 2) ".claude-as-file changed the block exit to $c"
+    Assert ((Get-Item -LiteralPath (Join-Path $fx ".claude")).PSIsContainer -eq $false) ".claude file was clobbered"
+  } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+  $np = Get-Content -Raw (Join-Path $kit "new-project.ps1")
+  Assert ($np -match '"\.claude/"') "new-project.ps1 .gitignore template lacks .claude/"
+  $up = Get-Content -Raw (Join-Path $kit "upgrade-project.ps1")
+  Assert ($up -match '\$noiseIgnores\s*=\s*@\("\.claude/"\)') "upgrade-project.ps1 does not add .claude/"
+}
+
 # ---------------------------------------------------------------- gates log genesis (T9.6, C3d)
 Write-Host "-- gates log genesis --" -ForegroundColor Cyan
 

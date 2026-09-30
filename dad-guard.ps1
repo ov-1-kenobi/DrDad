@@ -169,6 +169,46 @@ if ($hookMode -and $sessionId) {
     if (-not $armedSeen) { Write-GateLog "allow" "armed" }
   } catch { }
 }
+# SESSION POINTER (C4b): record {session_id, transcript_path, first_seen_utc} to .claude\.dad-session.json so a later
+# plain subprocess (dad-run-summary / publish-run) can find the session clock + transcript. Real hook mode only, both
+# fields present, DAD project only (checked above). Written when absent, unreadable, or for a DIFFERENT session_id
+# (a new session in the same project replaces the pointer - C4b says it points at the current session); the SAME
+# session never rewrites it, so first_seen_utc stays the first sighting. Temp file + Move/Replace so racing Stops
+# cannot leave a torn file. Best-effort: never alters the verdict or exit code. Ephemeral state - .claude\ is gitignored.
+if ($hookMode -and $sessionId -and $hook -and $hook.transcript_path) {
+  try {
+    $pdS = $proj; $dS = $proj
+    for ($i = 0; $i -lt 32 -and $dS; $i++) {
+      if ((Test-Path -LiteralPath (Join-Path $dS "docs")) -or (Test-Path -LiteralPath (Join-Path $dS "grades"))) { $pdS = $dS; break }
+      $parS = Split-Path -Parent $dS
+      if (-not $parS -or $parS -eq $dS) { break }
+      $dS = $parS
+    }
+    $ptrDir = Join-Path $pdS ".claude"
+    $ptrPath = Join-Path $ptrDir ".dad-session.json"
+    $needWrite = $true
+    if (Test-Path -LiteralPath $ptrPath) {
+      try {
+        $cur = [System.IO.File]::ReadAllText($ptrPath) | ConvertFrom-Json
+        if ($cur -and [string]$cur.session_id -eq $sessionId) { $needWrite = $false }
+      } catch { }
+    }
+    if ($needWrite) {
+      if (-not (Test-Path -LiteralPath $ptrDir)) { New-Item -ItemType Directory -Path $ptrDir -Force | Out-Null }
+      $ptr = [ordered]@{
+        session_id     = $sessionId
+        transcript_path = [string]$hook.transcript_path
+        first_seen_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", [System.Globalization.CultureInfo]::InvariantCulture)
+      } | ConvertTo-Json -Compress
+      $tmp = "$ptrPath.$PID.$([guid]::NewGuid().ToString('N')).tmp"
+      [System.IO.File]::WriteAllText($tmp, $ptr, (New-Object System.Text.UTF8Encoding($false)))
+      try {
+        if (Test-Path -LiteralPath $ptrPath) { $bak = "$tmp.bak"; [System.IO.File]::Replace($tmp, $ptrPath, $bak); Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue }
+        else { [System.IO.File]::Move($tmp, $ptrPath) }
+      } finally { if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue } }
+    }
+  } catch { }
+}
 if (-not (Test-Path (Join-Path $proj ".git"))) { Allow "no git repo - nothing to compare against" }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Allow "git not on PATH" }
 

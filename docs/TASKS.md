@@ -1061,7 +1061,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   task adds no production change at all, only the two assertions that keep them correct. It therefore has
   no dependency on the rest of S9 and can land at any point in the story.
 
-### [ ] T10.5 - dad-guard's Stop hook records the session pointer to .claude\.dad-session.json (C4b)   (Story S10)
+### [x] T10.5 - dad-guard's Stop hook records the session pointer to .claude\.dad-session.json (C4b)   (Story S10)
 - **Goal:** `dad-guard.ps1`'s Stop hook writes `{session_id, transcript_path, first_seen_utc}` ONCE per
   session to `.claude\.dad-session.json`, so any later plain subprocess (`dad-run-summary.ps1`,
   `publish-run.ps1`) can find both the session clock and the transcript.
