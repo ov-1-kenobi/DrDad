@@ -997,7 +997,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   from scratch, the same "reuse a proven shape" convention T8.2/T8.3/T8.4 already followed for their own
   gate provocations.
 
-### [ ] T9.6 - Genesis record + predecessor discovery on a fresh gate log (C3d)   (Story S9)
+### [x] T9.6 - Genesis record + predecessor discovery on a fresh gate log (C3d)   (Story S9)
 - **Goal:** When `dad-gates-log.ps1` creates `grades/gates-log.jsonl` because none exists, its FIRST line is
   a genesis record that names whatever prior history it can find - so a reader can always tell a complete
   history from a continuation after a human manually rolls the log.

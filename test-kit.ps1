@@ -4990,6 +4990,16 @@ function Invoke-GatesLog([string[]]$ArgList) {
     return [pscustomobject]@{ Exit = $pr.ExitCode; Out = [System.IO.File]::ReadAllText($so); Err = [System.IO.File]::ReadAllText($se) }
   } finally { Remove-Item $so, $se -Force -ErrorAction SilentlyContinue }
 }
+function Test-GenesisLine([string]$line) {
+  # C3d genesis: gate "gates-log", reason begins "log created".
+  try { $o = $line | ConvertFrom-Json } catch { return $false }
+  return (([string]$o.gate -eq "gates-log") -and ([string]$o.reason).StartsWith("log created"))
+}
+function Get-CallerLines([string]$log) {
+  # Raw non-empty log lines with the C3d genesis line filtered out (callers' own lines only).
+  if (-not (Test-Path -LiteralPath $log)) { return @() }
+  return @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ -and -not (Test-GenesisLine $_) })
+}
 function New-GatesSandbox {
   $root = Join-Path $kit "_tmp"; New-Item -ItemType Directory -Force $root | Out-Null
   $p = Join-Path $root ("gl_" + [guid]::NewGuid().ToString("N").Substring(0,8)); New-Item -ItemType Directory -Force $p | Out-Null
@@ -5003,8 +5013,9 @@ Test-Case "dad-gates-log: acceptance scenario (append, schema, order, ts, second
     Assert ($r.Exit -eq 0) "append exit $($r.Exit)"
     $log = Join-Path $sb "grades\gates-log.jsonl"
     Assert (Test-Path $log) "grades\gates-log.jsonl not created"
-    $lines = @([System.IO.File]::ReadAllLines($log))
-    Assert ($lines.Count -eq 1) "expected 1 line, got $($lines.Count)"
+    Assert (@([System.IO.File]::ReadAllLines($log)).Count -eq 2) "expected genesis + 1 caller line"
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq 1) "expected 1 caller line, got $($lines.Count)"
     $o = $lines[0] | ConvertFrom-Json
     $keys = @($o.PSObject.Properties.Name) -join ","
     Assert ($keys -eq "v,ts,gate,decision,tool,reason,session") "keys/order wrong: $keys"
@@ -5017,8 +5028,8 @@ Test-Case "dad-gates-log: acceptance scenario (append, schema, order, ts, second
     Assert (-not ($raw -contains 13)) "log contains CR"
 
     $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "ratchet", "-Decision", "allow", "-Tool", "`"`"", "-Reason", "`"ok`"", "-Session", "s1")
-    $lines = @([System.IO.File]::ReadAllLines($log))
-    Assert ($lines.Count -eq 2) "second append: expected 2 lines, got $($lines.Count)"
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq 2) "second append: expected 2 caller lines, got $($lines.Count)"
 
     $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Gate", "loop-guard")
     Assert ($q.Exit -eq 0) "query exit $($q.Exit)"
@@ -5046,7 +5057,9 @@ Test-Case "dad-gates-log: redacts a structural token inside a curl reason (C3a w
     Assert (Test-Path $log) "no log written"
     $txt = [System.IO.File]::ReadAllText($log)
     Assert ($txt -notmatch [regex]::Escape($tok)) "the raw token reached the log"
-    $o = ($txt.Trim() | ConvertFrom-Json)
+    $cl = @(Get-CallerLines $log)
+    Assert ($cl.Count -eq 1) "expected 1 caller line, got $($cl.Count)"
+    $o = ($cl[0] | ConvertFrom-Json)
     $want = 'curl -H "Authorization: Bearer [REDACTED]" https://api.example.com/v1/x'
     Assert ($o.reason -eq $want) "reason was [$($o.reason)], wanted [$want]"
   } finally { Remove-Sandbox $sb }
@@ -5064,9 +5077,12 @@ Test-Case "dad-gates-log: two concurrent writers lose no lines" {
     }
     foreach ($p in $procs) { $p.WaitForExit() }
     $log = Join-Path $sb "grades\gates-log.jsonl"
-    $lines = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })
-    Assert ($lines.Count -eq (2 * $n)) "expected $(2 * $n) lines, got $($lines.Count) - a concurrent line was lost"
-    foreach ($l in $lines) { $null = $l | ConvertFrom-Json }
+    $all = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })
+    Assert (Test-GenesisLine $all[0]) "line 1 is not the genesis line"
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq (2 * $n)) "expected $(2 * $n) caller lines, got $($lines.Count) - a concurrent line was lost"
+    Assert ($all.Count -eq (2 * $n + 1)) "expected exactly 1 genesis + $(2 * $n) lines, got $($all.Count) total"
+    foreach ($l in $all) { $null = $l | ConvertFrom-Json }
   } finally { Remove-Sandbox $sb }
 }
 
@@ -5080,8 +5096,8 @@ Test-Case "T9.4: all four gate ids in one sandbox -> 4 lines/7 keys; -Query -Gat
       Assert ($r.Exit -eq 0) "append $g exit $($r.Exit)"
     }
     $log = Join-Path $sb "grades\gates-log.jsonl"
-    $lines = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })
-    Assert ($lines.Count -eq 4) "expected 4 lines, got $($lines.Count)"
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq 4) "expected 4 caller lines, got $($lines.Count)"
     $want = @("v", "ts", "gate", "decision", "tool", "reason", "session")
     for ($i = 0; $i -lt 4; $i++) {
       $o = $lines[$i] | ConvertFrom-Json
@@ -5101,13 +5117,15 @@ Test-Case "T9.4: all four gate ids in one sandbox -> 4 lines/7 keys; -Query -Gat
     foreach ($l in $ql) { Assert (($l | ConvertFrom-Json).decision -eq "block") "non-block line in -Decision block: $l" }
     $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Count")
     Assert ($q.Exit -eq 0) "count exit $($q.Exit)"
-    Assert ($q.Out.Trim() -eq "4") "-Query -Count not bare 4: [$($q.Out)]"
+    Assert ($q.Out.Trim() -eq "5") "-Query -Count not bare 5 (genesis + 4): [$($q.Out)]"
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query", "-Count", "-Gate", "gates-log")
+    Assert ($q.Out.Trim() -eq "1") "-Query -Gate gates-log -Count not bare 1: [$($q.Out)]"
     # C3c invariant: huge reason -> line still under 4096 bytes (300-char truncation)
     $huge = 'x' * 20000
     $r = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", "`"$huge`"", "-Session", "s1")
-    $lines = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })
-    Assert ($lines.Count -eq 5) "huge-reason append: expected 5 lines, got $($lines.Count)"
-    foreach ($l in $lines) { Assert ([System.Text.Encoding]::UTF8.GetByteCount($l) -lt 4096) "a line is >= 4096 bytes" }
+    $lines = @(Get-CallerLines $log)
+    Assert ($lines.Count -eq 5) "huge-reason append: expected 5 caller lines, got $($lines.Count)"
+    foreach ($l in @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ })) { Assert ([System.Text.Encoding]::UTF8.GetByteCount($l) -lt 4096) "a line is >= 4096 bytes" }
     $o = $lines[4] | ConvertFrom-Json
     Assert ($o.reason.Length -le 300) "huge reason not truncated to 300: $($o.reason.Length)"
   } finally { Remove-Sandbox $sb }
@@ -5298,7 +5316,8 @@ function Invoke-HookScript([string]$script, [string]$json, [string[]]$extra = @(
 function Get-GateLines([string]$proj) {
   $l = Join-Path $proj "grades\gates-log.jsonl"
   if (-not (Test-Path -LiteralPath $l)) { return @() }
-  return @([System.IO.File]::ReadAllLines($l) | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+  # the C3d genesis line is filtered: these cases count the gate's own lines
+  return @([System.IO.File]::ReadAllLines($l) | Where-Object { $_ -and -not (Test-GenesisLine $_) } | ForEach-Object { $_ | ConvertFrom-Json })
 }
 function New-GuardFixture {
   $p = New-GatesSandbox
@@ -5423,6 +5442,131 @@ Test-Case "T9.2 (b): dad-guard -Check and -Ack write nothing; empty cwd -> no lo
     $c = Invoke-HookScript $dg ('{"session_id":"t92b-unw","cwd":"' + $fx.Replace('\','\\') + '","stop_hook_active":false}')
     Assert ($c -eq 2) "unwritable grades changed the block exit to $c"
   } finally { Remove-Item $fx -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# ---------------------------------------------------------------- gates log genesis (T9.6, C3d)
+Write-Host "-- gates log genesis --" -ForegroundColor Cyan
+
+function New-PriorLog([string]$sb, [string]$name, [int]$n, [string]$d1, [string]$d2) {
+  # A predecessor log with $n lines whose first ts is $d1 and last ts is $d2.
+  $g = Join-Path $sb "grades"; New-Item -ItemType Directory -Force $g | Out-Null
+  $sbld = New-Object System.Text.StringBuilder
+  for ($i = 0; $i -lt $n; $i++) {
+    $d = if ($i -eq ($n - 1)) { $d2 } else { $d1 }
+    [void]$sbld.Append('{"v":1,"ts":"' + $d + 'T10:00:00.000Z","gate":"loop-guard","decision":"block","tool":"Bash","reason":"r","session":"s"}' + "`n")
+  }
+  [System.IO.File]::WriteAllText((Join-Path $g $name), $sbld.ToString(), (New-Object System.Text.UTF8Encoding($false)))
+}
+function Add-GateLine([string]$sb, [string]$reason = "x") {
+  return (Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Gate", "loop-guard", "-Decision", "block", "-Tool", "Bash", "-Reason", "`"$reason`"", "-Session", "s1"))
+}
+
+Test-Case "T9.6 (C3d worked example 1): predecessor of 12,481 lines -> genesis names it exactly; caller's line is line 2" {
+  $sb = New-GatesSandbox
+  try {
+    New-PriorLog $sb "gates-log-2026-04-02.jsonl" 12481 "2026-04-02" "2026-09-29"
+    $r = Add-GateLine $sb "first"
+    Assert ($r.Exit -eq 0) "append exit $($r.Exit)"
+    $lines = @([System.IO.File]::ReadAllLines((Join-Path $sb "grades\gates-log.jsonl")))
+    Assert ($lines.Count -eq 2) "expected genesis + 1 caller line, got $($lines.Count)"
+    $o = $lines[0] | ConvertFrom-Json
+    $want = "log created; prior history in grades/gates-log-2026-04-02.jsonl (12,481 lines, 2026-04-02..2026-09-29)"
+    Assert ($o.reason -ceq $want) "genesis reason was [$($o.reason)], wanted [$want]"
+    Assert (($lines[1] | ConvertFrom-Json).reason -eq "first") "caller's line is not line 2: $($lines[1])"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.6 (C3d): brand-new sandbox -> 'no prior history' genesis, normal 7-key line, written once, -Query parseable from line 1" {
+  $sb = New-GatesSandbox
+  try {
+    $log = Join-Path $sb "grades\gates-log.jsonl"
+    $r = Add-GateLine $sb "one"
+    Assert ($r.Exit -eq 0) "append exit $($r.Exit)"
+    $lines = @([System.IO.File]::ReadAllLines($log))
+    Assert ($lines.Count -eq 2) "expected 2 lines, got $($lines.Count)"
+    $o = $lines[0] | ConvertFrom-Json
+    Assert ($o.reason -ceq "log created; no prior history found - this log begins here") "genesis reason: [$($o.reason)]"
+    $keys = @($o.PSObject.Properties.Name) -join ","
+    Assert ($keys -eq "v,ts,gate,decision,tool,reason,session") "genesis keys/order: $keys"
+    Assert ($o.v -eq 1) "genesis v != 1"
+    Assert ($o.ts -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') "genesis ts: $($o.ts)"
+    Assert (($o.gate -eq "gates-log") -and ($o.decision -eq "allow") -and ($o.tool -eq "") -and ($o.session -eq "")) "genesis fields: $($lines[0])"
+    $r = Add-GateLine $sb "two"
+    $lines = @([System.IO.File]::ReadAllLines($log))
+    Assert ($lines.Count -eq 3) "second append: expected 3 lines, got $($lines.Count)"
+    Assert (@($lines | Where-Object { Test-GenesisLine $_ }).Count -eq 1) "a second genesis was written"
+    $q = Invoke-GatesLog @("-ProjectDir", "`"$sb`"", "-Query")
+    $ql = @($q.Out -split "`r?`n" | Where-Object { $_ })
+    Assert ($ql.Count -eq 3) "-Query returned $($ql.Count) lines, expected 3"
+    Assert ($ql[0] -eq $lines[0]) "-Query line 1 is not the verbatim genesis"
+    foreach ($l in $ql) { $null = $l | ConvertFrom-Json }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.6 (C3d): several predecessors -> the newest by name date is named" {
+  $sb = New-GatesSandbox
+  try {
+    New-PriorLog $sb "gates-log-2026-09-01.jsonl" 3 "2026-09-01" "2026-09-02"
+    New-PriorLog $sb "gates-log-2026-04-02.jsonl" 5 "2026-04-02" "2026-05-01"
+    New-PriorLog $sb "gates-log-2026-07-15.jsonl" 4 "2026-07-15" "2026-08-01"
+    # make the OLDEST-by-name file the newest by mtime: the name must win
+    (Get-Item (Join-Path $sb "grades\gates-log-2026-04-02.jsonl")).LastWriteTimeUtc = [datetime]::UtcNow.AddDays(1)
+    $null = Add-GateLine $sb
+    $o = @([System.IO.File]::ReadAllLines((Join-Path $sb "grades\gates-log.jsonl")))[0] | ConvertFrom-Json
+    Assert ($o.reason -ceq "log created; prior history in grades/gates-log-2026-09-01.jsonl (3 lines, 2026-09-01..2026-09-02)") "newest by name not chosen: [$($o.reason)]"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.6 (C3d): a live log that already exists (no genesis) gets none inserted" {
+  $sb = New-GatesSandbox
+  try {
+    $g = Join-Path $sb "grades"; New-Item -ItemType Directory -Force $g | Out-Null
+    $pre = '{"v":1,"ts":"2026-01-01T00:00:00.000Z","gate":"ratchet","decision":"allow","tool":"","reason":"old","session":"s"}'
+    [System.IO.File]::WriteAllText((Join-Path $g "gates-log.jsonl"), $pre + "`n", (New-Object System.Text.UTF8Encoding($false)))
+    New-PriorLog $sb "gates-log-2026-04-02.jsonl" 2 "2026-04-02" "2026-04-03"
+    $null = Add-GateLine $sb "new"
+    $lines = @([System.IO.File]::ReadAllLines((Join-Path $g "gates-log.jsonl")))
+    Assert ($lines.Count -eq 2) "expected 2 lines, got $($lines.Count)"
+    Assert ($lines[0] -ceq $pre) "line 1 was altered"
+    Assert (@($lines | Where-Object { Test-GenesisLine $_ }).Count -eq 0) "a genesis was inserted into an existing log"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "T9.6 (C3d): 2-process burst x5 -> exactly one genesis, and it is line 1" {
+  $script = Join-Path $kit "dad-gates-log.ps1"
+  for ($rep = 1; $rep -le 5; $rep++) {
+    $sb = New-GatesSandbox
+    try {
+      $n = 3
+      $procs = @()
+      foreach ($w in @("wa", "wb")) {
+        $cmd = "for (`$i = 0; `$i -lt $n; `$i++) { & '$script' -ProjectDir '$sb' -Gate $w -Decision block -Tool Bash -Reason ('r' + `$i) -Session s }"
+        $procs += Start-Process powershell -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ('"' + $cmd + '"')) -PassThru -WindowStyle Hidden
+      }
+      foreach ($p in $procs) { $p.WaitForExit() }
+      $all = @([System.IO.File]::ReadAllLines((Join-Path $sb "grades\gates-log.jsonl")) | Where-Object { $_ })
+      Assert ($all.Count -eq (2 * $n + 1)) "burst $rep : expected $(2 * $n + 1) lines, got $($all.Count)"
+      Assert (@($all | Where-Object { Test-GenesisLine $_ }).Count -eq 1) "burst $rep : not exactly one genesis"
+      Assert (Test-GenesisLine $all[0]) "burst $rep : genesis is not line 1"
+    } finally { Remove-Sandbox $sb }
+  }
+}
+
+Test-Case "T9.6 (C3a-i): creating the gates log leaves ratchet's counts (incl. gradeBytes) unchanged" {
+  $sb = New-GatesSandbox
+  try {
+    New-Item -ItemType Directory -Force (Join-Path $sb "grades") | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $sb "grades\S1_GRADE.md"), "grade card`n")
+    $rt = Join-Path $kit "ratchet.ps1"
+    $before = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $rt -ProjectDir $sb -Json 2>$null) -join "`n" | ConvertFrom-Json).current
+    $null = Add-GateLine $sb
+    Assert (Test-Path (Join-Path $sb "grades\gates-log.jsonl")) "log not created"
+    $after = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $rt -ProjectDir $sb -Json 2>$null) -join "`n" | ConvertFrom-Json).current
+    Assert ($before.gradeBytes -gt 0) "fixture grade card not counted"
+    foreach ($k in @("tests","requirements","contracts","stories","tasks","sources","gradeBytes","hasBuildCommand","hasTestCommand")) {
+      Assert ($before.$k -eq $after.$k) "ratchet $k changed after log creation: $($before.$k) -> $($after.$k)"
+    }
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "T9.2 (characterization): dad-loopguard Unescape-Json replaces \t before \\ (known pre-existing bug; flips when fixed)" {

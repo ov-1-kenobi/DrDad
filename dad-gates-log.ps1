@@ -13,7 +13,8 @@
 #        (single-write atomicity); it may not be raised without revisiting C3c.
 #   C3e  query: stdout is VERBATIM JSONL only; human notes go to STDERR; -Count prints a bare integer.
 # FAILS OPEN: every error is swallowed and the script exits 0 - logging must never become a reason a gate's
-# own block fails. (C3d's genesis record on a fresh log is T9.6's job, not this task's.)
+# own block fails.
+#   C3d  a fresh log (none existed) starts with a GENESIS line (gate "gates-log") naming the newest predecessor; no rotation code.
 [CmdletBinding()]
 param(
   [string]$ProjectDir = ".",
@@ -102,6 +103,67 @@ try {
   $dir = Join-Path $ProjectDir "grades"
   if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
   $path = Join-Path $dir "gates-log.jsonl"
+
+  # C3d genesis: if the log does not exist, its first line describes the newest predecessor (or says none).
+  # Race-safe: existence is decided by FileMode.CreateNew (atomic; exactly one process wins). The winner writes
+  # genesis + its own line in ONE Write (still < 8192 bytes; each line is < 4096) using the same AppendData right,
+  # so the OS places it at EOF. A loser gets an IOException and falls through to the normal append below.
+  # Fail-open: any error here is swallowed and the normal append proceeds (a missing genesis beats a lost line).
+  $done = $false
+  if (-not (Test-Path -LiteralPath $path)) {
+    try {
+      $reasonG = "log created; no prior history found - this log begins here"
+      try {
+        # Newest = highest date embedded in the name (gates-log-<yyyy-MM-dd>.jsonl); LastWriteTime is the
+        # fallback for names without a date (git checkout resets mtimes, so the name is the better signal).
+        $cands = @(Get-ChildItem -LiteralPath $dir -Filter "gates-log*.jsonl" -File -ErrorAction Stop |
+          Where-Object { $_.Name -ne "gates-log.jsonl" } |
+          ForEach-Object {
+            $k = $_.LastWriteTimeUtc.ToString("yyyy-MM-dd")
+            if ($_.Name -match '(\d{4}-\d{2}-\d{2})') { $k = $Matches[1] }
+            [pscustomobject]@{ File = $_; Key = $k + "|" + $_.LastWriteTimeUtc.ToString("o") }
+          } | Sort-Object Key -Descending)
+        if ($cands.Count -gt 0) {
+          $pf = $cands[0].File
+          $n = 0; $first = $null; $lastL = $null
+          foreach ($l in [System.IO.File]::ReadLines($pf.FullName)) {
+            if ($l.Trim()) { $n++; if ($null -eq $first) { $first = $l }; $lastL = $l }
+          }
+          $span = ""
+          try {
+            $d1 = ([string](($first | ConvertFrom-Json).ts)).Substring(0, 10)
+            $d2 = ([string](($lastL | ConvertFrom-Json).ts)).Substring(0, 10)
+            $span = ", $d1..$d2"
+          } catch { }
+          $reasonG = "log created; prior history in grades/$($pf.Name) ($($n.ToString('N0', [Globalization.CultureInfo]::InvariantCulture)) lines$span)"
+        }
+      } catch { }
+      $g = New-Object System.Collections.Specialized.OrderedDictionary
+      $g.Add("v", 1)
+      $g.Add("ts", $ts)
+      $g.Add("gate", "gates-log")
+      $g.Add("decision", "allow")
+      $g.Add("tool", "")
+      $g.Add("reason", (Get-CleanReason $reasonG $pats))
+      $g.Add("session", "")
+      $gBytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes((($g | ConvertTo-Json -Compress)) + "`n")
+      if ($gBytes.Length -lt 4096) {
+        $both = New-Object byte[] ($gBytes.Length + $bytes.Length)
+        [Array]::Copy($gBytes, 0, $both, 0, $gBytes.Length)
+        [Array]::Copy($bytes, 0, $both, $gBytes.Length, $bytes.Length)
+        $fs = $null
+        try {
+          $fs = New-Object System.IO.FileStream($path, [IO.FileMode]::CreateNew, [System.Security.AccessControl.FileSystemRights]::AppendData, [IO.FileShare]::ReadWrite, 4096, [IO.FileOptions]::None)
+          $fs.Write($both, 0, $both.Length)
+          $done = $true
+        } catch [System.IO.IOException] {
+          # lost the create race (file now exists) -> normal append
+        } finally { if ($fs) { $fs.Dispose() } }
+      }
+    } catch { }
+  }
+  if ($done) { exit 0 }
+
   $delays = @(40, 80, 160)
   for ($i = 0; $i -le $delays.Count; $i++) {
     try {
