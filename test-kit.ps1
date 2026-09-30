@@ -1988,7 +1988,7 @@ Test-Case "S19 AC2: doc-stats honours a LOCALTOOLS_DOCS_DIR that holds STORIES.m
 }
 
 Test-Case "S19 AC3: docs-find ignores an EMPTY LOCALTOOLS_DOCS_DIR with a WARN and still finds project docs" {
-  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { return }
+  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { Write-Host "  SKIP (exe not built): docs-find AC3 case did not run" -ForegroundColor Yellow; return }
   $sb = New-Sandbox
   try {
     $p = New-S19Fixture $sb 1

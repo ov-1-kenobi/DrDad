@@ -14,7 +14,7 @@ function Resolve-DocsDir([string]$Proj, [switch]$Quiet) {
     try {
       if (Test-Path -LiteralPath $d -PathType Container) {
         foreach ($n in @("DESIGN.md", "TEDD.md", "STORIES.md")) {
-          if (Test-Path -LiteralPath (Join-Path $d $n)) { $ok = $true }
+          if (Test-Path -LiteralPath (Join-Path $d $n)) { $ok = $true; break }
         }
       }
     } catch { $ok = $false }
