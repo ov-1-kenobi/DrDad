@@ -753,7 +753,7 @@
     script does NOT roll back or change any security setting.
   - [ ] AC7: the full validation gate passes; the Claude Code stamp constant and the C4a stamp cannot drift.
 
-### Story S18: Verifier claims are computed or cross-checked, not taken on report   (R32, R24)   <!-- Status: TODO -->
+### Story S18: Verifier claims are computed or cross-checked, not taken on report   (R32, R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the failure class S11's decision named - a same-session verifier's unreliable self-report - is
   closed by computed checks, so the kit no longer depends on an agent's word for what a script can settle.
 - **Context:** S11 (Decision, 2026-09-30) kept same-session subagents (Option A) because the observed

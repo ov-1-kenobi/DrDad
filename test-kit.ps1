@@ -4965,6 +4965,98 @@ Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "close-unit -RequireGrade AC1: a headings-only card with no citation is refused, a cited one is accepted" {
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# stub`n" | Set-Content "$p\close-unit.ps1" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+    $filler = 'detail. ' * 120
+
+    # headings + size but NO citation -> refuse
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + "`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -SkipVerify -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "accepted a grade card with no citation"
+    # NOTE: close-unit rolls the story up in STORIES.md before the grade gate runs, so the refusal is the
+    # non-zero exit (a later -RequireGrade run is what gates the close), not an un-DONE file.
+
+    # a test-name citation against a sandbox test-kit.ps1 -> accept
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    "Test-Case `"sandbox named case`" {`n  Assert `$true `"x`"`n}" | Set-Content "$p\test-kit.ps1" -Encoding UTF8
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + " Verified by ``sandbox named case``.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "rejected a card citing an existing Test-Case name"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "test-name variant did not mark the story DONE"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit -RequireGrade AC1: a card citing an existing file:line is accepted" {
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# stub`n" | Set-Content "$p\close-unit.ps1" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + ('detail. ' * 120) + " See ``close-unit.ps1:1``.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "rejected a card citing close-unit.ps1:1"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit -RequireGrade AC2: a card citing an out-of-range line or a missing file is refused" {
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# stub`n" | Set-Content "$p\close-unit.ps1" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+    $filler = 'detail. ' * 120
+
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + " See ``close-unit.ps1:99999``.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -SkipVerify -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "accepted a citation of a line past the end of the file"
+
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + " See ``nosuchfile.ps1:3``.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -SkipVerify -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "accepted a citation of a file that does not exist"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "build.md carries the S18 post-hygiene re-check and neutral grading prompt text" {
+  $bm = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+  Assert ($bm -match [regex]::Escape('doc-stats -Findings')) "build.md has no 'doc-stats -Findings' re-check"
+  Assert ($bm -match 'CONTRADICTED') "build.md has no CONTRADICTED handling"
+  Assert ($bm -match 'Neutral prompt') "build.md has no 'Neutral prompt' phrase"
+}
+
 Test-Case "a build FILE-LOCK is cleared (project-scoped) and the build retried" {
   # Measured: a left-over apphost (a `dotnet run` nobody stopped) held bin\app.exe, so `dotnet build` failed
   # with MSB3026 / "being used by another process" seven times and the model could not clear it. free-locks

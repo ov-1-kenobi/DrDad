@@ -1842,7 +1842,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S18 (Behavior 2 and 3, AC3); Story S11 Decision (failures 2 and 3: S10 hygiene reported clean while `doc-stats` flagged two files; graders biased by known-issue lists); `docs/DESIGN.md` R24, R32.
 - **Context:** current step 5 text: "grade-agent -> grade the completed STORY. It writes `grades/<story id>_GRADE.md` ... Gate ... at least 800 bytes ... `## Grade history`, `## Assessment`, `## Suggestions`". Step 6: "hygiene-agent (give it the story id) -> applies the card's `[mechanical]` items ... then rebuilds." Step 7 runs `dad close-unit -Id <story id> -Title "<story> polish" -RequireGrade`. `doc-stats -Findings` emits tagged findings; there are 9 `[hygiene]`/`[integrity]` mentions in `doc-stats.ps1`. Do not edit grade-agent.md or hygiene-agent.md.
 
-### [ ] T18.3 - test-kit cases for S18 (AC1-AC4)   (Story S18)
+### [x] T18.3 - test-kit cases for S18 (AC1-AC4)   (Story S18)
 - **Goal:** `test-kit.ps1` proves the citation gate and that the build.md text landed.
 - **Touches:** `test-kit.ps1` (new `Test-Case` blocks immediately after `"close-unit -RequireGrade refuses a story with no real grade card"`, ~line 4540).
 - **Do:** Copy that test's sandbox shape (`New-Sandbox`, git init, `Remove-Sandbox`, `if (-not $haveGit) { return }`, `-SkipVerify -NoReindex -RequireGrade`). Cases:
