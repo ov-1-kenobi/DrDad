@@ -6090,6 +6090,165 @@ Test-Case "dad-run-summary: tokens has three reasoned states; 'does not expose' 
   } finally { Remove-Sandbox $fx.Dir }
 }
 
+Test-Case "dad-run-summary: tokens measured branch dedupes by message.id, windows, and names source+version; unmeasured model falls back (T10.6)" {
+  $fx = New-RsFixture
+  try {
+    $a = '{"type":"assistant","version":"2.1.285","sessionId":"s1","timestamp":"{T}","message":{"id":"{I}","model":"{M}","usage":{"input_tokens":{X},"output_tokens":{Y},"cache_read_input_tokens":{Z}}}}'
+    $now = (Get-Date).ToUniversalTime()
+    function Mk($id, $model, $x, $y, $z, $t) { return $a.Replace("{T}", $t.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")).Replace("{I}", $id).Replace("{M}", $model).Replace("{X}", "$x").Replace("{Y}", "$y").Replace("{Z}", "$z") }
+    $lines = @((Mk "old" "claude-sonnet-5-5" 900 900 900 $now.AddHours(-3)), (Mk "m1" "claude-sonnet-5-5" 10 20 1000 $now.AddMinutes(-30)),
+               (Mk "m1" "claude-sonnet-5-5" 10 20 1000 $now.AddMinutes(-30)), (Mk "m2" "claude-sonnet-5-5" 5 7 2000 $now.AddMinutes(-20)))
+    Write-RsFile $fx.Dir "t.jsonl" (($lines -join "`n") + "`n")
+    Write-RsFile $fx.Dir "u.jsonl" ((Mk "z" "some-other-model" 1 1 1 $now.AddMinutes(-5)) + "`n")
+    $r = Invoke-RunSummary ((Get-RsOverrideArgs $fx) + @("-TranscriptPath", ('"' + (Join-Path $fx.Dir "t.jsonl") + '"')))
+    $t = @(Get-RsLine $r.Out "tokens")[0]
+    Assert ($t -match 'tokens: 15 in / 27 out / 3,000 cache read\s+\(source: transcript t\.jsonl, 2 assistant entries, Claude Code \d') "measured line wrong (dedupe/window/source): $t"
+    $r2 = Invoke-RunSummary ((Get-RsOverrideArgs $fx) + @("-TranscriptPath", ('"' + (Join-Path $fx.Dir "u.jsonl") + '"')))
+    $t2 = @(Get-RsLine $r2.Out "tokens")[0]
+    Assert ($t2 -match 'not available \(backend UNMEASURED') "unmeasured model did not fall back with a reason: $t2"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: the stamped Claude Code version constant cannot drift from DESIGN C4a (T10.6, C2f device)" {
+  $src = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.ps1"))
+  $m = [regex]::Match($src, '\$MeasuredClaudeCodeVersion\s*=\s*"([0-9][0-9.]*)"')
+  Assert $m.Success "dad-run-summary.ps1 has no `$MeasuredClaudeCodeVersion constant (C4a requires one)"
+  $design = [System.IO.File]::ReadAllText((Join-Path $kit "docs\DESIGN.md"))
+  $c4a = [regex]::Match($design, '(?s)#### C4a:.*?(?=\r?\n#### C4b:)')
+  Assert $c4a.Success "DESIGN.md has no C4a section"
+  $d = [regex]::Match($c4a.Value, 'MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+Claude\s+Code\s+([0-9][0-9.]*)')
+  if ($d.Success) {
+    Assert ($m.Groups[1].Value -eq $d.Groups[1].Value) "dad-run-summary.ps1 says Claude Code $($m.Groups[1].Value) but DESIGN C4a is stamped $($d.Groups[1].Value) - re-measure, then update BOTH"
+  } else {
+    # PENDING (T10.6): C4a is LOCKED and does not yet carry a 'MEASURED <date> against Claude Code <version>'
+    # line; that is a /design amendment. Until it lands this case only checks the constant is well-formed
+    # and FAILS the moment the stamp appears and differs - then the comparison above takes over.
+    Write-Host "    (pending: DESIGN C4a has no 'MEASURED <date> against Claude Code <version>' stamp yet - /design amendment)" -ForegroundColor Yellow
+  }
+}
+
+# ---- T10.6 hardening: measured-tokens branch (C4a) ----
+function New-RsEntry([string]$type, [string]$id, [string]$model, $usage, [string]$ts, [switch]$NoStamp) {
+  $st = if ($NoStamp) { "" } else { '"version":"2.1.285","sessionId":"s1",' }
+  $u = if ($null -ne $usage) { ',"usage":{' + $usage + '}' } else { "" }
+  return ('{"type":"' + $type + '",' + $st + '"timestamp":"' + $ts + '","message":{"id":"' + $id + '","model":"' + $model + '"' + $u + '}}')
+}
+function Get-RsTokenLine($fx, [string]$file, [string]$start = "2026-01-01T12:00:00Z") {
+  $r = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'), "-SinceCommit", $fx.Base, "-StartTime", $start, "-TranscriptPath", ('"' + (Join-Path $fx.Dir $file) + '"'))
+  return [pscustomobject]@{ R = $r; Line = [string]@(Get-RsLine $r.Out "tokens")[0] }
+}
+function Get-RsSnap($d) {
+  return (@(Get-ChildItem $d -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } | Sort-Object FullName | ForEach-Object { $_.FullName + "|" + $_.Length + "|" + (Get-FileHash $_.FullName).Hash }) -join "`n")
+}
+
+Test-Case "dad-run-summary: tokens dedupe (3x identical, growing output = max), window boundary, absent cache_read, synthetic/user/corrupt/usage-less skipped, read-only (T10.6)" {
+  $fx = New-RsFixture
+  try {
+    $c = "claude-sonnet-5-5"
+    $L = @(
+      (New-RsEntry "assistant" "before" $c '"input_tokens":900,"output_tokens":900,"cache_read_input_tokens":900' "2026-01-01T11:59:59.999Z"),
+      (New-RsEntry "assistant" "eq"     $c '"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3' "2026-01-01T12:00:00.000Z"),
+      (New-RsEntry "assistant" "a1"     $c '"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":1000' "2026-01-01T12:00:05.000Z"),
+      (New-RsEntry "assistant" "a1"     $c '"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":1000' "2026-01-01T12:00:05.000Z"),
+      '{"type":"assistant","version":"2.1.285","sessionId":"s1","timestamp":"2026-01-01T12:00:06.000Z","message":{"id":"broken","model":"claude-sonnet-5-5","usage":{"input_tokens":99,',
+      (New-RsEntry "assistant" "a1"     $c '"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":1000' "2026-01-01T12:00:05.000Z"),
+      (New-RsEntry "assistant" "g"      $c '"input_tokens":4,"output_tokens":5' "2026-01-01T12:00:10.000Z"),
+      (New-RsEntry "assistant" "g"      $c '"input_tokens":4,"output_tokens":12,"cache_read_input_tokens":50' "2026-01-01T12:00:10.000Z"),
+      (New-RsEntry "assistant" "g"      $c '"input_tokens":4,"output_tokens":30,"cache_read_input_tokens":50' "2026-01-01T12:00:10.000Z"),
+      (New-RsEntry "assistant" "nc"     $c '"input_tokens":2,"output_tokens":3' "2026-01-01T12:00:11.000Z"),
+      (New-RsEntry "assistant" "syn"    "<synthetic>" '"input_tokens":7777,"output_tokens":7777,"cache_read_input_tokens":7777' "2026-01-01T12:00:12.000Z"),
+      (New-RsEntry "user"      "usr"    $c '"input_tokens":5555,"output_tokens":5555' "2026-01-01T12:00:13.000Z"),
+      (New-RsEntry "assistant" "nou"    $c $null "2026-01-01T12:00:14.000Z"),
+      'this line is not json at all'
+    )
+    Write-RsFile $fx.Dir "t.jsonl" (($L -join "`n") + "`n")
+    $before = Get-RsSnap $fx.Dir
+    $x = Get-RsTokenLine $fx "t.jsonl"
+    Assert ($x.R.Exit -eq 0) "exit $($x.R.Exit) with corrupt lines; stderr: $($x.R.Err)"
+    # eq + a1 + g + nc = 4 messages: in 1+10+4+2=17, out 2+20+30+3=55, cache 3+1000+50+0=1053
+    Assert ($x.Line -match 'tokens: 17 in / 55 out / 1,053 cache read') "wrong totals (want 17/55/1,053): $($x.Line)"
+    Assert ($x.Line -match 'source: transcript t\.jsonl, 4 assistant entries, Claude Code 2\.1\.285') "label wrong (file/count/version): $($x.Line)"
+    Assert ($x.Line -notmatch '\(local model\)') "cloud model labelled local: $($x.Line)"
+    $after = Get-RsSnap $fx.Dir
+    Assert ($before -eq $after) "run-summary modified files in the project dir (must be read-only)"
+    $y = Get-RsTokenLine $fx "t.jsonl" "2026-01-01T12:00:06Z"
+    Assert ($y.Line -match 'tokens: 6 in / 33 out / 50 cache read' -and $y.Line -match ', 2 assistant entries,') "later window wrong (want g+nc = 6/33/50, 2 entries): $($y.Line)"
+    $z = Get-RsTokenLine $fx "t.jsonl" "2026-01-01T12:00:05Z"
+    Assert ($z.Line -match 'tokens: 16 in / 53 out / 1,050 cache read') "boundary (a1 at exactly window start) not included once: $($z.Line)"
+    $w = Get-RsTokenLine $fx "t.jsonl" "2027-01-01T00:00:00Z"
+    Assert ($w.R.Exit -eq 0 -and $w.Line -match 'not available \(transcript has no assistant entries at or after window start') "empty window fallback wrong: $($w.Line)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: tokens label picks the right version constant for cloud vs local -cc model; unknown model UNMEASURED; no version/sessionId -> not-a-Claude-Code-transcript; no bare 'not available' (T10.6)" {
+  $fx = New-RsFixture
+  try {
+    $mj = [System.IO.File]::ReadAllText((Join-Path $kit "models.json"))
+    $ln = [regex]::Match($mj, '"name"\s*:\s*"([^"]+-cc)"').Groups[1].Value
+    Assert ($ln) "no -cc model name found in models.json"
+    $src = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.ps1"))
+    $vc = [regex]::Match($src, '\$MeasuredClaudeCodeVersion\s*=\s*"([0-9][0-9.]*)"').Groups[1].Value
+    $vl = [regex]::Match($src, '\$MeasuredLocalClaudeCodeVersion\s*=\s*"([0-9][0-9.]*)"').Groups[1].Value
+    Assert ($vc -and $vl -and $vc -ne $vl) "cloud/local version constants missing or identical ($vc / $vl)"
+    $ts = "2026-01-01T12:30:00.000Z"; $u = '"input_tokens":3,"output_tokens":4,"cache_read_input_tokens":5'
+    Write-RsFile $fx.Dir "cloud.jsonl" ((New-RsEntry "assistant" "c1" "claude-opus-4-1" $u $ts) + "`n")
+    Write-RsFile $fx.Dir "local.jsonl" ((New-RsEntry "assistant" "l1" $ln $u $ts) + "`n")
+    Write-RsFile $fx.Dir "unk.jsonl"   ((New-RsEntry "assistant" "u1" "mystery-model-9" $u $ts) + "`n")
+    Write-RsFile $fx.Dir "foreign.jsonl" ((New-RsEntry "assistant" "f1" "claude-opus-4-1" $u $ts -NoStamp) + "`n")
+    Write-RsFile $fx.Dir "empty.jsonl" ""
+    $all = @()
+    $c = Get-RsTokenLine $fx "cloud.jsonl";  $all += $c
+    Assert ($c.Line -match 'tokens: 3 in / 4 out / 5 cache read' -and $c.Line -match ('source: transcript cloud\.jsonl, 1 assistant entries, Claude Code ' + [regex]::Escape($vc) + '\)?\s*$') -and $c.Line -notmatch [regex]::Escape($vl)) "cloud label wrong (want $vc only): $($c.Line)"
+    $l = Get-RsTokenLine $fx "local.jsonl";  $all += $l
+    Assert ($l.Line -match 'tokens: 3 in / 4 out / 5 cache read' -and $l.Line -match ('Claude Code ' + [regex]::Escape($vl) + ' \(local model\)') -and $l.Line -notmatch ('Claude Code ' + [regex]::Escape($vc) + '\b')) "local label wrong for $ln (want $vl local only): $($l.Line)"
+    $k = Get-RsTokenLine $fx "unk.jsonl";    $all += $k
+    Assert ($k.Line -match 'not available \(backend UNMEASURED for model mystery-model-9') "unknown model line wrong: $($k.Line)"
+    Assert ($k.Line -notmatch 'tokens: \d') "unknown model printed a number: $($k.Line)"
+    $f = Get-RsTokenLine $fx "foreign.jsonl"; $all += $f
+    Assert ($f.Line -match 'not available \(transcript is not a Claude Code transcript') "no version/sessionId fallback wrong: $($f.Line)"
+    $e = Get-RsTokenLine $fx "empty.jsonl";  $all += $e
+    $m = Get-RsTokenLine $fx "nope.jsonl";   $all += $m
+    $nw = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'), "-TranscriptPath", ('"' + (Join-Path $fx.Dir "cloud.jsonl") + '"'))
+    $all += [pscustomobject]@{ R = $nw; Line = [string]@(Get-RsLine $nw.Out "tokens")[0] }
+    foreach ($a in $all) {
+      Assert ($a.R.Exit -eq 0) "exit $($a.R.Exit) (want 0): $($a.Line)"
+      Assert ($a.Line) "no tokens line emitted"
+      Assert ($a.Line -notmatch '(?i)does not expose') "superseded phrase: $($a.Line)"
+      if ($a.Line -match 'tokens: not available') {
+        Assert ($a.Line -match 'not available \([^)\s][^)]{9,}\)') "fallback without a named reason: $($a.Line)"
+      } else { Assert ($a.Line -match 'tokens: \d' -and $a.Line -match '\(source: transcript ') "figure without source: $($a.Line)" }
+    }
+    Assert ($e.Line -match 'not available \(transcript has no assistant entries') "empty transcript reason wrong: $($e.Line)"
+    Assert ($m.Line -match 'not available \(transcript path recorded but file missing') "missing transcript reason wrong: $($m.Line)"
+    Assert ($nw.Out -match 'tokens: not available \(no window') "no-window reason wrong: $($nw.Out)"
+    $bare = @($src -split "`r?`n" | Where-Object { $_ -match 'Emit "tokens" "not available"' -or $_ -match 'Emit "tokens" "not available\s*"' })
+    Assert ($bare.Count -eq 0) "script emits a bare 'not available': $($bare -join ' | ')"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: tokens branch streams the transcript (code inspection) and a 20k-entry transcript finishes in < 20 s (T10.6)" {
+  $src = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.ps1"))
+  $fn = [regex]::Match($src, '(?s)function Get-TranscriptTokens.*?\r?\ntry \{')
+  Assert $fn.Success "Get-TranscriptTokens not found"
+  Assert ($fn.Value -match 'StreamReader|ReadLines') "Get-TranscriptTokens does not stream (no StreamReader/ReadLines)"
+  Assert ($fn.Value -notmatch 'ReadAllText|ReadAllLines|Get-Content') "Get-TranscriptTokens loads the whole transcript (ReadAllText/ReadAllLines/Get-Content)"
+  $fx = New-RsFixture
+  try {
+    $sb = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt 20000; $i++) {
+      [void]$sb.Append((New-RsEntry "assistant" ("id$i") "claude-sonnet-5-5" '"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":3' "2026-01-01T13:00:00.000Z")).Append("`n")
+      if ($i % 5000 -eq 2500) { [void]$sb.Append("{ corrupt partial line`n") }
+    }
+    Write-RsFile $fx.Dir "big.jsonl" $sb.ToString()
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $x = Get-RsTokenLine $fx "big.jsonl"
+    $sw.Stop()
+    Assert ($x.R.Exit -eq 0) "exit $($x.R.Exit) on big transcript"
+    Assert ($x.Line -match 'tokens: 20,000 in / 40,000 out / 60,000 cache read' -and $x.Line -match '20000 assistant entries') "big transcript totals wrong: $($x.Line)"
+    Assert ($sw.Elapsed.TotalSeconds -lt 20) "20k-entry transcript took $([int]$sw.Elapsed.TotalSeconds) s (limit 20)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
 Test-Case "dad-run-summary: exit 2 for a nonexistent -ProjectDir, exit 0 otherwise" {
   $r = Invoke-RunSummary @("-ProjectDir", ('"' + (Join-Path $env:TEMP ("dadkit_nope_" + [guid]::NewGuid().ToString("N"))) + '"'))
   Assert ($r.Exit -eq 2) "nonexistent -ProjectDir exit $($r.Exit), want 2"

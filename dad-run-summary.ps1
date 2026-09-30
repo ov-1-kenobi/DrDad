@@ -17,6 +17,14 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+# C4a / T10.6: the Claude Code version the transcript token fields were MEASURED against (cloud backend,
+# R34b). This is the ONE stamped constant; test-kit.ps1 ties it to the version recorded in DESIGN C4a.
+$MeasuredClaudeCodeVersion = "2.1.285"
+# The local Ollama backend (R1) was measured on an EXISTING transcript written by an OLDER Claude Code
+# (2.1.191): 2.1.285 rejects unmapped local model ids in headless mode here, so a fresh local run was not
+# possible. C4a fact (ii) forbids stamping the local figure with the cloud version, so it is stamped apart.
+$MeasuredLocalClaudeCodeVersion = "2.1.191"
+
 if (-not (Test-Path -LiteralPath $ProjectDir -PathType Container)) {
   [Console]::Error.WriteLine("dad-run-summary: -ProjectDir does not exist: $ProjectDir")
   exit 2
@@ -173,15 +181,87 @@ try {
   }
 } catch { Emit "gate interventions" "not available (error: $($_.Exception.Message))" "" }
 
-# 5. tokens (C4a). T10.6 has not measured the transcript's token fields yet, so this prints C4a's FALLBACK
-# line NAMING ITS REASON. It never parses the transcript yet, never fabricates a number.
+# 5. tokens (C4a, measured by T10.6).
+# MEASURED FACTS (T10.6, 2026-09-30) this branch relies on - an assistant entry's message.usage carries
+# input_tokens / output_tokens / cache_read_input_tokens on BOTH backends; Claude Code writes ONE JSONL
+# entry per content block, so ONE API message appears as several entries sharing message.id with the SAME
+# usage (cloud) or a growing output_tokens (local, streamed) - summing entries would over-count ~1.5-2x, so
+# usage is taken as the per-field MAX over each message.id. Only claude-* (cloud, R34b) and the kit's local
+# -cc models (R1) were measured; any other model, or a transcript without Claude Code's version/sessionId
+# stamp (another harness), gets the reasoned fallback line, never a number.
+function Get-LocalModelNames {
+  $names = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+  $mj = Join-Path $PSScriptRoot "models.json"
+  if (Test-Path -LiteralPath $mj) {
+    foreach ($m in [regex]::Matches([IO.File]::ReadAllText($mj), '"name"\s*:\s*"([^"]+)"')) { [void]$names.Add($m.Groups[1].Value) }
+  }
+  return ,$names
+}
+function Get-TranscriptTokens([string]$path, $windowStart) {
+  $local = Get-LocalModelNames
+  $best = @{}                                   # message.id -> @(in, out, cacheRead, backend)
+  $unmeasured = @{}; $nonCc = 0; $seq = 0
+  $sr = New-Object System.IO.StreamReader($path)
+  try {
+    while ($null -ne ($line = $sr.ReadLine())) {
+      if ($line.IndexOf('"type":"assistant"', [StringComparison]::Ordinal) -lt 0) { continue }
+      try { $o = $line | ConvertFrom-Json } catch { continue }
+      if ([string]$o.type -ne "assistant" -or -not $o.message) { continue }
+      if (-not $o.version -or -not $o.sessionId) { $nonCc++; continue }
+      if ($windowStart) {
+        $ts = $o.timestamp
+        if ($ts -isnot [datetime]) {
+          try { $ts = [DateTimeOffset]::Parse([string]$ts, $inv, [Globalization.DateTimeStyles]::AssumeUniversal).UtcDateTime } catch { continue }
+        }
+        if ($ts.ToUniversalTime() -lt $windowStart) { continue }
+      }
+      $model = [string]$o.message.model
+      if ($model -eq "<synthetic>" -or -not $model) { continue }
+      $backend = ""
+      if ($model -like "claude-*") { $backend = "cloud" }
+      elseif ($model -like "*-cc" -or $local.Contains($model)) { $backend = "local" }
+      else { $unmeasured[$model] = $true; continue }
+      $u = $o.message.usage
+      if (-not $u) { continue }
+      $id = [string]$o.message.id
+      if (-not $id) { $seq++; $id = "noid-$seq" }
+      $v = @([long]$u.input_tokens, [long]$u.output_tokens, [long]$u.cache_read_input_tokens, $backend)
+      if ($best.ContainsKey($id)) {
+        $p = $best[$id]
+        for ($i = 0; $i -lt 3; $i++) { if ($v[$i] -gt $p[$i]) { $p[$i] = $v[$i] } }
+      } else { $best[$id] = $v }
+    }
+  } finally { $sr.Close() }
+  $r = [ordered]@{ In = 0L; Out = 0L; Cache = 0L; Entries = $best.Count; Backends = @{}; Unmeasured = @($unmeasured.Keys); NonCc = $nonCc }
+  foreach ($v in $best.Values) { $r.In += $v[0]; $r.Out += $v[1]; $r.Cache += $v[2]; $r.Backends[$v[3]] = $true }
+  return [pscustomobject]$r
+}
+
 try {
   $tp = ""; $from = ""
   if ($PSBoundParameters.ContainsKey('TranscriptPath') -and $TranscriptPath) { $tp = $TranscriptPath; $from = "-TranscriptPath" }
   elseif ($session -and $session.transcript_path) { $tp = [string]$session.transcript_path; $from = $sessionRel }
   if ($tp) {
     if (Test-Path -LiteralPath $tp -PathType Leaf) {
-      Emit "tokens" "not available (transcript present but token fields not yet measured - T10.6)" ""
+      if (-not $start) {
+        Emit "tokens" $noWindowMsg ""
+      } else {
+        $tk = Get-TranscriptTokens $tp $start
+        $bk = @($tk.Backends.Keys)
+        if ($tk.Entries -gt 0) {
+          $vers = @()
+          if ($bk -contains "cloud") { $vers += "Claude Code $MeasuredClaudeCodeVersion" }
+          if ($bk -contains "local") { $vers += "Claude Code $MeasuredLocalClaudeCodeVersion (local model)" }
+          $txt = "{0} in / {1} out / {2} cache read" -f $tk.In.ToString("N0", $inv), $tk.Out.ToString("N0", $inv), $tk.Cache.ToString("N0", $inv)
+          Emit "tokens" $txt ("transcript " + [IO.Path]::GetFileName($tp) + ", $($tk.Entries) assistant entries, " + ($vers -join " + "))
+        } elseif ($tk.Unmeasured.Count -gt 0) {
+          Emit "tokens" ("not available (backend UNMEASURED for model " + ($tk.Unmeasured -join ", ") + ": only claude-* cloud and the kit's local -cc models were measured, C4a)") ""
+        } elseif ($tk.NonCc -gt 0) {
+          Emit "tokens" "not available (transcript is not a Claude Code transcript: assistant entries carry no version/sessionId stamp)" ""
+        } else {
+          Emit "tokens" "not available (transcript has no assistant entries at or after window start $(Fmt-Utc $start))" ""
+        }
+      }
     } else {
       Emit "tokens" "not available (transcript path recorded but file missing: $from -> $tp)" ""
     }

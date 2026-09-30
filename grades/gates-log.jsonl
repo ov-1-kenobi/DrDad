@@ -18,3 +18,5 @@
 {"v":1,"ts":"2026-09-30T03:49:10.763Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.3","session":""}
 {"v":1,"ts":"2026-09-30T04:00:38.476Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
 {"v":1,"ts":"2026-09-30T04:00:43.510Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.4","session":""}
+{"v":1,"ts":"2026-09-30T04:34:46.800Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T04:34:52.075Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T10.6","session":""}

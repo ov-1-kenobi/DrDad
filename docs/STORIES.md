@@ -386,7 +386,7 @@
 - **Dev notes:** Inspired by claude-gates (DevRik99)'s `.ai/gates-log.jsonl` (timestamp, gate, tool, reason,
   session - queryable via `claude-gates log --deny --gate <id>`).
 
-### Story S10: Per-run stats summary   (R38)   <!-- Status: TODO -->
+### Story S10: Per-run stats summary   (R38)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** At the end of a `/build` scope or a full `/audit`, auto-generate a short, computed-not-narrated
   summary: tokens used, wall-clock time, files touched, findings count, gate interventions (pulled from S9's
   log).

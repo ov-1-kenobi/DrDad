@@ -1311,7 +1311,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   structural pattern to mirror (sandbox fixture -> run the script -> assert on output) - reuse that shape
   rather than inventing a new fixture style.
 
-### [ ] T10.6 - MEASURE token usage in the session transcript, both backends, and stamp the version (C4a)   [research]   (Story S10)
+### [x] T10.6 - MEASURE token usage in the session transcript, both backends, and stamp the version (C4a)   [research]   (Story S10)
 - **Goal:** Resolve C4a's CONDITIONAL pin by MEASUREMENT: determine whether a Claude Code session
   transcript actually carries usable input / output / cache token counts, on BOTH backends, and either wire
   the measured figure into `dad-run-summary.ps1` with its source and version stamp, or record the named
