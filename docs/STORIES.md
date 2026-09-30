@@ -713,7 +713,7 @@
   is broken on current Claude Code, R40's post-update check must catch exactly that.
   RECORD: lives in grades/S16_GRADE.md (Measured-facts record).
 
-### Story S17: Install reports harness versions and asks before updating   (R40)   <!-- Status: TODO -->
+### Story S17: Install reports harness versions and asks before updating   (R40)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** each `install.cmd` run prints, for Claude Code and (when present) Copilot CLI, installed vs
   latest vs measured-against versions, asks before updating, warns loudly when the version is newer than the
   contracts were measured against, and runs a smoke check after any update - replacing today's silent

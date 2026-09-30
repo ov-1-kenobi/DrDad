@@ -1611,6 +1611,147 @@ Test-Case "dad-doctor's Copilot harness section renders without erroring" {
   }
 }
 
+# ---- S17 / R40 harness-version cases (T17.5): stubs on a CHILD process PATH only; never a real npm/claude ----
+function Get-InstallMeasuredCc {
+  $t = Get-Content (Join-Path $kit "install.ps1") -Raw
+  return [regex]::Match($t, '(?m)^\$ClaudeCodeMeasuredVersion\s*=\s*"([^"]+)"').Groups[1].Value
+}
+# Runs install.ps1's extracted step-3 (Claude Code) + Copilot harness blocks in a child powershell with stubs.
+# Returns @{ Out; Exit; NpmLog; Settings (before/after hash) }.
+function Invoke-HvInstallStub([string]$ClaudeVer, [string]$CopilotVer, [string]$Latest, [bool]$NpmFail, [string]$Stdin,
+                              [bool]$Yes, [bool]$CopilotCli, [string]$Measured, [hashtable]$ExtraEnv = @{}) {
+  $sb = New-Sandbox
+  $bin = Join-Path $sb "bin"; New-Item -ItemType Directory -Force $bin | Out-Null
+  $home2 = Join-Path $sb "home"; New-Item -ItemType Directory -Force (Join-Path $home2 ".claude") | Out-Null
+  $settings = Join-Path $home2 ".claude\settings.json"
+  Set-Content -Path $settings -Value '{"sandbox":true}' -Encoding ASCII
+  $before = (Get-FileHash $settings).Hash
+  $npmLog = Join-Path $sb "npm.log"
+  if ($ClaudeVer)  { Set-Content -Path (Join-Path $bin "claude.cmd")  -Value "@echo off`r`necho $ClaudeVer (Claude Code)" -Encoding ASCII }
+  if ($CopilotVer) { Set-Content -Path (Join-Path $bin "copilot.cmd") -Value "@echo off`r`necho GitHub Copilot CLI $CopilotVer" -Encoding ASCII }
+  Set-Content -Path (Join-Path $bin "npm.cmd") -Encoding ASCII -Value @(
+    '@echo off', 'echo %* >> "%DAD_NPMLOG%"', 'if "%DAD_NPM_FAIL%"=="1" exit /b 1',
+    'if "%1"=="view" echo %DAD_LATEST%', 'exit /b 0')
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  $s3 = [regex]::Match($inst, '(?s)Write-Host "`n== 3\).*?(?=\r?\nif \(\$haveCode\))').Value
+  $cp = [regex]::Match($inst, '(?s)if \(\(Have copilot\) -or \$CopilotCli\) \{.*?(?=\r?\nif \(\$CopilotCli\) \{)').Value
+  if (-not $s3 -or -not $cp) { Remove-Sandbox $sb; throw "could not extract install.ps1 step-3 / copilot blocks" }
+  $driver = Join-Path $sb "driver.ps1"
+  $head = @(
+    'param([switch]$Yes, [switch]$CopilotCli)',
+    ('$ClaudeCodeMeasuredVersion = "' + $Measured + '"'),
+    '$CopilotMeasuredVersion = "1.0.89"',
+    'function Have($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }',
+    ('. "' + (Join-Path $kit "harness-versions.ps1") + '"'),
+    'function Read-Consent($prompt, [bool]$defaultYes) {',
+    '  if ($Yes) { return $true }',
+    '  $ans = ""; try { $ans = "$(Read-Host $prompt)".Trim() } catch { $ans = "" }',
+    '  if (-not $ans) { return $defaultYes }',
+    '  return ($ans -match ''^(y|yes)$'')',
+    '}',
+    '$haveNode = $true') -join "`r`n"
+  Set-Content -Path $driver -Value ($head + "`r`n" + $s3 + "`r`n" + $cp + "`r`nexit 0`r`n") -Encoding ASCII
+  $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+  $names = @("PATH","USERPROFILE","HOME","DAD_NPMLOG","DAD_NPM_FAIL","DAD_LATEST","DAD_SMOKE_GATES","DAD_SMOKE_LOCALMODEL") + @($ExtraEnv.Keys)
+  $saved = @{}; foreach ($n in $names) { $saved[$n] = [Environment]::GetEnvironmentVariable($n, "Process") }
+  try {
+    $env:PATH = "$bin;$env:SystemRoot\System32;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+    # HOME only: a sandbox USERPROFILE breaks Start-Job in the child (Get-LatestVersion then reports unknown).
+    # The extracted blocks never read USERPROFILE, so the real one is harmless here.
+    $env:HOME = $home2
+    $env:DAD_NPMLOG = $npmLog; $env:DAD_LATEST = $Latest
+    $env:DAD_NPM_FAIL = $(if ($NpmFail) { "1" } else { "" })
+    $env:DAD_SMOKE_GATES = "pass"; $env:DAD_SMOKE_LOCALMODEL = "skip"
+    foreach ($k in $ExtraEnv.Keys) { [Environment]::SetEnvironmentVariable($k, $ExtraEnv[$k], "Process") }
+    $argl = @("-NoProfile","-ExecutionPolicy","Bypass","-File",$driver)
+    if ($Yes) { $argl += "-Yes" }
+    if ($CopilotCli) { $argl += "-CopilotCli" }
+    $out = (& { $Stdin | & $ps @argl 2>&1 } | Out-String)
+    $code = $LASTEXITCODE
+  } finally {
+    foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $saved[$n], "Process") }
+  }
+  $log = ""; if (Test-Path $npmLog) { $log = Get-Content $npmLog -Raw }
+  $after = (Get-FileHash $settings).Hash
+  Remove-Sandbox $sb
+  return @{ Out = $out; Exit = $code; NpmLog = $log; SettingsSame = ($before -eq $after) }
+}
+
+Test-Case "R40 AC1: harness report prints installed / latest / measured for each present CLI" {
+  $m = Get-InstallMeasuredCc
+  Assert ($m) "could not read `$ClaudeCodeMeasuredVersion from install.ps1"
+  $r = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "1.0.89" -Latest "9.9.9" -NpmFail $false -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  Assert ($r.Out -match "\[harness\] claude-code\s+installed $([regex]::Escape($m))\s+latest 9\.9\.9\s+measured against $([regex]::Escape($m))") "claude-code line lacks the three columns:`n$($r.Out)"
+  Assert ($r.Out -match '\[harness\] copilot-cli\s+installed 1\.0\.89\s+latest 9\.9\.9\s+measured against 1\.0\.89') "copilot-cli line lacks the three columns:`n$($r.Out)"
+}
+
+Test-Case "R40 AC2: update is asked first - stdin N installs nothing, -Yes installs exactly once" {
+  $m = Get-InstallMeasuredCc
+  $n = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $false -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  Assert ($n.Out -match 'update available') "no update-available line:`n$($n.Out)"
+  Assert ($n.NpmLog -notmatch '(?m)^install\b') "npm install ran after answering N:`n$($n.NpmLog)"
+  $y = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $false -Stdin "" -Yes $true -CopilotCli $false -Measured $m
+  $installs = @([regex]::Matches($y.NpmLog, '(?m)^install -g @anthropic-ai/claude-code\s*$'))
+  Assert ($installs.Count -eq 1) "expected exactly one 'install -g @anthropic-ai/claude-code' with -Yes, got $($installs.Count):`n$($y.NpmLog)"
+}
+
+Test-Case "R40 AC3: registry unreachable (npm exits 1) reports latest unknown and still exits 0" {
+  $m = Get-InstallMeasuredCc
+  $r = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $true -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  Assert ($r.Out -match 'latest:? unknown') "no 'latest unknown' in output:`n$($r.Out)"
+  Assert ($r.Exit -eq 0) "exit code was $($r.Exit), expected 0"
+  Assert ($r.NpmLog -notmatch '(?m)^install\b') "npm install ran with an unknown latest:`n$($r.NpmLog)"
+}
+
+Test-Case "R40 AC4: installed newer than measured warns and names what to re-check; exit 0" {
+  $m = Get-InstallMeasuredCc
+  $r = Invoke-HvInstallStub -ClaudeVer "99.0.0" -CopilotVer "" -Latest "99.0.0" -NpmFail $false -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  Assert ($r.Out -match 'newer than measured') "no newer-than-measured warning:`n$($r.Out)"
+  foreach ($t in @('hooks/payload (C2, T9.5)','usage fields (C4a)','local model catalog')) {
+    Assert ($r.Out.Contains($t)) "warning does not name '$t':`n$($r.Out)"
+  }
+  Assert ($r.Exit -eq 0) "exit code was $($r.Exit), expected 0"
+}
+
+Test-Case "R40 AC5: no copilot and no -CopilotCli -> one skipped line, no @github/copilot npm call" {
+  $m = Get-InstallMeasuredCc
+  $r = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $false -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  $skipped = @($r.Out -split "`r?`n" | Where-Object { $_ -match 'skipped' })
+  Assert ($skipped.Count -eq 1) "expected exactly one 'skipped' line, got $($skipped.Count):`n$($r.Out)"
+  Assert ($skipped[0] -match 'copilot-cli') "the skipped line is not the copilot one: $($skipped[0])"
+  Assert ($r.NpmLog -notmatch '@github/copilot') "npm was called for @github/copilot:`n$($r.NpmLog)"
+}
+
+Test-Case "R40 AC6: a failed post-update smoke names the previous version and the way back, rolls nothing back" {
+  $m = Get-InstallMeasuredCc
+  $r = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $false -Stdin "" -Yes $true -CopilotCli $false -Measured $m -ExtraEnv @{ DAD_SMOKE_GATES = "fail" }
+  Assert ($r.Out -match 'smoke check FAILED') "no smoke-failure line:`n$($r.Out)"
+  Assert ($r.Out -match "Previous version was $([regex]::Escape($m))") "previous version not named:`n$($r.Out)"
+  Assert ($r.Out.Contains("npm install -g @anthropic-ai/claude-code@$m")) "way-back command not printed:`n$($r.Out)"
+  $installs = @([regex]::Matches($r.NpmLog, '(?m)^install\b'))
+  Assert ($installs.Count -eq 1) "npm log shows a rollback/extra install (expected only the one update):`n$($r.NpmLog)"
+  Assert ($r.NpmLog -notmatch "@$([regex]::Escape($m))") "npm log shows an install of the previous version (auto-rollback):`n$($r.NpmLog)"
+  Assert $r.SettingsSame "sandbox settings.json changed"
+  Assert ($r.Exit -eq 0) "exit code was $($r.Exit), expected 0 (smoke is loud, never blocking)"
+}
+
+Test-Case "R40 AC7: measured-version stamp is locked across install.ps1, DESIGN C4a and dad-run-summary; doctor does not hard-code it" {
+  $inst = Get-InstallMeasuredCc
+  Assert ($inst) "install.ps1 has no `$ClaudeCodeMeasuredVersion"
+  $design = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
+  $sm = [regex]::Match($design, '(?m)^\s*MEASURED \d{4}-\d\d-\d\d against Claude Code (\d+(?:\.\d+)+)')
+  Assert $sm.Success "DESIGN.md has no 'MEASURED <date> against Claude Code <v>' stamp (MEASURED-LOCAL does not count)"
+  Assert ($sm.Groups[1].Value -eq $inst) "DESIGN C4a stamp '$($sm.Groups[1].Value)' != install.ps1 `$ClaudeCodeMeasuredVersion '$inst'"
+  $rs = Get-Content (Join-Path $kit "dad-run-summary.ps1") -Raw
+  $rv = [regex]::Match($rs, '(?m)^\$MeasuredClaudeCodeVersion\s*=\s*"([^"]+)"').Groups[1].Value
+  Assert ($rv -eq $inst) "dad-run-summary `$MeasuredClaudeCodeVersion '$rv' != install.ps1 '$inst'"
+  $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
+  Assert ($doc -notmatch '(?m)^\s*\$ClaudeCodeMeasuredVersion\s*=\s*"\d') "dad-doctor.ps1 assigns its own measured version (must read install.ps1)"
+  Assert (-not $doc.Contains($inst)) "dad-doctor.ps1 hard-codes the measured version $inst"
+  $instText = Get-Content (Join-Path $kit "install.ps1") -Raw
+  Assert ($instText -notmatch '(?m)^npm install[^\r\n]*claude-code') "install.ps1 has a top-level unconditional npm install of claude-code"
+}
+
 Test-Case "C2f's drift check compares versions by EQUALITY, not substring (graded S12 defect)" {
   # Found by grade-agent on S12. Both consumers originally tested the raw `copilot --version` LINE with
   # -match against the measured number. That is silently wrong: "1.0.890" and "11.0.89" both CONTAIN

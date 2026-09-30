@@ -1797,7 +1797,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S17 (Behavior "After an update", AC6); `docs/DESIGN.md` R40(d), R35, R1; Story S16 / T16.1 (the local-model rule).
 - **Context:** Do not start until T16.1 is ticked. If T16.1's recommendation is a `/design` amendment, take only the smoke rule it states. The previous version is the installed version captured BEFORE `npm install`. The rollback text names the pinned-version command; running it is the human's decision.
 
-### [ ] T17.5 - test-kit cases for R40 (AC1-AC7), all stubbed and sandboxed   (Story S17)
+### [x] T17.5 - test-kit cases for R40 (AC1-AC7), all stubbed and sandboxed   (Story S17)
 - **Goal:** `test-kit.ps1` proves the harness-version report, ask-before-update, offline safety, drift warning, Copilot opt-in, smoke-failure message, and the stamp<->C4a lock.
 - **Touches:** `test-kit.ps1` (new `Test-Case` blocks after `"dad-doctor's Copilot harness section renders without erroring"`, ~line 1589-1610).
 - **Do:** Add cases, each using a temp sandbox dir with stub `.cmd` files (`claude`, `npm` logging its args to a file, `copilot`) put FIRST on a child process PATH, and a sandbox `USERPROFILE`/`HOME` (see how the existing `"uninstall removes the Copilot CLI hook file (sandboxed)"` case at ~line 1540 sandboxes). NEVER run the real `install.ps1`, `install.cmd` or real `npm` against the machine (R35b). Prefer testing `harness-versions.ps1` functions directly (child `powershell -File` with the stub PATH); for `install.ps1` behaviour, run only a stubbed/sandboxed child and assert the npm stub log.
