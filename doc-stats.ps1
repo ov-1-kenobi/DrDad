@@ -33,9 +33,17 @@ function Get-ProjectJunk([string]$root) {
   $strayRx = '(?i)(^|[_.-])(summary|complete|completed|notes?|results?|implementation|handoff|scratch|build_summary)([_.-]|\.md$|\.txt$)'
   $stray = @($rootFiles | Where-Object { $_.Name -match $strayRx -and $_.Name -notmatch '(?i)^(CHANGELOG|CONTRIBUTING)\b' } | ForEach-Object { $_.Name })
   $stray = @($stray | Where-Object { $_ -notmatch '(?i)run.*\.txt$|.*run\.txt$|.*run\d*\.txt$' })  # user run exports are not junk
-  # the kit's own scripts (dad-*.ps1 / dad-*.cmd) ARE the kit, never stray; only script extensions are
-  # exempt, so dad-notes.md or dad-summary.txt is still junk
-  $stray = @($stray | Where-Object { $_ -notmatch '(?i)^dad-.+\.(ps1|cmd)$' })
+  # the kit's own scripts (dad-*.ps1 / dad-*.cmd) ARE the kit, never stray - but ONLY when the scanned root
+  # IS the kit root (the folder holding this script). The exemption is kit-root-only: a user project's own
+  # dad-*.ps1/.cmd is still stray. Only script extensions are exempt, so dad-notes.md / dad-summary.txt stay junk.
+  # Kit root = normalised paths match OR the root directly holds doc-stats.ps1 (a user project never does). The
+  # second test survives junctions, subst drives and 8.3 short names, and covers another kit checkout or an
+  # installed copy scanned by a doc-stats living elsewhere.
+  $isKitRoot = ($root.TrimEnd('\','/') -ieq ([string]$PSScriptRoot).TrimEnd('\','/'))
+  if (-not $isKitRoot) { $isKitRoot = (Test-Path -LiteralPath (Join-Path $root 'doc-stats.ps1') -PathType Leaf) }
+  if ($isKitRoot) {
+    $stray = @($stray | Where-Object { $_ -notmatch '(?i)^dad-.+\.(ps1|cmd)$' })
+  }
   $leaf = (Split-Path $root -Leaf)
   $mangled = @(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Where-Object {
     $n = $_.Name
