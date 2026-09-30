@@ -111,7 +111,7 @@ else {
   }
   if ($ccUpdated) {
     $ccNow = Get-HarnessVersion claude
-    if ($ccNow) { Write-HarnessReport -Name "claude-code" -Installed $ccNow -Latest $ccLatest -Measured $ClaudeCodeMeasuredVersion | Out-Null }
+    if ($ccNow) { Write-HarnessReport -Name "claude-code" -Installed $ccNow -Latest $ccLatest -Measured $ClaudeCodeMeasuredVersion }
     # T17.4: post-update smoke (only when an update ran). Loud, never blocking: exit code stays 0.
     if (Get-Command Invoke-PostUpdateSmoke -ErrorAction SilentlyContinue) { $null = Invoke-PostUpdateSmoke -Name "claude-code" -Previous $ccPrevious -Package "@anthropic-ai/claude-code" }
   }
