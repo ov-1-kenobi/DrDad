@@ -3313,6 +3313,14 @@ Test-Case "doc-stats flags project-root JUNK and a nav-less layout" {
 
     $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
     Assert ($out -match '(?i)ad-hoc status/summary file') "stray summary files were not flagged"
+    # S15 AC2: the kit's own dad-*.ps1 is exempt; dad-notes.md is not
+    "x" | Set-Content "$p\dad-run-summary.ps1" -Encoding UTF8
+    "x" | Set-Content "$p\dad-notes.md" -Encoding UTF8
+    $outS15 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    $hyg = @($outS15 -split "`r?`n" | Where-Object { $_ -match 'ad-hoc status/summary file' }) -join ' '
+    Assert ($hyg -match 'IMPLEMENTATION_SUMMARY\.md') "the stray finding does not name IMPLEMENTATION_SUMMARY.md"
+    Assert ($hyg -notmatch 'dad-run-summary') "the stray finding names the kit script dad-run-summary.ps1"
+    Assert ($hyg -match 'dad-notes\.md') "the stray finding does not name dad-notes.md"
     Assert ($out -match '(?i)MANGLED path') "the mangled path directory was not flagged"
     Assert ($out -match '(?i)\.binlog') "the committed .binlog was not flagged"
     Assert ($out -match '(?i)2 solution files') "duplicate solution files were not flagged"
@@ -3344,6 +3352,48 @@ Test-Case "doc-stats flags project-root JUNK and a nav-less layout" {
   $dv = Get-Content (Join-Path $kit "global\agents\dev-agent.md") -Raw
   Assert ($dv -match '(?i)backslash') "dev-agent does not warn against backslash paths under bash"
   Assert ($dv -match '(?i)ad-hoc status|summary') "dev-agent does not warn against ad-hoc summary files"
+}
+
+Test-Case "doc-stats -Junk exempts the kit's own dad-*.ps1/.cmd scripts but still flags real junk (S15)" {
+  # Regression: dad-run-summary.ps1 matched the *summary* junk pattern and was reported as stray. Only
+  # script extensions of dad-* are exempt; dad-notes.md / dad-summary.txt stay junk.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED`nSecurity review: NOT-REQUIRED (test)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $ds = Join-Path $kit "doc-stats.ps1"
+    foreach ($n in "dad-run-summary.ps1","dad-run-summary.cmd","dad-other-notes.ps1",
+                   "IMPLEMENTATION_SUMMARY.md","dad-notes.md","dad-summary.txt") {
+      "x" | Set-Content (Join-Path $p $n) -Encoding UTF8
+    }
+    $raw = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Junk 2>&1 | Out-String
+    $j = $raw | ConvertFrom-Json
+    $stray = @($j.StrayFiles)
+    Assert ($stray -notcontains "dad-run-summary.ps1") "kit script dad-run-summary.ps1 was flagged as stray"
+    Assert ($stray -notcontains "dad-run-summary.cmd") "kit script dad-run-summary.cmd was flagged as stray"
+    Assert ($stray -notcontains "dad-other-notes.ps1") "kit script dad-other-notes.ps1 was flagged as stray"
+    Assert ($stray -contains "IMPLEMENTATION_SUMMARY.md") "IMPLEMENTATION_SUMMARY.md was not flagged as stray"
+    Assert ($stray -contains "dad-notes.md") "dad-notes.md (non-script dad-*) was not flagged as stray"
+    Assert ($stray -contains "dad-summary.txt") "dad-summary.txt (non-script dad-*) was not flagged as stray"
+  } finally { Remove-Sandbox $sb }
+
+  # AC1: a project whose only root files are the kit scripts is not flagged, and tidy (dry run) ignores them
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED`nSecurity review: NOT-REQUIRED (test)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "x" | Set-Content "$p\dad-run-summary.ps1" -Encoding UTF8
+    "x" | Set-Content "$p\dad-run-summary.cmd" -Encoding UTF8
+    $f1 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($f1 -notmatch 'ad-hoc status/summary file') "kit scripts at the root triggered the ad-hoc summary finding"
+    $t1 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "tidy.ps1") -ProjectDir $p 2>&1 | Out-String
+    Assert ($t1 -notmatch 'dad-run-summary') "tidy lists the kit script dad-run-summary"
+    Assert ((Test-Path "$p\dad-run-summary.ps1") -and (Test-Path "$p\dad-run-summary.cmd")) "kit scripts were removed"
+  } finally { Remove-Sandbox $sb }
+
+  # AC3: the kit repo itself has no stray-summary finding
+  $fk = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $kit -Findings 2>&1 | Out-String
+  Assert ($fk -notmatch 'ad-hoc status/summary') "the kit repo itself is flagged for ad-hoc status/summary files"
 }
 
 Test-Case "data-stats gates DATASET integrity, and the corpus indexes data files" {

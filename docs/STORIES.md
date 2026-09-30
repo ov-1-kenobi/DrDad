@@ -655,7 +655,7 @@
   writes to `%USERPROFILE%\.copilot\` (R35b) - use the least-invasive route (`--additional-mcp-config`,
   a scratch project dir) and back out every change.
 
-### Story S15: doc-stats' root-junk check must not flag the kit's own scripts   (R24)   <!-- Status: TODO -->
+### Story S15: doc-stats' root-junk check must not flag the kit's own scripts   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `doc-stats -Findings`' `[hygiene]` ad-hoc-file check (and `dad tidy -Fix`, which acts on it) stops
   treating the kit's own `dad-*.ps1` / `dad-*.cmd` scripts as stray summary files.
 - **Context:** S10 shipped `dad-run-summary.ps1` and `dad-run-summary.cmd`. `Get-ProjectJunk` (doc-stats.ps1,

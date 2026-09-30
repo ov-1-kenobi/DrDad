@@ -1651,7 +1651,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
   fixes both surfaces with no tidy change. The exemption is a name-prefix-plus-extension rule chosen to
   survive new kit scripts (S15 Dev notes) instead of an allow-list of names. Kit text must be ASCII.
 
-### [ ] T15.2 - test-kit.ps1 Test-Case: kit scripts not flagged, real junk classes still flagged   (Story S15)
+### [x] T15.2 - test-kit.ps1 Test-Case: kit scripts not flagged, real junk classes still flagged   (Story S15)
 - **Goal:** lock the S15 fix with a regression case covering AC1, AC2 and AC3.
 - **Touches:** `test-kit.ps1` (extend the existing junk-class Test-Case near line 3108-3134, the one that
   plants `IMPLEMENTATION_SUMMARY.md`, `STORY_S2_COMPLETE.md`, `completed_tasks.txt`, `msbuild.binlog`,
