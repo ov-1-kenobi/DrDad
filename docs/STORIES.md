@@ -562,7 +562,7 @@
   afterwards and `~/.copilot/` was confirmed returned to stock. Verification mode: **live-sandboxed** for
   AC1-AC5; **deferred, not code-review-only** for AC6 (see above).
 
-### Story S13: gates-smoke proves the LOG is wired, not just the gate   (R38)   <!-- Status: TODO -->
+### Story S13: gates-smoke proves the LOG is wired, not just the gate   (R38)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `dad gates-smoke` gains a FOURTH assertion - after provoking each gate in its own throwaway
   fixture, it asserts that a matching `"decision":"block"` line actually landed in that fixture's
   `grades/gates-log.jsonl` - and `dad-doctor` gains a NEW report of a project's log (size, line count,

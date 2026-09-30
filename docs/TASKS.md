@@ -1540,7 +1540,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
   threshold as a named constant rather than an inline magic number, matching the convention other thresholds
   in this kit already follow.
 
-### [ ] T13.3 - test-kit.ps1 Test-Cases for the fired-but-unlogged gate and the dad-doctor log report   (Story S13)
+### [x] T13.3 - test-kit.ps1 Test-Cases for the fired-but-unlogged gate and the dad-doctor log report   (Story S13)
 - **Goal:** The full validation gate mechanically proves T13.1's fourth assertion actually catches a
   fired-but-unlogged gate and actually rejects a near-miss line, and that T13.2's `dad-doctor` report
   behaves on both a present and an absent log (S13 AC5).

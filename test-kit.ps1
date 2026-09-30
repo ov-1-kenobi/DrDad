@@ -2356,6 +2356,76 @@ Test-Case "dad-gates-smoke reports a genuine per-gate SKIP when one sibling scri
   }
 }
 
+Test-Case "dad-gates-smoke: a fired-but-unlogged gate is a SILENT-FAIL naming the gate (T13.3, S13 AC5/AC1)" {
+  # MANUFACTURED: the smoke script + the two gate siblings are copied WITHOUT dad-gates-log.ps1, so the gates
+  # still fire and block but the writer cannot land a line. The smoke's verdict logic is untouched.
+  $sb = New-Sandbox
+  $isolated = Join-Path $env:TEMP ("dadkit_gs_nolog_" + [guid]::NewGuid().ToString("N").Substring(0,8))
+  New-Item -ItemType Directory -Force $isolated | Out-Null
+  try {
+    Copy-Item (Join-Path $kit "dad-gates-smoke.ps1") $isolated
+    Copy-Item (Join-Path $kit "dad-loopguard.ps1") $isolated
+    Copy-Item (Join-Path $kit "dad-guard.ps1") $isolated
+    Copy-Item (Join-Path $kit "scan-secrets.ps1") $isolated
+    Assert (-not (Test-Path (Join-Path $isolated "dad-gates-log.ps1"))) "sandbox must not contain the log writer"
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $isolated "dad-gates-smoke.ps1") -ProjectDir $sb 2>&1 | Out-String)
+    $exit = $LASTEXITCODE
+    Assert ($out -match 'SILENT-FAIL') "an unlogged block was not reported SILENT-FAIL:`n$out"
+    Assert ($out -match [regex]::Escape("loop-guard-log")) "the SILENT-FAIL did not name the gate ('loop-guard-log'):`n$out"
+    Assert ($out -match 'NOT LOGGED') "the SILENT-FAIL reason did not say NOT LOGGED:`n$out"
+    Assert ($exit -ne 0) "a SILENT-FAIL must exit non-zero (got $exit):`n$out"
+  } finally {
+    Remove-Sandbox $sb
+    Remove-Item -LiteralPath $isolated -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+Test-Case "dad-gates-smoke: Test-BlockLogged near-misses do not satisfy the assertion (T13.3, S13 AC3)" {
+  # Extract the real function from the smoke script (no copy of its logic) and run it against fixture logs.
+  $gsPath = Join-Path $kit "dad-gates-smoke.ps1"
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile($gsPath, [ref]$null, [ref]$null)
+  $fn = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Test-BlockLogged" }, $true) | Select-Object -First 1
+  Assert ($fn) "Test-BlockLogged not found in dad-gates-smoke.ps1"
+  . ([scriptblock]::Create($fn.Extent.Text))
+  $sb = New-Sandbox
+  try {
+    $g = Join-Path $sb "grades"; New-Item -ItemType Directory -Force $g | Out-Null
+    Assert (-not (Test-BlockLogged $sb @("loop-guard"))) "a missing log must not satisfy the assertion"
+    $allowRight = '{"ts":"2026-09-30T10:00:00.000Z","gate":"loop-guard","decision":"allow","reason":"armed"}'
+    $blockWrong = '{"ts":"2026-09-30T10:00:01.000Z","gate":"dad-guard-stop","decision":"block","reason":"x"}'
+    Set-Content -LiteralPath (Join-Path $g "gates-log.jsonl") -Value @($allowRight, "not json at all", $blockWrong) -Encoding ASCII
+    Assert (-not (Test-BlockLogged $sb @("loop-guard"))) "allow line for the right gate + block line for a DIFFERENT gate must NOT pass"
+    Add-Content -LiteralPath (Join-Path $g "gates-log.jsonl") -Value '{"ts":"2026-09-30T10:00:02.000Z","gate":"loop-guard","decision":"block","reason":"y"}' -Encoding ASCII
+    Assert (Test-BlockLogged $sb @("loop-guard")) "adding the matching gate + block line must pass"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-doctor reports the gate log: size, lines, newest-entry age; or plainly none (T13.3, S13 AC4)" {
+  $doctor = Join-Path $kit "dad-doctor.ps1"
+  $with = New-Sandbox
+  $none = New-Sandbox
+  try {
+    New-Item -ItemType Directory -Force (Join-Path $with "grades") | Out-Null
+    $l1 = '{"ts":"2026-09-01T10:00:00.000Z","gate":"loop-guard","decision":"allow","reason":"armed"}'
+    $l2 = '{"ts":"2026-09-02T10:00:00.000Z","gate":"loop-guard","decision":"block","reason":"x"}'
+    Set-Content -LiteralPath (Join-Path $with "grades\gates-log.jsonl") -Value @($l1, $l2) -Encoding ASCII
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $with 2>&1 | Out-String)
+    $m = [regex]::Match($out, '\[\w+\s*\]\s+gate log\s+(.*)')
+    Assert $m.Success "dad-doctor printed no 'gate log' line for a project with a log:`n$out"
+    Assert ($m.Groups[1].Value -match 'KB') "gate log line lacks a size: $($m.Value)"
+    Assert ($m.Groups[1].Value -match '2 line\(s\)') "gate log line lacks the line count (2): $($m.Value)"
+    Assert ($m.Groups[1].Value -match 'newest entry .* old') "gate log line lacks the newest-entry age: $($m.Value)"
+    Assert ($out -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on a fixture with a gate log:`n$out"
+
+    $out2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $none 2>&1 | Out-String)
+    $m2 = [regex]::Match($out2, '\[\w+\s*\]\s+gate log\s+(.*)')
+    Assert $m2.Success "dad-doctor printed no 'gate log' line for a project with no log:`n$out2"
+    Assert ($m2.Groups[1].Value -match 'none yet') "no-log case is not reported plainly: $($m2.Value)"
+    Assert ($out2 -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on a fixture with no gate log:`n$out2"
+    Assert (-not (Test-Path (Join-Path $none "grades\gates-log.jsonl"))) "dad-doctor must never create the log"
+  } finally { Remove-Sandbox $with; Remove-Sandbox $none }
+}
+
 Test-Case "grade-trends reads the STATED grade, not a capital letter in prose" {
   # First version scanned for \b[A-F]\b, so "A worked example was missing" scored a D card as an A - and
   # it flipped the reported direction on a real project. A retro built on mis-parsed grades is exactly the
