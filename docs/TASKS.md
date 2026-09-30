@@ -1828,7 +1828,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S18 (Behavior 1, AC1, AC2, AC4, Dev notes); Story S11 Decision (2026-09-30); `docs/DESIGN.md` R24, R32.
 - **Context:** current `Test-GradeCard` only checks existence, `>=800` bytes and `## Grade history`. `$proj` is the project dir variable in close-unit.ps1. `-RequireGrade` turns the returned string into a blocking `$problems` entry; without it it is only a warning. `build.md` step 5's gate names `## Assessment` and `## Suggestions` too, but close-unit does not check them today - leave that as is. ASCII only.
 
-### [ ] T18.2 - build.md: post-hygiene doc-stats re-check + neutral grading prompts   (Story S18)
+### [x] T18.2 - build.md: post-hygiene doc-stats re-check + neutral grading prompts   (Story S18)
 - **Goal:** `/build` re-runs `dad doc-stats -Findings` after hygiene-agent and treats a clean claim contradicted by a `[hygiene]`/`[integrity]` finding as CONTRADICTED and blocking; grading prompts are neutral; step 5 tells graders the card is computed-checked.
 - **Touches:** `global\commands\build.md` (per-STORY steps 5-7, ~lines 148-162; small insertions only).
 - **Do:**
