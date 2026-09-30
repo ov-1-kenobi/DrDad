@@ -418,7 +418,7 @@
 - **Dev notes:** Inspired by claude-code-audit-gate (fotografvecerek-ai)'s STATISTIKA.html (lines of code,
   screens, findings, time, exact token counts, generated at the end of every audit run).
 
-### Story S11: [SPIKE] Should high-stakes verification run as a separate process?   (R32)   <!-- Status: TODO -->
+### Story S11: [SPIKE] Should high-stakes verification run as a separate process?   (R32)   <!-- Status: DONE closed:close-unit -->
 - **Type:** Research spike (no code) - **[human]** decision pending; do NOT implement anything for this
   story.
 - **Goal:** Produce a short, cited written recommendation on whether DrDad's grade-agent/librarian-agent (or

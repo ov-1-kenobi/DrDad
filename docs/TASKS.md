@@ -1399,7 +1399,11 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   Option B (fully separate OS process, Kapitan/Auditor pattern) and Option C (hybrid - separate-process only
   for the single highest-stakes verification point). Do not add an Option D and do not pick one.
 
-### [ ] T11.2 - Confirm S11 defers the A/B/C choice to a human and commits to building nothing   [research]   (Story S11)
+### [x] T11.2 - Confirm S11 defers the A/B/C choice to a human and commits to building nothing   [research]   (Story S11)
+- **UPDATE 2026-09-30:** the human DECIDED (Option A + computed checks - see S11's "Decision" paragraph and
+  Story S18), so this task closes on: the pending-decision statement is preserved as history, the Decision
+  paragraph records A and that B/C are NOT built, and no task or story builds toward B or C (grep verified).
+  The "no option labelled chosen" wording below applies to the write-up BEFORE the Decision paragraph.
 - **Goal:** S11's recommendation explicitly states it is a **[human]** decision pending approval and does not
   commit to building any option (S11 AC2), so the spike can close with the decision still open.
 - **Touches:** `docs/STORIES.md` (Story S11's Recommendation subsection and its AC2 checkbox only)
