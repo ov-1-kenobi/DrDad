@@ -1260,7 +1260,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   capture goes at the very start (before either), and the `dad run-summary` call goes right after the
   `-UpdateStatus` step, before the librarian-agent spawn.
 
-### [ ] T10.4 - test-kit.ps1 Test-Case: dad-run-summary.ps1 computes correctly + build.md/audit.md reference it   (Story S10)
+### [x] T10.4 - test-kit.ps1 Test-Case: dad-run-summary.ps1 computes correctly + build.md/audit.md reference it   (Story S10)
 - **Goal:** The full validation gate mechanically proves T10.1's script computes its four real figures
   correctly against a fixture, and that both `build.md` and `audit.md` actually reference it (not merely
   that the file exists), covering S10's AC1-AC3 end to end.

@@ -6217,6 +6217,71 @@ Test-Case "T10.2: the baseline shell command exactly as written in build.md yiel
   } finally { Remove-Item $fx.Dir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
+Test-Case "T10.4: every numeric figure's (source: ...) label starts with a member of C4c's fixed set (override run and session-fallback run)" {
+  $fx = New-RsFixture
+  try {
+    $set = @("caller-supplied", "session start", "git range", "gate log", "transcript", "doc-stats -Findings")
+    $chk = {
+      param($out, $tag)
+      $fig = @($out -split "`r?`n" | Where-Object { $_ -match '^\[run-summary\] (wall-clock|files touched|findings|gate interventions): \d' })
+      Assert ($fig.Count -eq 4) "$tag : expected 4 numeric figure lines, got $($fig.Count):`n$out"
+      foreach ($l in $fig) {
+        $m = [regex]::Match($l, '\(source: (.*)\)\s*$')
+        Assert $m.Success "$tag : no trailing (source: ...) -> $l"
+        $s = $m.Groups[1].Value
+        $ok = @($set | Where-Object { $s.StartsWith($_) }).Count -gt 0
+        Assert $ok "$tag : source '$s' is not in C4c's fixed set -> $l"
+      }
+    }
+    $a = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($a.Exit -eq 0) "override run exit $($a.Exit)"
+    & $chk $a.Out "override"
+    Write-RsSession $fx.Dir ""
+    $b = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'))
+    Assert ($b.Exit -eq 0) "no-override run exit $($b.Exit)"
+    & $chk $b.Out "no-override"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "T10.4: C4d regression - 12 files changed, NOTHING committed since baseline -> 'files touched: 12 (0 committed, 12 uncommitted)', never 0" {
+  $d = New-Sandbox
+  try {
+    $utc2h = (Get-Date).ToUniversalTime().AddHours(-2).ToString("yyyy-MM-ddTHH:mm:ss") + "Z"
+    Invoke-RsGit $d @("init", "-q") | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $d ".git\info\exclude"), "grades/`n.claude/`n", (New-Object System.Text.UTF8Encoding($false)))
+    1..5 | ForEach-Object { Write-RsFile $d ("t{0:00}.txt" -f $_) "t$_`n" }
+    $env:GIT_AUTHOR_DATE = $utc2h; $env:GIT_COMMITTER_DATE = $utc2h
+    try {
+      Invoke-RsGit $d @("add", "-A") | Out-Null
+      Invoke-RsGit $d @("commit", "-q", "-m", "baseline") | Out-Null
+    } finally { Remove-Item Env:\GIT_AUTHOR_DATE, Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue }
+    $base = [string](@(Invoke-RsGit $d @("rev-parse", "HEAD"))[0])
+    1..5 | ForEach-Object { Write-RsFile $d ("t{0:00}.txt" -f $_) "modified $_`n" }   # 5 tracked-modified
+    1..7 | ForEach-Object { Write-RsFile $d ("new{0:00}.txt" -f $_) "n$_`n" }        # 7 untracked
+    $start = (Get-Date).ToUniversalTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss") + "Z"
+    $r = Invoke-RunSummary @("-ProjectDir", ('"' + $d + '"'), "-SinceCommit", $base, "-StartTime", $start)
+    Assert ($r.Exit -eq 0) "exit $($r.Exit); stderr: $($r.Err)"
+    Assert ($r.Out -match 'files touched: 12 \(0 committed, 12 uncommitted\)') "want 'files touched: 12 (0 committed, 12 uncommitted)':`n$($r.Out)"
+    Assert ($r.Out -notmatch 'files touched: 0\b') "reported 'files touched: 0' for a dirty tree with no commits (R22 regression):`n$($r.Out)"
+  } finally { Remove-Sandbox $d }
+}
+
+Test-Case "T10.4: static wiring - build.md '## End of scope' contains run-summary; audit.md run-summary sits after the UpdateStatus step, near it" {
+  $b = [System.IO.File]::ReadAllText((Join-Path $kit "global\commands\build.md"))
+  $eos = $b.IndexOf("## End of scope")
+  Assert ($eos -ge 0) "build.md has no '## End of scope'"
+  $rest = $b.Substring($eos + 5)
+  $nx = $rest.IndexOf("`n## ")
+  $sec = if ($nx -ge 0) { $rest.Substring(0, $nx) } else { $rest }
+  Assert ($sec -match 'run-summary') "build.md '## End of scope' section does not mention run-summary"
+  $a = [System.IO.File]::ReadAllText((Join-Path $kit "global\commands\audit.md"))
+  $us = $a.IndexOf("dad doc-stats -UpdateStatus")
+  Assert ($us -ge 0) "audit.md lacks the -UpdateStatus step"
+  $rs = $a.IndexOf("run-summary", $us)
+  Assert ($rs -gt $us) "audit.md has no run-summary after the -UpdateStatus step"
+  Assert (($rs - $us) -lt 1500) "audit.md run-summary is not near the -UpdateStatus step ($($rs - $us) chars away)"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })
