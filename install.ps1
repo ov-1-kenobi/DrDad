@@ -30,6 +30,7 @@ $claude = Join-Path $env:USERPROFILE ".claude"
 # and the code cannot drift apart silently, which is the precise failure the contract exists to prevent.
 # Bump it only after re-measuring C2a-C2e (hook location, event casing, block semantics, subagent coverage).
 $CopilotMeasuredVersion = "1.0.89"
+$ClaudeCodeMeasuredVersion = "2.1.285"
 
 function Have($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }
 function Write-NoBom($path, $content) {

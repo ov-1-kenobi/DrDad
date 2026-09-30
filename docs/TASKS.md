@@ -1741,7 +1741,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
   is a proposal for `/design`, not a fix here. Do this before Story S17's smoke check is finalized. Kit
   text stays ASCII.
 
-### [ ] T17.1 - Harness-version helper: installed vs latest vs measured, printed as [harness] lines   (Story S17)
+### [x] T17.1 - Harness-version helper: installed vs latest vs measured, printed as [harness] lines   (Story S17)
 - **Goal:** One helper script that, for a named harness, reads installed version, latest registry version and the measured-against stamp, compares them, and prints the R40 `[harness]` lines - with no install side effects.
 - **Touches:** `harness-versions.ps1` (new, kit root); `install.ps1` (ONLY add the constant `$ClaudeCodeMeasuredVersion = "2.1.285"` next to `$CopilotMeasuredVersion` at ~line 32).
 - **Do:**
