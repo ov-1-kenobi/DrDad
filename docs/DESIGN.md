@@ -1,6 +1,6 @@
 # Technical Design Document - DrDad (Design Research Document, Agentic Development)
 
-Status: LOCKED
+Status: DRAFT
 Security review: NOT-REQUIRED (local-only dev CLI; no user data stored, no exposed service; the kit stores and reads no credentials - a harness's login is its own, including R34's cloud/hybrid Anthropic key, and R37's supported path is BYOK to local Ollama, so no route through this kit requires an account. Re-confirmed 2026-09-29 against doc-stats' auth-keyword WARN: the hits are LLM token counts - R38c/C4a, harness session ids - C3b/C4b, the harness's own login and dummy local-Ollama auth token, and the secret scanner's detection patterns; none is this kit authenticating anyone)
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
      Flip to DRAFT (and use /design or /proto) only to change the design itself. -->
@@ -488,6 +488,51 @@ local-model ceiling, but every command, agent, and gate is identical across all 
           not papered over. Partial parity that says so beats claimed parity that fails silently.
       (e) **Same offline thesis (R37b).** Nothing here may require a GitHub account beyond what R37b already
           accepts: the BYOK-to-Ollama path stays the supported route.
+
+- [ ] R40: **Every install run REPORTS the harness versions against the latest release and ASKS before it
+      moves them - a newer harness is a MEASURED-AGAINST-drift event, never a silent one.** Today
+      `install.ps1` step 3 runs `npm install -g @anthropic-ai/claude-code` on EVERY run: it already pulls
+      whatever is latest, without reporting what changed and without asking. That is how a Claude Code newer
+      than the one this kit's contracts were measured against reaches a machine unannounced - and the kit has
+      already been bitten: Claude Code 2.1.285 rejects this kit's local `-cc` model ids in headless mode
+      ("isn't described by this version's model catalog"), so "latest" can quietly break the offline path
+      (R1) that is this project's thesis, while every gate still reports green. The user's aim is the
+      opposite of stale - access to the latest models and features on each run - so the rule is: latest is
+      the DEFAULT OFFER, and it is taken knowingly.
+      (a) **Check and report, every run.** For Claude Code, and for GitHub Copilot CLI whenever `copilot` is
+          on PATH, print installed version, latest published version (from the package registry, offline-safe:
+          an unreachable registry prints `latest: unknown (registry unreachable)` and never fails the
+          install), and the version each contract was last MEASURED against (`$CopilotMeasuredVersion` for
+          C2; the C4a stamps for Claude Code). Copilot CLI is NEVER installed as a side effect of a default
+          install: `-CopilotCli` stays the explicit opt-in (R37); with `copilot` absent and no `-CopilotCli`
+          the Copilot section prints one skipped line and does nothing.
+      (b) **Ask before updating.** When installed < latest, the installer says so and asks; declining leaves
+          the machine untouched and the install continues. `-Yes` (non-interactive) is an explicit consent
+          flag, never the default. The unconditional `npm install -g` in step 3 is REPLACED by this: with no
+          Claude Code installed the installer still offers the install (a first-time install is the one case
+          it is unasked-for-safe), but an existing install is not overwritten without the question.
+      (c) **Drift is loud, never blocking (extends R37/C2f).** When the version in use is NEWER than the one
+          the contracts were measured against, setup and `dad-doctor` warn and NAME which measurements need
+          re-checking for that harness: hook events and payload (C2, T9.5), usage/transcript fields (C4a),
+          and the local model catalog (a `-cc` model must still resolve). Nothing blocks and no gate
+          weakens - a warning is the honest state until someone re-measures.
+      (d) **Verified after a move, with a way back.** After the installer updates a harness it runs a cheap
+          smoke check (the kit's own `dad gates-smoke` for the guards, and for Claude Code that the
+          configured local model alias still resolves) and, on failure, prints the previous version and the
+          exact command to return to it. It never auto-rolls-back, and it never lowers any security setting
+          to make a check pass (R35).
+      (e) **Contract text follows the versions.** A version stamp in `install.ps1` and the matching stamp in
+          `## Contracts` cannot drift apart (the C2f/C4a device); re-measuring a newer harness is a `/design`
+          step (unlock, amend the measured table and stamp, re-lock), not a silent code edit.
+      Worked example (a run where Claude Code is behind and Copilot CLI is current):
+      ```
+      [harness] claude-code   installed 2.1.285   latest 2.1.301   measured against 2.1.285
+      [harness]   update available - update now? [y/N]
+      [harness] copilot-cli   installed 1.0.89    latest 1.0.89    measured against 1.0.89   (current)
+      ```
+      Declining `N` leaves 2.1.285 in place and the install continues; answering `y` updates, then prints
+      `[harness] claude-code now 2.1.301 (newer than measured 2.1.285) - re-check: hooks/payload (C2, T9.5),
+      usage fields (C4a), local model catalog` and runs the smoke check.
 
 ## Contracts (pin BEFORE locking - architect-agent writes these)
 ### C1: R36 planning-cost ratchet - thresholds, pricing message shape, worked examples
@@ -1031,6 +1076,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
 #### C4a: Tokens - CONDITIONAL on a measurement; never a fabricated number, never an unmeasured denial
 - **Status: APPROVED 2026-09-29** (conditional pin; the measurement that resolves it is a named follow-up
   task, and until it returns `dad-run-summary.ps1` prints the fallback line WITH its reason).
+  **RESOLVED 2026-09-30 by T10.6's measurement - see the MEASURED stamps at the end of this section.**
 - **Decision:** the token figure is MEASURED-OR-NAMED, stamped per harness and per version:
   - measured YES -> `dad-run-summary.ps1` streams the session transcript, sums input / output / cache
     tokens over entries at or after the window start, and prints the number WITH its source and the
@@ -1062,6 +1108,38 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   ```
   The third form is the one that matters most: it is still an honest gap, and it names a cause a human can
   act on, instead of collapsing three different situations into one unfalsifiable sentence.
+- **MEASURED (T10.6, 2026-09-30) - the outcome of the conditional pin.** The stamp lines below are what
+  `test-kit.ps1`'s drift case parses (`MEASURED <date> against Claude Code <version>`); the script's
+  `$MeasuredClaudeCodeVersion` must equal the first.
+
+  MEASURED 2026-09-30 against Claude Code 2.1.285
+
+  Cloud (R34b): assistant entries in the session transcript carry `message.usage.input_tokens`,
+  `output_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens` (plus `service_tier`,
+  `iterations`, `speed` and others), on 219 of 219 assistant entries in the measured transcript. Models seen
+  in the corpus: `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-haiku-4-5-20251001` and earlier ids.
+
+  MEASURED-LOCAL 2026-09-30 against Claude Code 2.1.191 (backend R1, Ollama, model `qwen3-coder-next-cc`)
+
+  Local (R1): the same usage fields are populated (`cache_read_input_tokens` measured as 0), taken from an
+  EXISTING transcript written by Claude Code 2.1.191. A fresh local run on 2.1.285 is UNMEASURED: that
+  version rejected an unmapped local model id (`--model qwen3-14b-cc`: "isn't described by this version's
+  model catalog") in headless mode, so the local figure carries its OWN version constant,
+  `$MeasuredLocalClaudeCodeVersion`, and is never stamped with the cloud version (fact (ii) above).
+- **Counting rule (measured, and load-bearing):** Claude Code writes ONE transcript entry PER CONTENT BLOCK,
+  so a single API message appears as several entries sharing one `message.id`. Usage is identical across
+  those entries on the cloud backend (a naive sum over-counts about 1.8x) and, on the local backend,
+  `output_tokens` can GROW across streamed partials of one message (a naive sum over-counts about 1.6x).
+  The figure is therefore the per-field MAX over each `message.id`, never a sum over entries, and the
+  printed entry count is the number of DEDUPED messages: "N assistant entries" means N messages.
+- **Mixed and foreign transcripts:** an assistant entry whose model is neither `claude-*` nor a `-cc` name
+  in `models.json`, a `<synthetic>` entry, or an entry without usage is SKIPPED, and a transcript lacking
+  the `version`/`sessionId` stamp (another harness) yields the reasoned fallback line, never a number. A
+  transcript that mixes measured and skipped entries understates the total, so the script must COUNT the
+  skipped-as-unmeasured entries and name that count on the tokens line rather than staying silent.
+- **Open:** re-measuring local on a current Claude Code version is a human decision (see the model-catalog
+  finding above); until then the local stamp stays at 2.1.191 and `test-kit.ps1`'s drift case must compare
+  BOTH constants to their stamps and must not pass merely because a stamp is absent.
 
 #### C4b: Session discovery - the Stop hook records what only it can see
 - **Status: APPROVED 2026-09-29.**
@@ -1084,6 +1162,18 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   ```
   `dad-run-summary.ps1` invoked with no `-StartTime` then windows from `2026-09-29T13:38:07.412Z` and
   labels that figure `source: session start` (C4c).
+- **Clarifications (from T10.5, 2026-09-30):**
+  - **A different `session_id` REPLACES the pointer** with a fresh `first_seen_utc`. The pointer is to the
+    CURRENT session; "ONCE per session" means the SAME session id never rewrites its own
+    `first_seen_utc`. The alternative (keep the first session's pointer) would point every later summary
+    at a stale transcript.
+  - **One pointer per project directory, so two concurrent sessions in one project overwrite each other**
+    (last Stop wins). That is a known limit of a single-file pointer, not a defect; the summary then
+    windows from whichever session stopped last, and the `source: session start` label says which pointer
+    it used. The remedy for a precise window is the explicit `-StartTime` / `-TranscriptPath` override.
+  - **Written only for a DAD project and only when both `session_id` and `transcript_path` are present**
+    (never under `-Check`/`-Ack`, never on the `stop_hook_active` retry pass), best-effort, and it can never
+    change the Stop hook's verdict or exit code.
 
 #### C4c: Scope boundary - caller-supplied, with a LABELLED session-start fallback
 - **Status: APPROVED 2026-09-29.**
@@ -1109,7 +1199,12 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   [run-summary] gate interventions: 1 block, 2 armed             (source: gate log, grades/gates-log.jsonl)
   [run-summary] tokens: not available (harness=copilot-cli: no session transcript is exposed to project tooling)
   ```
-  The SAME run with `-StartTime`/`-SinceCommit` forgotten changes exactly two things - the window and the
+  **Gate-intervention counting (from T10.1, 2026-09-30):** `block` = every log line with decision `block`
+  (all gates); `armed` = decision `allow` AND reason exactly `armed`. The genesis line (C3d) and the
+  every-invocation `allow` lines of `ratchet` and `close-unit-refusal` (C3b) count as NEITHER. A close that
+  passes `-AcceptShrink` still writes a `ratchet` block line (ratchet does not know the flag), so it counts
+  as an intervention - deliberately: an accepted shrink is exactly what a reader of the summary should see.
+  The same run with `-StartTime`/`-SinceCommit` forgotten changes exactly two things - the window and the
   label, never the silence:
   ```
   [run-summary] wall-clock: 1h 06m 04s                           (source: session start, .claude\.dad-session.json first_seen_utc 2026-09-29T13:38:07Z)

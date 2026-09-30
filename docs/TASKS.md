@@ -1358,7 +1358,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   documents `transcript_path` on the Stop payload and `dad-guard.ps1:76-77` already OPENS that file. R24
   forbids accepting an assertion a script can settle - so settle it.
 
-### [ ] T11.1 - Check S11's draft recommendation against R32 and the Kapitan/Auditor source; cite every claim   [research]   (Story S11)
+### [x] T11.1 - Check S11's draft recommendation against R32 and the Kapitan/Auditor source; cite every claim   [research]   (Story S11)
 - **Goal:** S11's written recommendation (Options A/B/C in its Dev notes) cites R32 and
   claude-code-audit-gate's Kapitan/Auditor architecture, and every factual claim in it traces to one of those
   sources or is marked unverified (S11 AC1).

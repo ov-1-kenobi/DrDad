@@ -445,33 +445,48 @@
   or a linked doc).
 - **Dependencies:** R32 (same-session subagent isolation discipline) as the baseline being evaluated against.
 - **Acceptance (testable, "deliverable produced" not code-tested):**
-  - [ ] AC1: a written recommendation exists (in this story's Dev notes / a Context subsection, or points to
+  - [x] AC1: a written recommendation exists (in this story's Dev notes / a Context subsection, or points to
     where it should be written) citing R32 and claude-code-audit-gate's Kapitan/Auditor architecture.
-  - [ ] AC2: the recommendation explicitly states it is a **[human]** decision pending approval, and does not
-    commit to building either option.
+  - [x] AC2: the recommendation explicitly states it is a **[human]** decision pending approval, and does not
+    commit to building either option. (Satisfied; the human then DECIDED on 2026-09-30 - see "Decision" below.)
 - **Dev notes:** Inspired by claude-code-audit-gate (fotografvecerek-ai)'s Kapitan/Auditor two-process
   (HANDOFF -> EVIDENCE -> VERDICT) architecture. This is a RESEARCH SPIKE, not a build story - flagged
   **[human]** for decision, still unresolved: nobody has picked option A, B or C yet.
 - **Recommendation (draft - pending human decision, satisfies AC1):**
   - **Option A - status quo (same-session Task-tool subagent, R32's discipline).** Pros: no new
-    infrastructure; matches how every other agent in this kit already runs; R32's own evidence (11 graded
-    runs, zero loops) shows the discipline mitigation works empirically for ordinary units today. Cons:
-    does NOT structurally close R32's stated gap - while a Task call is in flight the orchestrator is
-    suspended (cannot poll, cannot read a progress file, cannot interrupt), so the "unguarded, unobservable
-    region" remains real, just rare so far.
+    infrastructure; matches how the kit's other subagents already run (unverified - would need measurement;
+    neither R32 nor S11's Context says so). Evidence (R32): eleven graded runs in the MAIN loop produced zero
+    loops, and bounded one-agent-per-unit spawns succeeded (`taskmap-agent` in 5 and 9 calls); note the
+    eleven runs are main-loop runs, not evidence about subagents. R32's remedy for subagents is discipline
+    (one agent per unit, orchestrator regains control and runs `doc-stats -Findings` between spawns, retry
+    limit of one) plus DETECTION via `dad watch` (R33). Cons: does NOT structurally close R32's gap - inside
+    a subagent (R32) the `PreToolUse` hook does not fire (R32(a)), `tools:` frontmatter does not restrain it
+    (R32(b)), and its transcript cannot reliably be exported (R32(c)); "nothing can interrupt a spawn"
+    (R32), so the "unguarded, unobservable region" remains real. Three consecutive runs died inside a
+    subagent (R32: `taskmap-agent` 920 calls, `scribe-agent` 947 and 1023) - those were whole-job spawns, now
+    bounded by the discipline. That the orchestrator also cannot poll or read a progress file while a Task
+    call is in flight is not stated by R32 (unverified - would need measurement).
   - **Option B - fully separate OS process (Kapitan/Auditor pattern, claude-code-audit-gate).**
     grade-agent/librarian-agent (or a future high-stakes gate) runs as a second, independent Claude Code
     process with its own workspace, read-only repo access, and a file/message bus back to the main session
-    (HANDOFF -> EVIDENCE -> VERDICT). Pros: cannot share contaminated context by construction (separate
-    process, separate context window) - closes R32's gap structurally instead of by discipline; a runaway
-    auditor can be observed/killed from OUTSIDE the session that spawned it; read-only repo access becomes
-    an OS/filesystem-level guarantee, not just a tool-allowlist promise. Cons: real, ongoing cost of
-    coordinating two live sessions (process lifecycle, and the file/message bus itself becomes new surface
-    to design, gate, and maintain); loses this kit's current single-session continuation model; adds
-    latency/friction to the common case, where most units are NOT the highest-stakes case.
-  - **Where the tradeoff actually bites:** R32's discipline is empirically holding for ordinary
-    dev/qa/hygiene units today - this is not a currently-observed recurring failure, so Option B's
-    structural fix is insurance against a rare-but-real class of failure, not a fix for an active one. That
+    (HANDOFF -> EVIDENCE -> VERDICT). In claude-code-audit-gate (fotografvecerek-ai) the two processes are two
+    separate Claude Code windows, "Kapitan" building and "Auditor" reviewing (S11 Context); nothing further
+    about that project is asserted here. Pros: cannot share contaminated context with the agent under review
+    (S11 Context) - addresses R32's gap structurally instead of by discipline. Whether the second process's
+    OWN hooks (`PreToolUse` loop guard) and `tools:` list would govern its tool calls is unverified - would
+    need measurement (R32(a)/(b) only establish the gap for a same-session SUBAGENT; R37(c) is the precedent
+    that vendor behavior is a hypothesis until measured). Also unverified - would need measurement: that a
+    runaway auditor can be observed/killed from outside the main session, and that read-only repo access
+    would be an OS/filesystem-level guarantee rather than a tool-allowlist promise. Cons: the cost of
+    coordinating two live sessions instead of one (S11 Context) - process lifecycle, and the bus itself
+    becomes new surface to design, gate and maintain; loses the kit's single-session continuation model and
+    adds friction to the common, non-highest-stakes case (both kit-side judgment, unverified - would need
+    measurement).
+  - **Where the tradeoff actually bites:** R32 records three deaths inside subagents, then success once
+    spawns were bounded to one unit (R32: 5 and 9 calls); it holds no measurements for dev/qa/hygiene or
+    grade/librarian subagents (unverified - would need measurement). If that holds, Option B's structural
+    fix is insurance against a rare class of failure rather than a fix for an active one; the gain
+    (structural closure of R32's gap) is weighed against the two-live-session coordination cost. That
     argues against an all-or-nothing swap and toward a **hybrid** (Option C): separate-process ONLY for the
     single highest-stakes verification point (e.g. grade-agent's final LOCK-adjacent verdict, or a future
     audit-gate signoff), same-session for everything else.
@@ -479,6 +494,19 @@
     for all agents: (B) go fully separate-process for all high-stakes agents; or (C) hybrid - separate-
     process only for the named highest-stakes gate(s), same-session for the rest. This write-up does not
     pick for you; no build work follows from S11 until the human answers.
+- **Decision ([human], 2026-09-30): Option A - keep same-session subagents - PLUS computed checks on
+  verifier claims. Options B and C are NOT built.** Evidence recorded at decision time (this run, measured,
+  replacing the "unverified" marks above for dev/qa/hygiene/grade units): about 35 subagent spawns across
+  dev, qa, grade, hygiene, scribe, taskmap and measurement agents, the longest at 67 tool calls, none looped,
+  none needed killing, every one returned. The failures actually observed were NOT runaway loops but
+  unreliable SELF-REPORTS by a same-session verifier: (1) the S9 grade-agent claimed it could not confirm
+  dad-guard's first-Stop armed line (it exists at dad-guard.ps1:168) and admitted it had not read the test
+  bodies; (2) the S10 hygiene pass reported no stray root files while `doc-stats` flagged two; (3) graders
+  were biased by the orchestrator's own known-issues lists. A separate process would not have fixed (1) or
+  (2) - what caught them was the orchestrator re-checking with a computed source (grep, `doc-stats`, the
+  suite). So the response is to make verifier claims COMPUTED or cross-checked (R24: never accept an
+  assertion a script can settle) - tracked as Story S18. Revisit B/C only if a MEASURED same-session
+  verifier failure recurs AFTER S18, and measure first whether a second `claude` process's own hooks fire.
 
 <!-- S12 is NOT part of the Receipts (R38) grouping above - it is tagged to R37, like S1-S7. It appears
      after S11 only to keep story ids in numeric order. -->
