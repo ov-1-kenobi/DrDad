@@ -95,13 +95,8 @@ if ($Contract) {
   foreach ($m in $all) { Write-Host "  $($m.Matches[0].Groups[1].Value)" -ForegroundColor Yellow -NoNewline; Write-Host "" }
   exit 1
 }
-$mcp = Join-Path $proj ".mcp.json"
-if (Test-Path $mcp) {
-  try {
-    $d = (Get-Content $mcp -Raw | ConvertFrom-Json).mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
-    if ($d -and (Test-Path $d)) { $docs = (Resolve-Path -LiteralPath $d).Path }
-  } catch { }
-}
+. (Join-Path $PSScriptRoot "docs-dir.ps1")
+$docs = Resolve-DocsDir $proj
 $storiesFile = Join-Path $docs "STORIES.md"
 $tasksFile   = Join-Path $docs "TASKS.md"
 $gradesDir   = Join-Path $proj "grades"

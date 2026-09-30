@@ -212,14 +212,8 @@ function Save-Text([string]$path, [string[]]$lines) {
 }
 
 # --- where are the docs? (.mcp.json wins, else <proj>\docs) ---
-$docs = Join-Path $proj "docs"
-$mcp = Join-Path $proj ".mcp.json"
-if (Test-Path $mcp) {
-  try {
-    $d = (Get-Content $mcp -Raw | ConvertFrom-Json).mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
-    if ($d -and (Test-Path $d)) { $docs = (Resolve-Path -LiteralPath $d).Path }
-  } catch { }
-}
+. (Join-Path $PSScriptRoot "docs-dir.ps1")
+$docs = Resolve-DocsDir $proj
 $tasksFile   = Join-Path $docs "TASKS.md"
 $storiesFile = Join-Path $docs "STORIES.md"
 $esc = [regex]::Escape($Id)

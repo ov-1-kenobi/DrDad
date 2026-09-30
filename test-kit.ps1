@@ -1101,6 +1101,7 @@ Test-Case "no retired name is still shipped as a command or agent" {
 
 Test-Case "every .ps1 has a .cmd wrapper" {
   foreach ($f in Get-ChildItem $kit -Filter *.ps1 -File) {
+    if ($f.Name -eq "docs-dir.ps1") { continue }   # dot-sourced library (S19), not a runnable command
     Assert (Test-Path (Join-Path $kit "$($f.BaseName).cmd")) "$($f.Name) has no .cmd wrapper"
   }
 }

@@ -1855,7 +1855,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S18 (AC1-AC4); CLAUDE.md "Add a Test-Case for any bug".
 - **Context:** existing pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, `$cu = Join-Path $kit "close-unit.ps1"`. Suite must run without network and without touching the real `%USERPROFILE%\.claude`. ASCII only.
 
-### [ ] T19.1 - Shared Resolve-DocsDir helper; wire doc-stats, docs-find, close-unit, dad-doctor   (Story S19)
+### [x] T19.1 - Shared Resolve-DocsDir helper; wire doc-stats, docs-find, close-unit, dad-doctor   (Story S19)
 - **Goal:** a `LOCALTOOLS_DOCS_DIR` override from `.mcp.json` is honoured only if that dir holds `DESIGN.md`, `TEDD.md` or `STORIES.md`; otherwise the four scripts use `<project>\docs` and print one WARN line.
 - **Touches:** `docs-dir.ps1` (new, kit root); `doc-stats.ps1` (~lines 98-104); `docs-find.ps1` (~lines 34-50); `close-unit.ps1` (~lines 214-222); `dad-doctor.ps1` (~lines 402-405). NOT `corpus.ps1`, NOT `.mcp.json`, NOT any C# file.
 - **Do:**

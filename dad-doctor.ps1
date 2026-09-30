@@ -17,6 +17,7 @@
 param([string]$ProjectDir = "")
 $ErrorActionPreference = "Continue"     # this script probes things that are ALLOWED to be missing
 $kit = $PSScriptRoot
+. (Join-Path $kit "docs-dir.ps1")
 $GATES_LOG_WARN_BYTES = 5MB   # C3d: WARN past this size; the roll is a HUMAN rename, never automatic
 $script:fails = 0
 $script:warns = 0
@@ -401,9 +402,13 @@ if ($ProjectDir) {
         }
         else { Say "WARN" ".mcp.json" "exe path is '$cmd' - not this kit" "upgrade-project.cmd `"$p`"   (install.cmd only fixes the kit's OWN .mcp.json, never a project's)" }
         $dd = $j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
-        if ($dd -and (Test-Path $dd)) { Say "OK" "docs dir" $dd } else { Say "WARN" "docs dir" "'$dd' not found" }
-        if ($dd -and (Test-Path (Join-Path $dd ".index\chunks.json"))) { Say "OK" "RAG index" "built" }
-        else { Say "WARN" "RAG index" "not built" "run index_datasheets in a session, or reindex.cmd `"$dd`"" }
+        $rd = Resolve-DocsDir $p -Quiet
+        if (-not $dd) { Say "OK" "docs dir" $rd }
+        elseif ($dd -ne $rd -and (Test-Path -LiteralPath $dd) -and ((Resolve-Path -LiteralPath $dd).Path -eq $rd)) { Say "OK" "docs dir" $rd }
+        elseif ($dd -ne $rd) { Say "WARN" "docs dir" "'$dd' has no DESIGN/TEDD/STORIES - scripts use $p\docs instead" }
+        else { Say "OK" "docs dir" $rd }
+        if (Test-Path -LiteralPath (Join-Path $rd ".index\chunks.json")) { Say "OK" "RAG index" "built" }
+        else { Say "WARN" "RAG index" "not built" "run index_datasheets in a session, or reindex.cmd `"$rd`"" }
       } catch { Say "FAIL" ".mcp.json" "invalid JSON" }
     } else { Say "FAIL" ".mcp.json" "missing" "new-project.cmd / upgrade-project.cmd" }
 
