@@ -4,3 +4,5 @@
 {"v":1,"ts":"2026-09-29T23:42:55.468Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T9.4","session":""}
 {"v":1,"ts":"2026-09-30T00:01:33.861Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
 {"v":1,"ts":"2026-09-30T00:01:38.919Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T9.6","session":""}
+{"v":1,"ts":"2026-09-30T00:23:00.643Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 14, tasks 39)","session":""}
+{"v":1,"ts":"2026-09-30T00:23:05.919Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T9.7","session":""}

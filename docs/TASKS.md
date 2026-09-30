@@ -1032,7 +1032,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   out verbatim there. C3d also records that the gate log is NOT a ratcheted surface (R28): a deliberate
   human roll must never read as a SHRINK, which is exactly what T9.7's first assertion protects.
 
-### [ ] T9.7 - test-kit assertions that two adjacent globs stay narrow (C3a)   (Story S9)
+### [x] T9.7 - test-kit assertions that two adjacent globs stay narrow (C3a)   (Story S9)
 - **Goal:** Turn two facts that are true today only BY ACCIDENT into guarantees, with one `test-kit.ps1`
   assertion each - so a later widening of either glob cannot silently break the gate log or the gates.
 - **Touches:** `test-kit.ps1`

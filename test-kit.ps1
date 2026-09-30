@@ -5754,6 +5754,54 @@ Test-Case "T9.3: gate-log failure never changes ratchet/close-unit exit codes (h
   } finally { Remove-Sandbox $sb }
 }
 
+# ---------------------------------------------------------------- C3a adjacent globs stay narrow (T9.7)
+function Get-RatchetGradeFilterProblem([string]$text) {
+  # Finds the grade-card byte total (Get-ChildItem ... -Filter X ... $gradeBytes) and requires X = *_GRADE.md.
+  $m = [regex]::Matches($text, '(?m)^[^#\r\n]*\$gradeBytes\s*=.*$')
+  if ($m.Count -eq 0) { return "no gradeBytes assignment found in ratchet.ps1" }
+  foreach ($x in $m) {
+    if ($x.Value -match 'Get-ChildItem') {
+      if ($x.Value -match '-Filter\s+\*_GRADE\.md(\s|\))') { return $null }
+      return "ratchet.ps1 gradeBytes no longer uses the narrow -Filter *_GRADE.md: widening it to all of grades/ would put gates-log.jsonl in the byte total, so a deliberate manual roll (C3d) would read as a SHRINK and REFUSE the next close (R28)"
+    }
+  }
+  return "no Get-ChildItem grade-card total found for gradeBytes in ratchet.ps1"
+}
+function Get-GuardCodeExtProblem([string]$text) {
+  $lines = $text -split "\r?\n"
+  $start = -1
+  for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\s*\$codeExt\s*=\s*@\(') { $start = $i; break } }
+  if ($start -lt 0) { return "no `$codeExt list found in dad-guard.ps1" }
+  $exts = New-Object System.Collections.Generic.List[string]
+  for ($i = $start; $i -lt $lines.Count; $i++) {
+    $code = ($lines[$i] -replace '^\s*#.*$', '') -replace '\s#.*$', ''
+    foreach ($q in [regex]::Matches($code, '"(\.[^"]*)"')) { $exts.Add($q.Groups[1].Value.ToLowerInvariant()) }
+    if ($code -match '\)\s*$') { break }
+  }
+  if ($exts -notcontains ".json") { return "dad-guard.ps1 `$codeExt no longer lists .json (list parse sanity check failed)" }
+  if ($exts -contains ".jsonl") { return "dad-guard.ps1 `$codeExt now lists .jsonl: that creates a feedback loop in which the Stop hook blocks on the gate-log line it just wrote, on the very turn it reports (C3a/R22)" }
+  if ($text -notmatch '\$codeExt\s+-(not)?contains\s+\[System\.IO\.Path\]::GetExtension\(') { return "dad-guard.ps1 no longer matches `$codeExt on GetExtension (exact extension match is what keeps .jsonl out)" }
+  return $null
+}
+Write-Host "-- C3a adjacent globs (T9.7) --"
+Test-Case "C3a: ratchet.ps1 grade-card total keeps narrow -Filter *_GRADE.md (gates-log.jsonl excluded)" {
+  $t = [System.IO.File]::ReadAllText((Join-Path $kit "ratchet.ps1"))
+  $r = Get-RatchetGradeFilterProblem $t
+  Assert ($null -eq $r) $r
+  # prove the check FAILS when widened (in-memory copy; real script never touched)
+  $wide = $t -replace '-Filter\s+\*_GRADE\.md', '-Filter *.md'
+  Assert ($wide -ne $t) "widen mutation did not change the text (check is not anchored to the real filter)"
+  Assert ($null -ne (Get-RatchetGradeFilterProblem $wide)) "check did NOT fail when the filter was widened to *.md"
+}
+Test-Case "C3a: dad-guard.ps1 keeps .jsonl out of `$codeExt (no Stop-hook feedback loop)" {
+  $t = [System.IO.File]::ReadAllText((Join-Path $kit "dad-guard.ps1"))
+  $r = Get-GuardCodeExtProblem $t
+  Assert ($null -eq $r) $r
+  $wide = $t -replace '(\$codeExt\s*=\s*@\()', '$1".jsonl",'
+  Assert ($wide -ne $t) "widen mutation did not change the text"
+  Assert ($null -ne (Get-GuardCodeExtProblem $wide)) "check did NOT fail when .jsonl was added to `$codeExt"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

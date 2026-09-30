@@ -356,7 +356,7 @@
 - **Dev notes:** Inspired by claude-gates (DevRik99)'s `smoke` command, which does exactly this across its 50
   gates.
 
-### Story S9: Structured gate decision log   (R38)   <!-- Status: TODO -->
+### Story S9: Structured gate decision log   (R38)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** Every `block` a DrDad gate produces (loop guard, ratchet, dad-guard, a close-unit refusal),
   plus C3b's `allow` heartbeats, gets appended as one structured, machine-readable line - not just printed
   to console and lost. WARN findings are not gate decisions and are never logged (C3 header).
