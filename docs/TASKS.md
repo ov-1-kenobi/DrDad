@@ -151,6 +151,11 @@ prompts) and depends on T15.1 so the junk false positive is fixed before a `[hyg
 to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade cards S1-S12 are GRANDFATHERED
 (see T18.1). After T18.2, `install.cmd` must be re-run by the human - the executor must NOT run it.)
 
+T19.1 -> T19.2
+
+(Story S19 (R24): T19.1 adds the one shared docs-dir helper and wires the four scripts that have the flaw;
+T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT changed - see T19.1.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -1850,7 +1855,36 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S18 (AC1-AC4); CLAUDE.md "Add a Test-Case for any bug".
 - **Context:** existing pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, `$cu = Join-Path $kit "close-unit.ps1"`. Suite must run without network and without touching the real `%USERPROFILE%\.claude`. ASCII only.
 
+### [ ] T19.1 - Shared Resolve-DocsDir helper; wire doc-stats, docs-find, close-unit, dad-doctor   (Story S19)
+- **Goal:** a `LOCALTOOLS_DOCS_DIR` override from `.mcp.json` is honoured only if that dir holds `DESIGN.md`, `TEDD.md` or `STORIES.md`; otherwise the four scripts use `<project>\docs` and print one WARN line.
+- **Touches:** `docs-dir.ps1` (new, kit root); `doc-stats.ps1` (~lines 98-104); `docs-find.ps1` (~lines 34-50); `close-unit.ps1` (~lines 214-222); `dad-doctor.ps1` (~lines 402-405). NOT `corpus.ps1`, NOT `.mcp.json`, NOT any C# file.
+- **Do:**
+  1. Create `docs-dir.ps1` defining `function Resolve-DocsDir([string]$Proj, [switch]$Quiet)` returning the docs path string. Logic: default `$docs = Join-Path $Proj "docs"`; if `<Proj>\.mcp.json` exists, in try/catch read `.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR` into `$d`; if `$d` and `Test-Path -LiteralPath $d -PathType Container` and any of `DESIGN.md`/`TEDD.md`/`STORIES.md` exists in it -> return `(Resolve-Path -LiteralPath $d).Path` with no output. Else if `$d` is set (override present but failing the rule) and not `-Quiet` -> `Write-Host "WARN: ignoring LOCALTOOLS_DOCS_DIR $d (no DESIGN/TEDD/STORIES there); using $Proj\docs"` (exactly ONE line, yellow) and return the default. No override -> return default silently. The helper must NEVER create a directory.
+  2. `doc-stats.ps1`, `close-unit.ps1`, `docs-find.ps1`: delete the inline `.mcp.json` block and replace with `. (Join-Path $PSScriptRoot "docs-dir.ps1")` then `$docs = Resolve-DocsDir $proj`. (doc-stats does not define `$kit`; use `$PSScriptRoot` directly. Keep docs-find's existing no-create comment as a one-line note; its old guard only checked existence, the helper now subsumes it.)
+  3. `dad-doctor.ps1` (line ~402-405): keep the `.mcp.json` parsing for the exe check, but compute the docs dir via `Resolve-DocsDir $p -Quiet`; compare to the configured `$dd`: if they differ, `Say "WARN" "docs dir" "'$dd' has no DESIGN/TEDD/STORIES - scripts use $p\docs instead"`; otherwise OK as today. Use the resolved dir for the `.index\chunks.json` RAG check and the reindex hint. Dot-source the helper near the top using `$kit` (line 19).
+  4. `corpus.ps1` (lines 92-94) only SETS `$env:LOCALTOOLS_DOCS_DIR` to a research corpus for one `--search` call and never reads `.mcp.json`; the rule does not fit (a research corpus has no DESIGN/STORIES). Leave it unchanged; add nothing to it.
+  5. Keep all text ASCII; do not change the `.mcp.json` placeholder.
+- **Acceptance:** for a project whose `.mcp.json` override points at an existing EMPTY dir, `.\doc-stats.ps1 -ProjectDir <p>` prints the WARN line naming that path and reports the project's own `<p>\docs` counts; with the override pointing at a dir containing `STORIES.md`, no WARN is printed and that dir is used; `docs-find.ps1` and `close-unit.ps1` parse and behave the same way (they no longer contain their own `LOCALTOOLS_DOCS_DIR` read). `corpus.ps1` is byte-identical to before.
+- **Depends on:** none
+- **Refs:** Story S19 (Behavior, Data/interfaces); `docs/DESIGN.md` R24 (computed state must be computed from the right place).
+- **Context:** verified flaw in all four: doc-stats.ps1:102 and close-unit.ps1:220 use `if ($d -and (Test-Path $d))`; docs-find.ps1:48 the same (`$docs = $d`); dad-doctor.ps1:403 reports `OK` for any existing dir. Only "exists" was tested. Observed case: the dev-path placeholder folder `C:\Projects\Claude\MCP\DAD-kit\docs` got created empty by the MCP server, and doc-stats then reported 0/0 stories for a locked project. Do NOT create or touch that folder. doc-stats parameter name for the project dir is whatever the script already uses (`$proj` is set before the block). PowerShell 5.1 compatible.
+
+### [ ] T19.2 - test-kit Test-Cases for S19 (AC1-AC4)   (Story S19)
+- **Goal:** `test-kit.ps1` proves an empty/no-docs override is ignored with a WARN and a real-docs override is honoured, for doc-stats and docs-find.
+- **Touches:** `test-kit.ps1` (new `Test-Case` blocks directly after `"docs-find NEVER creates a real directory at an unrewritten .mcp.json placeholder"`, ~line 1943; the existing case stays untouched).
+- **Do:** Copy the existing case's sandbox shape (`New-Sandbox`, `$p\docs\DESIGN.md` fixture, `.mcp.json` via ConvertTo-Json, `Remove-Sandbox` in `finally`). Add:
+  1. AC1 (doc-stats): project has `docs\DESIGN.md` plus a `docs\STORIES.md` with one story and `docs\TASKS.md` with one task; `.mcp.json` override = an existing EMPTY dir in the sandbox. Run `powershell -NoProfile -ExecutionPolicy Bypass -File doc-stats.ps1 -ProjectDir $p` (use the parameter name doc-stats actually declares) and assert output contains `WARN: ignoring LOCALTOOLS_DOCS_DIR`, contains the empty dir path, and reports the project's own counts (not 0/0 stories/tasks).
+  2. AC2 (doc-stats): override = a second sandbox dir holding a `STORIES.md` with a DIFFERENT story count than the project's own; assert NO `WARN: ignoring` line and the counts come from the override.
+  3. AC3 (docs-find, empty override): guard with the same `local-tools.exe` exists check as the existing case; override = existing empty dir; search for the marker in the project's `DESIGN.md`; assert output matches the marker/C9 text and contains the WARN line, and the empty dir is still empty (`Get-ChildItem` count 0, nothing created).
+  4. dad-doctor/close-unit share the helper, so no separate case is required; instead add one text assertion that `doc-stats.ps1`, `docs-find.ps1`, `close-unit.ps1`, `dad-doctor.ps1` each reference `Resolve-DocsDir` and that `corpus.ps1` does not (keeps the exemption honest).
+  5. AC4: run `.\test-kit.ps1` and confirm `0 failed`.
+- **Acceptance:** `.\test-kit.ps1` prints `0 failed` and the new case names appear in its output; reverting T19.1's helper use in doc-stats.ps1 makes the AC1 case fail (verify, then restore).
+- **Depends on:** T19.1
+- **Refs:** Story S19 (AC1-AC4, Dev notes); `docs/DESIGN.md` R24; CLAUDE.md "Add a Test-Case for any bug".
+- **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, sandbox helpers `New-Sandbox`/`Remove-Sandbox`. The suite must not touch the real `C:\Projects\Claude\MCP\DAD-kit\docs` nor the real `%USERPROFILE%\.claude`. ASCII only.
+
 ## Open questions
+- **[design] S19 dad-doctor behaviour.** S19 lists `dad-doctor.ps1` but it only REPORTS the docs dir; T19.1 makes it WARN (and use the resolved dir for the RAG check) rather than silently choose a dir. If the human wants it to print the same `WARN: ignoring ...` line instead, amend T19.1 step 3.
 - **[design] S18 file:line resolution rule is not pinned in DESIGN.** T18.1 uses: path relative to project root, else a unique same-name file under the project (excluding .git, _tmp, bin, obj, node_modules); the largest number of a `a-b` range must be <= line count. If the human wants a different rule (e.g. root-relative only), amend T18.1 before building.
 - **[design] needs contract: the loop-guard writer's fallback if `PreToolUse` carries no `cwd`.** C3f's
   PREREQUISITE MEASUREMENT (sharded as T9.5) may come back NO. C3f deliberately does not pre-decide the

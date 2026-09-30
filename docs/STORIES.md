@@ -783,3 +783,40 @@
     one-line backfill - decide and state which).
 - **Dev notes:** keep the check cheap and deterministic; it must not judge quality, only that the card
   points at things a script can verify.
+
+### Story S19: A stale or empty LOCALTOOLS_DOCS_DIR must not hide the project's real docs   (R24)   <!-- Status: TODO -->
+- **Goal:** a `LOCALTOOLS_DOCS_DIR` override in `.mcp.json` is honoured only when that folder actually holds
+  the project's docs; otherwise the kit scripts fall back to `<project>\docs` and say so, so a computed
+  state check never reports an empty project because it read the wrong folder.
+- **Context:** observed 2026-09-30. `doc-stats.ps1` (~lines 98-104) replaces `$docs` with `.mcp.json`'s
+  `LOCALTOOLS_DOCS_DIR` whenever that path merely EXISTS. The kit's dev-path placeholder
+  `C:\Projects\Claude\MCP\DAD-kit\docs` had an empty folder (with an empty `.index`) created by the
+  local-tools MCP server on reconnect; `doc-stats` then reported "no design doc, 0/0 stories, 0/0 tasks" for a
+  LOCKED 12/18-story project. That broke `/build` Gate 3, and the STATUS reindex pointed at the same empty
+  folder. A computed check gave a confidently wrong answer (R24: state findings are computed, and must be
+  computed from the right place). Only `Test-Path` was asked; "exists" is not "is the project's docs".
+- **Behavior:**
+  - ONE shared rule (a small helper, dot-sourced or otherwise reused, not per-script variants): an override
+    dir counts only if it contains `DESIGN.md` or `TEDD.md` or `STORIES.md`.
+  - Override fails the rule (missing, empty, or no project docs) -> use `<project>\docs` and print ONE
+    visible line `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES there); using <project>\docs`.
+  - Override passes the rule -> honoured exactly as today, no warning.
+  - Apply the rule to every kit script that reads this key the same way: check `doc-stats.ps1`,
+    `docs-find.ps1`, `close-unit.ps1`, `dad-doctor.ps1`, and `corpus.ps1` (which deliberately points at a
+    research corpus - confirm whether the rule fits before touching it). Fix those with the same flaw.
+- **Data / interfaces:** `doc-stats.ps1`, plus whichever of the scripts above share the flaw; the shared
+  helper; `test-kit.ps1`. NOT changed: the placeholder in `.mcp.json` (CLAUDE.md convention), and the MCP
+  server still creates its docs folder (no C# change).
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [ ] AC1: a fixture whose `.mcp.json` override points at an existing EMPTY dir makes `doc-stats` read the
+    project's own docs (correct design/story/task counts) and print the WARN line naming the ignored path.
+  - [ ] AC2: an override dir that holds real docs (for example a `STORIES.md`) is still honoured, with no
+    WARN.
+  - [ ] AC3: a `test-kit.ps1` `Test-Case` covers both on fixtures (and each other script fixed gets its
+    case or shares the helper's).
+  - [ ] AC4: the full validation gate (`test-kit.ps1`) prints `0 failed`.
+- **Dev notes:** an existing test (docs-find fallback when the configured dir does not exist, test-kit ~line
+  1917) covers only the "missing" case; extend the same rule rather than adding a second one. The
+  `$env:LOCALTOOLS_DOCS_DIR` set by `corpus.ps1` for a research corpus is a legitimate non-project dir - do
+  not break it.
