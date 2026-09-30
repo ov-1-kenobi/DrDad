@@ -5894,6 +5894,247 @@ Test-Case "C3a: dad-guard.ps1 keeps .jsonl out of `$codeExt (no Stop-hook feedba
   Assert ($null -ne (Get-GuardCodeExtProblem $wide)) "check did NOT fail when .jsonl was added to `$codeExt"
 }
 
+# ---------------------------------------------------------------- run summary (T10.1, C4)
+Write-Host "-- run summary (dad-run-summary) --" -ForegroundColor Cyan
+
+function Invoke-RunSummary([string[]]$ArgList) {
+  $so = [System.IO.Path]::GetTempFileName(); $se = [System.IO.Path]::GetTempFileName()
+  try {
+    $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + (Join-Path $kit "dad-run-summary.ps1") + '"')) + $ArgList
+    $pr = Start-Process powershell -ArgumentList $a -Wait -PassThru -NoNewWindow -RedirectStandardOutput $so -RedirectStandardError $se
+    return [pscustomobject]@{ Exit = $pr.ExitCode; Out = [System.IO.File]::ReadAllText($so); Err = [System.IO.File]::ReadAllText($se) }
+  } finally { Remove-Item $so, $se -Force -ErrorAction SilentlyContinue }
+}
+function Get-RsLine([string]$out, [string]$label) {
+  return @($out -split "`r?`n" | Where-Object { $_ -match ('^\[run-summary\] ' + [regex]::Escape($label) + ':') })
+}
+function Invoke-RsGit([string]$dir, [string[]]$gitArgs) {
+  $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try { $o = @(& git -C $dir -c core.autocrlf=false -c user.name=t -c user.email=t@example.com @gitArgs 2>&1) } finally { $ErrorActionPreference = $old }
+  return $o
+}
+function Write-RsFile([string]$dir, [string]$rel, [string]$text) {
+  $full = Join-Path $dir $rel
+  New-Item -ItemType Directory -Force (Split-Path $full -Parent) | Out-Null
+  [System.IO.File]::WriteAllText($full, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+function Add-RsGateLine([string]$dir, [string]$gate, [string]$decision, [string]$reason) {
+  $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + (Join-Path $kit "dad-gates-log.ps1") + '"'),
+         "-ProjectDir", ('"' + $dir + '"'), "-Gate", $gate, "-Decision", $decision, "-Tool", '""', "-Reason", ('"' + $reason + '"'), "-Session", "rs1")
+  $pr = Start-Process powershell -ArgumentList $a -Wait -PassThru -NoNewWindow
+  if ($pr.ExitCode -ne 0) { throw "dad-gates-log append exit $($pr.ExitCode)" }
+}
+# Fixture: baseline commit dated 2h ago; 11 distinct files committed after it; 3 uncommitted (2 tracked-modified,
+# 1 untracked); docs\DESIGN.md is LOCKED with an empty Contracts section and no Security review header, so
+# doc-stats -Findings reports 2 [design] findings. grades/ and .claude/ are excluded via .git/info/exclude
+# (unless -TrackLog: then the genesis-only gate log is COMMITTED in the baseline and only .claude is excluded).
+# Gate log: genesis + 1 block + 2 armed + 1 non-armed allow ("clean close: T1.1").
+function New-RsFixture([switch]$TrackLog) {
+  $d = New-Sandbox
+  $utc2h = (Get-Date).ToUniversalTime().AddHours(-2).ToString("yyyy-MM-ddTHH:mm:ss") + "Z"
+  Invoke-RsGit $d @("init", "-q") | Out-Null
+  $ex = if ($TrackLog) { ".claude/`n" } else { "grades/`n.claude/`n" }
+  [System.IO.File]::WriteAllText((Join-Path $d ".git\info\exclude"), $ex, (New-Object System.Text.UTF8Encoding($false)))
+  Write-RsFile $d "base.txt" "base`n"
+  Write-RsFile $d "tracked1.txt" "one`n"
+  Write-RsFile $d "tracked2.txt" "two`n"
+  Write-RsFile $d "docs\DESIGN.md" "# Design`n`nStatus: LOCKED`n`n## Contracts`n`n(none pinned)`n"
+  if ($TrackLog) { Add-RsGateLine $d "gates-log" "allow" "seed genesis" }
+  $env:GIT_AUTHOR_DATE = $utc2h; $env:GIT_COMMITTER_DATE = $utc2h
+  try {
+    Invoke-RsGit $d @("add", "-A") | Out-Null
+    Invoke-RsGit $d @("commit", "-q", "-m", "baseline") | Out-Null
+  } finally { Remove-Item Env:\GIT_AUTHOR_DATE, Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue }
+  $base = [string](@(Invoke-RsGit $d @("rev-parse", "HEAD"))[0])
+  1..11 | ForEach-Object { Write-RsFile $d ("c{0:00}.txt" -f $_) "c$_`n" }
+  Invoke-RsGit $d @("add", "-A") | Out-Null
+  Invoke-RsGit $d @("commit", "-q", "-m", "eleven files") | Out-Null
+  Write-RsFile $d "tracked1.txt" "one modified`n"
+  Write-RsFile $d "tracked2.txt" "two modified`n"
+  Write-RsFile $d "untracked-new.txt" "new`n"
+  Add-RsGateLine $d "loop-guard" "block" "blocked once"
+  Add-RsGateLine $d "dad-guard" "allow" "armed"
+  Add-RsGateLine $d "dad-guard" "allow" "armed"
+  Add-RsGateLine $d "close-unit" "allow" "clean close: T1.1"
+  return [pscustomobject]@{ Dir = $d; Base = $base; Start1h = ((Get-Date).ToUniversalTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss") + "Z") }
+}
+function Write-RsSession([string]$dir, [string]$transcript) {
+  $o = [ordered]@{ session_id = "s1"; first_seen_utc = (Get-Date).ToUniversalTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
+  if ($transcript) { $o["transcript_path"] = $transcript }
+  Write-RsFile $dir ".claude\.dad-session.json" (($o | ConvertTo-Json))
+}
+function Get-RsOverrideArgs($fx) { return @("-ProjectDir", ('"' + $fx.Dir + '"'), "-SinceCommit", $fx.Base, "-StartTime", $fx.Start1h) }
+
+Test-Case "dad-run-summary: acceptance scenario (14 files 11+3, gate 1 block 2 armed, findings, tokens reason, every figure has (source:)" {
+  $fx = New-RsFixture
+  try {
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($r.Exit -eq 0) "exit $($r.Exit); stderr: $($r.Err)"
+    Assert ($r.Out -match 'files touched: 14 \(11 committed, 3 uncommitted\)') "files touched line wrong:`n$($r.Out)"
+    Assert ($r.Out -match 'gate interventions: 1 block, 2 armed') "gate interventions line wrong (genesis or non-armed allow counted?):`n$($r.Out)"
+    Assert (@(Get-RsLine $r.Out "findings").Count -eq 1) "no findings line:`n$($r.Out)"
+    $tk = @(Get-RsLine $r.Out "tokens")
+    Assert ($tk.Count -eq 1) "no tokens line"
+    Assert ($tk[0] -match 'not available \(.{8,}\)') "tokens line does not name a reason: $($tk[0])"
+    $fig = @($r.Out -split "`r?`n" | Where-Object { $_ -match '^\[run-summary\] (wall-clock|files touched|findings|gate interventions): \d' })
+    Assert ($fig.Count -eq 4) "expected 4 numeric figure lines, got $($fig.Count):`n$($r.Out)"
+    foreach ($l in $fig) { Assert ($l -match '\(source:') "numeric figure without (source: -> $l" }
+    Assert ($r.Out -match 'caller-supplied') "override labels do not say caller-supplied"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: findings figure equals a direct count of [tag] lines from doc-stats -Findings (and 2 seeded)" {
+  $fx = New-RsFixture
+  try {
+    $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try { $ds = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $fx.Dir -Findings 2>$null) } finally { $ErrorActionPreference = $old }
+    $direct = @($ds | Where-Object { ([string]$_) -match '^\s*\[[a-z]+\]' }).Count
+    Assert ($direct -ge 2) "fixture did not seed 2 findings (direct count $direct): $($ds -join ' | ')"
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    $fl = @(Get-RsLine $r.Out "findings")
+    Assert ($fl.Count -eq 1 -and $fl[0] -match ('^\[run-summary\] findings: ' + $direct + '\s')) "findings line != direct count $direct : $($fl -join ' / ')"
+    Assert ($fl[0] -match '\(source:') "findings line lacks (source:"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: overrides omitted + .dad-session.json -> same figures, labels say session start, no error" {
+  $fx = New-RsFixture
+  try {
+    $a = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Write-RsSession $fx.Dir ""
+    $b = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'))
+    Assert ($b.Exit -eq 0) "exit $($b.Exit); stderr: $($b.Err)"
+    Assert ([string]::IsNullOrWhiteSpace($b.Err)) "stderr not empty: $($b.Err)"
+    foreach ($lab in @("files touched", "findings", "gate interventions")) {
+      $va = (@(Get-RsLine $a.Out $lab)[0] -replace '\s*\(source:.*$', '')
+      $vb = (@(Get-RsLine $b.Out $lab)[0] -replace '\s*\(source:.*$', '')
+      Assert ($va -eq $vb) "$lab figure differs: override [$va] vs session [$vb]"
+    }
+    foreach ($lab in @("wall-clock", "files touched", "gate interventions")) {
+      $l = @(Get-RsLine $b.Out $lab)[0]
+      Assert ($l -match 'session start') "$lab label does not say session start: $l"
+    }
+    Assert ($b.Out -match 'files touched: 14 \(11 committed, 3 uncommitted\)') "session-derived files touched wrong:`n$($b.Out)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: neither overrides nor session file -> labelled 'not available (no window', exit 0, no crash" {
+  $fx = New-RsFixture
+  try {
+    $r = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'))
+    Assert ($r.Exit -eq 0) "exit $($r.Exit); stderr: $($r.Err)"
+    foreach ($lab in @("wall-clock", "files touched", "gate interventions")) {
+      $l = @(Get-RsLine $r.Out $lab)
+      Assert ($l.Count -eq 1 -and $l[0] -match 'not available \(no window') "$lab not labelled 'not available (no window': $($l -join ' / ')"
+    }
+    Assert (@(Get-RsLine $r.Out "tokens").Count -eq 1) "tokens line missing"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: a path both committed and dirty is counted once" {
+  $fx = New-RsFixture
+  try {
+    Write-RsFile $fx.Dir "c01.txt" "c1 dirtied again`n"   # committed in the range AND now modified
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($r.Out -match 'files touched: 14 \(11 committed, 3 uncommitted\)') "duplicate path double-counted (want 14 = 11+3):`n$($r.Out)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: a COMMITTED gates-log.jsonl that is dirty counts as one uncommitted file" {
+  $fx = New-RsFixture -TrackLog
+  try {
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($r.Exit -eq 0) "exit $($r.Exit)"
+    Assert ($r.Out -match 'files touched: 15 \(11 committed, 4 uncommitted\)') "dirty tracked gate log not counted as one uncommitted file:`n$($r.Out)"
+    Assert ($r.Out -match 'gate interventions: 1 block, 2 armed') "gate counts wrong with tracked log:`n$($r.Out)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: gate log window excludes lines older than the window start" {
+  $fx = New-RsFixture
+  try {
+    $log = Join-Path $fx.Dir "grades\gates-log.jsonl"
+    $old = '{"v":1,"ts":"2020-01-01T00:00:00.000Z","gate":"loop-guard","decision":"block","tool":"","reason":"ancient","session":"x"}' + "`n" +
+           '{"v":1,"ts":"2020-01-01T00:00:01.000Z","gate":"dad-guard","decision":"allow","tool":"","reason":"armed","session":"x"}' + "`n"
+    [System.IO.File]::AppendAllText($log, $old, (New-Object System.Text.UTF8Encoding($false)))
+    $r = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    Assert ($r.Out -match 'gate interventions: 1 block, 2 armed') "old lines leaked into the window:`n$($r.Out)"
+    # and a start time before them DOES include them (proves the lines are seen at all)
+    $r2 = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'), "-SinceCommit", $fx.Base, "-StartTime", "2019-12-31T00:00:00Z")
+    Assert ($r2.Out -match 'gate interventions: 2 block, 3 armed') "wide window did not include the 2020 lines:`n$($r2.Out)"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: tokens has three reasoned states; 'does not expose' never appears (output or source)" {
+  $fx = New-RsFixture
+  try {
+    $args1 = Get-RsOverrideArgs $fx
+    $r1 = Invoke-RunSummary $args1                       # no pointer
+    $t1 = @(Get-RsLine $r1.Out "tokens")[0]
+    Assert ($t1 -match 'not available \(.*(no session pointer|absent)') "state 1 (no pointer) reason missing: $t1"
+    $missing = Join-Path $fx.Dir "no-such-transcript.jsonl"
+    Write-RsSession $fx.Dir $missing                     # pointer, transcript missing
+    $r2 = Invoke-RunSummary $args1
+    $t2 = @(Get-RsLine $r2.Out "tokens")[0]
+    Assert ($t2 -match 'not available \(.*missing') "state 2 (missing transcript) reason missing: $t2"
+    $real = Join-Path $fx.Dir "transcript.jsonl"
+    Write-RsFile $fx.Dir "transcript.jsonl" ('{"type":"user"}' + "`n")
+    Write-RsSession $fx.Dir $real                        # transcript exists
+    $r3 = Invoke-RunSummary $args1
+    $t3 = @(Get-RsLine $r3.Out "tokens")[0]
+    Assert ($t3 -match 'not available \(.*\)|tokens: \d') "state 3 (transcript exists) neither a figure nor a reasoned fallback: $t3"
+    Assert ($t3 -ne $t1 -and $t3 -ne $t2) "state 3 line identical to another state: $t3"
+    foreach ($o in @($r1.Out, $r2.Out, $r3.Out)) { Assert ($o -notmatch '(?i)does not expose') "superseded phrase in output: $o" }
+    $src = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.ps1"))
+    Assert ($src -notmatch '(?i)does not expose') "superseded phrase 'does not expose' is in dad-run-summary.ps1"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: exit 2 for a nonexistent -ProjectDir, exit 0 otherwise" {
+  $r = Invoke-RunSummary @("-ProjectDir", ('"' + (Join-Path $env:TEMP ("dadkit_nope_" + [guid]::NewGuid().ToString("N"))) + '"'))
+  Assert ($r.Exit -eq 2) "nonexistent -ProjectDir exit $($r.Exit), want 2"
+  Assert ($r.Err -match 'does not exist') "no loud error on stderr: $($r.Err)"
+  $d = New-Sandbox   # not even a git repo: still exit 0
+  try {
+    $r2 = Invoke-RunSummary @("-ProjectDir", ('"' + $d + '"'))
+    Assert ($r2.Exit -eq 0) "plain empty dir exit $($r2.Exit); stderr: $($r2.Err)"
+  } finally { Remove-Sandbox $d }
+}
+
+Test-Case "dad-run-summary: read-only (tracked contents, git status and gate log byte-identical before/after)" {
+  $fx = New-RsFixture
+  try {
+    Write-RsSession $fx.Dir ""
+    $snap = {
+      param($dir)
+      $h = @(Get-ChildItem $dir -Recurse -File -Force | Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+             Sort-Object FullName | ForEach-Object { $_.FullName.Substring($dir.Length) + "=" + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join "`n"
+      $st = (@(Invoke-RsGit $dir @("status", "--porcelain", "--ignored")) -join "`n")
+      return $h + "`n--`n" + $st
+    }
+    $before = & $snap $fx.Dir
+    $r1 = Invoke-RunSummary (Get-RsOverrideArgs $fx)
+    $r2 = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'))
+    Assert ($r1.Exit -eq 0 -and $r2.Exit -eq 0) "runs failed"
+    $after = & $snap $fx.Dir
+    Assert ($before -ceq $after) "fixture changed during a run:`nBEFORE:`n$before`nAFTER:`n$after"
+  } finally { Remove-Sandbox $fx.Dir }
+}
+
+Test-Case "dad-run-summary: dad.cmd usage lists run-summary; .cmd wrapper has the same CRLF shape as dad-gates-log.cmd" {
+  $dad = [System.IO.File]::ReadAllText((Join-Path $kit "dad.cmd"))
+  Assert ($dad -match 'dad run-summary') "dad.cmd usage does not list 'dad run-summary'"
+  $rs = [System.IO.File]::ReadAllText((Join-Path $kit "dad-run-summary.cmd"))
+  $gl = [System.IO.File]::ReadAllText((Join-Path $kit "dad-gates-log.cmd"))
+  Assert ($rs -match 'dad-run-summary\.ps1') "dad-run-summary.cmd does not call the .ps1"
+  Assert (-not ($rs -match "(?<!`r)`n")) "dad-run-summary.cmd has bare LF (not CRLF)"
+  Assert ($rs.EndsWith("`r`n")) "dad-run-summary.cmd does not end in CRLF"
+  $norm = { param($t, $n) (($t -replace $n, 'NAME') -split "`r`n" | Where-Object { $_ -notmatch '^REM ' }) -join "|" }
+  $sh1 = & $norm $rs 'dad-run-summary'
+  $sh2 = & $norm $gl 'dad-gates-log'
+  Assert ($sh1 -ceq $sh2) "wrapper shape differs:`n$sh1`nvs`n$sh2"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

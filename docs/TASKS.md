@@ -1096,7 +1096,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   EVIDENCE and is committed to `grades/`; this file is STATE and lives in gitignored `.claude\`. Getting
   that backwards is the mistake this Context exists to prevent.
 
-### [ ] T10.1 - Ship dad-run-summary.ps1 implementing contract C4 (wall-clock/files-touched/findings/gate-interventions/tokens)   [research]   (Story S10)
+### [x] T10.1 - Ship dad-run-summary.ps1 implementing contract C4 (wall-clock/files-touched/findings/gate-interventions/tokens)   [research]   (Story S10)
 - **Goal:** Ship one script, `dad-run-summary.ps1`, that computes S10's figures from the sources PINNED in
   `docs/DESIGN.md` C4 - every printed figure NAMING ITS PROVENANCE - so T10.2/T10.3 each make one call
   instead of improvising their own sourcing.
