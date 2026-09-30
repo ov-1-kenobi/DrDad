@@ -711,6 +711,7 @@
   - [ ] AC3: any real-machine change made to take the measurement is reverted and confirmed (R35).
 - **Dev notes:** ORDERING - do this before Story S17's smoke check is finalized; if the record says local
   is broken on current Claude Code, R40's post-update check must catch exactly that.
+  RECORD: lives in grades/S16_GRADE.md (Measured-facts record).
 
 ### Story S17: Install reports harness versions and asks before updating   (R40)   <!-- Status: TODO -->
 - **Goal:** each `install.cmd` run prints, for Claude Code and (when present) Copilot CLI, installed vs
