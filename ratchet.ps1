@@ -49,6 +49,7 @@ $baselineFile = Join-Path $proj ".claude\.dad-ratchet.json"
 
 # Gate log (DESIGN C3/C3b): one line per verdict via dad-gates-log.ps1. Fail-open - logging never changes the
 # verdict or exit code. Empty args are omitted (a native call drops them); reason is flattened and capped.
+# NOTE: arg-cleanup here is deliberately duplicated in ratchet.ps1, close-unit.ps1, dad-guard.ps1, dad-loopguard.ps1 (hot path, no shared dot-source); keep the four copies in sync.
 function Write-GateLog([string]$decision, [string]$why) {
   try {
     $why = ([regex]::Replace([string]$why, '\s+', ' ')).Replace([string][char]34, "'").Trim()

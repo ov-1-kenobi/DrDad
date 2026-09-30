@@ -49,6 +49,7 @@ function Allow($why) {
 # Project = nearest ancestor of $proj holding docs or grades (cwd may be a subdirectory), else $proj.
 $hookMode = $false
 $sessionId = ""
+# NOTE: arg-cleanup here is deliberately duplicated in ratchet.ps1, close-unit.ps1, dad-guard.ps1, dad-loopguard.ps1 (hot path, no shared dot-source); keep the four copies in sync.
 function Write-GateLog([string]$decision, [string]$why) {
   if (-not $hookMode -or -not $proj) { return }
   try {

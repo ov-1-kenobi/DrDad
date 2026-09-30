@@ -233,6 +233,7 @@ function Resolve-LogProject([string]$cwd) {
 }
 
 # Fail-open append via dad-gates-log.ps1 (spawns powershell - call ONLY on the first call and on blocks).
+# NOTE: arg-cleanup here is deliberately duplicated in ratchet.ps1, close-unit.ps1, dad-guard.ps1, dad-loopguard.ps1 (hot path, no shared dot-source); keep the four copies in sync.
 function Write-GateLog([string]$cwd, [string]$decision, [string]$tool, [string]$why, [string]$sid) {
   try {
     $pd = Resolve-LogProject $cwd

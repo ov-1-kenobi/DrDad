@@ -45,6 +45,7 @@ $warns = New-Object System.Collections.Generic.List[string]
 # human's unverified escape hatch) does not log. Empty args are omitted (a native call drops them); the
 # reason is flattened, quote-swapped and capped before the native call.
 $script:allowLogged = $false
+# NOTE: arg-cleanup here is deliberately duplicated in ratchet.ps1, close-unit.ps1, dad-guard.ps1, dad-loopguard.ps1 (hot path, no shared dot-source); keep the four copies in sync.
 function Write-GateLog([string]$decision, [string]$why) {
   if ($SkipVerify) { return }
   try {
