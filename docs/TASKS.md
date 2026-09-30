@@ -1869,7 +1869,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Refs:** Story S19 (Behavior, Data/interfaces); `docs/DESIGN.md` R24 (computed state must be computed from the right place).
 - **Context:** verified flaw in all four: doc-stats.ps1:102 and close-unit.ps1:220 use `if ($d -and (Test-Path $d))`; docs-find.ps1:48 the same (`$docs = $d`); dad-doctor.ps1:403 reports `OK` for any existing dir. Only "exists" was tested. Observed case: the dev-path placeholder folder `C:\Projects\Claude\MCP\DAD-kit\docs` got created empty by the MCP server, and doc-stats then reported 0/0 stories for a locked project. Do NOT create or touch that folder. doc-stats parameter name for the project dir is whatever the script already uses (`$proj` is set before the block). PowerShell 5.1 compatible.
 
-### [ ] T19.2 - test-kit Test-Cases for S19 (AC1-AC4)   (Story S19)
+### [x] T19.2 - test-kit Test-Cases for S19 (AC1-AC4)   (Story S19)
 - **Goal:** `test-kit.ps1` proves an empty/no-docs override is ignored with a WARN and a real-docs override is honoured, for doc-stats and docs-find.
 - **Touches:** `test-kit.ps1` (new `Test-Case` blocks directly after `"docs-find NEVER creates a real directory at an unrewritten .mcp.json placeholder"`, ~line 1943; the existing case stays untouched).
 - **Do:** Copy the existing case's sandbox shape (`New-Sandbox`, `$p\docs\DESIGN.md` fixture, `.mcp.json` via ConvertTo-Json, `Remove-Sandbox` in `finally`). Add:

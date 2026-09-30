@@ -784,7 +784,7 @@
 - **Dev notes:** keep the check cheap and deterministic; it must not judge quality, only that the card
   points at things a script can verify.
 
-### Story S19: A stale or empty LOCALTOOLS_DOCS_DIR must not hide the project's real docs   (R24)   <!-- Status: TODO -->
+### Story S19: A stale or empty LOCALTOOLS_DOCS_DIR must not hide the project's real docs   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** a `LOCALTOOLS_DOCS_DIR` override in `.mcp.json` is honoured only when that folder actually holds
   the project's docs; otherwise the kit scripts fall back to `<project>\docs` and say so, so a computed
   state check never reports an empty project because it read the wrong folder.

@@ -1943,6 +1943,71 @@ Test-Case "docs-find NEVER creates a real directory at an unrewritten .mcp.json 
   } finally { Remove-Sandbox $sb }
 }
 
+function New-S19Fixture([string]$sb, [int]$nStories) {
+  # project with DESIGN + $nStories stories + 1 task; returns the project dir
+  $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+  "# Design`n`n### C9: marker`n- **Decision:** the real project docs dir was used, per this text." |
+    Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+  $st = "# Stories`n"
+  for ($i = 1; $i -le $nStories; $i++) { $st += "`n### Story S${i}: S$i   <!-- Status: TODO -->`n" }
+  $st | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+  "# Task map`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+  return $p
+}
+function Set-S19Override([string]$p, [string]$dir) {
+  @{ mcpServers = @{ 'local-tools' = @{ command = "local-tools.exe"; env = @{ LOCALTOOLS_DOCS_DIR = $dir } } } } |
+    ConvertTo-Json -Depth 10 | Set-Content "$p\.mcp.json" -Encoding UTF8
+}
+
+Test-Case "S19 AC1: doc-stats ignores an EMPTY LOCALTOOLS_DOCS_DIR with a WARN and reads the project's docs" {
+  $sb = New-Sandbox
+  try {
+    $p = New-S19Fixture $sb 2
+    $empty = Join-Path $sb "emptydocs"; New-Item -ItemType Directory -Force $empty | Out-Null
+    Set-S19Override $p $empty
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p 2>&1 | Out-String)
+    Assert ($out -match 'WARN: ignoring LOCALTOOLS_DOCS_DIR') "no WARN line for an empty override:`n$out"
+    Assert ($out.Contains($empty)) "WARN does not name the empty dir:`n$out"
+    Assert ($out -match 'stories\s*:\s*0/2 done') "doc-stats did not report the project's own 2 stories:`n$out"
+    Assert (@(Get-ChildItem -Force $empty).Count -eq 0) "the empty override dir was written to"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S19 AC2: doc-stats honours a LOCALTOOLS_DOCS_DIR that holds STORIES.md (no WARN)" {
+  $sb = New-Sandbox
+  try {
+    $p = New-S19Fixture $sb 2
+    $ov = Join-Path $sb "overridedocs"; New-Item -ItemType Directory -Force $ov | Out-Null
+    "# Stories`n`n### Story S1: a   <!-- Status: TODO -->`n`n### Story S2: b   <!-- Status: TODO -->`n`n### Story S3: c   <!-- Status: TODO -->" |
+      Set-Content "$ov\STORIES.md" -Encoding UTF8
+    Set-S19Override $p $ov
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p 2>&1 | Out-String)
+    Assert (-not ($out -match 'WARN: ignoring')) "a valid override was ignored:`n$out"
+    Assert ($out -match 'stories\s*:\s*0/3 done') "counts did not come from the override (expected 3 stories):`n$out"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S19 AC3: docs-find ignores an EMPTY LOCALTOOLS_DOCS_DIR with a WARN and still finds project docs" {
+  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { return }
+  $sb = New-Sandbox
+  try {
+    $p = New-S19Fixture $sb 1
+    $empty = Join-Path $sb "emptydocs"; New-Item -ItemType Directory -Force $empty | Out-Null
+    Set-S19Override $p $empty
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "docs-find.ps1") -ProjectDir $p "marker" 2>&1 | Out-String)
+    Assert ($out -match 'WARN: ignoring LOCALTOOLS_DOCS_DIR') "docs-find printed no WARN for an empty override:`n$out"
+    Assert ($out -match 'marker|C9') "docs-find did not find the marker in the project docs:`n$out"
+    Assert (@(Get-ChildItem -Force $empty).Count -eq 0) "docs-find created something inside the empty override dir"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S19: doc-stats/docs-find/close-unit/dad-doctor use Resolve-DocsDir; corpus.ps1 does not" {
+  foreach ($f in @("doc-stats.ps1", "docs-find.ps1", "close-unit.ps1", "dad-doctor.ps1")) {
+    Assert ((Get-Content (Join-Path $kit $f) -Raw) -match 'Resolve-DocsDir') "$f does not reference Resolve-DocsDir"
+  }
+  Assert (-not ((Get-Content (Join-Path $kit "corpus.ps1") -Raw) -match 'Resolve-DocsDir')) "corpus.ps1 references Resolve-DocsDir (it is deliberately exempt)"
+}
+
 Test-Case "close-unit RECORDS the commands that worked (RECIPES stops being empty)" {
   # docs\RECIPES.md was designed as a proven-commands log agents append to on success. After nine runs on a
   # real project it held 18 lines - the bare template, zero entries. Meanwhile runs kept emitting broken
