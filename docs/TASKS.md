@@ -1572,7 +1572,7 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
   from T8.1/T8.4 and T9.4's gate-log coverage are the structural patterns to mirror (sandbox fixture -> run
   the script -> assert on output and exit code).
 
-### [ ] T14.1 - MEASURE Copilot CLI's MCP, agent/skill and hook-payload surfaces (feeds contract C5, BLOCKS all other R39 stories)   [research]   (Story S14)
+### [x] T14.1 - MEASURE Copilot CLI's MCP, agent/skill and hook-payload surfaces (feeds contract C5, BLOCKS all other R39 stories)   [research]   (Story S14)
 - **Goal:** Produce a version-stamped MEASURED-FACTS RECORD answering R39(a)'s three unknowns against the
   installed Copilot CLI binary, so `/design` can later pin contract C5 from facts, not vendor docs (R37c).
 - **Touches:** NO kit code changes. The record is returned in the completion report / grade card for this

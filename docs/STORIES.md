@@ -608,7 +608,7 @@
   (whether the real `PreToolUse` payload carries `cwd`) - if that measurement forces a fallback, that is a
   NEW `/design` decision, not something to settle inside this story.
 
-### Story S14: [SPIKE] Measure Copilot CLI's MCP, agent/skill and hook-payload surfaces   (R39)   <!-- Status: TODO -->
+### Story S14: [SPIKE] Measure Copilot CLI's MCP, agent/skill and hook-payload surfaces   (R39)   <!-- Status: DONE closed:close-unit -->
 - **Type:** Measurement spike - no kit code changes. Its output is a MEASURED-FACTS RECORD that `/design`
   turns into contract C5. **C5 stays UNPINNED until a human runs that `/design` step**; no parity story is
   written before then (R39a).
