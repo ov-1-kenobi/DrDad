@@ -6135,6 +6135,55 @@ Test-Case "dad-run-summary: dad.cmd usage lists run-summary; .cmd wrapper has th
   Assert ($sh1 -ceq $sh2) "wrapper shape differs:`n$sh1`nvs`n$sh2"
 }
 
+Test-Case "T10.2: build.md records the scope baseline after Gate 3 and runs dad run-summary in End of scope (C4c)" {
+  $p = Join-Path $kit "global\commands\build.md"
+  $bytes = [System.IO.File]::ReadAllBytes($p)
+  Assert (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) "build.md has a BOM"
+  Assert (-not (@($bytes | Where-Object { $_ -gt 127 }).Count)) "build.md has non-ASCII bytes"
+  $t = [System.IO.File]::ReadAllText($p)
+  $g3 = $t.IndexOf("Gate 3 - PROVE THE SHELL WORKS")
+  $bl = $t.IndexOf("Record the scope baseline")
+  $env = $t.IndexOf("ENVIRONMENT BLOCK")
+  $pt = $t.IndexOf("## Per TASK")
+  Assert ($g3 -ge 0 -and $bl -gt $g3) "baseline instruction is not after the Gate 3 text"
+  Assert ($env -gt $bl) "baseline instruction is not before the ENVIRONMENT BLOCK paragraph"
+  Assert ($pt -gt $bl) "baseline instruction is not before '## Per TASK'"
+  $blk = $t.Substring($bl, $env - $bl)
+  Assert ($blk -match 'git rev-parse HEAD') "baseline block lacks 'git rev-parse HEAD'"
+  Assert ($blk -match 'ToUniversalTime\(\)\.ToString\(''yyyy-MM-ddTHH:mm:ss\.fffZ''\)') "baseline block lacks the ISO UTC ...fffZ command"
+  $eos = $t.IndexOf("## End of scope")
+  Assert ($eos -gt $pt) "no '## End of scope' section after Per TASK"
+  $tail = $t.Substring($eos)
+  $once = $tail.IndexOf("build command once more")
+  $rsx = [regex]::Match($tail, 'dad run-summary[^`]*-SinceCommit[^`]*-StartTime')
+  $lib = $tail.IndexOf("librarian-agent")
+  Assert ($once -ge 0) "End of scope lost 'build command once more'"
+  Assert ($rsx.Success) "End of scope lacks 'dad run-summary ... -SinceCommit ... -StartTime'"
+  Assert ($rsx.Index -gt $once) "run-summary is not after the build re-run"
+  Assert ($lib -gt $rsx.Index) "run-summary is not before the librarian-agent spawn"
+  Assert ($tail -match 'source: session start') "End of scope lacks the 'source: session start' fallback label"
+  Assert ($tail -match 'never a gate') "End of scope lacks 'never a gate'"
+  Assert ($t -notmatch '5-line') "build.md makes a literal '5-line' claim"
+}
+
+Test-Case "T10.2: the baseline shell command exactly as written in build.md yields values dad-run-summary accepts (caller-supplied)" {
+  $t = [System.IO.File]::ReadAllText((Join-Path $kit "global\commands\build.md"))
+  $m = [regex]::Match($t, 'powershell -NoProfile -Command "\(Get-Date\)[^"]*"')
+  Assert $m.Success "could not extract the baseline time command from build.md"
+  $fx = New-RsFixture
+  try {
+    $time = [string](@(Invoke-Expression $m.Value)[0])
+    Assert ($time -match '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$') "baseline time not ISO ...fffZ: '$time'"
+    $sha = [string](@(Invoke-RsGit $fx.Dir @("rev-parse", "HEAD"))[0])
+    Assert ($sha -match '^[0-9a-f]{40}$') "git rev-parse HEAD gave '$sha'"
+    $r = Invoke-RunSummary @("-ProjectDir", ('"' + $fx.Dir + '"'), "-SinceCommit", $sha, "-StartTime", $time)
+    Assert ($r.Exit -eq 0) "run-summary exit $($r.Exit): $($r.Err)"
+    Assert ($r.Out -match 'caller-supplied') "output lacks caller-supplied labels: $($r.Out)"
+    Assert ($r.Out -match '\[run-summary\] wall-clock: ') "no wall-clock figure: $($r.Out)"
+    Assert ($r.Out -match '\[run-summary\] files touched: ') "no files touched figure: $($r.Out)"
+  } finally { Remove-Item $fx.Dir -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

@@ -1192,7 +1192,7 @@ task may be written or sharded before C5 is pinned. It carries a consent guard: 
   `dad-guard.ps1:76-77` already OPENS it. `publish-run.ps1` remains the mechanism for a committed run
   receipt; this script is console output only (C4's Out of scope).
 
-### [ ] T10.2 - Wire dad-run-summary.ps1 into /build's end-of-scope   [research]   (Story S10)
+### [x] T10.2 - Wire dad-run-summary.ps1 into /build's end-of-scope   [research]   (Story S10)
 - **Goal:** `global\commands\build.md`'s "## End of scope" step actually captures a scope-start baseline
   and calls T10.1's `dad-run-summary.ps1`, relaying its output, instead of a `/build` run ending with no
   computed summary at all.
