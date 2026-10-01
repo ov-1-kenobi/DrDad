@@ -52,6 +52,9 @@ A few of the gates, each from a real incident:
   status that is not true.
 - **the environment-block detector** - when Windows App Control / WDAC refuses to run a build, the kit
   STOPS and reports it, and forbids agents from disabling your security to get past it (a real run tried).
+- **gate evidence** - `dad gates-smoke` provokes each gate and reports whether it actually fired; every gate
+  decision lands in a committed log (`grades\gates-log.jsonl`); `dad run-summary` reports what a run cost
+  (time, files, findings, gate hits, tokens), each figure labelled with its source.
 
 17 slash commands and 18 sub-agents sit on top of these, but the gates are the point.
 

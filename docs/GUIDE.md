@@ -77,6 +77,7 @@ Unplug the internet after step 2 - everything from here is local. `install.ps1` 
 | `recover-lost.ps1` / `.cmd` | **Puts back what a rewrite dropped.** Diffs NAMED UNITS (tests, methods, functions, headings) against the ratchet baseline, separates genuinely-lost from merely-MOVED, and `-Restore`s the vanished ones while keeping whatever the change added - a whole-file revert would discard the good half. Recovered content lands commented, to reconcile. |
 | `ratchet.ps1` / `.cmd` | **Refuses a shrinking verification surface.** Every other gate asks "is X OK now?", which is satisfied by DELETING X. This records tests, contracts, requirements, backlog totals, sources, grade-card bytes and CLAUDE.md's Build/Test commands on each clean close, and blocks the next close if any fell. `-AcceptShrink` on close-unit records a deliberate removal. |
 | `grade-trends.ps1` / `.cmd` | **The computed half of a retrospective**: grade direction over time, units that needed rework, stub cards, and recurring themes across every grade card. `/retro` turns these into at most three proposed convention changes; you approve them. |
+| `dad-gates-smoke.ps1` / `dad-gates-log.ps1` / `dad-run-summary.ps1` | **Gate evidence** - prove the gates fire, query the gate-decision log, and report what a run cost. See "Gate evidence" under the build-and-test loop. |
 | `source-stats.ps1` / `.cmd` | **Citation-integrity gate** for `/research`: do the design doc's `[Snnn]` citations resolve to sources that exist and were tiered? FAILs on a claim resting on nothing. Verifies traceability, not truth. |
 | `data-stats.ps1` / `.cmd` | **Dataset integrity gate** - the counterpart to `source-stats`. Declare each dataset in `docs/DATASETS.md` (file, key, min rows, columns with type/required/range) and this checks the real `.csv`/`.tsv`/`.json` against it: missing file, missing or undeclared column, empty required value, wrong type, out-of-range or out-of-set value, short row count, duplicate keys. A column that vanishes or a unit that changes from kg to lb is otherwise invisible - the code still compiles and the tests still pass. Checks SHAPE, not truth. |
 | `api-surface.ps1` / `.cmd` | **The signature registry.** Reflects over the project's built assemblies AND its NuGet packages, writing exact public signatures to `docs/API-SURFACE.md` - regenerated after every successful build, so it cannot drift. `-Lookup <Type>` answers one question. A build failure prints the relevant signatures automatically. |
@@ -271,6 +272,19 @@ Tip: `/design` and `/stories` on `use-model.cmd oss`; `use-quality.cmd` (Next) f
 The commands read the project type from `CLAUDE.md`, so the same loop works for Unity, .NET,
 Python, embedded, or anything. It self-loops on auto-testable work; manual/hardware/visual
 checks pause for you. See `templates/README.md`.
+
+### Gate evidence: did the gates fire, and what did the run cost?
+Three read-mostly tools answer "were we actually protected?" with computed evidence, not narration:
+- `dad gates-smoke` - deliberately PROVOKES each real gate (loop guard, ratchet/close-unit, the stop guard)
+  and reports INTERCEPTED, SILENT-FAIL (the violation got through - named), or SKIP (with a reason). A gate's
+  file existing is not proof it fires; this is.
+- `dad gates-log -Query` - the gate-decision log. close-unit, the ratchet, both guards and the secret scanner
+  append one JSON line per decision to `grades\gates-log.jsonl` (committed; reasons redacted and truncated).
+  Filter with `-Gate`, `-Decision allow|block`, `-Since`, `-Last`, or `-Count`. Logging fails open: it never
+  becomes a reason a gate misbehaves.
+- `dad run-summary` - wall-clock, files touched, findings, gate interventions and tokens for a run, every
+  figure tagged `(source: ...)`. `/build` and `/audit` print it at the end of a scope; pass `-SinceCommit` /
+  `-StartTime` for an exact window, otherwise it falls back to the session pointer and says so.
 
 ## Migrating an existing project to the layered docs
 

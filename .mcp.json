@@ -1,7 +1,7 @@
 {
     "mcpServers":  {
                        "local-tools":  {
-                                           "command":  "D:\\projects\\DrDad\\local-tools\\bin\\Release\\net8.0\\local-tools.exe",
+                                           "command":  "D:\\Tools\\DrDad\\local-tools\\bin\\Release\\net8.0\\local-tools.exe",
                                            "env":  {
                                                        "LOCALTOOLS_DOCS_DIR":  "C:\\Projects\\Claude\\MCP\\DAD-kit\\docs",
                                                        "OLLAMA_HOST":  "http://localhost:11434",

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
+All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
 ## 0.53.0 - 2026-09-30
 

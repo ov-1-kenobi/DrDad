@@ -821,3 +821,40 @@
   1917) covers only the "missing" case; extend the same rule rather than adding a second one. The
   `$env:LOCALTOOLS_DOCS_DIR` set by `corpus.ps1` for a research corpus is a legitimate non-project dir - do
   not break it.
+
+### Story S20: The local-tools MCP server must not index an empty placeholder docs dir either   (R24)   <!-- Status: TODO -->
+- **Goal:** the C# server applies S19's docs-dir rule to its PRIMARY root, so `index_datasheets` and
+  `search_datasheets` never silently run against an empty placeholder folder.
+- **Context:** observed 2026-10-01 during `/audit`. S19 added the shared `Resolve-DocsDir` rule
+  (`docs-dir.ps1`) for the kit SCRIPTS only. `local-tools/Rag.cs` `BuildRoots()` (~line 49) still takes
+  `LOCALTOOLS_DOCS_DIR` as-is, and `IndexDir`/`WebDir` derive from `BuildRoots()[0]`. The kit repo's own
+  `.mcp.json` must keep the dev-path placeholder `C:\Projects\Claude\MCP\DAD-kit\docs` (test-kit.ps1 ~735
+  asserts it), so in the kit repo `index_datasheets` reported "No documents" and `search_datasheets` searched
+  nothing. Worked around with a local-scope `claude mcp add -s local` override (not in the repo).
+- **Behavior:**
+  - Same predicate as `docs-dir.ps1`: a dir counts only if it contains `DESIGN.md` or `TEDD.md` or
+    `STORIES.md`.
+  - Primary root fails the predicate AND `<cwd>\docs` passes -> `<cwd>\docs` becomes primary, and ONE line
+    `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES there); using <cwd>\docs` goes to
+    STDERR (never stdout - stdout is the MCP protocol channel).
+  - Primary passes -> honoured as today, no warning. Primary fails and `<cwd>\docs` also fails -> keep the
+    primary as today, no crash.
+  - Additional `;` roots are unchanged. No env var set -> the existing datasheets fallback is unchanged.
+  - No `.index` (or `web`) folder is created under a rejected override (that empty-folder creation caused
+    S19's original incident).
+- **Data / interfaces:** `local-tools/Rag.cs` (`BuildRoots`, `IndexDir`/`WebDir` init, `CreateDirectory`
+  calls ~371-372), `local-tools/Program.cs` CLI entry points (`--list`, `--reindex`) for tests,
+  `test-kit.ps1`. Not changed: the `.mcp.json` placeholder (CLAUDE.md convention). Re-run `install.cmd`.
+- **Dependencies:** Story S19 (the rule being mirrored).
+- **Acceptance (testable, via `local-tools.exe --list` / `--reindex` in `test-kit.ps1` Test-Cases):**
+  - [ ] AC1: placeholder primary + cwd with `docs\DESIGN.md` -> the cwd docs are indexed and stderr carries
+    the WARN line; stdout carries no WARN.
+  - [ ] AC2: a valid override holding `DESIGN.md` -> honoured, no warning.
+  - [ ] AC3: override invalid and cwd has no `docs` -> behaves as today (keeps the primary), exit 0, no crash.
+  - [ ] AC4: no `.index` folder is created under a rejected override.
+  - [ ] AC5: with a multi-root `;` value, the secondary roots are still indexed.
+  - [ ] AC6: `dotnet build` and the full `test-kit.ps1` pass with `0 failed`.
+- **Dev notes:** QUESTION for the human - `corpus.ps1` and `Program.cs`'s corpus/ingest entry (~lines 20-27)
+  and `--reindex <path>` set `LOCALTOOLS_DOCS_DIR` to a deliberate research-corpus root with no
+  DESIGN/TEDD/STORIES; run from a project folder, the rule as written would redirect them to `<cwd>\docs`.
+  Decide whether an explicit CLI path arg (or a corpus marker) bypasses the rule before implementing.

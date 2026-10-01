@@ -122,6 +122,9 @@ never via `local-tools`. If the model claims otherwise, it's confused - point it
 | `test-kit.cmd`                                 | run the kit's own test suite - the validation gate after any kit change |
 | `dad-guard.cmd -Check` / `-Ack`             | stop guard: would a turn be blocked for unverified code? / accept it anyway |
 | `scan-secrets.cmd [-Path x \| -Staged]`        | scan for credentials (also installed as each project's pre-commit hook) |
+| `dad gates-smoke [-ProjectDir x]`              | prove the gates FIRE: provokes each one, reports INTERCEPTED / SILENT-FAIL / SKIP |
+| `dad gates-log -Query [-Gate g] [-Decision block] [-Last n] [-Count]` | read the gate-decision log, `grades\gates-log.jsonl` |
+| `dad run-summary [-SinceCommit r] [-StartTime t]` | what a run cost: wall-clock, files, findings, gate hits, tokens - each with its source |
 | `LOCALTOOLS_AUTO_REINDEX=1` (in proj .mcp.json)| auto-refresh the index when docs change                 |
 | `/mcp` (inside Claude Code)                    | check `local-tools` is connected + its tools            |
 | `ollama ps`                                    | confirm the model is on the GPU (vs CPU offload)        |
