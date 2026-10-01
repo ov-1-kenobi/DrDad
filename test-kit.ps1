@@ -4771,6 +4771,105 @@ Test-Case "upgrade-project repoints a project's .mcp.json at THIS kit" {
   } finally { Remove-Sandbox $sb }
 }
 
+# S26: upgrade-project must refuse a DrDad kit checkout (install.ps1 + VERSION + global\commands\) before
+# any write. FIXTURES ONLY - these cases never pass the real kit ($kit) as -ProjectDir (S26 AC4); $kit is
+# used solely to locate the script under test.
+function New-S26KitSandbox([string]$dir, [switch]$NoGlobalCommands) {
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  "# stub" | Set-Content "$dir\install.ps1" -Encoding ASCII
+  "0.0.0" | Set-Content "$dir\VERSION" -Encoding ASCII
+  if (-not $NoGlobalCommands) {
+    New-Item -ItemType Directory -Force "$dir\global\commands" | Out-Null
+    "# x" | Set-Content "$dir\global\commands\x.md" -Encoding ASCII
+  }
+  "# Project: t`n`n## Stack`n- x" | Set-Content "$dir\CLAUDE.md" -Encoding UTF8
+  # a stale local-tools path, so a missing guard WOULD repoint (rewrite) it
+  $stale = 'D:\gone\OLD-kit\local-tools\bin\Release\net8.0\local-tools.exe'
+  $mcp = @{ mcpServers = @{ 'local-tools' = @{
+    command = $stale; args = @(); env = @{ LOCALTOOLS_DOCS_DIR = "$dir\docs" } } } } | ConvertTo-Json -Depth 10
+  [System.IO.File]::WriteAllText("$dir\.mcp.json", $mcp, (New-Object System.Text.UTF8Encoding($false)))
+}
+# Every file AND folder under $dir, hidden included, files with their SHA256: catches new files, new
+# folders (docs\, .git) and changed bytes alike.
+function Get-S26Snapshot([string]$dir) {
+  @(Get-ChildItem -LiteralPath $dir -Recurse -Force | Sort-Object FullName | ForEach-Object {
+    if ($_.PSIsContainer) { "D " + $_.FullName } else { "F " + $_.FullName + " " + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+  }) -join "`n"
+}
+$script:S26Msg = "is a DrDad kit checkout, not a project - upgrade-project does not retrofit the kit; use install.cmd to deploy it"
+
+Test-Case "S26 AC1: upgrade-project refuses a kit checkout - exit 2, one message line, every file byte-identical" {
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-S26KitSandbox $p
+    Assert ($p -like "$env:TEMP*") "fixture is not under %TEMP%: $p"
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $expected = "$p $script:S26Msg"
+    $before = Get-S26Snapshot $p
+    Assert ($before -match '\.mcp\.json' -and $before -match 'global\\commands\\x\.md') "snapshot did not cover the fixture files"
+
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 2) "expected exit 2 (refused, kit checkout), got $code. Output: $o"
+    $lines = @($o -split "`r?`n" | Where-Object { $_.Trim() -ne "" })
+    Assert ($lines.Count -eq 1) "expected exactly ONE output line, got $($lines.Count): $o"
+    Assert ($lines[0].Trim() -ceq $expected) "message mismatch.`n expected: $expected`n actual:   $($lines[0].Trim())"
+    Assert ((Get-S26Snapshot $p) -ceq $before) "the kit sandbox changed (a file/folder was added or rewritten)"
+    Assert (-not (Test-Path -LiteralPath "$p\.dad-kit-version")) ".dad-kit-version was stamped"
+    Assert (-not (Test-Path -LiteralPath "$p\.git")) "git was initialised in the kit sandbox"
+    Assert (-not (Test-Path -LiteralPath "$p\docs")) "docs\ was created in the kit sandbox"
+    Assert (-not (Test-Path -LiteralPath "$p\.gitignore")) ".gitignore was written in the kit sandbox"
+
+    # a target given WITH a trailing backslash: same refusal, path shown WITHOUT the trailing '\'
+    $o2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir "$p\" 2>&1 | Out-String); $code2 = $LASTEXITCODE
+    Assert ($code2 -eq 2) "trailing-backslash target: expected exit 2, got $code2. Output: $o2"
+    $lines2 = @($o2 -split "`r?`n" | Where-Object { $_.Trim() -ne "" })
+    Assert ($lines2.Count -eq 1) "trailing-backslash target: expected exactly ONE output line, got $($lines2.Count): $o2"
+    Assert ($lines2[0].Trim() -ceq $expected) "trailing-backslash target: message mismatch.`n expected: $expected`n actual:   $($lines2[0].Trim())"
+    Assert ((Get-S26Snapshot $p) -ceq $before) "trailing-backslash target: the kit sandbox changed"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S26 AC2: the refusal keys on the TARGET - same result run from another working directory" {
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-S26KitSandbox $p
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $expected = "$p $script:S26Msg"
+    $before = Get-S26Snapshot $p
+    New-Item -ItemType Directory -Force "$sb\elsewhere" | Out-Null
+    # script root = $kit, cwd = elsewhere, target = $p: the installed-copy case
+    Push-Location "$sb\elsewhere"
+    try {
+      $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p 2>&1 | Out-String); $code = $LASTEXITCODE
+    } finally { Pop-Location }
+    Assert ($code -eq 2) "from another cwd: expected exit 2, got $code. Output: $o"
+    $lines = @($o -split "`r?`n" | Where-Object { $_.Trim() -ne "" })
+    Assert ($lines.Count -eq 1) "from another cwd: expected exactly ONE output line, got $($lines.Count): $o"
+    Assert ($lines[0].Trim() -ceq $expected) "from another cwd: message mismatch.`n expected: $expected`n actual:   $($lines[0].Trim())"
+    Assert ((Get-S26Snapshot $p) -ceq $before) "from another cwd: the kit sandbox changed"
+    Assert (@(Get-ChildItem -LiteralPath "$sb\elsewhere" -Force).Count -eq 0) "the working directory was written to"
+
+    # all three markers are required: install.ps1 + VERSION + CLAUDE.md WITHOUT global\commands\ is a project
+    $q = Join-Path $sb "partial"; New-S26KitSandbox $q -NoGlobalCommands
+    $o3 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $q 2>&1 | Out-String); $code3 = $LASTEXITCODE
+    Assert ($code3 -ne 2) "a folder without global\commands\ was refused as a kit checkout. Output: $o3"
+    Assert (-not $o3.Contains($script:S26Msg)) "a folder without global\commands\ printed the kit-refusal message: $o3"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S26 AC3: a normal project (no kit markers) still upgrades" {
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force $p | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "a normal project did not upgrade: exit $code. Output: $o"
+    Assert (-not $o.Contains($script:S26Msg)) "a normal project printed the kit-refusal message: $o"
+    Assert (Test-Path -LiteralPath "$p\.dad-kit-version") "the normal project was not stamped (.dad-kit-version missing)"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-doctor's fix hints name commands that actually fix the thing" {
   $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
   # install.cmd does NOT touch a project's .mcp.json - suggesting it sent you in a circle.

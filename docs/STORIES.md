@@ -1061,7 +1061,7 @@
   holds two Copilot stamps (C2 ~DESIGN.md:682, C5 ~1307). Refs: DESIGN
   C2f, C5f (worked example: C2 bumped to 1.0.95, C5 left at 1.0.89 -> FAIL naming C5's stamp).
 
-### Story S26: upgrade-project refuses to run against a kit checkout   (R15)   <!-- Status: TODO -->
+### Story S26: upgrade-project refuses to run against a kit checkout   (R15)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `upgrade-project` detects that its target is a DrDad kit checkout and exits without changing
   anything, so the kit repo is never "retrofitted" as if it were a project.
 - **Context:** observed 2026-10-01. upgrade-project was run against the kit repo `D:\projects\DrDad`
