@@ -217,6 +217,7 @@ if ($Findings) {
   # So the librarian no longer gets to author this category. These findings are generated; its remit is what
   # a script cannot do - scope contamination, traceability judgement, orphan files.
   $f = New-Object System.Collections.Generic.List[string]
+  $securityWaiverFact = $null
 
   # The security review is a header field like Status:, so its state is computable. REQUIRED means nobody
   # has decided yet - not that the project is safe. /build Gate 2b refuses on it.
@@ -311,10 +312,35 @@ if ($Findings) {
       # contradiction. WARN, not FAIL: the words could legitimately appear in an out-of-scope note, so this
       # is a nudge for a human to look, not a hard gate - same shape as the [research] keyword findings.
       $authKw = '(?i)\b(auth|login|password|token|session)\b'
-      $authHit = $designRaw -match $authKw
-      if (-not $authHit -and (Test-Path $storiesFile)) { $authHit = (Get-Content $storiesFile -Raw) -match $authKw }
-      if ($authHit) {
-        $f.Add("[design] Security review: NOT-REQUIRED, but $designName (or STORIES.md) mentions auth/login/password/token/session - the waiver may not be admissible. This doc's own rule keeps anything handling auth REQUIRED; a human should confirm NOT-REQUIRED still holds here.")
+      # S23: a human-dated 'Security waiver confirmed: <date> (human; auth-keyword hits: <N>)' header line
+      # acknowledges the waiver. M is a MATCH COUNT over the design doc + STORIES.md, EXCLUDING the
+      # confirmation line itself (its own 'auth-keyword' matches \bauth\b and would make M = N+1 forever).
+      # M <= N -> no finding, a STATE FACTS line instead; M > N, malformed, or no line -> the WARN fires.
+      $wl = [regex]::Match($designRaw, '(?im)^\s*Security waiver confirmed:\s*(.*?)\s*$')
+      $designForCount = [regex]::Replace($designRaw, '(?im)^\s*Security waiver confirmed:.*$', '')
+      $M = [regex]::Matches($designForCount, $authKw).Count
+      if (Test-Path $storiesFile) { $M += [regex]::Matches((Get-Content $storiesFile -Raw), $authKw).Count }
+      $today = (Get-Date).ToString('yyyy-MM-dd')
+      $base = "[design] Security review: NOT-REQUIRED, but $designName (or STORIES.md) mentions auth/login/password/token/session - the waiver may not be admissible. This doc's own rule keeps anything handling auth REQUIRED; a human should confirm NOT-REQUIRED still holds here."
+      $addLine = "Security waiver confirmed: $today (human; auth-keyword hits: $M)"
+      $wValid = $false; $wDate = $null; $wN = 0
+      if ($wl.Success) {
+        $wm = [regex]::Match($wl.Groups[1].Value, '^(\d{4}-\d{2}-\d{2})\s*\(human;\s*auth-keyword hits:\s*(\d+)\)$')
+        if ($wm.Success) {
+          $dt = [datetime]::MinValue
+          if ([datetime]::TryParseExact($wm.Groups[1].Value, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$dt)) {
+            $wValid = $true; $wDate = $wm.Groups[1].Value; $wN = [int]$wm.Groups[2].Value
+          }
+        }
+      }
+      if (-not $wl.Success) {
+        if ($M -gt 0) { $f.Add("$base To acknowledge it, the human adds this header line via /design: $addLine") }
+      } elseif (-not $wValid) {
+        $f.Add("$base The 'Security waiver confirmed:' line is malformed (expected: Security waiver confirmed: YYYY-MM-DD (human; auth-keyword hits: N)), so it is NOT honoured; fix it via /design, e.g.: $addLine")
+      } elseif ($M -le $wN) {
+        $securityWaiverFact = "security waiver: confirmed $wDate at $wN auth-keyword hits (now $M) - not re-raised"
+      } else {
+        $f.Add("$base - $($M - $wN) new auth-keyword mention(s) since the $wDate confirmation; re-confirm by updating the line to: $addLine")
       }
     } elseif ($sr.Groups[1].Value.Trim() -match '^DONE') {
       # DONE is also one word. What makes it true is security-agent having written CITED decisions into
@@ -728,6 +754,7 @@ if ($Findings) {
   }
   $nextId = if ($next) { $next.Id } else { "none" }
   Write-Host "  design ${designName}: Status $designStatus | stories $($storiesDone.Count)/$($storyIds.Count) DONE | tasks $taskFacts | next $nextId"
+  if ($securityWaiverFact) { Write-Host "  $securityWaiverFact" }
   if ($null -ne $uncommittedTaskCount -and $uncommittedTaskCount -gt 0) {
     Write-Host "  ^ $uncommittedTaskCount of the [x] tasks are hand-ticked with NO commit - a green [x] is not 'verified'. See [integrity]." -ForegroundColor Red
   }
