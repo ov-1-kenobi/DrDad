@@ -234,10 +234,44 @@ if ($Findings) {
     # one and an EMPTY one means step 5 never landed. A design that deliberately carries no such section
     # (the kit's own is requirement-based, and a script-only project has no data formats to pin) is silent -
     # a finding that fires on good input is noise, and noise is how findings stop being read.
+    $contractHeadingRx = '(?m)^#{2,4}\s*(C[0-9]+[A-Za-z0-9-]*)\s*:'
     if ($designStatus -eq 'LOCKED' -and $designRaw -match '(?m)^##\s*Contracts\b') {
-      $pinned = @([regex]::Matches($designRaw, '(?m)^#{2,4}\s*(C[0-9]+[A-Za-z0-9-]*)\s*:'))
+      $pinned = @([regex]::Matches($designRaw, $contractHeadingRx))
       if ($pinned.Count -eq 0) {
         $f.Add("[design] $designName is LOCKED and its '## Contracts' section is EMPTY - /design step 5 (architect-agent) never landed anything. /build will start dev-agents against a design with no pinned semantics, which is exactly what LOCKED is supposed to prevent.")
+      }
+    }
+    # REFERENCED but never PINNED (S22, R24): a contract id the docs cite that resolves to no heading. A
+    # design promised "a new contract (C5)" from a spike; the spike closed and C5 was never written into
+    # '## Contracts' - nothing caught it for days. "Does the heading exist" is a grep, so it is computed here.
+    # Same section gate as the empty-Contracts finding, but in DRAFT and LOCKED alike (a to-do list in DRAFT,
+    # a contract gap in LOCKED). The reference regex is [regex] (case-SENSITIVE: -match/Select-String would
+    # also hit a lowercase 'c1') and does not match C2PA / C# / C++. A sub-id resolves via its parent
+    # (C4a -> C4, C3-b -> C3). Grade cards are history and are NOT scanned.
+    if ($designRaw -match '(?m)^##\s*Contracts\b') {
+      $pinnedIds = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+      foreach ($pm in [regex]::Matches($designRaw, $contractHeadingRx)) { [void]$pinnedIds.Add($pm.Groups[1].Value) }
+      $unpinned = [ordered]@{}
+      $refSources = @(@($designPath, $designName), @($storiesFile, "STORIES.md"), @($tasksFile, "TASKS.md"))
+      foreach ($src in $refSources) {
+        if (-not (Test-Path -LiteralPath $src[0])) { continue }
+        $refLines = @(Get-Content -LiteralPath $src[0] -Encoding UTF8)
+        $seenHere = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+        for ($i = 0; $i -lt $refLines.Count; $i++) {
+          foreach ($rm in [regex]::Matches([string]$refLines[$i], '\bC[0-9]+[a-z]?(?:-[a-z0-9]+)?\b')) {
+            $rid = $rm.Value
+            $rparent = [regex]::Match($rid, '^C[0-9]+').Value
+            if ($pinnedIds.Contains($rid) -or $pinnedIds.Contains($rparent)) { continue }
+            if (-not $seenHere.Add($rid)) { continue }
+            if (-not $unpinned.Contains($rid)) { $unpinned[$rid] = New-Object System.Collections.Generic.List[string] }
+            $unpinned[$rid].Add("$($src[1]):$($i + 1)")
+          }
+        }
+      }
+      if ($unpinned.Count -gt 0) {
+        $entries = @($unpinned.Keys | Select-Object -First 8 | ForEach-Object { "$_ ($($unpinned[$_] -join ', '))" })
+        $more = if ($unpinned.Count -gt 8) { " ..." } else { "" }
+        $f.Add("[design] $($unpinned.Count) contract id(s) are REFERENCED but never PINNED in ${designName}: " + ($entries -join ', ') + $more + " - pin them via /design (unlock -> architect-agent -> relock), or fix the reference.")
       }
     }
     # [domain] COARSE + informative (WARN): the design's '## Domain model' pins the shared nouns; API-SURFACE

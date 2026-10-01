@@ -2002,7 +2002,7 @@ two open edits of that file overlap and each finishes on the skipped-aware summa
 - **Refs:** Story S21 (AC1-AC6, Dev notes); close-unit.ps1:186-194, :377-399 (story-close test gate: non-zero exit refuses, count 0 refuses); test-kit.ps1:4990-5028 (the zero-tests case to copy); CLAUDE.md "Add a Test-Case for any bug" and the Test bullet (close-unit refuses a run reporting zero tests).
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, `New-Sandbox`/`Remove-Sandbox`, `$haveGit` is set near the top of the suite. Child-process output: `Write-Host` in a child `powershell.exe` arrives on its stdout. The suite must not touch the real `%USERPROFILE%\.claude` and needs no network. ASCII only.
 
-### [ ] T22.1 - doc-stats -Findings: [design] finding for contract ids REFERENCED but never PINNED   (Story S22)
+### [x] T22.1 - doc-stats -Findings: [design] finding for contract ids REFERENCED but never PINNED   (Story S22)
 - **Goal:** `doc-stats.ps1 -Findings` compares the contract ids the design doc, STORIES.md and TASKS.md reference with the ids the design doc pins, and WARNs (tag `[design]`) on every reference that resolves to no contract heading.
 - **Touches:** `doc-stats.ps1` only, inside the `-Findings` design block `if ($designPath -and (Test-Path -LiteralPath $designPath)) {` (lines 226-298): hoist the heading regex used at line 238; insert the new check directly after the empty-Contracts check (after line 242, before the `[domain]` comment at line 243). NOT the `-Contract <id>` lookup (lines 88-108, its own pattern at line 92), NOT the empty-Contracts finding's behaviour, NOT `docs/DESIGN.md`.
 - **Do:**
