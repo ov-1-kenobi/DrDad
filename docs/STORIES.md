@@ -822,20 +822,25 @@
   `$env:LOCALTOOLS_DOCS_DIR` set by `corpus.ps1` for a research corpus is a legitimate non-project dir - do
   not break it.
 
-### Story S20: The local-tools MCP server must not index an empty placeholder docs dir either   (R24)   <!-- Status: TODO -->
+### Story S20: The local-tools MCP server must not index an empty placeholder docs dir either   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the C# server applies S19's docs-dir rule to its PRIMARY root, so `index_datasheets` and
   `search_datasheets` never silently run against an empty placeholder folder.
-- **Context:** observed 2026-10-01 during `/audit`. S19 added the shared `Resolve-DocsDir` rule
+- **Context:** observed 2026-09-30 during `/audit`. S19 added the shared `Resolve-DocsDir` rule
   (`docs-dir.ps1`) for the kit SCRIPTS only. `local-tools/Rag.cs` `BuildRoots()` (~line 49) still takes
   `LOCALTOOLS_DOCS_DIR` as-is, and `IndexDir`/`WebDir` derive from `BuildRoots()[0]`. The kit repo's own
   `.mcp.json` must keep the dev-path placeholder `C:\Projects\Claude\MCP\DAD-kit\docs` (test-kit.ps1 ~735
   asserts it), so in the kit repo `index_datasheets` reported "No documents" and `search_datasheets` searched
   nothing. Worked around with a local-scope `claude mcp add -s local` override (not in the repo).
 - **Behavior:**
-  - Same predicate as `docs-dir.ps1`: a dir counts only if it contains `DESIGN.md` or `TEDD.md` or
-    `STORIES.md`.
+  - Predicate: a dir counts only if it contains `DESIGN.md` or `TEDD.md` or `STORIES.md` or `CORPUS.md`
+    (`CORPUS.md` marks a `/corpus` folder, see `corpus.ps1 new`). This extends S19's predicate for the
+    SERVER only; `docs-dir.ps1` is unchanged.
+  - Scope: the rule applies ONLY when the primary root comes from the `LOCALTOOLS_DOCS_DIR` env var (MCP
+    server start, or a CLI mode run with no path arg, e.g. `corpus.ps1`'s `--search`, which sets the env
+    var to a corpus folder - safe via `CORPUS.md`). A path given EXPLICITLY as a CLI arg (`--reindex <dir>`,
+    `--ingest <url> <dir>`, `--corpus <dir>`) is used as-is - no check, no warning.
   - Primary root fails the predicate AND `<cwd>\docs` passes -> `<cwd>\docs` becomes primary, and ONE line
-    `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES there); using <cwd>\docs` goes to
+    `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES/CORPUS there); using <cwd>\docs` goes to
     STDERR (never stdout - stdout is the MCP protocol channel).
   - Primary passes -> honoured as today, no warning. Primary fails and `<cwd>\docs` also fails -> keep the
     primary as today, no crash.
@@ -843,18 +848,55 @@
   - No `.index` (or `web`) folder is created under a rejected override (that empty-folder creation caused
     S19's original incident).
 - **Data / interfaces:** `local-tools/Rag.cs` (`BuildRoots`, `IndexDir`/`WebDir` init, `CreateDirectory`
-  calls ~371-372), `local-tools/Program.cs` CLI entry points (`--list`, `--reindex`) for tests,
+  calls ~371-372), `local-tools/Program.cs` CLI entry points (`--corpus` ~line 50, `--reindex`, `--ingest`),
   `test-kit.ps1`. Not changed: the `.mcp.json` placeholder (CLAUDE.md convention). Re-run `install.cmd`.
 - **Dependencies:** Story S19 (the rule being mirrored).
-- **Acceptance (testable, via `local-tools.exe --list` / `--reindex` in `test-kit.ps1` Test-Cases):**
-  - [ ] AC1: placeholder primary + cwd with `docs\DESIGN.md` -> the cwd docs are indexed and stderr carries
-    the WARN line; stdout carries no WARN.
+- **Acceptance (testable in `test-kit.ps1` Test-Cases via `local-tools.exe --corpus` with NO path arg +
+  `LOCALTOOLS_DOCS_DIR` + a working directory, so the rule is exercised; needs no Ollama):**
+  - [ ] AC1: placeholder primary + cwd with `docs\DESIGN.md` -> the cwd docs are the listed primary and
+    stderr carries the WARN line; stdout carries no WARN.
   - [ ] AC2: a valid override holding `DESIGN.md` -> honoured, no warning.
   - [ ] AC3: override invalid and cwd has no `docs` -> behaves as today (keeps the primary), exit 0, no crash.
   - [ ] AC4: no `.index` folder is created under a rejected override.
-  - [ ] AC5: with a multi-root `;` value, the secondary roots are still indexed.
+  - [ ] AC5: with a multi-root `;` value, the secondary roots are still listed by `--corpus`.
   - [ ] AC6: `dotnet build` and the full `test-kit.ps1` pass with `0 failed`.
-- **Dev notes:** QUESTION for the human - `corpus.ps1` and `Program.cs`'s corpus/ingest entry (~lines 20-27)
-  and `--reindex <path>` set `LOCALTOOLS_DOCS_DIR` to a deliberate research-corpus root with no
-  DESIGN/TEDD/STORIES; run from a project folder, the rule as written would redirect them to `<cwd>\docs`.
-  Decide whether an explicit CLI path arg (or a corpus marker) bypasses the rule before implementing.
+  - [ ] AC7: an env-var primary holding only `CORPUS.md` (cwd has `docs\DESIGN.md`) -> honoured, no warning.
+  - [ ] AC8: `--corpus <dir>` with an explicit path arg and no marker -> used as-is, no warning, even when
+    `<cwd>\docs` is valid.
+- **Dev notes:** DECIDED 2026-09-30 (human): predicate adds `CORPUS.md` (server only; `docs-dir.ps1`
+  unchanged); explicit CLI path args (`--reindex <dir>`, `--ingest <url> <dir>`, `--corpus <dir>`) bypass
+  the rule; it applies only to an env-var-sourced primary. Note `Program.cs` currently passes explicit args
+  by SETTING `LOCALTOOLS_DOCS_DIR` (lines ~11, 27, 55), so the server must carry an "explicit" flag rather
+  than infer it from the env var.
+
+### Story S21: A skipped test-kit case must be COUNTED as skipped, never as a pass   (R24)   <!-- Status: TODO -->
+- **Goal:** a `test-kit.ps1` case that runs nothing reports SKIP with a reason and is counted separately, so
+  the pass count means "ran and passed" and a missing build artifact on a full run is a failure.
+- **Context:** observed 2026-09-30 in S20's QA and grade (`grades/S20_GRADE.md`). Several cases begin with
+  `if ($SkipBuild) { return }` or `if (-not (Test-Path $exe)) { return }` (e.g. the S20 case ~test-kit.ps1
+  2846-2848, the S19 case, the multi-root corpus case ~2813, ~4466). An early return inside `Test-Case`
+  prints PASS, so `-SkipBuild` reports e.g. "231 passed" where some ran nothing, and a missing exe on a FULL
+  run passes silently. close-unit's "zero tests = refuse" rule cannot see it: the count is inflated, not
+  zero (R24: a computed gate must count what actually ran).
+- **Behavior:**
+  - `Test-Case` gains a way for a case to declare a skip with a reason (e.g. a `Skip-Case "<reason>"` helper
+    or a returned sentinel). A skipped case prints `SKIP  <name> - <reason>` and is counted separately.
+  - The summary line becomes `== N passed, M failed, K skipped ==`.
+  - Under a FULL run (no `-SkipBuild`), a case skipping because the built exe is missing is a FAIL, not a
+    skip (the build step just ran, so a missing exe is a real defect).
+  - Every existing early-return-on-`$SkipBuild`/missing-exe case is converted.
+  - close-unit's test-count parser (`close-unit.ps1` ~line 188, `(\d+)\s+passed`) keeps working with the
+    new summary, and zero PASSED with some skipped still refuses.
+- **Data / interfaces:** `test-kit.ps1` (`Test-Case`, summary line, converted cases), `close-unit.ps1`
+  (count parsing, only if needed).
+- **Dependencies:** none (S20 is where it was noticed).
+- **Acceptance (testable):**
+  - [ ] AC1: a `-SkipBuild` run prints SKIP lines for the build-dependent cases and a nonzero skipped count;
+    their names no longer appear as PASS.
+  - [ ] AC2: a full run reports `0 skipped` on a healthy machine.
+  - [ ] AC3: a fixture/self-test where the exe path is absent on a full run FAILS the case.
+  - [ ] AC4: a grep finds no remaining `{ return }` early-exit on `$SkipBuild` / exe-missing inside
+    `Test-Case` bodies.
+  - [ ] AC5: close-unit still parses the totals from the new summary, and refuses a run with 0 passed.
+  - [ ] AC6: the full `test-kit.ps1` prints `0 failed`.
+- **Dev notes:** keep the skip mechanism one helper, not per-case variants; the reason string is required.

@@ -156,6 +156,14 @@ T19.1 -> T19.2
 (Story S19 (R24): T19.1 adds the one shared docs-dir helper and wires the four scripts that have the flaw;
 T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT changed - see T19.1.)
 
+T20.1 (needs T19.1) -> T20.2
+
+(Story S20 (R24): T20.1 mirrors S19's docs-dir rule inside the C# server (Rag.cs + Program.cs) for an
+env-var-sourced primary root only, with CORPUS.md added to the predicate (server only); T20.2 is the
+test-kit coverage via `local-tools.exe --corpus` (no Ollama) and needs T20.1. docs-dir.ps1 and the
+`.mcp.json` placeholder are NOT changed. After T20.1, `install.cmd` must be re-run by the human - the
+executor must NOT run it.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -1882,6 +1890,38 @@ T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT c
 - **Depends on:** T19.1
 - **Refs:** Story S19 (AC1-AC4, Dev notes); `docs/DESIGN.md` R24; CLAUDE.md "Add a Test-Case for any bug".
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, sandbox helpers `New-Sandbox`/`Remove-Sandbox`. The suite must not touch the real `C:\Projects\Claude\MCP\DAD-kit\docs` nor the real `%USERPROFILE%\.claude`. ASCII only.
+
+### [x] T20.1 - local-tools server: docs-dir rule for an env-var primary root (Rag.cs + Program.cs)   (Story S20)
+- **Goal:** when the PRIMARY root comes from the `LOCALTOOLS_DOCS_DIR` env var and holds none of `DESIGN.md`/`TEDD.md`/`STORIES.md`/`CORPUS.md`, the server uses `<cwd>\docs` instead (if that passes), warns once on STDERR, and never creates `.index`/`web` under the rejected dir; explicit CLI path args bypass the rule.
+- **Touches:** `local-tools/Rag.cs` (`DocsRoots`/`DocsDir`/`IndexDir`/`WebDir` fields ~lines 44-47, `BuildRoots()` ~lines 49-65; `IndexAsync` `CreateDirectory` calls ~371-372 and `IngestUrlAsync` ~487 need no edit once the paths are right); `local-tools/Program.cs` (`--reindex` ~line 11, `--ingest` ~line 27, `--corpus` ~line 55). NOT `docs-dir.ps1`, NOT `.mcp.json`, NOT `corpus.ps1`.
+- **Do:**
+  1. In `Rag.cs`, add a SEPARATE tiny type (outside class `Rag`, same namespace `LocalTools`), e.g. `public static class DocsRootSource { public static bool Explicit; }`. It must NOT be a static member of `Rag`: `Rag`'s static field initializers (lines 44-47) run on first access to ANY `Rag` static, so a flag stored on `Rag` would be read before Program could set it.
+  2. In `Program.cs`, at each of the three places that turn an explicit path arg into the env var (`--reindex` line ~11 `args[1]`, `--ingest` line ~27 `args[2]`, `--corpus` line ~55 `args[1]`), also set `DocsRootSource.Explicit = true;` inside the same `if`, BEFORE any `Rag.` call. `--search` and the MCP server path set nothing (they are env-var-sourced).
+  3. In `BuildRoots()`: after building `seen` exactly as today (multi-root split, nested-root skip, keep-primary-if-absent), if the env var was set AND `!DocsRootSource.Explicit`, apply the rule to `seen[0]` only: `static bool HasProjectDocs(string d) => Directory.Exists(d) && new[]{"DESIGN.md","TEDD.md","STORIES.md","CORPUS.md"}.Any(n => File.Exists(Path.Combine(d, n)));`. If `!HasProjectDocs(seen[0])` and `cwdDocs = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "docs"))` passes `HasProjectDocs` (and differs from `seen[0]`), replace `seen[0]` with `cwdDocs` (remove any later duplicate of `cwdDocs` from `seen`) and write exactly ONE line via `Console.Error.WriteLine($"WARN: ignoring LOCALTOOLS_DOCS_DIR {seen0} (no DESIGN/TEDD/STORIES/CORPUS there); using {cwdDocs}")` where `{seen0}` is the rejected primary path. If both fail -> keep `seen[0]`, no warning. If the primary passes -> unchanged, no warning. Secondary `;` roots stay as they are. Env var unset/blank -> the existing `datasheets` fallback (line 52) unchanged, rule not applied.
+  4. Make the WARN print once: `BuildRoots()` is currently called three times (lines 44, 46, 47). Change `IndexDir` and `WebDir` to `Path.Combine(DocsRoots[0], ".index")` / `Path.Combine(DocsRoots[0], "web")` (DocsRoots is declared first, so textual initializer order guarantees it is set). This also guarantees `.index`/`web` follow the substituted primary, so nothing is created under a rejected override.
+  5. NEVER write the WARN to stdout (`Console.WriteLine`) - stdout is the MCP protocol channel. Never create any directory inside `BuildRoots()`. Update the comment block at lines 36-43 with one line describing the rule. ASCII only.
+  6. Build: `dotnet build local-tools\local-tools.csproj -c Release`. Do NOT run `install.cmd` (the human re-runs it).
+- **Acceptance:** with the sandbox env var `LOCALTOOLS_DOCS_DIR=<empty dir>` and working directory `<p>` holding `<p>\docs\DESIGN.md`, `local-tools.exe --corpus` (no path arg) lists `<p>\docs` as the first root, its `index:` line ends in `<p>\docs\.index\chunks.json`, stderr has exactly one `WARN: ignoring LOCALTOOLS_DOCS_DIR` line and stdout has none; `local-tools.exe --corpus <empty dir>` from the same cwd lists `<empty dir>` with no WARN. The build succeeds with no new warnings-as-errors.
+- **Depends on:** T19.1
+- **Refs:** Story S20 (Behavior, Data/interfaces, Dev notes DECIDED 2026-09-30); Story S19 (the rule mirrored); `docs/DESIGN.md` R24.
+- **Context:** observed: the kit repo's `.mcp.json` must keep the placeholder `C:\Projects\Claude\MCP\DAD-kit\docs` (test-kit asserts it, CLAUDE.md convention), so `index_datasheets` indexed an empty folder there. `BuildRoots()` today returns `GetFullPath` of each `;` part. `DescribeCorpus()` (~line 277) only reads (`CorpusFiles` skips missing roots) and prints `index: {IndexFile}` last, so `--corpus` is the no-Ollama way to observe the chosen primary. The existing test "the corpus spans MULTIPLE roots" (test-kit ~2810) passes roots as an explicit `--corpus` arg, so it is bypassed by the rule and must still pass unchanged. Do NOT create or touch the real placeholder folder.
+
+### [x] T20.2 - test-kit Test-Cases for S20 (AC1-AC5, AC7, AC8)   (Story S20)
+- **Goal:** `test-kit.ps1` proves the server's env-var docs-dir rule, its CORPUS.md marker, multi-root behaviour, and the explicit-arg bypass, using `local-tools.exe --corpus` (needs no Ollama).
+- **Touches:** `test-kit.ps1` (new `Test-Case` block(s) directly after `"the corpus spans MULTIPLE roots (and does not double-count)"`, ~line 2810-2839; that case stays untouched).
+- **Do:** Copy that case's guards (`if ($SkipBuild) { return }`; `$exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"`; `if (-not (Test-Path $exe)) { return }`) and sandbox shape (`$sb = New-Sandbox`; `try { ... } finally { Remove-Sandbox $sb }`). Write a small local helper in the case that runs the exe with a given env value, cwd and args and returns stdout, stderr and exit code SEPARATELY: save the old `$env:LOCALTOOLS_DOCS_DIR`, set the new value, `Start-Process -FilePath $exe -ArgumentList ... -WorkingDirectory $cwd -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e`, read both files, restore the env var in `finally` (Remove-Item `env:LOCALTOOLS_DOCS_DIR` if it was unset). Fixtures: `$proj\docs\DESIGN.md` (valid cwd), `$empty` (existing empty dir = the placeholder stand-in), `$good\DESIGN.md`, `$corp\CORPUS.md`, `$shared\finding.md`, `$bare` (a cwd with no `docs`). Match paths by tail (e.g. `proj\\docs\\\.index`) because `$env:TEMP` may be an 8.3 short name.
+  1. AC1: env=`$empty`, cwd=`$proj`, `--corpus` -> stdout's first root line is `...proj\docs`, `index:` line is under `proj\docs\.index`; stderr matches `WARN: ignoring LOCALTOOLS_DOCS_DIR` and names the empty dir; stdout does NOT contain `WARN`.
+  2. AC2: env=`$good`, cwd=`$proj` -> `$good` is the primary, stderr has no `WARN`.
+  3. AC3: env=`$empty`, cwd=`$bare` -> exit code 0, `$empty` stays the primary, no `WARN`.
+  4. AC4: after AC1 (and AC3), `Get-ChildItem -Force $empty` count is 0 (no `.index` or `web` created under the rejected override).
+  5. AC5: env=`"$empty;$shared"`, cwd=`$proj` -> stdout lists `proj\docs` first AND still lists the `shared` root with `finding.md`.
+  6. AC7: env=`$corp` (only `CORPUS.md`), cwd=`$proj` -> `$corp` is the primary, no `WARN`.
+  7. AC8: env unset or anything, cwd=`$proj`, `--corpus $empty` (explicit arg) -> `$empty` is the primary, no `WARN`, even though `$proj\docs` is valid.
+  8. AC6: run `dotnet build local-tools\local-tools.csproj -c Release` then `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1` and confirm `0 failed`.
+- **Acceptance:** `.\test-kit.ps1` (full, not `-SkipBuild`) prints `0 failed` and the new case name(s) appear in its output; temporarily disabling T20.1's substitution in `BuildRoots()` makes the AC1 assertion fail (verify, then restore and rebuild).
+- **Depends on:** T20.1
+- **Refs:** Story S20 (AC1-AC8); CLAUDE.md "Add a Test-Case for any bug".
+- **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. `--corpus` output shape: `N root(s), M indexable file(s):`, then per root `  <root>[  [MISSING - skipped]]  -> K file(s)`, then `index: <primary>\.index\chunks.json`. The WARN goes to stderr only: `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES/CORPUS there); using <cwd>\docs`. The suite must leave the process env var as it found it, must not touch the real `C:\Projects\Claude\MCP\DAD-kit\docs` nor `%USERPROFILE%\.claude`, and needs no network/Ollama. ASCII only.
 
 ## Open questions
 - **[design] S19 dad-doctor behaviour.** S19 lists `dad-doctor.ps1` but it only REPORTS the docs dir; T19.1 makes it WARN (and use the resolved dir for the RAG check) rather than silently choose a dir. If the human wants it to print the same `WARN: ignoring ...` line instead, amend T19.1 step 3.

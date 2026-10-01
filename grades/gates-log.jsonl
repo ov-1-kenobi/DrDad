@@ -30,3 +30,25 @@
 {"v":1,"ts":"2026-10-01T01:00:29.421Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
 {"v":1,"ts":"2026-10-01T01:08:24.597Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
 {"v":1,"ts":"2026-10-01T02:08:56.285Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:25:27.650Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:26:03.040Z","gate":"dad-guard-stop","decision":"block","tool":"","reason":"DAD-kit stop guard: this session changed 2 code file(s) and nothing has verified them - local-tools\\Program.cs, local-tools\\Rag.cs Do not end the turn here. Do ONE of these now: 1. Close the unit properly (builds, runs tests, commits, verifies): powershell -ExecutionPolicy Bypass -File \u0027D:\\Tools\\DrD","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:33:27.551Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:39:58.276Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:40:32.314Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 20, tasks 54)","session":""}
+{"v":1,"ts":"2026-10-01T02:40:37.935Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T20.1","session":""}
+{"v":1,"ts":"2026-10-01T02:48:42.362Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:56:27.470Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T03:03:10.115Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T03:09:42.894Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T03:18:23.345Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T03:25:10.751Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 20, tasks 54)","session":""}
+{"v":1,"ts":"2026-10-01T03:25:16.550Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T20.2","session":""}
+{"v":1,"ts":"2026-10-01T03:25:24.296Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T03:33:48.851Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T03:40:44.613Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 20, tasks 54)","session":""}
+{"v":1,"ts":"2026-10-01T03:40:50.874Z","gate":"close-unit-refusal","decision":"block","tool":"","reason":"S20 INCOMPLETE: story S20 : grade card cites docs/STORIES.md:871 but the file has 870 lines - run /grade S20","session":""}
+{"v":1,"ts":"2026-10-01T03:41:00.008Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T03:48:33.205Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 20, tasks 54)","session":""}
+{"v":1,"ts":"2026-10-01T03:48:39.185Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S20","session":""}
+{"v":1,"ts":"2026-10-01T03:48:45.606Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T12:27:29.620Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}

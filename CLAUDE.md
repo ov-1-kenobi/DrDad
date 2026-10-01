@@ -72,6 +72,10 @@ Add a `Test-Case` for any bug you fix here - that is how this gate stays useful.
   `install` copies them and when shown in a cp437/cp1252 console. Use `->`, `-`, `<->`, straight quotes.
 - **Preserve the dev-path placeholder** `C:\Projects\Claude\MCP\DAD-kit` in config files - `install.ps1`
   rewrites it to the real install location. Do NOT replace it with a hard-coded absolute path.
+  ONE deliberate exception: the kit repo's own root `.mcp.json` `command` points at the INSTALLED copy
+  (`D:\Tools\DrDad\...\local-tools.exe`, via the version link) so a kit session never runs - and so never
+  file-locks - the repo build it is developing. Its `LOCALTOOLS_DOCS_DIR` keeps the placeholder (S20 makes
+  the server fall back to `<cwd>\docs`). Templates keep the placeholder for both.
 - **JSON config = no BOM** (Node/Claude Code reads it). Scripts that write JSON use UTF-8 without BOM.
 - **Models live in `models.json`** - one entry per model (alias / `-cc` name / base tag / role / VRAM).
   `sync-models.ps1` GENERATES the Modelfiles (`FROM <model>` + `PARAMETER num_ctx`) because Ollama's
