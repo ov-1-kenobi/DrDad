@@ -2,6 +2,7 @@
 
 Status: LOCKED
 Security review: NOT-REQUIRED (FOUNDATIONAL and permanent, not a per-release waiver - the kit handles NO security: it authenticates no one and stores, reads or brokers no credential; at most it passes a harness's or tool's own auth through untouched. See ## Out of scope "Handling security". Local-only dev CLI; no user data stored, no exposed service; the kit stores and reads no credentials - a harness's login is its own, including R34's cloud/hybrid Anthropic key, and R37's supported path is BYOK to local Ollama, so no route through this kit requires an account. Re-confirmed 2026-09-29 against doc-stats' auth-keyword WARN: the hits are LLM token counts - R38c/C4a, harness session ids - C3b/C4b, the harness's own login and dummy local-Ollama auth token, and the secret scanner's detection patterns; none is this kit authenticating anyone)
+Security waiver confirmed: 2026-10-01 (human; auth-keyword hits: 145)
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
      Flip to DRAFT (and use /design or /proto) only to change the design itself. -->
 
