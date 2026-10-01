@@ -941,7 +941,7 @@
   kit (`C4a`, `C3-b` have pinned parents; `C5` is the gap AC5 waits on). The finding is computed state, so
   it goes into the `$f` list like the other `[design]` findings (dad-run-summary counts it).
 
-### Story S23: An acknowledged FOUNDATIONAL security waiver stops the auth-keyword WARN until NEW mentions appear   (R24)   <!-- Status: DONE closed:close-unit -->
+### Story S23: An acknowledged FOUNDATIONAL security waiver stops the auth-keyword WARN until NEW mentions appear   (R24)   <!-- Status: TODO -->
 - **Goal:** a human-dated confirmation line in the design header silences doc-stats' auth-keyword
   admissibility WARN while the keyword count has not grown, and re-fires it the moment it does.
 - **Context:** observed 2026-10-01 in `/audit`. The admissibility check (`doc-stats.ps1` ~271-283) WARNs
@@ -1060,3 +1060,40 @@
   the `against Claude Code` stamp at C4) and compute the line from the match index. Today the real doc
   holds two Copilot stamps (C2 ~DESIGN.md:682, C5 ~1307). Refs: DESIGN
   C2f, C5f (worked example: C2 bumped to 1.0.95, C5 left at 1.0.89 -> FAIL naming C5's stamp).
+
+### Story S26: upgrade-project refuses to run against a kit checkout   (R15)   <!-- Status: TODO -->
+- **Goal:** `upgrade-project` detects that its target is a DrDad kit checkout and exits without changing
+  anything, so the kit repo is never "retrofitted" as if it were a project.
+- **Context:** observed 2026-10-01. upgrade-project was run against the kit repo `D:\projects\DrDad`
+  itself. Step 0b (`upgrade-project.ps1` ~59-79) repoints `.mcp.json` `command` at `$kit = $PSScriptRoot`'s
+  `local-tools.exe` - here the repo build - silently undoing the deliberate CLAUDE.md exception (the kit
+  repo's `.mcp.json` runs the INSTALLED copy so a kit chat never file-locks the repo build). The stale
+  pointer launched two `local-tools.exe` processes from the repo `bin\`, and the suite's build case failed
+  with MSB3026 until they were stopped. It also restamped `.dad-kit-version` and rewrote CLAUDE.md with
+  CRLF line endings (step 3 section refresh ~166-227, `WriteAllText` of a CRLF string), which test-kit's
+  line-ending check rejects. The kit repo is not a DAD project; it is the kit.
+- **Behavior:**
+  - Before ANY write, resolve `-ProjectDir`; if it contains `install.ps1` AND `VERSION` AND
+    `global\commands\` (the kit's own markers), it is a kit checkout.
+  - Detection works whether the script runs from that same folder or from an installed copy elsewhere
+    (e.g. `D:\Tools\DrDad` against `D:\projects\DrDad`) - it keys on the TARGET, not `$PSScriptRoot`.
+  - On a kit checkout: print ONE line - `<dir> is a DrDad kit checkout, not a project - upgrade-project
+    does not retrofit the kit; use install.cmd to deploy it` - change NOTHING (no `.mcp.json`, CLAUDE.md,
+    `docs/`, `.gitignore`, git, version stamp), and exit 2 so a script caller notices.
+  - Normal projects (no kit markers) are unaffected.
+- **Data / interfaces:** `upgrade-project.ps1` (an early guard before step 0b); `test-kit.ps1` (fixture
+  cases). Exit code 2 = refused, kit checkout. Not changed: DESIGN.md, `install.ps1`.
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [ ] AC1: sandbox with the three kit markers + a CLAUDE.md + `.mcp.json` -> exit 2, the message, and
+    every file byte-identical afterwards (hash before/after).
+  - [ ] AC2: same result when upgrade-project is invoked from a different directory than the target
+    (installed-copy case).
+  - [ ] AC3: a normal sandbox project (CLAUDE.md, no kit markers) still upgrades as before (existing
+    upgrade-project test cases keep passing).
+  - [ ] AC4: the suite does NOT run it against the real kit repo (`D:\projects\DrDad`) - fixtures only.
+  - [ ] AC5: the full `test-kit.ps1` prints `0 failed`.
+- **Dev notes:** put the guard first, before any step that touches the filesystem or git, so "changes
+  NOTHING" holds by construction. All three markers are required (one alone is too weak a signal for a
+  user project). The CRLF rewrite of CLAUDE.md in step 3 is a separate defect for normal projects too; it
+  is out of scope here - QUESTION (human): file it as its own story? Refs: DESIGN R15.
