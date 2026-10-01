@@ -4774,10 +4774,10 @@ Test-Case "upgrade-project repoints a project's .mcp.json at THIS kit" {
 # S26: upgrade-project must refuse a DrDad kit checkout (install.ps1 + VERSION + global\commands\) before
 # any write. FIXTURES ONLY - these cases never pass the real kit ($kit) as -ProjectDir (S26 AC4); $kit is
 # used solely to locate the script under test.
-function New-S26KitSandbox([string]$dir, [switch]$NoGlobalCommands) {
+function New-S26KitSandbox([string]$dir, [switch]$NoGlobalCommands, [switch]$NoInstall, [switch]$NoVersion) {
   New-Item -ItemType Directory -Force $dir | Out-Null
-  "# stub" | Set-Content "$dir\install.ps1" -Encoding ASCII
-  "0.0.0" | Set-Content "$dir\VERSION" -Encoding ASCII
+  if (-not $NoInstall) { "# stub" | Set-Content "$dir\install.ps1" -Encoding ASCII }
+  if (-not $NoVersion) { "0.0.0" | Set-Content "$dir\VERSION" -Encoding ASCII }
   if (-not $NoGlobalCommands) {
     New-Item -ItemType Directory -Force "$dir\global\commands" | Out-Null
     "# x" | Set-Content "$dir\global\commands\x.md" -Encoding ASCII
@@ -4849,11 +4849,17 @@ Test-Case "S26 AC2: the refusal keys on the TARGET - same result run from anothe
     Assert ((Get-S26Snapshot $p) -ceq $before) "from another cwd: the kit sandbox changed"
     Assert (@(Get-ChildItem -LiteralPath "$sb\elsewhere" -Force).Count -eq 0) "the working directory was written to"
 
-    # all three markers are required: install.ps1 + VERSION + CLAUDE.md WITHOUT global\commands\ is a project
-    $q = Join-Path $sb "partial"; New-S26KitSandbox $q -NoGlobalCommands
-    $o3 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $q 2>&1 | Out-String); $code3 = $LASTEXITCODE
-    Assert ($code3 -ne 2) "a folder without global\commands\ was refused as a kit checkout. Output: $o3"
-    Assert (-not $o3.Contains($script:S26Msg)) "a folder without global\commands\ printed the kit-refusal message: $o3"
+    # all three markers are required: drop ANY one of them and the folder is a project that upgrades
+    # normally (exit 0 - a crash with exit 1 must not pass), with no refusal message
+    foreach ($partial in @(
+        @{ name = "no-globalcommands"; what = "global\commands\"; args = @{ NoGlobalCommands = $true } },
+        @{ name = "no-install";        what = "install.ps1";      args = @{ NoInstall = $true } },
+        @{ name = "no-version";        what = "VERSION";          args = @{ NoVersion = $true } })) {
+      $q = Join-Path $sb $partial.name; $pa = $partial.args; New-S26KitSandbox $q @pa
+      $o3 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $q 2>&1 | Out-String); $code3 = $LASTEXITCODE
+      Assert ($code3 -eq 0) "a folder without $($partial.what) did not upgrade normally (expected exit 0, got $code3). Output: $o3"
+      Assert (-not $o3.Contains($script:S26Msg)) "a folder without $($partial.what) printed the kit-refusal message: $o3"
+    }
   } finally { Remove-Sandbox $sb }
 }
 
