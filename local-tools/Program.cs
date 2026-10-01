@@ -8,7 +8,7 @@ using LocalTools;
 // The path arg is optional; without it, uses LOCALTOOLS_DOCS_DIR. Exit code 0 = success.
 if (args.Length > 0 && args[0] == "--reindex")
 {
-    if (args.Length > 1) Environment.SetEnvironmentVariable("LOCALTOOLS_DOCS_DIR", args[1]);
+    if (args.Length > 1) { Environment.SetEnvironmentVariable("LOCALTOOLS_DOCS_DIR", args[1]); DocsRootSource.Explicit = true; }  // S20: explicit arg bypasses the docs-dir rule
     try { Console.WriteLine(await Rag.IndexAsync()); }
     catch (Exception e) { Console.Error.WriteLine("reindex failed: " + e.Message); Environment.Exit(1); }
     return;
@@ -24,7 +24,7 @@ if (args.Length > 0 && args[0] == "--reindex")
 if (args.Length > 0 && args[0] == "--ingest")
 {
     if (args.Length < 2) { Console.Error.WriteLine("usage: local-tools.exe --ingest \"url\" [docsDir]"); Environment.Exit(1); return; }
-    if (args.Length > 2) Environment.SetEnvironmentVariable("LOCALTOOLS_DOCS_DIR", args[2]);
+    if (args.Length > 2) { Environment.SetEnvironmentVariable("LOCALTOOLS_DOCS_DIR", args[2]); DocsRootSource.Explicit = true; }  // S20: explicit arg bypasses the docs-dir rule
     try { Console.WriteLine(await Rag.IngestUrlAsync(args[1])); }
     catch (Exception e) { Console.Error.WriteLine("ingest failed: " + e.Message); Environment.Exit(1); }
     return;
@@ -52,7 +52,7 @@ if (args.Length > 0 && args[0] == "--search")
 // the test suite verifies enumeration without embeddings.
 if (args.Length > 0 && args[0] == "--corpus")
 {
-    if (args.Length > 1) Environment.SetEnvironmentVariable("LOCALTOOLS_DOCS_DIR", args[1]);
+    if (args.Length > 1) { Environment.SetEnvironmentVariable("LOCALTOOLS_DOCS_DIR", args[1]); DocsRootSource.Explicit = true; }  // S20: explicit arg bypasses the docs-dir rule
     try { Console.WriteLine(Rag.DescribeCorpus()); }
     catch (Exception e) { Console.Error.WriteLine("corpus listing failed: " + e.Message); Environment.Exit(1); }
     return;

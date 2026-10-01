@@ -18,6 +18,17 @@ public class Chunk
 }
 
 /// <summary>
+/// S20: true when Program.cs got the docs root as an EXPLICIT CLI path arg (--reindex/--ingest/--corpus
+/// &lt;dir&gt;), which it passes on by setting LOCALTOOLS_DOCS_DIR - so the env var alone cannot tell the two
+/// apart. A SEPARATE type on purpose: Rag's static initializers run on first touch of any Rag static, so a
+/// flag stored on Rag could be read by BuildRoots() before Program had set it.
+/// </summary>
+public static class DocsRootSource
+{
+    public static bool Explicit;
+}
+
+/// <summary>
 /// Local, offline RAG. Embeddings come from Ollama over HTTP (language-agnostic); vectors
 /// are stored in a single JSON file and searched with brute-force cosine (instant for
 /// thousands of chunks). Plus online helpers: ingest_url and web_search.
@@ -41,10 +52,15 @@ public static class Rag
     // all, so a research corpus on another drive (or shared between projects) is searchable without
     // copying it. Roots that do not exist are skipped rather than fatal - a missing shared drive should
     // degrade the corpus, not break the server.
+    // S20 (mirrors S19's docs-dir rule): an ENV-VAR primary holding none of DESIGN/TEDD/STORIES/CORPUS.md
+    // yields to <cwd>\docs when that one passes (one WARN on stderr) - the kit's .mcp.json placeholder was
+    // otherwise indexed as an empty corpus. An explicit CLI path arg (DocsRootSource.Explicit) bypasses it.
     static readonly string[] DocsRoots = BuildRoots();
     static string DocsDir => DocsRoots[0];                              // primary root
-    static readonly string IndexDir = Path.Combine(BuildRoots()[0], ".index");  // self-contained per project
-    static readonly string WebDir = Path.Combine(BuildRoots()[0], "web");
+    // Derived from DocsRoots (computed ONCE) so the WARN prints once and .index\/web\ follow a substituted
+    // primary - nothing is ever created under a rejected override (S19's original empty-folder incident).
+    static readonly string IndexDir = Path.Combine(DocsRoots[0], ".index");  // self-contained per project
+    static readonly string WebDir = Path.Combine(DocsRoots[0], "web");
 
     static string[] BuildRoots()
     {
@@ -61,8 +77,30 @@ public static class Rag
             if (!seen.Any(s => s.Equals(full, StringComparison.OrdinalIgnoreCase))) seen.Add(full);
         }
         if (seen.Count == 0) seen.Add(Path.GetFullPath(raw.Split(';')[0]));   // keep the primary even if absent
+
+        // S20: the docs-dir rule, for an env-var-sourced primary only (seen[0]); secondary roots untouched.
+        // Never write to stdout here - it is the MCP protocol channel - and never create a directory.
+        if (!DocsRootSource.Explicit && !HasProjectDocs(seen[0]))
+        {
+            string? cwdDocs = null;
+            try { cwdDocs = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "docs")); } catch { }
+            if (cwdDocs != null && HasProjectDocs(cwdDocs)
+                && !cwdDocs.Equals(seen[0], StringComparison.OrdinalIgnoreCase))
+            {
+                var rejected = seen[0];
+                seen.RemoveAll(s => s.Equals(cwdDocs, StringComparison.OrdinalIgnoreCase));
+                seen[0] = cwdDocs;
+                Console.Error.WriteLine($"WARN: ignoring LOCALTOOLS_DOCS_DIR {rejected} (no DESIGN/TEDD/STORIES/CORPUS there); using {cwdDocs}");
+            }
+        }
         return seen.ToArray();
     }
+
+    // S20: a dir counts as project docs only if it holds one of these markers (CORPUS.md marks a /corpus
+    // folder). Extends S19's predicate for the SERVER only; docs-dir.ps1 is unchanged.
+    static bool HasProjectDocs(string d) =>
+        Directory.Exists(d) && new[] { "DESIGN.md", "TEDD.md", "STORIES.md", "CORPUS.md" }
+            .Any(n => File.Exists(Path.Combine(d, n)));
     static string IndexFile => Path.Combine(IndexDir, "chunks.json");
     static string SigFile   => Path.Combine(IndexDir, "manifest.sig");  // corpus signature, for staleness
 

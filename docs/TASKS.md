@@ -1891,7 +1891,7 @@ executor must NOT run it.)
 - **Refs:** Story S19 (AC1-AC4, Dev notes); `docs/DESIGN.md` R24; CLAUDE.md "Add a Test-Case for any bug".
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, sandbox helpers `New-Sandbox`/`Remove-Sandbox`. The suite must not touch the real `C:\Projects\Claude\MCP\DAD-kit\docs` nor the real `%USERPROFILE%\.claude`. ASCII only.
 
-### [ ] T20.1 - local-tools server: docs-dir rule for an env-var primary root (Rag.cs + Program.cs)   (Story S20)
+### [x] T20.1 - local-tools server: docs-dir rule for an env-var primary root (Rag.cs + Program.cs)   (Story S20)
 - **Goal:** when the PRIMARY root comes from the `LOCALTOOLS_DOCS_DIR` env var and holds none of `DESIGN.md`/`TEDD.md`/`STORIES.md`/`CORPUS.md`, the server uses `<cwd>\docs` instead (if that passes), warns once on STDERR, and never creates `.index`/`web` under the rejected dir; explicit CLI path args bypass the rule.
 - **Touches:** `local-tools/Rag.cs` (`DocsRoots`/`DocsDir`/`IndexDir`/`WebDir` fields ~lines 44-47, `BuildRoots()` ~lines 49-65; `IndexAsync` `CreateDirectory` calls ~371-372 and `IngestUrlAsync` ~487 need no edit once the paths are right); `local-tools/Program.cs` (`--reindex` ~line 11, `--ingest` ~line 27, `--corpus` ~line 55). NOT `docs-dir.ps1`, NOT `.mcp.json`, NOT `corpus.ps1`.
 - **Do:**

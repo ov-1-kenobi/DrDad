@@ -30,3 +30,9 @@
 {"v":1,"ts":"2026-10-01T01:00:29.421Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
 {"v":1,"ts":"2026-10-01T01:08:24.597Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
 {"v":1,"ts":"2026-10-01T02:08:56.285Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:25:27.650Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:26:03.040Z","gate":"dad-guard-stop","decision":"block","tool":"","reason":"DAD-kit stop guard: this session changed 2 code file(s) and nothing has verified them - local-tools\\Program.cs, local-tools\\Rag.cs Do not end the turn here. Do ONE of these now: 1. Close the unit properly (builds, runs tests, commits, verifies): powershell -ExecutionPolicy Bypass -File \u0027D:\\Tools\\DrD","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:33:27.551Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:39:58.276Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T02:40:32.314Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 20, tasks 54)","session":""}
+{"v":1,"ts":"2026-10-01T02:40:37.935Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T20.1","session":""}
