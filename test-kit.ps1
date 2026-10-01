@@ -667,7 +667,7 @@ Test-Case "api-surface resolves a type deriving from an ASP.NET framework base (
   # FrameworkReference lib with such a type and asserts it now appears. Skips (does not fail) when the SDK or
   # the ASP.NET Core shared framework is unavailable.
   $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
-  if (-not (Test-Path $exe)) { return }
+  if (-not (Test-Path $exe)) { Skip-Case "local-tools.exe not built" -NeedsBuild }
   if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { return }
   $sb = New-Sandbox
   try {
@@ -2083,7 +2083,7 @@ Test-Case "docs-find NEVER creates a real directory at an unrewritten .mcp.json 
   # subfolder. That created a real, empty directory tree OUTSIDE any project, on the real machine - which
   # then went on to hijack close-unit's own (correctly guarded) path resolution on a LATER run, because
   # once the bogus path exists, Test-Path stops distinguishing "really configured" from "leaked by a bug".
-  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { return }
+  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { Skip-Case "local-tools.exe not built" -NeedsBuild }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -2149,7 +2149,7 @@ Test-Case "S19 AC2: doc-stats honours a LOCALTOOLS_DOCS_DIR that holds STORIES.m
 }
 
 Test-Case "S19 AC3: docs-find ignores an EMPTY LOCALTOOLS_DOCS_DIR with a WARN and still finds project docs" {
-  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { Write-Host "  SKIP (exe not built): docs-find AC3 case did not run" -ForegroundColor Yellow; return }
+  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { Skip-Case "local-tools.exe not built (docs-find AC3 case did not run)" -NeedsBuild }
   $sb = New-Sandbox
   try {
     $p = New-S19Fixture $sb 1
@@ -2828,9 +2828,9 @@ Test-Case "a claimed-missing contract is settled by grep, not by the model" {
 Test-Case "the corpus spans MULTIPLE roots (and does not double-count)" {
   # A research corpus can be large or shared between projects, so LOCALTOOLS_DOCS_DIR takes a ';'-separated
   # list. The first root stays primary - it owns .index\ - and one index covers them all.
-  if ($SkipBuild) { return }
+  if ($SkipBuild) { Skip-Case "-SkipBuild: needs the built local-tools.exe" }
   $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
-  if (-not (Test-Path $exe)) { return }
+  if (-not (Test-Path $exe)) { Skip-Case "local-tools.exe not built" -NeedsBuild }
   $sb = New-Sandbox
   try {
     $a = Join-Path $sb "projdocs"; $b = Join-Path $sb "shared"
@@ -2861,9 +2861,9 @@ Test-Case "T20.2 / S20 AC1-AC5, AC7, AC8: the server's env-var docs-dir rule (--
   # DESIGN/TEDD/STORIES/CORPUS.md yields to <cwd>\docs when that one passes, with ONE WARN on stderr (stdout
   # is the MCP protocol channel). An explicit CLI path arg bypasses the rule. Fixtures live in a %TEMP%
   # sandbox, never under the kit tree; the process env var is restored exactly as found.
-  if ($SkipBuild) { return }
+  if ($SkipBuild) { Skip-Case "-SkipBuild: needs the built local-tools.exe" }
   $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
-  if (-not (Test-Path $exe)) { return }
+  if (-not (Test-Path $exe)) { Skip-Case "local-tools.exe not built" -NeedsBuild }
   $sb = New-Sandbox
   # run the exe with a given LOCALTOOLS_DOCS_DIR ($null = unset), cwd and args; stdout/stderr SEPARATELY
   $run = {
@@ -4502,9 +4502,9 @@ Test-Case "the stack is decided EARLY, and the record says so" {
 Test-Case "the API surface generator produces real signatures" {
   # The registry is only worth having if it carries EXACT signatures including generics - that is the whole
   # difference between it and grepping source. Generate it for the kit's OWN server and check the shape.
-  if ($SkipBuild) { return }
+  if ($SkipBuild) { Skip-Case "-SkipBuild: needs the built local-tools.exe" }
   $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
-  if (-not (Test-Path $exe)) { return }
+  if (-not (Test-Path $exe)) { Skip-Case "local-tools.exe not built" -NeedsBuild }
   $sb = New-Sandbox
   try {
     $out = Join-Path $sb "API-SURFACE.md"
@@ -5875,7 +5875,7 @@ if (-not $SkipBuild) {
     # without a network: IngestUrlAsync creates <root>\web BEFORE fetching, so an offline .invalid URL shows
     # web\ appearing under the corpus even while LOCALTOOLS_DOCS_DIR points at a 'project'.
     $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
-    if (-not (Test-Path $exe)) { return }
+    if (-not (Test-Path $exe)) { Skip-Case "local-tools.exe not built" -NeedsBuild }
     & $exe --ingest 2>&1 | Out-Null
     Assert ($LASTEXITCODE -ne 0) "--ingest with no url should print usage and exit non-zero"
     $sb = New-Sandbox

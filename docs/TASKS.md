@@ -1968,7 +1968,7 @@ two open edits of that file overlap and each finishes on the skipped-aware summa
 - **Refs:** Story S21 (Behavior 1-3, Dev notes); `docs/DESIGN.md` R24; test-kit.ps1:17 (`param([switch]$SkipBuild)`), :20-42, :7074; close-unit.ps1:186-194 (`Get-TestCount`).
 - **Context:** today `Test-Case` does `& $body; $script:pass++`, so a body that hits an early `return` PASSes having asserted nothing (observed in S20's QA/grade, `grades/S20_GRADE.md`). The skip signal is an exception because `Test-Case` already sorts outcomes by try/catch. A case must call `Skip-Case` BEFORE entering a `try { } catch { }` of its own (a body-level catch would swallow the signal); the existing cases use `try { } finally { }`, which is fine. `$SkipBuild` is the script parameter and is visible inside the function by dynamic scope. close-unit's parser (`(?i)(\d+)\s+passed`, close-unit.ps1:188) still finds the pass count in the new summary line.
 
-### [ ] T21.2 - Convert every $SkipBuild / missing-exe early return in test-kit.ps1 to Skip-Case   (Story S21)
+### [x] T21.2 - Convert every $SkipBuild / missing-exe early return in test-kit.ps1 to Skip-Case   (Story S21)
 - **Goal:** no build-dependent case can PASS having run nothing: under `-SkipBuild` it prints SKIP with a reason; on a full run a missing `local-tools.exe` FAILS the case.
 - **Touches:** `test-kit.ps1` - exactly these early returns (line numbers as of this map; anchor by case name, T21.1 shifts them by a few lines):
   - `"api-surface resolves a type deriving from an ASP.NET framework base (ApplicationUser : IdentityUser)"` - line 652 (exe missing).
