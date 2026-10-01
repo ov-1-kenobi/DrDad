@@ -2021,7 +2021,7 @@ two open edits of that file overlap and each finishes on the skipped-aware summa
 - **Refs:** Story S22 (Behavior, Data/interfaces, Dev notes); `docs/DESIGN.md` R24; doc-stats.ps1:111-112 (`$storiesFile`, `$tasksFile`), :219 (`$f`), :225-227 (`$designPath`, `$designRaw`), :233-242 (Contracts gate + heading regex), :88-108 (`-Contract`, unchanged).
 - **Context:** observed 2026-10-01 in `/audit`: R39(a) promised contract C5 from the S14 spike, S14 closed, and C5 was never written into `## Contracts`; only the librarian's prose read noticed. "Does the heading exist" is a grep (R24). The reference regex does not match `C2PA` (no word boundary between the digit and `P`), `C#` or `C++`. `$designName` is the FILE NAME (`DESIGN.md` or `TEDD.md`), not a path. A pinned heading line is itself a reference and resolves to itself.
 
-### [ ] T22.2 - test-kit Test-Case for S22 (AC1-AC4), kit-repo check (AC5), full suite   (Story S22)
+### [x] T22.2 - test-kit Test-Case for S22 (AC1-AC4), kit-repo check (AC5), full suite   (Story S22)
 - **Goal:** `test-kit.ps1` proves the referenced-but-not-pinned finding fires with exact locations, resolves sub-contracts via their parent, ignores `C2PA`/`C#`/`C++`, and stays silent with no `## Contracts` section.
 - **Touches:** `test-kit.ps1` (one new `Test-Case` directly after `"a one-word edit cannot satisfy the LOCK or the SECURITY gate"`, ~lines 4137-4184, which already exercises the empty-Contracts finding; that case stays untouched).
 - **Do:**

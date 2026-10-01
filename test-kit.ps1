@@ -4201,6 +4201,74 @@ Test-Case "a one-word edit cannot satisfy the LOCK or the SECURITY gate" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S22: doc-stats flags contract ids REFERENCED but never PINNED (AC1-AC4)" {
+  # Observed 2026-10-01: a design promised a new contract from a spike, the spike closed, and the contract
+  # was never written into '## Contracts' - only a prose read noticed. "Does the heading exist" is a grep
+  # (R24), so doc-stats -Findings computes it. Fixtures are line ARRAYS so the reported line numbers are exact.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $ds = Join-Path $kit "doc-stats.ps1"
+    function Set-S22Doc([string]$name, [string[]]$lines) {
+      $path = Join-Path "$p\docs" $name
+      if ($null -eq $lines) { Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue; return }
+      Set-Content -LiteralPath $path -Value $lines -Encoding UTF8
+    }
+    function Findings() { return (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) }
+    $hdrDraft  = @('# Design', '', 'Status: DRAFT',  'Security review: NOT-REQUIRED (test fixture, offline)', '')
+    $hdrLocked = @('# Design', '', 'Status: LOCKED', 'Security review: NOT-REQUIRED (test fixture, offline)', '')
+    $tag = 'REFERENCED but never PINNED'
+
+    # AC1: exact locations, first line per file only (DESIGN.md:9 is not listed)
+    $ac1Body = @('## Contracts', '### C1: x', '- **Decision:** see C5.', 'C5 again.')
+    Set-S22Doc "DESIGN.md" ($hdrDraft + $ac1Body)
+    Set-S22Doc "STORIES.md" @('# Stories', '', '### Story S1: one   <!-- Status: TODO -->', '- **Goal:** implement C5.')
+    Set-S22Doc "TASKS.md" @('# Tasks', '', '## Tasks', '', '### [ ] T1.1 - do C5   (Story S1)')
+    $want = '[design] 1 contract id(s) are REFERENCED but never PINNED in DESIGN.md: C5 (DESIGN.md:8, STORIES.md:4, TASKS.md:5)'
+    $o = Findings
+    Assert ($o.Contains($want)) "AC1 (DRAFT): the finding is missing or its locations are wrong. Output: $o"
+    # ...fires in LOCKED as well
+    Set-S22Doc "DESIGN.md" ($hdrLocked + $ac1Body)
+    $o = Findings
+    Assert ($o.Contains($want)) "AC1 (LOCKED): the finding did not fire under LOCKED. Output: $o"
+    # ...and pinning the id clears it
+    Set-S22Doc "DESIGN.md" ($hdrLocked + @('## Contracts', '### C1: x', '### C5: y', '- **Decision:** see C5.', 'C5 again.'))
+    $o = Findings
+    Assert (-not $o.Contains($tag)) "AC1: pinning the referenced contract did not clear the finding. Output: $o"
+
+    # AC2: a sub-contract id resolves via its pinned parent (C4a -> C4, C3-b -> C3)
+    Set-S22Doc "DESIGN.md" ($hdrDraft + @('## Contracts', '### C3: a', '### C4: b', '', 'The parser follows C4a and the writer C3-b.'))
+    Set-S22Doc "STORIES.md" @('# Stories', '', '### Story S1: one   <!-- Status: TODO -->', '- **Goal:** implement C4a and C3-b.')
+    Set-S22Doc "TASKS.md" $null
+    $o = Findings
+    Assert (-not $o.Contains($tag)) "AC2: a sub-contract id (C4a / C3-b) was not resolved via its pinned parent. Output: $o"
+
+    # AC3: C2PA, C# and C++ are not contract ids, and matching is case-SENSITIVE (a lowercase c<n> is prose, not an id)
+    Set-S22Doc "DESIGN.md" ($hdrDraft + @('## Contracts', '### C1: x', '', 'signed with C2PA, written in C# and C++.', ('see c' + 9 + ' and c' + 12 + '.')))
+    Set-S22Doc "STORIES.md" @('# Stories', '', '### Story S1: one   <!-- Status: TODO -->', '- **Goal:** signed with C2PA, written in C# and C++.')
+    $o = Findings
+    Assert (-not $o.Contains($tag)) "AC3: C2PA / C# / C++ or a lowercase c<n> were read as contract ids. Output: $o"
+
+    # AC4: no '## Contracts' section -> silent, even with unpinned references (ids built, not literal)
+    $u1 = "C" + 7; $u2 = "C" + 8
+    Set-S22Doc "DESIGN.md" ($hdrLocked + @('## Requirements', "- R1: follows $u1."))
+    Set-S22Doc "STORIES.md" @('# Stories', '', '### Story S1: one   <!-- Status: TODO -->', "- **Goal:** implement $u2.")
+    $o = Findings
+    Assert (-not $o.Contains($tag)) "AC4: fired on a design with no '## Contracts' section. Output: $o"
+
+    # Cap: ten unpinned ids -> the count says 10, the list shows exactly 8 entries and ' ...'
+    $many = @(11..20 | ForEach-Object { "see " + ("C" + $_) + "." })
+    Set-S22Doc "DESIGN.md" ($hdrDraft + @('## Contracts', '### C1: x') + $many)
+    Set-S22Doc "STORIES.md" $null
+    $o = Findings
+    $line = [regex]::Match($o, '(?m)^.*REFERENCED but never PINNED.*$').Value
+    Assert ($line -match '\[design\] 10 contract id\(s\) are REFERENCED but never PINNED') "cap: the finding does not count all 10 ids. Line: $line"
+    $shown = [regex]::Matches($line, 'C\d+ \(').Count
+    Assert ($shown -eq 8) "cap: expected exactly 8 listed entries, got $shown. Line: $line"
+    Assert ($line.Contains(' ...')) "cap: the truncated list does not end its entries with ' ...'. Line: $line"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "doc-stats flags a NOT-REQUIRED security waiver contradicted by the design's own auth content" {
   # A.4: the existence check above (previous Test-Case) only asks "is there a parenthetical >=4 chars" -
   # it never asks whether the reason is CREDIBLE. A real run waived the review as

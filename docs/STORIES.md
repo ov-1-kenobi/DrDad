@@ -901,7 +901,7 @@
   - [ ] AC6: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** keep the skip mechanism one helper, not per-case variants; the reason string is required.
 
-### Story S22: doc-stats flags a contract that is REFERENCED but never PINNED   (R24)   <!-- Status: TODO -->
+### Story S22: doc-stats flags a contract that is REFERENCED but never PINNED   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `doc-stats.ps1 -Findings` compares the contract ids the docs REFERENCE against the ids the design
   doc PINS, and WARNs on every reference that resolves to no contract heading.
 - **Context:** observed 2026-10-01 in `/audit`. DESIGN.md R39(a) promised "a new contract (C5)" from the S14
