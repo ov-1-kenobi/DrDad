@@ -5045,6 +5045,141 @@ Test-Case "close-unit refuses a STORY close when tests run zero tests" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S21 AC1/AC3: Skip-Case counts SKIP not PASS; -NeedsBuild on a FULL run FAILS; a blank reason FAILS" {
+  # Tests the REAL helper text (parsed out of this file), in a CHILD process so the probe's deliberate FAIL
+  # lines never touch this suite's own counters.
+  $path = Join-Path $kit "test-kit.ps1"
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$null)
+  $fns = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and @('Test-Case','Skip-Case','Assert') -contains $n.Name }, $false))
+  Assert ($fns.Count -eq 3) "expected Test-Case, Skip-Case and Assert at the top level of test-kit.ps1, found $($fns.Count)"
+  $sb = New-Sandbox
+  try {
+    $probe = Join-Path $sb "probe.ps1"
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add('param([switch]$SkipBuild)')
+    $lines.Add('$script:pass = 0')
+    $lines.Add('$script:fail = 0')
+    $lines.Add('$script:skip = 0')
+    $lines.Add('$script:failures = New-Object System.Collections.Generic.List[string]')
+    foreach ($fn in $fns) { $lines.Add($fn.Extent.Text) }
+    $lines.Add('Test-Case "probe-build" { Skip-Case "exe missing" -NeedsBuild }')
+    $lines.Add('Test-Case "probe-tool" { Skip-Case "no tool" }')
+    $lines.Add('Test-Case "probe-blank" { Skip-Case "" }')
+    $lines.Add('Test-Case "probe-pass" { Assert $true "x" }')
+    $lines.Add('Write-Host "COUNTS $script:pass $script:fail $script:skip"')
+    Set-Content -LiteralPath $probe -Value $lines.ToArray() -Encoding ASCII
+
+    # FULL run: -NeedsBuild is a FAIL, a plain skip is a SKIP, a blank reason is a FAIL.
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $probe 2>&1 | Out-String
+    Assert ($out -match 'FAIL  probe-build') "full run: a -NeedsBuild skip did not FAIL. Output: $out"
+    Assert ($out -match 'SKIP  probe-tool - no tool') "full run: a plain skip did not print SKIP with its reason. Output: $out"
+    Assert ($out -match 'FAIL  probe-blank') "full run: a blank-reason skip did not FAIL. Output: $out"
+    Assert ($out -match 'PASS  probe-pass') "full run: an ordinary passing case did not PASS. Output: $out"
+    Assert ($out -match 'COUNTS 1 2 1') "full run: expected pass/fail/skip counts 1 2 1. Output: $out"
+    Assert ($out -notmatch 'PASS  probe-build') "full run: a -NeedsBuild skip was counted as a PASS"
+    Assert ($out -notmatch 'PASS  probe-tool') "full run: a skip was counted as a PASS"
+
+    # -SkipBuild run: the -NeedsBuild skip is now an honest SKIP.
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $probe -SkipBuild 2>&1 | Out-String
+    Assert ($out -match 'SKIP  probe-build - exe missing') "-SkipBuild run: a -NeedsBuild skip did not print SKIP with its reason. Output: $out"
+    Assert ($out -match 'COUNTS 1 1 2') "-SkipBuild run: expected pass/fail/skip counts 1 1 2. Output: $out"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case 'S21 AC4: no $SkipBuild / missing-exe early return is left in test-kit.ps1' {
+  # A bare `return` in a case body counts as PASS having asserted nothing; build-dependent cases must call
+  # Skip-Case instead. Patterns are single-quoted so this case's own source does not match them.
+  $retRx = '\breturn\s*\}'
+  $buildRx = '\$SkipBuild|Test-Path \$exe|local-tools\.exe'
+  $src = @(Get-Content -LiteralPath (Join-Path $kit "test-kit.ps1"))
+  $bad = New-Object System.Collections.Generic.List[string]
+  for ($i = 0; $i -lt $src.Count; $i++) {
+    if (($src[$i] -match $retRx) -and ($src[$i] -match $buildRx)) { $bad.Add([string]($i + 1)) }
+  }
+  Assert ($bad.Count -eq 0) ("build-dependent early return(s) left at test-kit.ps1 line(s): " + ($bad -join ', ') + " - use Skip-Case")
+}
+
+Test-Case "S21 AC5: close-unit reads the passed count from the skipped-aware summary; 0 passed refuses" {
+  if (-not $haveGit) { Skip-Case "git not available" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | init |`n`n## Assessment`n" + ('detail. ' * 120) + " See docs/STORIES.md:1.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+
+    # the new summary with 0 passed -> refuse
+    "# Project: t`n`n## Build / test`n- Build: ``echo ok```n- Test:  ``echo == 0 passed, 0 failed, 3 skipped ==``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "closed a story on '0 passed, 0 failed, 3 skipped'"
+    Assert (-not (Select-String "$p\docs\STORIES.md" -Pattern 'Status: DONE' -Quiet)) "marked the story DONE on 0 passed"
+
+    # the new summary with a real pass count -> accept
+    "# Project: t`n`n## Build / test`n- Build: ``echo ok```n- Test:  ``echo == 12 passed, 0 failed, 3 skipped ==``" |
+      Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -RequireGrade | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "rejected a story whose skipped-aware summary reports 12 passed"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE on 12 passed"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S21 AC5: close-unit takes the LAST 'N passed' - a decoy '0 passed' line before the summary does not refuse" {
+  # 2026-10-01: this suite's own case NAME ("...; 0 passed refuses") on a PASS line made first-match
+  # Get-TestCount read 0 and refuse a green 243-test run. The echo fixtures above are single-line and missed it.
+  if (-not $haveGit) { Skip-Case "git not available" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | init |`n`n## Assessment`n" + ('detail. ' * 120) + " See docs/STORIES.md:1.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    # a two-line test runner: the decoy first, the real summary last
+    @('@echo off', 'echo PASS  S21 AC5: close-unit reads the summary; 0 passed refuses', 'echo == 12 passed, 0 failed, 3 skipped ==') |
+      Set-Content "$p\runtests.cmd" -Encoding ASCII
+    "# Project: t`n`n## Build / test`n- Build: ``echo ok```n- Test:  ``runtests.cmd``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $runOut = @(cmd /c "runtests.cmd")
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    # the fixture must really emit both lines, decoy first - otherwise this case proves nothing
+    Assert ($runOut.Count -eq 2) "fixture runner emitted $($runOut.Count) line(s), expected 2: $($runOut -join ' | ')"
+    Assert ($runOut[0] -match '0 passed' -and $runOut[1] -match '== 12 passed') "fixture runner lines out of order: $($runOut -join ' | ')"
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -RequireGrade 2>&1 | Out-String
+    Assert ($LASTEXITCODE -eq 0) "refused a story whose real summary (after a decoy '0 passed' line) reports 12 passed. Output: $out"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE on a decoy-then-12-passed run"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit Get-TestCount: last match wins; echo fixtures, decoy, and dotnet 'Total tests'" {
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $kit "close-unit.ps1"), [ref]$null, [ref]$null)
+  $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-TestCount' }, $true)
+  Assert ($null -ne $fn) "Get-TestCount is not defined in close-unit.ps1"
+  . ([scriptblock]::Create($fn.Extent.Text))
+  $n = Get-TestCount "== 0 passed, 0 failed, 3 skipped ==`r`n"
+  Assert ($n -eq 0) "single-line '0 passed' summary -> $n, expected 0"
+  $n = Get-TestCount "== 12 passed, 0 failed, 3 skipped ==`r`n"
+  Assert ($n -eq 12) "single-line '12 passed' summary -> $n, expected 12"
+  $n = Get-TestCount "PASS  S21 AC5: close-unit reads the summary; 0 passed refuses`r`n== 12 passed, 0 failed, 3 skipped ==`r`n"
+  Assert ($n -eq 12) "decoy '0 passed' line before the real summary -> $n, expected 12"
+  $n = Get-TestCount "Test run for x.dll (.NETCoreApp,Version=v8.0)`r`nTotal tests: 5`r`n     Passed: 5`r`n"
+  Assert ($n -eq 5) "dotnet-test-style 'Total tests: 5' -> $n, expected 5"
+  $n = Get-TestCount "Build succeeded.`r`n"
+  Assert ($n -eq -1) "output with no count -> $n, expected -1"
+}
+
 Test-Case "upgrade-project migrates docs\COMMANDS.md -> RECIPES.md preserving entries" {
   $sb = New-Sandbox
   try {

@@ -183,11 +183,14 @@ function Show-EnvBlock([string]$output) {
 
 # How many tests actually ran? -1 = could not tell. A story must never close on 0 or unknown: mediamotor
 # had six test projects missing from the .sln, so 'dotnet test' printed "Build succeeded" and ran NOTHING.
+# Each pattern takes its LAST match: runners print their totals at the END, so earlier "N passed" text (a
+# test NAME, a log line) must not win. 2026-10-01: a test named "...; 0 passed refuses" printed on a PASS
+# line made first-match read 0 and refuse a green 243-test run (T21.3).
 function Get-TestCount([string]$out) {
   foreach ($rx in @('(?im)^\s*Total:\s*(\d+)', '(?i)Total tests:\s*(\d+)', '(?i)Tests run:\s*(\d+)',
                     '(?i)(\d+)\s+passed', '(?i)Passed:\s*(\d+)', '(?i)(\d+)\s+test\(s\)')) {
-    $m = [regex]::Match($out, $rx)
-    if ($m.Success) { return [int]$m.Groups[1].Value }
+    $ms = [regex]::Matches($out, $rx)
+    if ($ms.Count -gt 0) { return [int]$ms[$ms.Count - 1].Groups[1].Value }
   }
   if ($out -match '(?i)(no tests? (were run|to run|ran|available)|zero tests|found 0 test)') { return 0 }
   return -1

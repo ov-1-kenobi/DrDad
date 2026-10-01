@@ -869,7 +869,7 @@
   by SETTING `LOCALTOOLS_DOCS_DIR` (lines ~11, 27, 55), so the server must carry an "explicit" flag rather
   than infer it from the env var.
 
-### Story S21: A skipped test-kit case must be COUNTED as skipped, never as a pass   (R24)   <!-- Status: TODO -->
+### Story S21: A skipped test-kit case must be COUNTED as skipped, never as a pass   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** a `test-kit.ps1` case that runs nothing reports SKIP with a reason and is counted separately, so
   the pass count means "ran and passed" and a missing build artifact on a full run is a failure.
 - **Context:** observed 2026-09-30 in S20's QA and grade (`grades/S20_GRADE.md`). Several cases begin with

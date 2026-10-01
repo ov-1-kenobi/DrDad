@@ -1989,7 +1989,7 @@ two open edits of that file overlap and each finishes on the skipped-aware summa
 - **Refs:** Story S21 (Behavior 3-4, AC1, AC2, AC4); test-kit.ps1:652, :2068, :2134, :2813-2815, :2846-2848, :4487-4489, :5785, :5860.
 - **Context:** under `-SkipBuild` the exe may still exist from an earlier build; the exe-missing cases then RUN, which is honest - only the `$SkipBuild` guards skip unconditionally. On a full run the build case "local-tools builds (Release)" has just run, so a missing exe is a real defect and `-NeedsBuild` makes it FAIL (S21 Behavior 3).
 
-### [ ] T21.3 - test-kit Test-Cases for S21 (AC1, AC3-AC5) + full suite   (Story S21)
+### [x] T21.3 - test-kit Test-Cases for S21 (AC1, AC3-AC5) + full suite   (Story S21)
 - **Goal:** `test-kit.ps1` proves a skip is counted as SKIP (never PASS), a missing exe on a full run FAILS, no early-return skip is left, and close-unit still reads the new summary.
 - **Touches:** `test-kit.ps1` (three new `Test-Case` blocks directly after `"close-unit refuses a STORY close when tests run zero tests"`, ~lines 4990-5028; that case stays untouched). `close-unit.ps1` (`Get-TestCount`, lines 186-194) ONLY if case 3 below fails - expected not to be needed.
 - **Do:**
