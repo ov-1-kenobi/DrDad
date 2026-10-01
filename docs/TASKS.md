@@ -1953,7 +1953,7 @@ two open edits of that file overlap and each finishes on the skipped-aware summa
 - **Refs:** Story S20 (AC1-AC8); CLAUDE.md "Add a Test-Case for any bug".
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. `--corpus` output shape: `N root(s), M indexable file(s):`, then per root `  <root>[  [MISSING - skipped]]  -> K file(s)`, then `index: <primary>\.index\chunks.json`. The WARN goes to stderr only: `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES/CORPUS there); using <cwd>\docs`. The suite must leave the process env var as it found it, must not touch the real `C:\Projects\Claude\MCP\DAD-kit\docs` nor `%USERPROFILE%\.claude`, and needs no network/Ollama. ASCII only.
 
-### [ ] T21.1 - test-kit.ps1: one Skip-Case helper; a SKIP is counted separately; summary prints K skipped   (Story S21)
+### [x] T21.1 - test-kit.ps1: one Skip-Case helper; a SKIP is counted separately; summary prints K skipped   (Story S21)
 - **Goal:** a `Test-Case` body can declare "I ran nothing" with a REQUIRED reason; it prints `SKIP  <name> - <reason>`, is counted in a new skip counter (never as a pass), and the summary line becomes `== N passed, M failed, K skipped ==`.
 - **Touches:** `test-kit.ps1` only - header comment (lines 6-9), counters (lines 20-22), `Test-Case` (lines 24-39), a new `Skip-Case` function next to `Assert` (line 42), the summary line (line 7074). No case bodies change in this task (T21.2 does that).
 - **Do:**

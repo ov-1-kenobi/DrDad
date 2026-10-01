@@ -6,6 +6,9 @@
 #   test-kit.ps1              full suite
 #   test-kit.ps1 -SkipBuild   skip the dotnet build + MCP tests (fast doc/script-only pass)
 #
+# A case that runs nothing calls `Skip-Case "<reason>"` (never a bare `return`, which counts as PASS);
+# `-NeedsBuild` turns that skip into a FAIL on a full run.
+#
 # Exit code 0 = all passed, 1 = at least one failure.
 
 # CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
@@ -19,6 +22,7 @@ $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
 $script:pass = 0
 $script:fail = 0
+$script:skip = 0
 $script:failures = New-Object System.Collections.Generic.List[string]
 
 function Test-Case([string]$name, [scriptblock]$body) {
@@ -32,14 +36,28 @@ function Test-Case([string]$name, [scriptblock]$body) {
     $script:pass++
     Write-Host ("  PASS  " + $name) -ForegroundColor DarkGreen
   } catch {
-    $script:fail++
-    $script:failures.Add("$name -> $($_.Exception.Message)")
-    Write-Host ("  FAIL  " + $name + " -> " + $_.Exception.Message) -ForegroundColor Red
+    $msg = [string]$_.Exception.Message
+    if ($msg.StartsWith("__DAD_SKIP__:")) {
+      $script:skip++
+      Write-Host ("  SKIP  " + $name + " - " + $msg.Substring("__DAD_SKIP__:".Length)) -ForegroundColor Yellow
+    } else {
+      $script:fail++
+      $script:failures.Add("$name -> $($_.Exception.Message)")
+      Write-Host ("  FAIL  " + $name + " -> " + $_.Exception.Message) -ForegroundColor Red
+    }
   } finally { $ErrorActionPreference = $prev }
 }
 # Untyped $cond on purpose: a [bool] parameter in PS 5.1 refuses strings ("accepts only Boolean values
 # and numbers"), so Assert ($someString) would fail the TEST rather than evaluate truthiness.
 function Assert($cond, [string]$msg) { if (-not $cond) { throw $msg } }
+# S21: a case that runs nothing declares it - the reason is REQUIRED. The skip travels as an exception
+# (Test-Case sorts outcomes by try/catch), so call it BEFORE any try/catch of the case's own. -NeedsBuild:
+# on a FULL run the build step just ran, so a missing built artifact is a real defect -> FAIL, not SKIP.
+function Skip-Case([string]$Reason, [switch]$NeedsBuild) {
+  if ([string]::IsNullOrWhiteSpace($Reason)) { throw "Skip-Case needs a reason" }
+  if ($NeedsBuild -and -not $SkipBuild) { throw "built artifact missing on a FULL run (the build step just ran): $Reason" }
+  throw ("__DAD_SKIP__:" + $Reason)
+}
 function New-Sandbox { $p = Join-Path $env:TEMP ("dadkit_t_" + [guid]::NewGuid().ToString("N").Substring(0,8)); New-Item -ItemType Directory -Force $p | Out-Null; return $p }
 function Remove-Sandbox([string]$p) {
   if (-not (Test-Path $p)) { return }
@@ -7071,7 +7089,7 @@ Test-Case "T10.4: static wiring - build.md '## End of scope' contains run-summar
 
 # ---------------------------------------------------------------- summary
 Write-Host ""
-Write-Host "== $script:pass passed, $script:fail failed ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })
+Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })
 if ($script:fail) {
   Write-Host ""
   foreach ($f in $script:failures) { Write-Host "  - $f" -ForegroundColor Red }

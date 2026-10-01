@@ -52,3 +52,21 @@
 {"v":1,"ts":"2026-10-01T03:48:39.185Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S20","session":""}
 {"v":1,"ts":"2026-10-01T03:48:45.606Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
 {"v":1,"ts":"2026-10-01T12:27:29.620Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T13:22:42.092Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"f1c4e2f4-85fa-4368-a06b-ac51f72b0610"}
+{"v":1,"ts":"2026-10-01T13:22:52.005Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"f1c4e2f4-85fa-4368-a06b-ac51f72b0610"}
+{"v":1,"ts":"2026-10-01T13:23:45.897Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"0b2fd04b-106f-4b7f-90f7-529b1d6935d1"}
+{"v":1,"ts":"2026-10-01T13:23:55.407Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"0b2fd04b-106f-4b7f-90f7-529b1d6935d1"}
+{"v":1,"ts":"2026-10-01T13:25:05.178Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"44d1f756-9308-42de-bb8a-4963f188ea4e"}
+{"v":1,"ts":"2026-10-01T13:25:14.761Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"44d1f756-9308-42de-bb8a-4963f188ea4e"}
+{"v":1,"ts":"2026-10-01T13:29:21.443Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T13:29:45.432Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T13:41:57.412Z","gate":"loop-guard","decision":"block","tool":"Grep","reason":"BLOCKED: 25 reads/searches in a row and nothing written. You are looking for context instead of producing the thing you were asked for. A real run did this 947 times and produced an EMPTY output file before it had to be killed by hand. What to do NOW, in this order: 1. If you need the design doc, th","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T13:48:49.613Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T13:48:57.288Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T14:11:17.318Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T14:22:54.169Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T14:37:55.815Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T14:44:38.627Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T14:52:02.721Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T14:52:59.367Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 25, tasks 66)","session":""}
+{"v":1,"ts":"2026-10-01T14:53:05.640Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T21.1","session":""}
