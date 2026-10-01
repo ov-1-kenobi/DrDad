@@ -6,47 +6,51 @@
 - NEXT: T22.3 (Story S22)
 
 ## Done (recent, newest first)
-- 2026-10-01 /design retrofit (not a story): DESIGN unlocked, amended, RE-LOCKED. C5 (C5a-C5f, Copilot
-  CLI parity, from S14) pinned; C4a/R1/R40 amended from S16; four open choices decided; NOT-REQUIRED
-  security posture recorded as foundational and permanent (human-confirmed).
-- S20 (T20.1-T20.2, R24): MCP server applies the docs-dir rule to an env-var root. v0.54.0.  (grade A-)
-- S19 (T19.1-T19.2, R24): stale/empty LOCALTOOLS_DOCS_DIR no longer hides real docs.  (grade A-)
-- S18 (T18.1-T18.3, R32/R24): close-unit -RequireGrade citation check; post-hygiene re-check.  (grade B+)
-- S17 (R40): install reports harness versions and asks before updating.  (grade B+)
-- S16 (T16.1, R1/R40, SPIKE): local -cc models work on Claude Code 2.1.285.  (grade B+)
-- S15 (T15.1-T15.2, R24): root-junk check exempts kit-root dad-* scripts.  (grade A-)
-- S14 (T14.1, R39, SPIKE): Copilot CLI MCP/agent/hook surfaces measured.  (grade A-)
-- S13 (T13.1-T13.3, R38): gates-smoke proves the gate LOG is wired.  (grade B+)
-- S12 (R37, closed outside the task map): Copilot CLI second harness (C2a-C2f).  (grade A-)
-- S9-S11: gate-decision log (C3), dad-run-summary (C4), R32 spike closed.  (cards in grades/)
-- S8 (R38a) A-, S7 (R36) B+, S6 (R36) A, S5 A-, S4 (R35) A-, S1-S3 A- each.
+- 2026-10-01 /design header edit (not a story): `Security waiver confirmed: 2026-10-01 (human; auth-keyword
+  hits: 145)` added via unlock/relock; doc-stats now reports the waiver as a STATE FACT, not a WARN.
+- S26 (T26.1-T26.2, R15): upgrade-project refuses a kit checkout before any write (exit 2).  (grade A)
+- S23 (T23.1-T23.2, R24): acknowledged security waiver silences the auth-keyword WARN until the count
+  grows.  (grade A-; REOPENED for cleanup T23.3)
+- S22 (T22.1-T22.2, R24): referenced-but-never-pinned contract finding.  (grade A-; REOPENED for T22.3)
+- S21 (T21.1-T21.3, R24): skipped test-kit cases counted as skipped, not passed.  (grade A-)
+- 2026-10-01 /design retrofit: C5 (C5a-C5f) pinned; C4a/R1/R40 amended; NOT-REQUIRED security posture
+  recorded as foundational (human-confirmed).
+- S20 A-, S19 A-, S18 B+, S17 B+, S16 B+, S15 A-, S14 A-, S13 B+, S12 A-, S9-S11 (cards in grades/),
+  S8 A-, S7 B+, S6 A, S5 A-, S4 A-, S1-S3 A- each.
 
 ## In progress / next ready
-- NEXT: T21.1 - test-kit.ps1 Skip-Case helper; skips counted separately (S21, R24).
-- Queue, all sharded and TODO, strictly sequential through test-kit.ps1 (see TASKS Build order):
-  S21 T21.1-T21.3 -> S22 T22.1-T22.2 (referenced-but-never-pinned contract check) -> S23 T23.1-T23.2
-  (acknowledged security waiver) -> S24 T24.1-T24.3 (probe shows unrecognized_model WARN) -> S25
-  T25.1-T25.2 (Copilot drift test checks every stamp). `/build S21..S25` is unblocked (DESIGN LOCKED).
+- Queue (TASKS Build order): S24 T24.1 -> T24.2 -> T24.3 (probe shows unrecognized_model WARN), then
+  S25 T25.1 -> T25.2 (Copilot drift test checks every stamp), then cleanups T22.3 (S22) and T23.3 (S23).
+- doc-stats' computed NEXT shows T22.3 because it walks file order; the Build order queues T22.3 LAST
+  (after T25.2 - it shares doc-stats.ps1/test-kit.ps1). Work T24.1 first.
 
 ## Issues & blockers (dated; clear them when resolved)
+- 2026-10-01: installed kit (D:\Tools\DrDad) is 0.55.0 and predates S23/S26 - its doc-stats still prints
+  the old auth WARN, and its close-unit/upgrade-project lack S23/S26. Deploy a new version (install.cmd).
+  [human]
 - 2026-10-01: any R39 Copilot MCP parity story is BLOCKED on a consented, human-attended measurement of
   Copilot's interactive trust prompt (C5a). [human]
-- 2026-10-01: any agents/skills parity story is BLOCKED on a consented user-level ~/.copilot spike (C5b),
+- 2026-10-01: any agents/skills parity story is BLOCKED on a consented user-level ~/.copilot spike (C5b);
   per-project .github/ is the fallback. [human]
 - 2026-09-30: S16 interactive rows remain NEEDS HUMAN, unrun (grades/S16_GRADE.md).
-- 2026-09-30: README/CHEATSHEET/GUIDE now cover the gate log and run summary; the install harness-version
-  report (S17) is still undocumented. [human]
-- 2026-09-22: S7 AC3 / S12 AC6 install re-run deferred pending human consent (R35b). Installed copy
-  (D:\Tools\DrDad) reports 0.54.0 - confirm both ACs against it, then clear this line.
-- Open human decisions: install.ps1 first-time Claude Code install defaults Y on empty input; missing
-  dad-gates-log in gates-smoke - SILENT-FAIL or SKIP; should Test-GradeCard enforce all three headings;
-  should the CONTRADICTED block in build.md be scripted.
-- Open (non-blocking): source of the context-size value S24 prints - models.json numCtx 65536 vs 40960 measured as
-  served by Ollama; S21 scope excludes other early-return skips in test-kit (possible follow-up).
+- 2026-09-30: the install harness-version report (S17) is still undocumented in README/CHEATSHEET/GUIDE.
+  [human]
+- 2026-09-22: S7 AC3 / S12 AC6 install re-run deferred pending human consent (R35b); confirm both ACs
+  against the installed copy, then clear this line.
+
+## Open questions (human)
+- S26 Dev notes: upgrade-project's step-3 CLAUDE.md section refresh writes CRLF for NORMAL projects too -
+  file it as its own story?
+- doc-stats' `Security review:` lookup is also first-match-anywhere (taskmap note in T23.3, which fixes
+  only the waiver line) - possible further cleanup.
+- install.ps1 first-time Claude Code install defaults Y on empty input; missing dad-gates-log in
+  gates-smoke - SILENT-FAIL or SKIP; should Test-GradeCard enforce all three headings; should the
+  CONTRADICTED block in build.md be scripted.
+- Non-blocking: source of the context-size value S24 prints (models.json numCtx 65536 vs 40960 served by
+  Ollama); other early-return skips in test-kit outside S21 scope (possible follow-up).
 
 ## Notes for the next session
-- Expected findings, not blockers: the auth-keyword security WARN stays until S23 is built AND a human
-  adds the `Security waiver confirmed:` line via /design; doc-stats reports S12 with no tasks (documented
-  in TASKS Build order - closed outside the task map).
+- Expected, not blockers: doc-stats reports S12 with no tasks (closed outside the task map, documented in
+  TASKS Build order); the security waiver line is a STATE FACT at 145 hits and re-fires only if hits grow.
 - Copilot trust: the user trusts the folder once via Copilot's prompt; the kit never sets
   COPILOT_ALLOW_ALL. One $CopilotMeasuredVersion constant; the probe uses the fast alias.
