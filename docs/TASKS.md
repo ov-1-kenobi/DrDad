@@ -2078,7 +2078,7 @@ it is closed: close-unit re-rolls the story up when T22.3 is ticked. It does not
 - **Refs:** Story S23 (Behavior 1-8, Dev notes DECIDED 2026-10-01); `docs/DESIGN.md` R24; doc-stats.ps1:219, :260-283 (security header + admissibility block), :295-297 (REQUIRED finding, unchanged), :686-698 (STATE FACTS); dad-run-summary.ps1:140-148 (findings count, unchanged).
 - **Context:** today the check is a PRESENCE test (`$designRaw -match $authKw`, then STORIES.md) that fires every audit on this kit although the human re-confirmed the waiver on 2026-09-29 and declared it FOUNDATIONAL on 2026-10-01. A finding that fires on settled input is noise; silencing it forever would hide a future auth feature - hence re-fire on growth. `$designRaw` is read with `-Raw` and may be CRLF: `(.*?)\s*$` under `(?m)` keeps the `\r` out of the captured value. After this lands, the kit's own N must be counted by the human AFTER S22/S23's text is in STORIES.md (it adds hits).
 
-### [ ] T23.2 - test-kit Test-Case for S23 (AC1-AC6) + full suite   (Story S23)
+### [x] T23.2 - test-kit Test-Case for S23 (AC1-AC6) + full suite   (Story S23)
 - **Goal:** `test-kit.ps1` proves the waiver acknowledgement: no-line WARN carries the line to add, a valid line silences at M <= N, growth re-fires with the delta, a malformed line is never honoured, REQUIRED ignores the line, and the STATE FACTS line is not counted as a finding.
 - **Touches:** `test-kit.ps1` (one new `Test-Case` directly after `"doc-stats flags a NOT-REQUIRED security waiver contradicted by the design's own auth content"`, ~lines 4186-4218 before T22.2/T21.3 shifted them; that case stays untouched and must still pass).
 - **Do:**

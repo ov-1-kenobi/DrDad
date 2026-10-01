@@ -4303,6 +4303,85 @@ Test-Case "doc-stats flags a NOT-REQUIRED security waiver contradicted by the de
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S23: an acknowledged security waiver silences the auth-keyword WARN until NEW mentions appear (AC1-AC6)" {
+  # S23: the NOT-REQUIRED admissibility WARN above fired on every audit of settled input (noise). A human-dated
+  # 'Security waiver confirmed: <date> (human; auth-keyword hits: <N>)' line silences it while the hit count
+  # M <= N, and it re-fires (with the delta) when M grows; a malformed line is never honoured; REQUIRED ignores it.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $ds = Join-Path $kit "doc-stats.ps1"
+    function Set-WaiverDesign($secValue, $confirmLine, $extraDesign, $storiesContent) {
+      $hdr = "# Design`r`n`r`nStatus: LOCKED`r`nSecurity review: $secValue`r`n"
+      if ($confirmLine) { $hdr += "$confirmLine`r`n" }
+      $body = $hdr + "`r`n## Requirements`r`n- R1: a`r`n`r`n## Contracts`r`n### C1: x`r`n- **Decision:** y`r`n$extraDesign`r`n"
+      Set-Content "$p\docs\DESIGN.md" $body -Encoding UTF8
+      if ($storiesContent) { Set-Content "$p\docs\STORIES.md" $storiesContent -Encoding UTF8 }
+      elseif (Test-Path "$p\docs\STORIES.md") { Remove-Item "$p\docs\STORIES.md" }
+    }
+    function Findings() { return (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) }
+
+    $notReq = "NOT-REQUIRED (small personal project, low risk)"
+    $valid = "Security waiver confirmed: 2026-10-01 (human; auth-keyword hits: 3)"
+    # 3 hits: design 'login' + 'password' (2) + STORIES.md 'token' (1) - proves M sums both files.
+    # 5 hits: the same plus design 'session' + 'auth' (+2). ('tokens'/'sessions' would NOT match: \b.)
+    $d3 = "- R2: login with a password"
+    $d5 = "- R2: login with a password`r`n- R3: session auth"
+    $st = "# Stories`r`n`r`n- **Goal:** add a token"
+
+    # AC1: no confirmation line, 3 hits -> the WARN fires and carries the exact line to add
+    Set-WaiverDesign $notReq $null $d3 $st
+    $o = Findings
+    Assert ($o -match 'NOT-REQUIRED, but') "AC1: no confirmation line + 3 hits did not raise the WARN. Output: $o"
+    Assert ($o -match 'auth-keyword hits: 3') "AC1: the WARN does not report M = 3 (design + STORIES.md). Output: $o"
+    Assert ($o -match 'Security waiver confirmed: \d{4}-\d{2}-\d{2} \(human; auth-keyword hits: 3\)') "AC1: the WARN does not carry the confirmation line to add. Output: $o"
+
+    # AC2: a valid line at N = 3 with M = 3 -> silenced; STATE FACTS says so ('now 3' also proves the
+    # confirmation line's own 'auth-keyword' text is not counted)
+    Set-WaiverDesign $notReq $valid $d3 $st
+    $o = Findings
+    Assert ($o -notmatch 'NOT-REQUIRED, but') "AC2: a valid waiver at M <= N still raised the WARN. Output: $o"
+    Assert ($o.Contains('security waiver: confirmed 2026-10-01 at 3 auth-keyword hits (now 3) - not re-raised')) "AC2: the STATE FACTS waiver line is missing or wrong. Output: $o"
+
+    # AC3: the same line, 5 hits -> re-fires with the delta and the refreshed line
+    Set-WaiverDesign $notReq $valid $d5 $st
+    $o = Findings
+    # anchored on the WARN's preceding text so a sign-flipped delta ('- -2 new ...') cannot match
+    Assert ($o -match 'still holds here\. - 2 new auth-keyword mention\(s\) since the 2026-10-01 confirmation') "AC3: growth M = 5 > N = 3 did not re-fire with the delta. Output: $o"
+    Assert ($o -match 'auth-keyword hits: 5\)') "AC3: the re-confirm line does not carry M = 5. Output: $o"
+
+    # AC4: malformed lines (impossible date; missing N) are never honoured, regardless of M
+    foreach ($bad in @("Security waiver confirmed: 2026-13-45 (human; auth-keyword hits: 3)", "Security waiver confirmed: 2026-10-01 (human)")) {
+      Set-WaiverDesign $notReq $bad $d3 $st
+      $o = Findings
+      Assert ($o -match 'malformed') "AC4: malformed line '$bad' was not reported as malformed. Output: $o"
+      Assert ($o -match 'NOT-REQUIRED, but') "AC4: malformed line '$bad' did not keep the WARN. Output: $o"
+      Assert ($o -notmatch 'not re-raised') "AC4: malformed line '$bad' was honoured. Output: $o"
+    }
+
+    # AC5: REQUIRED ignores a confirmation line entirely
+    Set-WaiverDesign "REQUIRED" $valid $d3 $st
+    $o = Findings
+    Assert ($o.Contains('Security review: REQUIRED and not done')) "AC5: REQUIRED + a confirmation line lost the REQUIRED finding. Output: $o"
+    Assert ($o -notmatch 'not re-raised') "AC5: a confirmation line was honoured under REQUIRED. Output: $o"
+    Assert ($o -notmatch 'malformed') "AC5: a confirmation line was parsed under REQUIRED. Output: $o"
+
+    # AC6: on the AC2 fixture the untagged STATE FACTS line is NOT counted as a finding by dad-run-summary
+    Set-WaiverDesign $notReq $valid $d3 $st
+    $dsOut = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>$null)
+    $direct = @($dsOut | Where-Object { ([string]$_) -match '^\s*\[[a-z]+\]' }).Count
+    $factLine = @($dsOut | Where-Object { ([string]$_).Contains('not re-raised') })
+    Assert ($factLine.Count -eq 1) "AC6: expected exactly one 'not re-raised' line, got $($factLine.Count)"
+    Assert (([string]$factLine[0]) -notmatch '^\s*\[[a-z]+\]') "AC6: the waiver STATE FACTS line is [tag]-shaped and would count as a finding: $($factLine[0])"
+    $rs = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-run-summary.ps1") -ProjectDir $p 2>&1 | Out-String)
+    $rsExit = $LASTEXITCODE
+    Assert ($rsExit -eq 0) "AC6: dad-run-summary exited $rsExit on the sandbox. Output: $rs"
+    $fm = [regex]::Match($rs, '\[run-summary\] findings: (\d+)')
+    Assert ($fm.Success) "AC6: dad-run-summary printed no findings count. Output: $rs"
+    Assert ($fm.Success -and [int]$fm.Groups[1].Value -eq $direct) "AC6: run-summary findings ($($fm.Groups[1].Value)) != direct [tag] count ($direct). Output: $rs"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "grade cards are demanded for STORIES only, not for every task" {
   # doc-stats demanded a card for every done TASK as well as every done story, contradicting /build:2
   # ("grade + hygiene per story"), /build:98, DESIGN R18 and close-unit (which only asks under

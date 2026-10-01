@@ -941,7 +941,7 @@
   kit (`C4a`, `C3-b` have pinned parents; `C5` is the gap AC5 waits on). The finding is computed state, so
   it goes into the `$f` list like the other `[design]` findings (dad-run-summary counts it).
 
-### Story S23: An acknowledged FOUNDATIONAL security waiver stops the auth-keyword WARN until NEW mentions appear   (R24)   <!-- Status: TODO -->
+### Story S23: An acknowledged FOUNDATIONAL security waiver stops the auth-keyword WARN until NEW mentions appear   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** a human-dated confirmation line in the design header silences doc-stats' auth-keyword
   admissibility WARN while the keyword count has not grown, and re-fires it the moment it does.
 - **Context:** observed 2026-10-01 in `/audit`. The admissibility check (`doc-stats.ps1` ~271-283) WARNs
@@ -960,9 +960,10 @@
     re-fire forever. The message and the check use this one definition.
   - Honoured only when `Security review:` is NOT-REQUIRED. Under REQUIRED or DONE the line is ignored and
     the existing findings are unchanged.
-  - Valid line and M <= N -> no WARN; instead an informational line
-    `[info] Security waiver confirmed <date> at <N> auth-keyword hits (now <M>) - not re-raised.` It is NOT a
-    finding: it does not go into `$f` and is not counted in dad-run-summary's findings figure.
+  - Valid line and M <= N -> no WARN; instead an UNTAGGED line in the `== STATE FACTS ==` block:
+    `security waiver: confirmed <YYYY-MM-DD> at <N> auth-keyword hits (now <M>) - not re-raised` (no leading
+    `[tag]`, per the Dev-notes decision 2026-10-01). It is NOT a finding: it does not go into `$f` and is
+    not counted in dad-run-summary's findings figure.
   - Valid line and M > N -> the existing WARN fires, extended with `- <M-N> new auth-keyword mention(s)
     since the <date> confirmation; re-confirm by updating the line to: Security waiver confirmed: <today>
     (human; auth-keyword hits: <M>)`.
@@ -979,12 +980,14 @@
 - **Acceptance (testable):**
   - [ ] AC1: fixture NOT-REQUIRED + 3 hits + no confirmation line -> WARN containing `auth-keyword hits: 3`.
   - [ ] AC2: confirmation N=3 and 3 hits (the confirmation line's own `auth` not counted) -> no WARN; the
-    `[info]` line is present. Same fixture, the line added exactly as AC1's WARN printed it -> still silent.
+    untagged `security waiver: confirmed ...` STATE FACTS line is present. Same fixture, the line added
+    exactly as AC1's WARN printed it -> still silent.
   - [ ] AC3: confirmation N=3 and 5 hits -> WARN naming 2 new mentions and the re-confirm line with 5.
   - [ ] AC4: malformed confirmation line -> WARN says it is malformed.
   - [ ] AC5: `Security review: REQUIRED` with a confirmation line -> line ignored; the REQUIRED finding is
     unchanged.
-  - [ ] AC6: on the AC2 fixture, dad-run-summary's findings figure does not count the `[info]` line.
+  - [ ] AC6: on the AC2 fixture, dad-run-summary's findings figure does not count the untagged
+    `security waiver: confirmed ...` STATE FACTS line.
   - [ ] AC7: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** doc-stats has no info channel today - only `$f` findings and the STATE FACTS block. And
   `dad-run-summary.ps1:147` counts every line matching `^\s*\[[a-z]+\]`, so a printed `[info] ...` line
