@@ -1903,7 +1903,7 @@ executor must NOT run it.)
   6. Build: `dotnet build local-tools\local-tools.csproj -c Release`. Do NOT run `install.cmd` (the human re-runs it).
 - **Acceptance:** with the sandbox env var `LOCALTOOLS_DOCS_DIR=<empty dir>` and working directory `<p>` holding `<p>\docs\DESIGN.md`, `local-tools.exe --corpus` (no path arg) lists `<p>\docs` as the first root, its `index:` line ends in `<p>\docs\.index\chunks.json`, stderr has exactly one `WARN: ignoring LOCALTOOLS_DOCS_DIR` line and stdout has none; `local-tools.exe --corpus <empty dir>` from the same cwd lists `<empty dir>` with no WARN. The build succeeds with no new warnings-as-errors.
 - **Depends on:** T19.1
-- **Refs:** Story S20 (Behavior, Data/interfaces, Dev notes DECIDED 2026-10-01); Story S19 (the rule mirrored); `docs/DESIGN.md` R24.
+- **Refs:** Story S20 (Behavior, Data/interfaces, Dev notes DECIDED 2026-09-30); Story S19 (the rule mirrored); `docs/DESIGN.md` R24.
 - **Context:** observed: the kit repo's `.mcp.json` must keep the placeholder `C:\Projects\Claude\MCP\DAD-kit\docs` (test-kit asserts it, CLAUDE.md convention), so `index_datasheets` indexed an empty folder there. `BuildRoots()` today returns `GetFullPath` of each `;` part. `DescribeCorpus()` (~line 277) only reads (`CorpusFiles` skips missing roots) and prints `index: {IndexFile}` last, so `--corpus` is the no-Ollama way to observe the chosen primary. The existing test "the corpus spans MULTIPLE roots" (test-kit ~2810) passes roots as an explicit `--corpus` arg, so it is bypassed by the rule and must still pass unchanged. Do NOT create or touch the real placeholder folder.
 
 ### [x] T20.2 - test-kit Test-Cases for S20 (AC1-AC5, AC7, AC8)   (Story S20)

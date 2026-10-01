@@ -2,6 +2,23 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.54.0 - 2026-10-01
+
+### Fixed - R24: the local-tools server no longer indexes an empty placeholder docs dir (Story S20)
+S19's docs-dir rule, extended to the C# server. When `LOCALTOOLS_DOCS_DIR` comes from the environment (MCP
+server start, or a CLI mode run without a path) and that folder holds none of `DESIGN.md` / `TEDD.md` /
+`STORIES.md` / `CORPUS.md`, the server uses `<cwd>\docs` instead when that one qualifies, with ONE warning on
+stderr (never stdout - the MCP channel). `CORPUS.md` counts, so `/corpus` folders are honoured; a path given
+explicitly to `--reindex` / `--ingest` / `--corpus` is used as-is. `.index\` and `web\` follow the chosen
+folder, so nothing is created under a rejected one. In the kit repo this means `search_datasheets` finds
+the kit's own docs instead of an empty placeholder.
+
+### Changed
+- The kit repo's `.mcp.json` runs the INSTALLED server (`D:\Tools\DrDad`) rather than the repo build, so a
+  kit session cannot lock the exe it is rebuilding (documented in CLAUDE.md as the one placeholder exception).
+- Docs: `dad gates-smoke`, `dad gates-log` and `dad run-summary` are now covered in README, CHEATSHEET and
+  GUIDE.
+
 ## 0.53.0 - 2026-09-30
 
 ### Added - R38(b): the gate-decision log (Story S9, contract C3)
