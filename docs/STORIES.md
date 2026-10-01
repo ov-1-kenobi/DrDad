@@ -832,10 +832,15 @@
   asserts it), so in the kit repo `index_datasheets` reported "No documents" and `search_datasheets` searched
   nothing. Worked around with a local-scope `claude mcp add -s local` override (not in the repo).
 - **Behavior:**
-  - Same predicate as `docs-dir.ps1`: a dir counts only if it contains `DESIGN.md` or `TEDD.md` or
-    `STORIES.md`.
+  - Predicate: a dir counts only if it contains `DESIGN.md` or `TEDD.md` or `STORIES.md` or `CORPUS.md`
+    (`CORPUS.md` marks a `/corpus` folder, see `corpus.ps1 new`). This extends S19's predicate for the
+    SERVER only; `docs-dir.ps1` is unchanged.
+  - Scope: the rule applies ONLY when the primary root comes from the `LOCALTOOLS_DOCS_DIR` env var (MCP
+    server start, or a CLI mode run with no path arg, e.g. `corpus.ps1`'s `--search`, which sets the env
+    var to a corpus folder - safe via `CORPUS.md`). A path given EXPLICITLY as a CLI arg (`--reindex <dir>`,
+    `--ingest <url> <dir>`, `--corpus <dir>`) is used as-is - no check, no warning.
   - Primary root fails the predicate AND `<cwd>\docs` passes -> `<cwd>\docs` becomes primary, and ONE line
-    `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES there); using <cwd>\docs` goes to
+    `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES/CORPUS there); using <cwd>\docs` goes to
     STDERR (never stdout - stdout is the MCP protocol channel).
   - Primary passes -> honoured as today, no warning. Primary fails and `<cwd>\docs` also fails -> keep the
     primary as today, no crash.
@@ -843,18 +848,23 @@
   - No `.index` (or `web`) folder is created under a rejected override (that empty-folder creation caused
     S19's original incident).
 - **Data / interfaces:** `local-tools/Rag.cs` (`BuildRoots`, `IndexDir`/`WebDir` init, `CreateDirectory`
-  calls ~371-372), `local-tools/Program.cs` CLI entry points (`--list`, `--reindex`) for tests,
+  calls ~371-372), `local-tools/Program.cs` CLI entry points (`--corpus` ~line 50, `--reindex`, `--ingest`),
   `test-kit.ps1`. Not changed: the `.mcp.json` placeholder (CLAUDE.md convention). Re-run `install.cmd`.
 - **Dependencies:** Story S19 (the rule being mirrored).
-- **Acceptance (testable, via `local-tools.exe --list` / `--reindex` in `test-kit.ps1` Test-Cases):**
-  - [ ] AC1: placeholder primary + cwd with `docs\DESIGN.md` -> the cwd docs are indexed and stderr carries
-    the WARN line; stdout carries no WARN.
+- **Acceptance (testable in `test-kit.ps1` Test-Cases via `local-tools.exe --corpus` with NO path arg +
+  `LOCALTOOLS_DOCS_DIR` + a working directory, so the rule is exercised; needs no Ollama):**
+  - [ ] AC1: placeholder primary + cwd with `docs\DESIGN.md` -> the cwd docs are the listed primary and
+    stderr carries the WARN line; stdout carries no WARN.
   - [ ] AC2: a valid override holding `DESIGN.md` -> honoured, no warning.
   - [ ] AC3: override invalid and cwd has no `docs` -> behaves as today (keeps the primary), exit 0, no crash.
   - [ ] AC4: no `.index` folder is created under a rejected override.
-  - [ ] AC5: with a multi-root `;` value, the secondary roots are still indexed.
+  - [ ] AC5: with a multi-root `;` value, the secondary roots are still listed by `--corpus`.
   - [ ] AC6: `dotnet build` and the full `test-kit.ps1` pass with `0 failed`.
-- **Dev notes:** QUESTION for the human - `corpus.ps1` and `Program.cs`'s corpus/ingest entry (~lines 20-27)
-  and `--reindex <path>` set `LOCALTOOLS_DOCS_DIR` to a deliberate research-corpus root with no
-  DESIGN/TEDD/STORIES; run from a project folder, the rule as written would redirect them to `<cwd>\docs`.
-  Decide whether an explicit CLI path arg (or a corpus marker) bypasses the rule before implementing.
+  - [ ] AC7: an env-var primary holding only `CORPUS.md` (cwd has `docs\DESIGN.md`) -> honoured, no warning.
+  - [ ] AC8: `--corpus <dir>` with an explicit path arg and no marker -> used as-is, no warning, even when
+    `<cwd>\docs` is valid.
+- **Dev notes:** DECIDED 2026-10-01 (human): predicate adds `CORPUS.md` (server only; `docs-dir.ps1`
+  unchanged); explicit CLI path args (`--reindex <dir>`, `--ingest <url> <dir>`, `--corpus <dir>`) bypass
+  the rule; it applies only to an env-var-sourced primary. Note `Program.cs` currently passes explicit args
+  by SETTING `LOCALTOOLS_DOCS_DIR` (lines ~11, 27, 55), so the server must carry an "explicit" flag rather
+  than infer it from the env var.
