@@ -116,3 +116,11 @@
 {"v":1,"ts":"2026-10-01T19:00:33.019Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 25, tasks 66)","session":""}
 {"v":1,"ts":"2026-10-01T19:00:39.464Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T22.2","session":""}
 {"v":1,"ts":"2026-10-01T19:00:46.232Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"6595c686-d872-42cf-a969-a308ad0e7b1f"}
+{"v":1,"ts":"2026-10-01T19:02:21.311Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T19:11:40.923Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T19:18:55.020Z","gate":"close-unit-refusal","decision":"block","tool":"","reason":"story S22 not closed: tests ran zero tests","session":""}
+{"v":1,"ts":"2026-10-01T19:18:59.834Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T19:25:58.489Z","gate":"close-unit-refusal","decision":"block","tool":"","reason":"story S22 not closed: tests ran zero tests","session":""}
+{"v":1,"ts":"2026-10-01T19:26:05.406Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T19:33:50.531Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-01T19:40:45.562Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 25, tasks 66)","session":""}
