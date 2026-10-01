@@ -1,7 +1,7 @@
 # Technical Design Document - DrDad (Design Research Document, Agentic Development)
 
 Status: LOCKED
-Security review: NOT-REQUIRED (local-only dev CLI; no user data stored, no exposed service; the kit stores and reads no credentials - a harness's login is its own, including R34's cloud/hybrid Anthropic key, and R37's supported path is BYOK to local Ollama, so no route through this kit requires an account. Re-confirmed 2026-09-29 against doc-stats' auth-keyword WARN: the hits are LLM token counts - R38c/C4a, harness session ids - C3b/C4b, the harness's own login and dummy local-Ollama auth token, and the secret scanner's detection patterns; none is this kit authenticating anyone)
+Security review: NOT-REQUIRED (FOUNDATIONAL and permanent, not a per-release waiver - the kit handles NO security: it authenticates no one and stores, reads or brokers no credential; at most it passes a harness's or tool's own auth through untouched. See ## Out of scope "Handling security". Local-only dev CLI; no user data stored, no exposed service; the kit stores and reads no credentials - a harness's login is its own, including R34's cloud/hybrid Anthropic key, and R37's supported path is BYOK to local Ollama, so no route through this kit requires an account. Re-confirmed 2026-09-29 against doc-stats' auth-keyword WARN: the hits are LLM token counts - R38c/C4a, harness session ids - C3b/C4b, the harness's own login and dummy local-Ollama auth token, and the secret scanner's detection patterns; none is this kit authenticating anyone)
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
      Flip to DRAFT (and use /design or /proto) only to change the design itself. -->
 
@@ -17,6 +17,11 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       dummy `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`) to skip the login screen, plus offline flags
       (telemetry/autoupdater off). apiKeyHelper is deliberately NOT set - having both caused a per-session
       Claude Code auth warning; the token alone suffices (apikey.cmd kept only as a fallback).
+      Amended 2026-10-01 from S16 / T16.1 (Claude Code 2.1.285, measured 2026-09-30): an unknown `-cc` model
+      id is a WARNING (`[claude-code:unrecognized_model]`), not a rejection - local runs succeed. Precedence:
+      the USER `settings.json` `env.ANTHROPIC_MODEL` OVERRIDES a process-level `ANTHROPIC_MODEL` (and a project
+      `.claude/settings.json` env beats the user one), so a kit probe that must reach a specific local model
+      passes `--model <-cc name>` and never relies on the process env var. Detail and the probe rule: C4a.
 - [x] R34: **Three backend modes, one loop - and the GPU is never idle.** Offline-first (R1) is the DEFAULT
       and the thesis; two opt-in alternate backends share every command, agent, and gate - only where the
       AGENT LOOP runs changes:
@@ -155,7 +160,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       the orchestrator passes to the librarian as ground truth it may not contradict. The librarian-agent is
       explicitly forbidden to author state findings; its remit is what no script can settle - scope
       contamination, traceability judgement, corpus health. Paired with `-Contract <Cn>`, which refutes a
-      claimed-missing contract by grep (the same run called C2PA signing absent when it is `C10-b`). The
+      claimed-missing contract by grep (the same run called C2PA signing absent when it is that project's contract 10-b). The
       general rule, now applied three times: **never accept an assertion a script can settle** - not for
       counts (R14), not for a contract, not for document state.
 - [x] R25: **UI units are gated on behaviour and accessibility, never on looks** (`ui-agent`,
@@ -189,7 +194,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
 - [x] R28: **The verification surface may not SHRINK silently** (`ratchet.ps1`, enforced by `close-unit`).
       Every gate up to here asked "is X OK right now?" - and a gate of that shape is satisfied by DELETING
       X. Measured: a run set out to fix the IIIF tests, rewrote the test file to introduce a fixture, and
-      15 of 16 tests did not survive the rewrite (including the C9 worked example, the level-2 conformance
+      15 of 16 tests did not survive the rewrite (including that project's contract-9 worked example, the level-2 conformance
       check and the byte-identical guarantee). The report read "8 passed, 3 failed" and EVERY gate went
       green - build passed, tests RAN (11 > 0), tests PASSED (8), tree clean - because none of them
       compared against what had been there before. The model was not cheating: it was asked to make the
@@ -217,7 +222,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       restores only what disappeared.
       **"And sensible" is the load-bearing half.** A unit that still exists ELSEWHERE in the tree moved or
       was renamed - it is not lost, and restoring it would duplicate it. On the very first real case 3 of
-      the 15 apparently-deleted tests had been relocated to another file, including the C9 worked example
+      the 15 apparently-deleted tests had been relocated to another file, including that project's contract-9 worked example
       and the level-2 conformance check; a blind restore would have created duplicate `[Fact]` methods.
       Recovered content is written back COMMENTED, under a marker, with the diff command - it is a
       starting point for reconciliation, not a merge, because restored code routinely needs a using, a
@@ -494,9 +499,11 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       `install.ps1` step 3 runs `npm install -g @anthropic-ai/claude-code` on EVERY run: it already pulls
       whatever is latest, without reporting what changed and without asking. That is how a Claude Code newer
       than the one this kit's contracts were measured against reaches a machine unannounced - and the kit has
-      already been bitten: Claude Code 2.1.285 rejects this kit's local `-cc` model ids in headless mode
-      ("isn't described by this version's model catalog"), so "latest" can quietly break the offline path
-      (R1) that is this project's thesis, while every gate still reports green. The user's aim is the
+      already been bitten: on Claude Code 2.1.285 a headless local run failed and was first read as that
+      version rejecting the kit's `-cc` model ids ("isn't described by this version's model catalog").
+      CORRECTED 2026-10-01 by S16 / T16.1: that text is only a WARNING; the failure was settings precedence
+      (R1, C4a). Either way, "latest" changed how the offline path (R1) behaves - this project's thesis -
+      while every gate still reported green. The user's aim is the
       opposite of stale - access to the latest models and features on each run - so the rule is: latest is
       the DEFAULT OFFER, and it is taken knowingly.
       (a) **Check and report, every run.** For Claude Code, and for GitHub Copilot CLI whenever `copilot` is
@@ -517,8 +524,9 @@ local-model ceiling, but every command, agent, and gate is identical across all 
           and the local model catalog (a `-cc` model must still resolve). Nothing blocks and no gate
           weakens - a warning is the honest state until someone re-measures.
       (d) **Verified after a move, with a way back.** After the installer updates a harness it runs a cheap
-          smoke check (the kit's own `dad gates-smoke` for the guards, and for Claude Code that the
-          configured local model alias still resolves) and, on failure, prints the previous version and the
+          smoke check (the kit's own `dad gates-smoke` for the guards, and for Claude Code that a local -cc
+          model (the `fast` alias) still resolves - "resolves" is defined in C4a's S16 amendment; amended
+          2026-10-01, OPEN-4(a), from "the configured local model alias") and, on failure, prints the previous version and the
           exact command to return to it. It never auto-rolls-back, and it never lowers any security setting
           to make a check pass (R35).
       (e) **Contract text follows the versions.** A version stamp in `install.ps1` and the matching stamp in
@@ -694,6 +702,9 @@ local-model ceiling, but every command, agent, and gate is identical across all 
 - **Teardown (R37e):** `uninstall.ps1` removes that same single file, and only if its contents reference
   our guards, so a same-named third-party file is never deleted (`uninstall.ps1`'s Copilot teardown section). The
   `-CopilotDir` parameter exists so the removal is testable against a sandbox, not the real machine.
+- **Qualified 2026-10-01 by C5a (T14.1):** "loads nothing" holds for an UNTRUSTED folder; in a trusted one
+  repo-level `.github/hooks/` DO fire. The decision above is unchanged, with a second reason - a repo-level
+  copy would double-fire alongside `dad.json` (C2b invariant i).
 
 #### C2b: File shape + event-name casing - PascalCase, registered ONCE
 - **File shape (measured):** `{"version":1,"hooks":{"<Event>":[{"type":"command","bash":"...",
@@ -1122,10 +1133,11 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   MEASURED-LOCAL 2026-09-30 against Claude Code 2.1.191 (backend R1, Ollama, model `qwen3-coder-next-cc`)
 
   Local (R1): the same usage fields are populated (`cache_read_input_tokens` measured as 0), taken from an
-  EXISTING transcript written by Claude Code 2.1.191. A fresh local run on 2.1.285 is UNMEASURED: that
-  version rejected an unmapped local model id (`--model qwen3-14b-cc`: "isn't described by this version's
-  model catalog") in headless mode, so the local figure carries its OWN version constant,
-  `$MeasuredLocalClaudeCodeVersion`, and is never stamped with the cloud version (fact (ii) above).
+  EXISTING transcript written by Claude Code 2.1.191. The usage fields of a fresh local run on 2.1.285 are
+  UNMEASURED, so the local figure carries its OWN version constant, `$MeasuredLocalClaudeCodeVersion`, and is
+  never stamped with the cloud version (fact (ii) above). **CORRECTED 2026-10-01 (S16 / T16.1, measured
+  2026-09-30 on 2.1.285):** this paragraph used to say 2.1.285 "rejected an unmapped local model id
+  (`--model qwen3-14b-cc`)". It does not - see the S16 amendment below.
 - **Counting rule (measured, and load-bearing):** Claude Code writes ONE transcript entry PER CONTENT BLOCK,
   so a single API message appears as several entries sharing one `message.id`. Usage is identical across
   those entries on the cloud backend (a naive sum over-counts about 1.8x) and, on the local backend,
@@ -1137,9 +1149,56 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   the `version`/`sessionId` stamp (another harness) yields the reasoned fallback line, never a number. A
   transcript that mixes measured and skipped entries understates the total, so the script must COUNT the
   skipped-as-unmeasured entries and name that count on the tokens line rather than staying silent.
-- **Open:** re-measuring local on a current Claude Code version is a human decision (see the model-catalog
-  finding above); until then the local stamp stays at 2.1.191 and `test-kit.ps1`'s drift case must compare
-  BOTH constants to their stamps and must not pass merely because a stamp is absent.
+- **S16 amendment - local models on Claude Code 2.1.285 (T16.1, measured 2026-09-30; record:
+  `grades/S16_GRADE.md` "Measured-facts record (T16.1)"; Windows 11 Pro 10.0.26200, Ollama 0.34.0).**
+  Headless only; the interactive rows (`/model`, interactive `claude --model`, the model-switch script) are
+  NEEDS HUMAN and unmeasured.
+  1. **Warning, not rejection.** `claude -p ... --model qwen3-14b-cc` exits 0 and answers; the catalog text
+     ("isn't described by this version's model catalog ... `[claude-code:unrecognized_model]`") is a
+     WARNING. A base tag (`--model qwen3:14b`) behaves the same.
+  2. **Precedence.** User `settings.json` `env.ANTHROPIC_MODEL` OVERRIDES a process `ANTHROPIC_MODEL` (row a:
+     process `qwen3-14b-cc`, user settings `claude-sonnet-5-5` -> exit 1 naming `claude-sonnet-5-5`); with the
+     user source excluded (`--setting-sources project,local`) the same call succeeds; a project
+     `.claude/settings.json` env beats the user one. That was T10.6's failure: the machine was in cloud/hybrid
+     mode, so the user setting held a cloud id. Kit probes therefore pass `--model <-cc name>`.
+  3. **"Local model resolves" (R40d) means:** with per-process `ANTHROPIC_BASE_URL=http://localhost:11434`
+     and a dummy `ANTHROPIC_AUTH_TOKEN`, `claude -p "<tiny prompt>" --max-turns 1 --model <-cc name>
+     --output-format json` exits 0, its JSON `result` is non-empty, and `modelUsage` is keyed by the `-cc`
+     name. `unrecognized_model` is a WARN, never a FAIL. Ollama unreachable -> SKIP, never a pass.
+     S17 implements this in `harness-versions.ps1` `Test-LocalModelResolves` (adding
+     `--setting-sources project,local`).
+  **Worked example (row e):** `claude -p "Reply with the single word: pong" --max-turns 1 --model
+  qwen3-14b-cc --output-format json --setting-sources project,local` -> exit 0, `result` = `"pong"`,
+  `modelUsage` has the key `"qwen3-14b-cc"`, and `ollama ps` shows `qwen3-14b-cc` loaded 100% GPU -> PASS
+  (the local model answered, not a cloud fallback).
+  **Where S17 differed from this text - DECIDED 2026-10-01, chosen by the human (OPEN-4).**
+  (a) **Model = the `fast` alias (option A).** R40(d) is amended to "a local -cc model (the `fast` alias)",
+  matching `harness-versions.ps1`: S16 measured that resolution is model-independent, and `fast` is the
+  cheapest to load. Rejected: B, probe "the configured" alias - costs a bigger model load and proves nothing
+  more, since resolution does not depend on which `-cc` name is asked.
+  (b) **stderr is CAPTURED and the WARN is PRINTED (option A).** The probe must capture the `claude` call's
+  stderr and, when it contains `unrecognized_model`, print one line
+  `[harness] local model <cc>: WARN unrecognized_model (Claude Code assumes a 200000 context window;
+  Ollama serves <ctx>)` while the result stays a PASS (WARN, never FAIL); it must never discard stderr, and
+  other stderr content does not change the outcome. The SOURCE of `<ctx>` is NOT pinned here (`models.json`
+  `numCtx` says 65536 while S16 measured 40960 served, so the manifest is no proxy); until a `/design`
+  decision it prints `unknown`. Reason for (b): that warning is the only visible trace of the context-window
+  hazard in Open (ii) below. Rejected: B, keep discarding stderr - a WARN nobody can see is exactly the
+  silent outcome R40 ("never a silent one") forbids.
+  Today's `Test-LocalModelResolves` still discards stderr; bringing it into line is a follow-up story, not
+  part of this contract text. **Worked example:** row (e) above (`fast` = `qwen3-14b-cc` in `models.json`),
+  whose stderr carries `[claude-code:unrecognized_model]` -> exit 0, `result` `"pong"`, `modelUsage` key
+  `"qwen3-14b-cc"` -> the probe prints `[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude
+  Code assumes a 200000 context window; Ollama serves unknown)` and scores PASS; the same run with empty
+  stderr scores PASS and prints no WARN line.
+- **Open:** (i) local usage fields on 2.1.285 - re-measuring is NO LONGER BLOCKED (the local run succeeds,
+  amendment item 1); it is simply UNMEASURED. Until someone measures it the local stamp stays at 2.1.191,
+  and `test-kit.ps1`'s drift case must compare BOTH constants to their stamps and must not pass merely
+  because a stamp is absent. (ii) **Context-window risk (open, not a measured failure):** Claude Code assumes
+  a 200000-token window for an unrecognised model (`modelUsage` `contextWindow` 200000) while Ollama serves
+  the `-cc` model at ctx 40960, so auto-compact keyed to 200k could let a long local session overrun the real
+  window. How it fails, if it does, is unmeasured; the warning text names `CLAUDE_CODE_MAX_CONTEXT_TOKENS`
+  and a `modelOverrides`/`behavesAs` mapping as knobs - none is tried or chosen here.
 
 #### C4b: Session discovery - the Stop hook records what only it can see
 - **Status: APPROVED 2026-09-29.**
@@ -1239,6 +1298,234 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   individual subagents (R32 - a subagent is an unobservable region; the summary is per SCOPE); a
   cross-run trend view of these figures (that is `/retro`'s territory, R27, once the data exists).
 
+### C5: R39(a) Copilot CLI parity surfaces - MCP route + folder trust, agents, commands-as-skills, hook payloads, the UNMEASURED boundary
+- **Status: MEASURED, pinned 2026-10-01 from S14 / T14.1 (commit e313aa0).** Source of truth: `grades/S14_GRADE.md`
+  "Measured-facts record (T14.1)", "Verdicts feeding C5" and "Unmeasured items". Every fact below is an
+  observation of the installed binary in scratch projects under `_tmp\t141` (since removed), with
+  `COPILOT_ALLOW_ALL=true` as a PROCESS env var (writes nothing) and hooks captured per the T9.5 recipe;
+  `~\.copilot\config.json` was SHA256-identical before and after. Vendor documentation is not used as a fact
+  (R37c). **Version stamp: true OF Copilot CLI 1.0.89 on Windows 11 Pro 10.0.26200 - the same binary C2 was
+  measured against - and of nothing else.**
+
+  MEASURED 2026-09-30 against GitHub Copilot CLI 1.0.89
+
+- **The rule this contract exists to enforce (R39a, R37c):** a parity story may rely ONLY on C5a-C5d facts.
+  Anything in C5e is UNMEASURED and no parity story may rely on it. The three choices once marked open
+  (OPEN-1 trust route, OPEN-2 delivery location, OPEN-3 version constant) were DECIDED by the human on
+  2026-10-01 (C5a, C5b, C5f); two of them gate parity work on a consented measurement first (C5a, C5b).
+- **Enforced by `test-kit.ps1`:** nothing yet - no parity code exists. Per R37(c) each C5 fact a parity story
+  starts relying on lands WITH its `Test-Case` in that story.
+
+#### C5a: MCP route - the workspace `.mcp.json` works AS-IS; the blocker is FOLDER TRUST, not schema
+- **Measured:**
+  | fact | observed |
+  |---|---|
+  | why `local-tools` did not list (R39 prose) | FOLDER TRUST. Workspace MCP servers, skills and hooks load only for a TRUSTED folder. Untrusted: `copilot mcp list` shows only `github-mcp-server`; with `COPILOT_ALLOW_ALL=true` (exactly `true`) the cwd is trusted and `local-tools (local)` lists |
+  | schema | the kit's project `.mcp.json` works unchanged (`mcpServers`, absolute exe `command`, `env` block, no `type`/`args`); `copilot mcp get local-tools` -> Enabled, local, tools `*`, Source Workspace. `type:"stdio"` / `tools:["*"]` variants also list - key names were never the cause |
+  | `.github/mcp.json` | works the same as `.mcp.json` |
+  | nested launch | a `.mcp.json` at an ancestor git root is picked up from a nested directory |
+  | real call | a `list_datasheets` call was answered through the workspace `.mcp.json` (`copilot -p ... -s --allow-all-tools`) |
+  | docs path | `"LOCALTOOLS_DOCS_DIR":"./docs"` works and resolves against the SESSION cwd (C5d: the launch dir); `${workspaceFolder}` is NOT expanded |
+  | env display | env values are masked (`***`) in `copilot mcp get` |
+- **Consequences pinned:** (i) no Copilot-specific MCP file is needed - Copilot reads the same project
+  `.mcp.json` Claude Code does, so R39(c)'s no-machine-path rule adds no NEW path; the exe `command` is the
+  one machine-specific value, exactly as it already is for Claude Code (`local-tools` is not on PATH).
+  (ii) `./docs` resolves against the launch dir, so a Copilot session launched from a project SUBDIRECTORY
+  resolves `<subdir>\docs`, not the project's docs - parity guidance must say "launch from the project root"
+  or the server must not depend on a relative path. (iii) `--additional-mcp-config` was not exercised (the
+  workspace file sufficed) and is not part of the route.
+- **Qualifies C2a (dated 2026-10-01):** in T14.1's TRUSTED scratch folders, hooks at the repo-level
+  `.github/hooks/cap.json` DID fire. C2a's "the repo-level path loads nothing" was observed in an untrusted
+  folder and is true only of one. C2a's DECISION is unchanged and now has a second reason: the kit writes
+  hooks at user level ONLY and never writes `.github/hooks/`, because in a trusted folder a repo-level copy
+  would fire alongside the user-level `dad.json` and double-count the loop guard (C2b invariant i).
+- **Trust route: DECIDED 2026-10-01, chosen by the human (OPEN-1 = A).** The user trusts each project folder
+  ONCE, themselves, through Copilot's own interactive trust prompt. The kit NEVER sets `COPILOT_ALLOW_ALL` -
+  not in a script, a hook, a generated file, an env block or guidance text - because what that variable
+  permits beyond trusting the cwd is UNMEASURED (C5e item 3), and a kit that switches on a harness's
+  blanket-permission flag would be lowering a security setting on the user's behalf (R35) and acting on
+  the harness's authorization surface, which `## Out of scope` "Handling security" places outside the kit.
+  Rejected: B, the kit sets `COPILOT_ALLOW_ALL=true` for Copilot sessions - unmeasured blast radius, and a
+  security decision made for the user; C, the kit pre-writes trust into `~\.copilot\config.json` - an
+  unmeasured file format and a user-level write without consent (R35).
+  **Gate:** the MCP parity story is BLOCKED until a consented, human-attended measurement of the interactive
+  trust prompt (and its probable `config.json` write) is recorded and stamped into C5a via `/design`. Until
+  then C5e item 3 stays UNMEASURED and no story may rely on how, or whether, trust persists.
+  **Worked example:** a user opens Copilot CLI in `D:\projects\demo` for the first time; `copilot mcp list`
+  shows only `github-mcp-server` (untrusted). They answer Copilot's trust prompt themselves; from then on
+  `local-tools (local)` lists. Nothing in `install.ps1 -CopilotCli`, the hooks or the generated skills ever
+  contains the string `COPILOT_ALLOW_ALL`; a parity story's `Test-Case` asserts that by grep over what it
+  ships.
+
+#### C5b: Agents - `global\agents\*.md` load AS-IS from a workspace dir; their tool grants are UNMEASURED
+- **Measured:** Copilot discovers custom agents in `.github/agents/*.md`, `.github/agents/*.agent.md` and
+  `.claude/agents/*.md` (evidence: `copilot --agent <nonexistent> -p hi` lists the available agents).
+  Three UNMODIFIED copies of `global\agents\*.md` (Claude frontmatter `name` / `description` / `tools`,
+  including `mcp__local-tools__*` names) were discovered with no error. A skill can spawn a named custom
+  agent through Copilot's `task` tool and get its reply back (marker `PROBE-AGENT-OK`), so the
+  orchestrator -> subagent pattern `/build` uses is viable. C2d still applies: lifecycle events and
+  attribution need a NAMED custom agent, never the built-in `general-purpose` one.
+- **Not measured (C5e):** whether Claude `tools:` names map to any Copilot tool grant; user-level agent
+  paths; discovery in an UNTRUSTED folder (inconclusive).
+- **Delivery location: DECIDED 2026-10-01, chosen by the human (OPEN-2 = B with A as fallback; shared with
+  C5c).** Every MEASURED location is WORKSPACE-level, so before ANY agents/skills parity story a small
+  CONSENTED spike measures whether user-level `~/.copilot/agents` and `~/.copilot/skills` load (C5e item 2).
+  (B) If they load: `install.ps1 -CopilotCli` generates agents and skills ONCE at user level - mirroring the
+  Claude side (user-level `~\.claude\agents`, `~\.claude\commands`) and C2a (hooks at user level only).
+  (A, fallback) If they do not: per-project generation into `.github/agents/` and `.github/skills/`,
+  gitignored and regenerated, never hand-edited. NEVER `.claude/agents/` or `.claude/skills/` in either case:
+  Claude Code reads those too, so a generated copy there would be seen by BOTH harnesses and would shadow
+  the user-level agent in Claude Code. Rejected: A outright - a per-project copy in every project when one
+  user-level copy may work; C, `.claude/agents` + `.claude/skills` - double-loaded and shadowing, as above.
+  Until the spike's result is stamped into C5b/C5c via `/design`, the location is UNMEASURED and no
+  agents/skills parity story may be sharded.
+  **Worked example:** spike result "loads" -> `install.ps1 -CopilotCli` writes
+  `%USERPROFILE%\.copilot\skills\build\SKILL.md` (and one per command) and
+  `%USERPROFILE%\.copilot\agents\dev-agent.md`, and `uninstall.ps1` removes exactly those. Spike result
+  "does not load" -> generating for `D:\projects\demo` writes `D:\projects\demo\.github\skills\build\SKILL.md`
+  and `D:\projects\demo\.github\agents\dev-agent.md`, both under a `.gitignore` entry; nothing is ever
+  written to `D:\projects\demo\.claude\agents\` or `.claude\skills\`.
+
+#### C5c: Commands as skills - a GENERATED transform of `global\commands\*.md`, never a hand copy (R39b)
+- **Measured:** skill locations discovered: `.github/skills/<n>/SKILL.md`, `.agents/skills/`,
+  `.claude/skills/` (user-level `~/.copilot/skills` not tested). Of the 19 command files loaded RAW as
+  skills: 2 load (`corpus`, `scaffold`); 13 fail `argument-hint must be a string` (a `[...]` value parses as
+  a YAML list); `assess` and `design` fail YAML parse (a colon inside an unquoted scalar); `audit` and
+  `grade` fail, cause not individually counted. Single-quoting `description` and `argument-hint` made 15
+  load; `corpus` and `research` contain `'` and need proper escaping.
+- **Decision (the record's verdict, made exact):** the skill set is GENERATED from `global\commands\*.md` by
+  a kit script - never hand-copied, never hand-edited (R39b). The transform touches the FRONTMATTER ONLY:
+  - `description` and `argument-hint` (when present) are re-emitted as YAML single-quoted scalars, each
+    embedded `'` doubled to `''` (YAML's single-quote escape).
+  - every other byte - other frontmatter lines, the `---` fences, the whole body - is copied unchanged; no
+    key is added or removed. Output path: `<skills-root>\<command basename>\SKILL.md`, where `<skills-root>`
+    is decided in C5b (OPEN-2): `~/.copilot/skills` if the consented spike shows it loads, else the
+    project's gitignored `.github/skills/`; never `.claude/skills/`.
+- **Signature / pre + post:** `Convert-CommandToSkill(<command .md text>) -> <SKILL.md text>`. Pre: the file
+  opens with a `---` frontmatter of single-line `key: value` entries. A frontmatter it cannot parse that way
+  is an ERROR naming the file - never a silent skip, never a partially emitted skill. Post: the transform is
+  DETERMINISTIC (same source -> byte-identical output) and always reads `global\commands\`, never its own
+  output (it is not idempotent on a quoted value); the generated set has exactly one skill per command file.
+- **What is and is not measured about the OUTPUT:** loading after quoting is measured for 15 files. Whether
+  the doubled-quote form loads `corpus` and `research`, and whether `audit` and `grade` load after the
+  transform at all, is UNMEASURED (C5e) - the S14 card names a follow-up measurement for exactly this.
+- **Invariant:** generated set == transform(current `global\commands\*.md`); a parity story that ships the
+  generator ships a `test-kit.ps1` case asserting that equality, so a drifted skill is a test failure, not
+  a silent difference.
+
+#### C5d: Hook payloads, `cwd` and the session id - PascalCase per C2b; `cwd` is the LAUNCH dir
+- **Casing is NOT decided here:** C2b already decided it - PascalCase, each event registered ONCE. T14.1
+  re-confirms C2b's finding that casing selects the payload SHAPE. Under the C2b registration the fields the
+  kit reads are `hook_event_name`, `session_id`, `cwd`, `tool_name`, `tool_input` (PreToolUse) and
+  `session_id`, `cwd`, `transcript_path`, `stop_reason`, `stop_hook_active` (Stop). The camelCase family
+  (`preToolUse`, `agentStop`; `sessionId`, `toolName`, `transcriptPath`, ...) is never registered.
+- **Measured:**
+  | fact | observed |
+  |---|---|
+  | `cwd` | PRESENT and non-empty in all four captured payloads; an absolute Windows path, JSON-escaped (`\\`) |
+  | session id | PRESENT, a UUID (`session_id` in the PascalCase shape) |
+  | launch from a subdirectory | `cwd` = the LAUNCH dir, not the git root (git-root hooks are still found) |
+  | after an in-session `cd` | `cwd` is UNCHANGED on the next `PreToolUse` - it stays the launch dir |
+  | tool name | PascalCase reports the alias `tool_name:"Bash"` (camelCase would say `powershell`) |
+  | hook command key | on Windows the `powershell` key ran and the `bash` key did not |
+  | Stop | carries `stop_reason`, `stop_hook_active:false`, and a `transcript_path` to Copilot's own `events.jsonl` under `~\.copilot\session-state\<uuid>\` |
+  Verbatim PascalCase captures (transcript path redacted in the record):
+  `{"hook_event_name":"PreToolUse","session_id":"1d0ab973-d259-4a6f-bc5e-6188c753ac5b","timestamp":"2026-09-30T19:18:03.077Z","cwd":"D:\\projects\\DrDad\\_tmp\\t141\\p9","tool_name":"Bash","tool_input":{"command":"echo hello-root","description":"Run the requested shell command","mode":"sync","initial_wait":10}}`
+  `{"hook_event_name":"Stop","session_id":"1d0ab973-d259-4a6f-bc5e-6188c753ac5b","timestamp":"2026-09-30T19:18:05.022Z","cwd":"D:\\projects\\DrDad\\_tmp\\t141\\p9","transcript_path":"<REDACTED>","stop_reason":"end_turn","stop_hook_active":false}`
+- **Answer to R39(a)(iii):** yes - both payloads carry a non-empty `cwd` and a `session_id`, so the C3 writers'
+  "skip logging on empty `cwd`" branch does not silently kill the Copilot log.
+- **CONSTRAINT on all future parity work touching the C3 gate-log writers (and anything else that reads the
+  payload `cwd`):** `cwd` is where the session was LAUNCHED, and it does not follow an in-session `cd`.
+  A writer must therefore (i) never treat `cwd` as the project root - it resolves the project by walking UP
+  from `cwd` to the nearest ancestor that is a DrDad project, as `dad-loopguard.ps1`'s `Resolve-LogProject`
+  already does; and (ii) never treat `cwd` as where the current tool call is acting - a session launched in
+  project A that `cd`s into project B keeps logging to A. A parity story that needs per-call project
+  attribution must derive it from `tool_input`, and that is a new decision, not something C5 grants.
+- **Stop `transcript_path` vs C4a:** Copilot DOES expose a transcript path, so C4a fact (i)'s wording "no
+  session transcript is exposed" is imprecise for 1.0.89. Its CONCLUSION stands: `events.jsonl`'s format is
+  UNMEASURED and carries no Claude Code `version`/`sessionId` stamp, so C4a's reasoned fallback line remains
+  the correct output on this harness. Reading `events.jsonl` for tokens would need its own measurement.
+
+#### C5e: The UNMEASURED boundary - no parity story may rely on any of these (R39a, R37c)
+Each item was named in the T14.1 record as not measured or inconclusive. They are pinned AS UNMEASURED: a
+story that needs one must first get it measured and amended into C5 via `/design`.
+1. **Claude `tools:` -> Copilot tool mapping** - agents load, but what tools a `tools:` list (including
+   `mcp__local-tools__*`) actually grants under Copilot is unknown.
+2. **User-level discovery paths** - `~/.copilot/agents`, `~/.copilot/skills` and plugins were not tested
+   (consent guard: user-level writes). The consented spike C5b requires before any agents/skills parity
+   story measures the first two.
+3. **Trust persistence via the interactive prompt** - not run; probably a user-level `config.json` write, so
+   it needs a human-attended, consented run (R35); C5a BLOCKS the MCP parity story on exactly that run. Also
+   unmeasured: what `COPILOT_ALLOW_ALL` permits BEYOND trusting the cwd (moot for the kit, which never sets
+   it - C5a).
+4. **`$ARGUMENTS`-style substitution in skill bodies, an `allowed-tools` equivalent, and equivalents of
+   Claude's hook/permission settings** - recorded as "not measured", which is NOT the same as "no
+   equivalent"; R39(d)'s honest-boundary entry in `## Out of scope` waits for a measurement either way.
+5. **The `audit` and `grade` skill failure cause**, and whether the C5c transform loads `audit`, `grade`,
+   `corpus` and `research`.
+6. **Agent (and skill) discovery without folder trust** - inconclusive.
+
+#### C5f: Version stamp and drift for C5
+- **Fact:** C5 and C2 were measured against the SAME binary (1.0.89). C2f's `$CopilotMeasuredVersion` in
+  `install.ps1` is the one Copilot constant today, and `test-kit.ps1`'s C2f case compares it to the FIRST
+  `MEASURED <date> against GitHub Copilot CLI <v>` stamp in this doc, which is C2's.
+- **Whether that constant also governs C5: DECIDED 2026-10-01, chosen by the human (OPEN-3 = A, ONE
+  constant).** `$CopilotMeasuredVersion` covers C2 AND C5. Consequence: a Copilot update that is
+  re-measured re-measures BOTH, and the constant may not move until every Copilot stamp in this doc moves
+  with it. The C2f drift test must therefore be extended so that EVERY
+  `MEASURED <date> against GitHub Copilot CLI <v>` stamp in DESIGN equals `$CopilotMeasuredVersion` (today it
+  checks only the FIRST, C2's); that `test-kit.ps1` change is a follow-up story, not part of this text.
+  Rejected: B, a second constant for C5 - two numbers to keep true for one binary, and nothing gained while
+  C2 and C5 are measured together; C, no constant for C5 - C5 could silently go stale.
+  **Worked example:** `$CopilotMeasuredVersion = '1.0.89'`; DESIGN holds two stamps, C2's and C5's, both
+  `... against GitHub Copilot CLI 1.0.89` -> the extended case PASSES. Someone re-measures C2 on 1.0.95, bumps
+  the constant and C2's stamp but not C5's -> the case FAILS naming the C5 stamp `1.0.89 != 1.0.95` (the
+  current first-stamp-only case would pass it).
+
+#### C5 worked example - the transform on real bytes, and a subdirectory launch traced to the log
+- **Worked example:** (1/2) `Convert-CommandToSkill` on two real command files. Input frontmatter of
+  `global\commands\build.md`:
+  ```
+  ---
+  description: Orchestrate dev -> qa per task, grade + hygiene per story; close-out is scripted. Gated on DESIGN LOCKED.
+  argument-hint: [scope; empty = next ready task]
+  ---
+  ```
+  Output frontmatter of `<skills-root>\build\SKILL.md` (body unchanged byte-for-byte):
+  ```
+  ---
+  description: 'Orchestrate dev -> qa per task, grade + hygiene per story; close-out is scripted. Gated on DESIGN LOCKED.'
+  argument-hint: '[scope; empty = next ready task]'
+  ---
+  ```
+  Raw, the input fails with `argument-hint must be a string` (`[...]` is a YAML list); quoted, it is a
+  string. `global\commands\corpus.md` (`description: Set a knowledge corpus's directive and run ...`) becomes
+  `description: 'Set a knowledge corpus''s directive and run ...'` - the embedded `'` doubled - and its
+  `argument-hint: <corpus-name> [-env <env>]   (empty = list corpora and pick one)` becomes
+  `argument-hint: '<corpus-name> [-env <env>]   (empty = list corpora and pick one)'`. qa's first unit test is
+  exactly these two input -> output pairs.
+- (2/2) A Copilot session launched in `D:\projects\demo\src`, where `D:\projects\demo` holds `docs\` and
+  `grades\`:
+  1. `PreToolUse` stdin = `{"hook_event_name":"PreToolUse","session_id":"1d0ab973-d259-4a6f-bc5e-6188c753ac5b","cwd":"D:\\projects\\demo\\src","tool_name":"Bash",...}`.
+  2. The loop guard decodes `cwd` = `D:\projects\demo\src`, walks up, and resolves the project
+     `D:\projects\demo` (the nearest ancestor with `docs\` or `grades\`).
+  3. Its log line lands in `D:\projects\demo\grades\gates-log.jsonl`.
+  4. The model runs `cd ..\..\other`; the next `PreToolUse` still says `"cwd":"D:\\projects\\demo\\src"`, so
+     that call is logged to `demo` as well.
+  Counter-example that MUST NOT ship: a writer taking `cwd` as the root writes
+  `D:\projects\demo\src\grades\gates-log.jsonl` - a log nobody queries, while `demo`'s real log looks clean.
+- **Invariant(s):** (i) no parity story relies on a C5e item, and none is sharded ahead of the consented
+  measurement its C5a/C5b gate names; (ii) skills are GENERATED
+  from `global\commands\` and agents are served from `global\agents\` - never a second hand-edited copy
+  (R39b); (iii) hook registration stays exactly C2's - user level, PascalCase, once per event - and the kit
+  never writes `.github/hooks/`; (iv) every reader of payload `cwd` resolves the project by walking up and
+  never assumes `cwd` follows the session; (v) whatever parity installs, `uninstall.ps1` removes, testable
+  against a sandbox (R39c / R37e).
+- **Out of scope:** the RESULTS of the two consented measurements C5a and C5b gate on (they are amended in
+  via `/design` when run); the kit setting `COPILOT_ALLOW_ALL` (never - C5a); the camelCase hook family; reading Copilot's `events.jsonl`;
+  `--additional-mcp-config`; other Copilot surfaces (see `## Out of scope`); any Copilot version other than
+  1.0.89.
+
 ## Components
 ### local-tools (C# MCP server)
 - Behavior: R2. `net8.0`, `RollForward=LatestMajor`. Config via env: `LOCALTOOLS_DOCS_DIR`, `OLLAMA_HOST`,
@@ -1281,6 +1568,17 @@ This design doc previously embedded the story backlog inline; it now lives in th
 - Cloud models as the DEFAULT. Offline-first is the default and the thesis; cloud and hybrid are opt-in
   alternate backends (R34), used for delivery or to clear a local-model ceiling, never the out-of-the-box path.
 - Additional Node/Python MCP servers (the single C# server is the design).
+- **Handling security - FOUNDATIONAL, permanently out of scope (confirmed by the human 2026-10-01).** The kit
+  never authenticates, authorizes, stores, reads, brokers or rotates a credential or a user identity. Auth
+  that exists in the loop belongs to something else - a harness's own login (Claude Code, Copilot CLI), a
+  cloud provider's key held in the harness's settings (R34), the dummy local-Ollama token - and the kit at
+  most passes it through untouched. What the kit DOES ship is hygiene, not handling: the secret scanner
+  (`scan-secrets.ps1`) and the by-NAME-only rule keep credentials OUT of the repo and the index. This is why
+  `Security review:` is NOT-REQUIRED as a standing fact rather than a waiver to re-argue each release: the
+  auth/token/session words doc-stats finds here are LLM token counts (R38c/C4a), harness session ids
+  (C3b/C4b, C5), harness logins and the scanner's own detection patterns. A future requirement that would
+  make the kit itself handle a credential is not a REQUIRED review - it contradicts this design and needs a
+  human decision to change the kit's foundation first.
 - Other Copilot surfaces as harness targets - VS Code Copilot Chat, the Agents View, the cloud coding agent.
   R37 covers Copilot CLI only. VS Code Copilot Chat is deliberately deferred and NOT measured: it is the
   surface carrying the live upstream casing defect (microsoft/vscode#335244, camelCase `subagentStart`

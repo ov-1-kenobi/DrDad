@@ -100,6 +100,13 @@ option (AC2). T11.2 depends on T11.1 because both edit the same Recommendation s
 against the final text. Neither task decides A, B or C - that is a [human] decision, and no build work
 follows from S11 until it is made.)
 
+(Story S12 (R37, GitHub Copilot CLI as a second harness) has NO T12.x tasks, on purpose. It was delivered
+AHEAD of its story card by the `dogfood/copilot-pilot` research pilot (commit `64188cc`), and then closed
+through the normal gate - `close-unit` with a grade card (`grades/S12_GRADE.md`) - which is why STORIES.md
+marks it `Status: DONE closed:close-unit`. It was closed OUTSIDE this task map, so a "story has no tasks"
+reading for S12 (e.g. `doc-stats -Findings` `[taskmap]`) is expected and correct, not a truncated taskmap.
+Do not backfill T12.x tasks.)
+
 T13.1 (needs T9.1, T9.2, T9.3) -> T13.3
 T13.2 (needs T9.1) -> T13.3
 
@@ -163,6 +170,29 @@ env-var-sourced primary root only, with CORPUS.md added to the predicate (server
 test-kit coverage via `local-tools.exe --corpus` (no Ollama) and needs T20.1. docs-dir.ps1 and the
 `.mcp.json` placeholder are NOT changed. After T20.1, `install.cmd` must be re-run by the human - the
 executor must NOT run it.)
+
+T21.1 -> T21.2 -> T21.3
+T22.1 -> T22.2 (also after T21.3)
+T22.1 -> T23.1 -> T23.2 (also after T22.2)
+
+(Stories S21, S22, S23 (all R24) have no dependency on each other's BEHAVIOUR; they are sequenced only
+because they share files. S21 goes first: T21.1 changes `Test-Case` and the summary line in `test-kit.ps1`,
+T21.2 converts the build-dependent early returns to the new `Skip-Case` helper, T21.3 adds S21's own
+Test-Cases. S22 and S23 both add new Test-Cases to `test-kit.ps1` AND both edit the same `-Findings`
+region of `doc-stats.ps1` (S22 after the empty-Contracts check, S23 in the security admissibility block a
+few lines below), so they run strictly one after the other: T22.1 -> T22.2, then T23.1 -> T23.2. T22.2 and
+T23.2 come after T21.3 so the suite they finish on already has the skipped-aware summary. S22's AC5 (the
+kit repo is silent) reads contract C5 from `docs/DESIGN.md`, which `/design` is pinning; it is checked in
+T22.2 and does not block T22.1.)
+
+T23.2 -> T24.1 -> T24.2 -> T24.3 (needs T24.1, T24.2, T23.2) -> T25.1 (also after T24.3) -> T25.2
+
+(Stories S24 (R40) and S25 (R37, R40) have no dependency on each other's BEHAVIOUR. T24.1 and T24.2 edit
+only `harness-versions.ps1` (`Test-LocalModelResolves`, then `Invoke-PostUpdateSmoke`); T24.3 adds S24's
+Test-Cases after the R40 AC7 case in `test-kit.ps1`. T25.1 rewrites the C2f drift case (also `test-kit.ps1`)
+behind a small shared function and T25.2 adds its fixture cases. Every one of T21.x-T25.x that touches
+`test-kit.ps1` runs strictly one after the other (T21.3 -> T22.2 -> T23.2 -> T24.3 -> T25.1 -> T25.2), so no
+two open edits of that file overlap and each finishes on the skipped-aware summary from S21.)
 
 ## Tasks
 
@@ -1883,7 +1913,7 @@ executor must NOT run it.)
 - **Do:** Copy the existing case's sandbox shape (`New-Sandbox`, `$p\docs\DESIGN.md` fixture, `.mcp.json` via ConvertTo-Json, `Remove-Sandbox` in `finally`). Add:
   1. AC1 (doc-stats): project has `docs\DESIGN.md` plus a `docs\STORIES.md` with one story and `docs\TASKS.md` with one task; `.mcp.json` override = an existing EMPTY dir in the sandbox. Run `powershell -NoProfile -ExecutionPolicy Bypass -File doc-stats.ps1 -ProjectDir $p` (use the parameter name doc-stats actually declares) and assert output contains `WARN: ignoring LOCALTOOLS_DOCS_DIR`, contains the empty dir path, and reports the project's own counts (not 0/0 stories/tasks).
   2. AC2 (doc-stats): override = a second sandbox dir holding a `STORIES.md` with a DIFFERENT story count than the project's own; assert NO `WARN: ignoring` line and the counts come from the override.
-  3. AC3 (docs-find, empty override): guard with the same `local-tools.exe` exists check as the existing case; override = existing empty dir; search for the marker in the project's `DESIGN.md`; assert output matches the marker/C9 text and contains the WARN line, and the empty dir is still empty (`Get-ChildItem` count 0, nothing created).
+  3. AC3 (docs-find, empty override): guard with the same `local-tools.exe` exists check as the existing case; override = existing empty dir; search for the marker in the project's `DESIGN.md`; assert output matches the marker/contract-9 text and contains the WARN line, and the empty dir is still empty (`Get-ChildItem` count 0, nothing created).
   4. dad-doctor/close-unit share the helper, so no separate case is required; instead add one text assertion that `doc-stats.ps1`, `docs-find.ps1`, `close-unit.ps1`, `dad-doctor.ps1` each reference `Resolve-DocsDir` and that `corpus.ps1` does not (keeps the exemption honest).
   5. AC4: run `.\test-kit.ps1` and confirm `0 failed`.
 - **Acceptance:** `.\test-kit.ps1` prints `0 failed` and the new case names appear in its output; reverting T19.1's helper use in doc-stats.ps1 makes the AC1 case fail (verify, then restore).
@@ -1923,6 +1953,204 @@ executor must NOT run it.)
 - **Refs:** Story S20 (AC1-AC8); CLAUDE.md "Add a Test-Case for any bug".
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. `--corpus` output shape: `N root(s), M indexable file(s):`, then per root `  <root>[  [MISSING - skipped]]  -> K file(s)`, then `index: <primary>\.index\chunks.json`. The WARN goes to stderr only: `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES/CORPUS there); using <cwd>\docs`. The suite must leave the process env var as it found it, must not touch the real `C:\Projects\Claude\MCP\DAD-kit\docs` nor `%USERPROFILE%\.claude`, and needs no network/Ollama. ASCII only.
 
+### [ ] T21.1 - test-kit.ps1: one Skip-Case helper; a SKIP is counted separately; summary prints K skipped   (Story S21)
+- **Goal:** a `Test-Case` body can declare "I ran nothing" with a REQUIRED reason; it prints `SKIP  <name> - <reason>`, is counted in a new skip counter (never as a pass), and the summary line becomes `== N passed, M failed, K skipped ==`.
+- **Touches:** `test-kit.ps1` only - header comment (lines 6-9), counters (lines 20-22), `Test-Case` (lines 24-39), a new `Skip-Case` function next to `Assert` (line 42), the summary line (line 7074). No case bodies change in this task (T21.2 does that).
+- **Do:**
+  1. Add `$script:skip = 0` after `$script:fail = 0` (line 21).
+  2. Add ONE helper (S21 Dev notes: one helper, not per-case variants; the reason is required): `function Skip-Case([string]$Reason, [switch]$NeedsBuild)`. If `$Reason` is null or whitespace -> `throw "Skip-Case needs a reason"` (an ordinary failure). Else if `-NeedsBuild` and NOT `$SkipBuild` -> `throw "built artifact missing on a FULL run (the build step just ran): $Reason"` (an ordinary failure - S21 Behavior 3). Else `throw ("__DAD_SKIP__:" + $Reason)`.
+  3. In `Test-Case`'s `catch`: if `$_.Exception.Message` starts with `__DAD_SKIP__:` -> `$script:skip++` and `Write-Host ("  SKIP  " + $name + " - " + <the text after the prefix>) -ForegroundColor Yellow`; do NOT touch `$script:pass`, `$script:fail` or `$script:failures`. Any other exception -> the existing FAIL path, unchanged. The PASS path (after `& $body`) is unchanged.
+  4. Line 7074 becomes `Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })`. Exit code logic unchanged: a skip never fails the run.
+  5. Header comment: add one line - a case that runs nothing calls `Skip-Case "<reason>"` (never a bare `return`, which counts as PASS); `-NeedsBuild` turns that skip into a FAIL on a full run.
+  6. ASCII only, PowerShell 5.1 compatible.
+- **Acceptance:** `.\test-kit.ps1 -SkipBuild` ends with `== <n> passed, 0 failed, 0 skipped ==` and exits 0 (no case calls the helper yet, so 0 skipped is the correct value at this point).
+- **Depends on:** none
+- **Refs:** Story S21 (Behavior 1-3, Dev notes); `docs/DESIGN.md` R24; test-kit.ps1:17 (`param([switch]$SkipBuild)`), :20-42, :7074; close-unit.ps1:186-194 (`Get-TestCount`).
+- **Context:** today `Test-Case` does `& $body; $script:pass++`, so a body that hits an early `return` PASSes having asserted nothing (observed in S20's QA/grade, `grades/S20_GRADE.md`). The skip signal is an exception because `Test-Case` already sorts outcomes by try/catch. A case must call `Skip-Case` BEFORE entering a `try { } catch { }` of its own (a body-level catch would swallow the signal); the existing cases use `try { } finally { }`, which is fine. `$SkipBuild` is the script parameter and is visible inside the function by dynamic scope. close-unit's parser (`(?i)(\d+)\s+passed`, close-unit.ps1:188) still finds the pass count in the new summary line.
+
+### [ ] T21.2 - Convert every $SkipBuild / missing-exe early return in test-kit.ps1 to Skip-Case   (Story S21)
+- **Goal:** no build-dependent case can PASS having run nothing: under `-SkipBuild` it prints SKIP with a reason; on a full run a missing `local-tools.exe` FAILS the case.
+- **Touches:** `test-kit.ps1` - exactly these early returns (line numbers as of this map; anchor by case name, T21.1 shifts them by a few lines):
+  - `"api-surface resolves a type deriving from an ASP.NET framework base (ApplicationUser : IdentityUser)"` - line 652 (exe missing).
+  - `"docs-find NEVER creates a real directory at an unrewritten .mcp.json placeholder"` - line 2068 (exe missing).
+  - `"S19 AC3: docs-find ignores an EMPTY LOCALTOOLS_DOCS_DIR with a WARN and still finds project docs"` - line 2134 (exe missing; it prints its own `SKIP (exe not built)` text and then `return`s, which is still counted as a PASS).
+  - `"the corpus spans MULTIPLE roots (and does not double-count)"` - lines 2813 (`$SkipBuild`) and 2815 (exe missing).
+  - `"T20.2 / S20 AC1-AC5, AC7, AC8: the server's env-var docs-dir rule (--corpus, no Ollama)"` - lines 2846 (`$SkipBuild`) and 2848 (exe missing).
+  - `"the API surface generator produces real signatures"` - lines 4487 (`$SkipBuild`) and 4489 (exe missing).
+  - `"CLI --ingest targets the GIVEN root, not the open project (corpus scope)"` - line 5860 (exe missing; inside the `if (-not $SkipBuild)` server block, so it only ever runs on a full run).
+- **Do:**
+  1. Every `if ($SkipBuild) { return }` -> `if ($SkipBuild) { Skip-Case "-SkipBuild: needs the built local-tools.exe" }`.
+  2. Every exe-missing `{ return }` (both shapes: `if (-not (Test-Path $exe)) { return }` and `if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { return }`) -> the same condition with `{ Skip-Case "local-tools.exe not built" -NeedsBuild }`.
+  3. Line 2134: replace the whole `{ Write-Host "  SKIP (exe not built): ..." ...; return }` with `{ Skip-Case "local-tools.exe not built (docs-find AC3 case did not run)" -NeedsBuild }`.
+  4. Do NOT convert (outside S21 Behavior 4 / AC4, see Open questions): the `$haveGit` guards, python (565, 570), ollama (1221), the Copilot-harness guard (1599), the dotnet / ASP.NET-framework guards in the api-surface case (653, 667); the `if (Test-Path (...local-tools.exe)) { ... }` sub-check at line 2042 (it gates one optional sub-assertion, not the case); the `if (-not $SkipBuild) { ... }` server block at line 5785 (its cases are not registered under `-SkipBuild`, so they inflate nothing).
+  5. Change nothing else in those cases. ASCII only.
+- **Acceptance:** `.\test-kit.ps1 -SkipBuild` prints `SKIP` lines (with reasons) for the three `$SkipBuild` cases (corpus multi-root, T20.2/S20, API surface generator), the summary shows `K skipped` with K >= 3, and those three names appear on no `PASS` line; a full `.\test-kit.ps1` (after `dotnet build local-tools\local-tools.csproj -c Release`) ends `0 failed, 0 skipped`.
+- **Depends on:** T21.1
+- **Refs:** Story S21 (Behavior 3-4, AC1, AC2, AC4); test-kit.ps1:652, :2068, :2134, :2813-2815, :2846-2848, :4487-4489, :5785, :5860.
+- **Context:** under `-SkipBuild` the exe may still exist from an earlier build; the exe-missing cases then RUN, which is honest - only the `$SkipBuild` guards skip unconditionally. On a full run the build case "local-tools builds (Release)" has just run, so a missing exe is a real defect and `-NeedsBuild` makes it FAIL (S21 Behavior 3).
+
+### [ ] T21.3 - test-kit Test-Cases for S21 (AC1, AC3-AC5) + full suite   (Story S21)
+- **Goal:** `test-kit.ps1` proves a skip is counted as SKIP (never PASS), a missing exe on a full run FAILS, no early-return skip is left, and close-unit still reads the new summary.
+- **Touches:** `test-kit.ps1` (three new `Test-Case` blocks directly after `"close-unit refuses a STORY close when tests run zero tests"`, ~lines 4990-5028; that case stays untouched). `close-unit.ps1` (`Get-TestCount`, lines 186-194) ONLY if case 3 below fails - expected not to be needed.
+- **Do:**
+  1. `"S21 AC1/AC3: Skip-Case counts SKIP not PASS; -NeedsBuild on a FULL run FAILS; a blank reason FAILS"` - tests the REAL helper text, in a child process so its FAIL lines never touch this suite's counters: parse `Join-Path $kit "test-kit.ps1"` with `[System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$null)`; `FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and @('Test-Case','Skip-Case','Assert') -contains $n.Name }, $false)`; assert 3 found. In a `New-Sandbox` dir write `probe.ps1` (ASCII): `param([switch]$SkipBuild)`, the four counters (`$script:pass/fail/skip = 0`, `$script:failures = New-Object System.Collections.Generic.List[string]`), the three functions' `.Extent.Text`, then `Test-Case "probe-build" { Skip-Case "exe missing" -NeedsBuild }`, `Test-Case "probe-tool" { Skip-Case "no tool" }`, `Test-Case "probe-blank" { Skip-Case "" }`, `Test-Case "probe-pass" { Assert $true "x" }`, `Write-Host "COUNTS $script:pass $script:fail $script:skip"`. Run it with `& powershell -NoProfile -ExecutionPolicy Bypass -File $probe 2>&1 | Out-String`: assert `FAIL  probe-build`, `SKIP  probe-tool - no tool`, `FAIL  probe-blank`, `PASS  probe-pass`, `COUNTS 1 2 1`, and NO `PASS  probe-build` / `PASS  probe-tool`. Run again with `-SkipBuild`: assert `SKIP  probe-build - exe missing` and `COUNTS 1 1 2`. `Remove-Sandbox` in `finally`.
+  2. `"S21 AC4: no $SkipBuild / missing-exe early return is left in test-kit.ps1"` - read `test-kit.ps1` lines; a violation is a line matching `\breturn\s*\}` AND matching `\$SkipBuild|Test-Path \$exe|local-tools\.exe`; assert none, listing offending line numbers in the message. Keep the patterns in single-quoted strings (their source text then does not match `\breturn\s*\}`), confirm the case passes on its own source, then verify by hand that re-adding one `if ($SkipBuild) { return }` makes it FAIL, and restore.
+  3. `"S21 AC5: close-unit reads the passed count from the skipped-aware summary; 0 passed refuses"` - copy the zero-tests case's sandbox shape exactly (STORIES.md fixture, the `grades\S1_GRADE.md` card with its `docs/STORIES.md:1` citation, git init + base commit, `-NoReindex -RequireGrade`), but guard with `if (-not $haveGit) { Skip-Case "git not available" }`. CLAUDE.md `- Test:  ``echo == 0 passed, 0 failed, 3 skipped ==``` -> exit non-zero and story NOT DONE; `- Test:  ``echo == 12 passed, 0 failed, 3 skipped ==``` -> exit 0 and `Story S1.*Status: DONE`. If either assertion fails, fix `Get-TestCount` only (none of its first three patterns should match this summary; the 4th, `(?i)(\d+)\s+passed`, should) and say so in the completion report.
+  4. AC1/AC2/AC6: run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1` -> must end `0 failed, 0 skipped` on this machine; then `.\test-kit.ps1 -SkipBuild` -> SKIP lines for the build-dependent cases and a nonzero skipped count. Put both summary lines in the completion report.
+- **Acceptance:** the full `.\test-kit.ps1` prints `== <n> passed, 0 failed, 0 skipped ==` and the three new case names appear on PASS lines; reverting T21.1's catch branch (so a skip counts as a pass) makes case 1 fail (verify, then restore).
+- **Depends on:** T21.1, T21.2
+- **Refs:** Story S21 (AC1-AC6, Dev notes); close-unit.ps1:186-194, :377-399 (story-close test gate: non-zero exit refuses, count 0 refuses); test-kit.ps1:4990-5028 (the zero-tests case to copy); CLAUDE.md "Add a Test-Case for any bug" and the Test bullet (close-unit refuses a run reporting zero tests).
+- **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, `New-Sandbox`/`Remove-Sandbox`, `$haveGit` is set near the top of the suite. Child-process output: `Write-Host` in a child `powershell.exe` arrives on its stdout. The suite must not touch the real `%USERPROFILE%\.claude` and needs no network. ASCII only.
+
+### [ ] T22.1 - doc-stats -Findings: [design] finding for contract ids REFERENCED but never PINNED   (Story S22)
+- **Goal:** `doc-stats.ps1 -Findings` compares the contract ids the design doc, STORIES.md and TASKS.md reference with the ids the design doc pins, and WARNs (tag `[design]`) on every reference that resolves to no contract heading.
+- **Touches:** `doc-stats.ps1` only, inside the `-Findings` design block `if ($designPath -and (Test-Path -LiteralPath $designPath)) {` (lines 226-298): hoist the heading regex used at line 238; insert the new check directly after the empty-Contracts check (after line 242, before the `[domain]` comment at line 243). NOT the `-Contract <id>` lookup (lines 88-108, its own pattern at line 92), NOT the empty-Contracts finding's behaviour, NOT `docs/DESIGN.md`.
+- **Do:**
+  1. Just above line 237 define `$contractHeadingRx = '(?m)^#{2,4}\s*(C[0-9]+[A-Za-z0-9-]*)\s*:'` and change line 238 to `[regex]::Matches($designRaw, $contractHeadingRx)`. This is the EXISTING regex (S22 Behavior 1: reuse it, do not write a second one).
+  2. After line 242 add a block gated ONLY on `$designRaw -match '(?m)^##\s*Contracts\b'` (same section gate as the empty-Contracts finding, but NO `$designStatus` test - it fires in DRAFT and LOCKED alike):
+     - pinned = the `Groups[1]` values of `[regex]::Matches($designRaw, $contractHeadingRx)`, in a `HashSet[string]` with `[StringComparer]::Ordinal`.
+     - scan, in this order, each file that exists: the design doc (`$designPath`, label `$designName`), `$storiesFile` (label `STORIES.md`), `$tasksFile` (label `TASKS.md`). Never `grades\` (S22 Behavior 2: grade cards are history).
+     - per file read lines with `Get-Content -LiteralPath`; for line i (1-based) take `[regex]::Matches($line, '\bC[0-9]+[a-z]?(?:-[a-z0-9]+)?\b')`. It MUST be `[regex]` (case-sensitive): PowerShell `-match` and `Select-String` are case-INsensitive by default and would also match lowercase `c1`.
+     - a reference resolves if `$pinned.Contains($id)` or `$pinned.Contains($parent)`, `$parent = [regex]::Match($id, '^C[0-9]+').Value` (S22 Behavior 3).
+     - collect unresolved ids in an ordered dictionary id -> list of `<label>:<line>`, keeping only the FIRST line per file per id; id order = first seen.
+     - if N (count of unresolved ids) > 0: `$f.Add("[design] $N contract id(s) are REFERENCED but never PINNED in ${designName}: " + <entries> + " - pin them via /design (unlock -> architect-agent -> relock), or fix the reference.")`. Each entry is `<id> (<loc>, <loc>, ...)`; entries joined by `, `; list at most the first 8 entries and append ` ...` when N > 8 (N itself counts all).
+     - silent when every reference resolves (S22 Behavior 6).
+  3. WARN only; it goes into `$f` like the other `[design]` findings, so dad-run-summary counts it (S22 Dev notes). It blocks nothing new. ASCII, PowerShell 5.1.
+- **Acceptance:** worked example: a sandbox `docs\DESIGN.md` with a `## Contracts` section holding only `### C1: x` and the token `C5` on line 8, plus a `docs\STORIES.md` with `C5` on line 4 -> `doc-stats.ps1 -ProjectDir <p> -Findings` prints `[design] 1 contract id(s) are REFERENCED but never PINNED in DESIGN.md: C5 (DESIGN.md:8, STORIES.md:4) - pin them via /design (unlock -> architect-agent -> relock), or fix the reference.`; after adding `### C5: y` under `## Contracts` the line is gone.
+- **Depends on:** none
+- **Refs:** Story S22 (Behavior, Data/interfaces, Dev notes); `docs/DESIGN.md` R24; doc-stats.ps1:111-112 (`$storiesFile`, `$tasksFile`), :219 (`$f`), :225-227 (`$designPath`, `$designRaw`), :233-242 (Contracts gate + heading regex), :88-108 (`-Contract`, unchanged).
+- **Context:** observed 2026-10-01 in `/audit`: R39(a) promised contract C5 from the S14 spike, S14 closed, and C5 was never written into `## Contracts`; only the librarian's prose read noticed. "Does the heading exist" is a grep (R24). The reference regex does not match `C2PA` (no word boundary between the digit and `P`), `C#` or `C++`. `$designName` is the FILE NAME (`DESIGN.md` or `TEDD.md`), not a path. A pinned heading line is itself a reference and resolves to itself.
+
+### [ ] T22.2 - test-kit Test-Case for S22 (AC1-AC4), kit-repo check (AC5), full suite   (Story S22)
+- **Goal:** `test-kit.ps1` proves the referenced-but-not-pinned finding fires with exact locations, resolves sub-contracts via their parent, ignores `C2PA`/`C#`/`C++`, and stays silent with no `## Contracts` section.
+- **Touches:** `test-kit.ps1` (one new `Test-Case` directly after `"a one-word edit cannot satisfy the LOCK or the SECURITY gate"`, ~lines 4137-4184, which already exercises the empty-Contracts finding; that case stays untouched).
+- **Do:**
+  1. Name: `"S22: doc-stats flags contract ids REFERENCED but never PINNED (AC1-AC4)"`. Shape as in that case and in `"an UNREADABLE task ledger is an error, not a count of zero"` (~line 4092): `New-Sandbox`, `$p\docs`, a local `Findings` function running `powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String`, `Remove-Sandbox` in `finally`. Write fixtures as line ARRAYS (`Set-Content -Encoding UTF8 @(...)`) so line numbers are exact. Header lines: `# Design`, ``, `Status: DRAFT`, `Security review: NOT-REQUIRED (test fixture, offline)`, `` (no auth keywords anywhere in the fixtures).
+  2. AC1: DESIGN line 6 `## Contracts`, line 7 `### C1: x`, line 8 `- **Decision:** see C5.`, line 9 `C5 again.`; STORIES.md line 3 `### Story S1: one   <!-- Status: TODO -->`, line 4 `- **Goal:** implement C5.`; TASKS.md line 5 `### [ ] T1.1 - do C5   (Story S1)` (lines 1-4: `# Tasks`, ``, `## Tasks`, ``). Assert the output contains `[design] 1 contract id(s) are REFERENCED but never PINNED in DESIGN.md: C5 (DESIGN.md:8, STORIES.md:4, TASKS.md:5)` (first location per file only - line 9 is not listed). Re-run with `Status: LOCKED` -> same finding (fires in both). Add `### C5: y` under `## Contracts` -> no `REFERENCED but never PINNED`.
+  3. AC2: pinned `### C3: a` and `### C4: b`, no sub-headings; prose references `C4a` and `C3-b` -> no `REFERENCED but never PINNED`.
+  4. AC3: pinned `### C1: x`; prose `signed with C2PA, written in C# and C++.` -> no `REFERENCED but never PINNED`.
+  5. AC4: a design with NO `## Contracts` section that references an unpinned id in DESIGN and STORIES -> no `REFERENCED but never PINNED` (build the unpinned ids in the fixture as `"C" + <number>`, so this task text carries no dangling id of its own).
+  6. Cap: a design with `## Contracts` + `### C1: x` and ten distinct unpinned ids generated in the fixture (e.g. `11..20 | ForEach-Object { "C" + $_ }`) -> the finding starts `[design] 10 contract id(s)`, lists exactly 8 entries (count `C\d+ \(` occurrences) and contains ` ...`.
+  7. AC5 (kit repo, manual - NOT a Test-Case): run `.\doc-stats.ps1 -Findings` on the kit repo and put its `REFERENCED but never PINNED` line (or its absence) in the completion report. C5 is pinned (2026-10-01) and the other-project contract ids in DESIGN.md prose and in T19.2 were reworded the same day, so the expected result is NO such line - any hit is a real finding to report. Do NOT edit `docs/DESIGN.md` or `docs/TASKS.md` to silence it.
+  8. AC6: run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1` -> `0 failed`.
+- **Acceptance:** the full `.\test-kit.ps1` prints `0 failed` and the new case name appears on a PASS line; temporarily making T22.1's parent rule a no-op makes the AC2 assertion fail (verify, then restore).
+- **Depends on:** T22.1, T21.3 (sequenced: both edit `test-kit.ps1`)
+- **Refs:** Story S22 (AC1-AC6); test-kit.ps1:4092-4135, :4137-4184 (fixture style); doc-stats.ps1:233-242 (Contracts gate); CLAUDE.md "Add a Test-Case for any bug".
+- **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. In assertions on the finding text use `-match` with escaped regex or `.Contains()` for the literal line (parentheses and dots are regex metacharacters). The suite needs no network and must not touch the real `%USERPROFILE%\.claude`. ASCII only.
+
+### [ ] T23.1 - doc-stats: an acknowledged security waiver silences the auth-keyword WARN until the count grows   (Story S23)
+- **Goal:** under `Security review: NOT-REQUIRED`, a valid `Security waiver confirmed: <YYYY-MM-DD> (human; auth-keyword hits: <N>)` header line suppresses the auth-keyword admissibility WARN while the hit count M <= N (printing a STATE FACTS line instead), and the WARN re-fires, extended, when M > N, when the line is malformed, or when there is no line.
+- **Touches:** `doc-stats.ps1` only: one initialiser after `$f = New-Object ...` (line 219); the admissibility check in the NOT-REQUIRED branch (lines 278-283; keep the comment at 271-277 and the `$authKw` definition at 278 as they are); one print in the STATE FACTS block (lines 686-698). NOT `dad-run-summary.ps1`, NOT `docs/DESIGN.md`.
+- **Do:**
+  1. After line 219 add `$securityWaiverFact = $null`.
+  2. Replace lines 279-283 (`$authHit` presence test + its `$f.Add`) with:
+     - `$wl = [regex]::Match($designRaw, '(?im)^\s*Security waiver confirmed:\s*(.*?)\s*$')`.
+     - M = a MATCH COUNT of the same `$authKw` (it carries `(?i)`): `$designForCount = [regex]::Replace($designRaw, '(?im)^\s*Security waiver confirmed:.*$', '')`; `$M = [regex]::Matches($designForCount, $authKw).Count`; if `Test-Path $storiesFile`, add `[regex]::Matches((Get-Content $storiesFile -Raw), $authKw).Count`. The confirmation line itself is EXCLUDED from M because its own `auth-keyword` text matches `\bauth\b` (see Open questions); everything else is counted exactly as S23 Behavior 2 says.
+     - `$today = (Get-Date).ToString('yyyy-MM-dd')`; `$base` = the existing WARN text from line 282, byte-identical (existing Test-Cases match on it); `$addLine = "Security waiver confirmed: $today (human; auth-keyword hits: $M)"`.
+     - valid line = `$wl.Success` and its value matches `^(\d{4}-\d{2}-\d{2})\s*\(human;\s*auth-keyword hits:\s*(\d+)\)$` and the date passes `[datetime]::TryParseExact($d, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$dt)`.
+     - no line: if M > 0 -> `$f.Add("$base To acknowledge it, the human adds this header line via /design: $addLine")`; if M = 0 -> nothing (as today).
+     - line present but not valid (bad date, missing N, any other shape) -> `$f.Add("$base The 'Security waiver confirmed:' line is malformed (expected: Security waiver confirmed: YYYY-MM-DD (human; auth-keyword hits: N)), so it is NOT honoured; fix it via /design, e.g.: $addLine")` - regardless of M; never silently honoured.
+     - valid and M <= N -> NO `$f` entry; `$securityWaiverFact = "security waiver: confirmed $date at $N auth-keyword hits (now $M) - not re-raised"`.
+     - valid and M > N -> `$f.Add("$base - $($M - $N) new auth-keyword mention(s) since the $date confirmation; re-confirm by updating the line to: $addLine")` (S23 Behavior 5 wording).
+  3. STATE FACTS: directly after the `design ...: Status ...` `Write-Host` (line 695) add `if ($securityWaiverFact) { Write-Host "  $securityWaiverFact" }` - NO leading `[tag]`. This is the DECIDED choice (S23 Dev notes, 2026-10-01): `dad-run-summary.ps1:147` counts every line matching `^\s*\[[a-z]+\]` as a finding, so the info goes in STATE FACTS untagged and dad-run-summary is NOT changed. Do not reopen this.
+  4. The REQUIRED and DONE branches are untouched, so a confirmation line is ignored there (S23 Behavior 3) without extra code.
+  5. Never write or update the confirmation line in any doc: that is a DESIGN edit the human makes via `/design` (S23 Behavior 8). ASCII only, PowerShell 5.1.
+- **Acceptance:** sandbox design `Security review: NOT-REQUIRED (small personal project, low risk)` + `Security waiver confirmed: 2026-10-01 (human; auth-keyword hits: 3)` with exactly 3 keyword hits elsewhere -> `-Findings` has no `NOT-REQUIRED, but` line and STATE FACTS shows `security waiver: confirmed 2026-10-01 at 3 auth-keyword hits (now 3) - not re-raised`; with 5 hits -> the WARN fires ending `- 2 new auth-keyword mention(s) since the 2026-10-01 confirmation; re-confirm by updating the line to: Security waiver confirmed: <today> (human; auth-keyword hits: 5)`.
+- **Depends on:** T22.1 (sequenced: same `-Findings` region of `doc-stats.ps1`)
+- **Refs:** Story S23 (Behavior 1-8, Dev notes DECIDED 2026-10-01); `docs/DESIGN.md` R24; doc-stats.ps1:219, :260-283 (security header + admissibility block), :295-297 (REQUIRED finding, unchanged), :686-698 (STATE FACTS); dad-run-summary.ps1:140-148 (findings count, unchanged).
+- **Context:** today the check is a PRESENCE test (`$designRaw -match $authKw`, then STORIES.md) that fires every audit on this kit although the human re-confirmed the waiver on 2026-09-29 and declared it FOUNDATIONAL on 2026-10-01. A finding that fires on settled input is noise; silencing it forever would hide a future auth feature - hence re-fire on growth. `$designRaw` is read with `-Raw` and may be CRLF: `(.*?)\s*$` under `(?m)` keeps the `\r` out of the captured value. After this lands, the kit's own N must be counted by the human AFTER S22/S23's text is in STORIES.md (it adds hits).
+
+### [ ] T23.2 - test-kit Test-Case for S23 (AC1-AC6) + full suite   (Story S23)
+- **Goal:** `test-kit.ps1` proves the waiver acknowledgement: no-line WARN carries the line to add, a valid line silences at M <= N, growth re-fires with the delta, a malformed line is never honoured, REQUIRED ignores the line, and the STATE FACTS line is not counted as a finding.
+- **Touches:** `test-kit.ps1` (one new `Test-Case` directly after `"doc-stats flags a NOT-REQUIRED security waiver contradicted by the design's own auth content"`, ~lines 4186-4218 before T22.2/T21.3 shifted them; that case stays untouched and must still pass).
+- **Do:**
+  1. Name: `"S23: an acknowledged security waiver silences the auth-keyword WARN until NEW mentions appear (AC1-AC6)"`. Copy that case's shape (`New-Sandbox`, `$p\docs`, a local fixture writer, `Findings` = `powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String`, `Remove-Sandbox` in `finally`). Fixture writer takes (security header value, confirmation line or `$null`, extra design text, stories text). Base design: `# Design`, ``, `Status: LOCKED`, `Security review: <value>`, [`<confirmation line>`], ``, `## Requirements`, `- R1: a`, ``, `## Contracts`, `### C1: x`, `- **Decision:** y`, then the extra text.
+  2. 3 hits = design `- R2: login with a password` (2) + STORIES.md `- **Goal:** add a token` (1) - proves M sums both files. 5 hits = the same plus design `- R3: session auth` (+2).
+  3. AC1: NOT-REQUIRED (reason `small personal project, low risk`), 3 hits, no confirmation line -> output matches `NOT-REQUIRED, but` and `auth-keyword hits: 3` and `Security waiver confirmed: \d{4}-\d{2}-\d{2} \(human; auth-keyword hits: 3\)`.
+  4. AC2: + `Security waiver confirmed: 2026-10-01 (human; auth-keyword hits: 3)`, 3 hits -> no `NOT-REQUIRED, but`; output contains `security waiver: confirmed 2026-10-01 at 3 auth-keyword hits (now 3) - not re-raised` (the `now 3` also proves the confirmation line's own `auth` is not counted).
+  5. AC3: same line, 5 hits -> matches `2 new auth-keyword mention\(s\) since the 2026-10-01 confirmation` and `auth-keyword hits: 5\)`.
+  6. AC4: `Security waiver confirmed: 2026-13-45 (human; auth-keyword hits: 3)` and, separately, `Security waiver confirmed: 2026-10-01 (human)` -> each output matches `malformed` and `NOT-REQUIRED, but`, and has no `not re-raised`.
+  7. AC5: `Security review: REQUIRED` + a valid confirmation line -> output contains `Security review: REQUIRED and not done`, and has no `not re-raised` and no `malformed`.
+  8. AC6: on the AC2 fixture, `$ds = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>$null)`; `$direct = @($ds | Where-Object { ([string]$_) -match '^\s*\[[a-z]+\]' }).Count`; assert the `not re-raised` line is present and does NOT match `^\s*\[[a-z]+\]`; run `& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-run-summary.ps1") -ProjectDir $p` (a non-git sandbox is fine - it exits 0) and assert its `[run-summary] findings: (\d+)` value equals `$direct`. Call the scripts directly: the `Invoke-RunSummary` helper is defined much later in the file (~line 6590) and is not yet in scope here.
+  9. AC7: run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1` -> `0 failed`.
+- **Acceptance:** the full `.\test-kit.ps1` prints `0 failed` and the new case name appears on a PASS line; temporarily making T23.1's `M <= N` branch add the WARN anyway makes the AC2 assertion fail (verify, then restore).
+- **Depends on:** T23.1, T22.2 (sequenced: both add cases to `test-kit.ps1`)
+- **Refs:** Story S23 (AC1-AC7, Dev notes); test-kit.ps1:4186-4218 (case to copy), :6614 (existing run-summary direct-count case); dad-run-summary.ps1:36-40 (`Emit` line shape `[run-summary] <label>: <text>`), :140-148; doc-stats.ps1:271-283, :686-698.
+- **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. The keyword regex is `(?i)\b(auth|login|password|token|session)\b`; `tokens` and `sessions` do NOT match (word boundary), so pick fixture words exactly as listed. The suite needs no network and must not touch the real `%USERPROFILE%\.claude` or the kit's own `docs\`. ASCII only.
+
+### [ ] T24.1 - Test-LocalModelResolves: capture stderr, print the unrecognized_model WARN, env-only Ollama reachability seam   (Story S24)
+- **Goal:** the post-update local-model probe stops discarding the `claude` call's stderr; when it contains `unrecognized_model` it prints one WARN line and the outcome is unchanged (a PASS stays PASS); tests can force Ollama reachability through an env var.
+- **Touches:** `harness-versions.ps1` only - `Test-LocalModelResolves` (lines 90-131) and its comment block (lines 80-89). NOT `Invoke-PostUpdateSmoke` (T24.2), NOT `install.ps1`, NOT `models.json`, NOT `docs/DESIGN.md`.
+- **Do:**
+  1. Reachability seam (S24 Dev notes: env-only, like the existing hooks). Replace the live check at lines 105-110 with: `$o = "$env:DAD_SMOKE_OLLAMA"`; `up` -> `$reachable = $true` (no request); `down` -> `$reachable = $false` (no request); anything else (unset) -> the existing `Invoke-WebRequest http://localhost:11434/api/tags` try/catch, unchanged. The SKIP return at line 110 and its reason text `skipped (Ollama not reachable at localhost:11434)` stay byte-identical. The `DAD_SMOKE_LOCALMODEL` hook (lines 93-96) stays first and unchanged.
+  2. Capture stderr. At the top of the `try` (line 112) add a function-scoped `$ErrorActionPreference = 'Continue'` (install.ps1:21 sets `Stop`, and Windows PowerShell 5.1 can turn redirected native stderr into a terminating NativeCommandError - the probe must not fail because the warning exists) and `$errFile = [IO.Path]::GetTempFileName()`. Line 115 becomes the same `claude` call with `2> $errFile` instead of `2>$null` (stdout still piped to `Out-String` into `$raw`); `$code = $LASTEXITCODE` right after, as now. Then `$errText = ""; if (Test-Path $errFile) { $errText = "$(Get-Content $errFile -Raw)" }`. In the existing `finally` (line 128) also `Remove-Item $errFile -Force -ErrorAction SilentlyContinue` (guard for `$errFile` being set).
+  3. WARN line, directly after reading `$errText` and BEFORE the existing exit-code / JSON / `modelUsage` checks: `if ($errText -match 'unrecognized_model') { Write-Host "[harness] local model ${model}: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves unknown)" -ForegroundColor Yellow }`. Write `${model}:` with braces - `"$model:"` parses as a scope-qualified variable and prints nothing. `<ctx>` is the literal `unknown` (pinned in C4a OPEN-4(b) until a `/design` decision; do NOT read `numCtx` from models.json).
+  4. The outcome logic (lines 116-125) is unchanged: the WARN never makes a FAIL, and any other stderr content changes nothing.
+  5. Comment block: replace "The `unrecognized_model` line is a WARN, not a FAIL." with one sentence saying stderr is captured and an `unrecognized_model` warning is PRINTED as a WARN (never a FAIL), and add `DAD_SMOKE_OLLAMA = up | down` to the test-hook line at 89. ASCII only, PowerShell 5.1.
+- **Acceptance:** C4a worked example (OPEN-4(b)): with a sandbox stub `claude.cmd` first on PATH that writes `[claude-code:unrecognized_model]` to stderr and `{"result":"pong","modelUsage":{"qwen3-14b-cc":{}}}` to stdout, `DAD_SMOKE_OLLAMA=up`, `DAD_SMOKE_LOCALMODEL` unset, `$ErrorActionPreference = 'Stop'` in the caller, and `-ModelsJson` pointing at a fixture whose `fast` alias is `qwen3-14b-cc`, `Test-LocalModelResolves` prints `[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves unknown)` and returns `Result` = `PASS`; the same stub with empty stderr returns PASS and prints no WARN line. (T24.3 automates this.)
+- **Depends on:** none (sequenced after T23.2 in the Build order only)
+- **Refs:** Story S24 (Behavior 1-2, 4; Dev notes); `docs/DESIGN.md` C4a S16 amendment item 3 and "Where S17 differed ... (OPEN-4)" (b) with its worked example, R40(d); harness-versions.ps1:80-131.
+- **Context:** today line 115 runs `claude -p "Reply with the single word: pong" --max-turns 1 --model $model --output-format json --setting-sources project,local 2>$null`, so Claude Code 2.1.285's `[claude-code:unrecognized_model]` warning (measured in S16, `grades/S16_GRADE.md`) is dropped. That warning is the only visible trace of the hazard: Claude Code assumes a 200000-token window while Ollama serves the `-cc` model at 40960. The model is the `fast` alias from models.json (line 101; R40(d) as amended) - keep that. Per-process env only (`ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` saved and restored as now); never touch settings.json, use-model state or any security setting.
+
+### [ ] T24.2 - Invoke-PostUpdateSmoke: a skipped local-model check is named in the final smoke line   (Story S24)
+- **Goal:** when the local-model check was SKIPPED, the final line is `[harness] <name> smoke check passed (local-model check SKIPPED: <reason>)`, never a bare "smoke check passed".
+- **Touches:** `harness-versions.ps1` only - `Invoke-PostUpdateSmoke` (lines 136-166). NOT `Test-LocalModelResolves` (T24.1).
+- **Do:**
+  1. Before the `try` (after line 138) add `$skipNote = ""`.
+  2. In the SKIP branch (line 153) keep the existing `Write-Host "[harness] $Name local-model check $($lm.Reason)"` and also set `$skipNote = ($lm.Reason -replace '^skipped \((.*)\)$', '$1')` (so `skipped (Ollama not reachable at localhost:11434)` becomes `Ollama not reachable at localhost:11434`; a reason of any other shape is used as is).
+  3. Line 164 becomes: if `$skipNote` -> `Write-Host "[harness] $Name smoke check passed (local-model check SKIPPED: $skipNote)" -ForegroundColor Yellow`; else the existing `Write-Host "[harness] $Name smoke check passed"` unchanged. `return $true` unchanged in both (a skip is not a failure).
+  4. Unchanged: the FAIL paths and their rollback hint (lines 156-163), the `DAD_SMOKE_GATES` hook, the claude-code-only local-model call (line 150) - so a PASS or a non-claude-code harness keeps the bare line. ASCII only.
+- **Acceptance:** with `DAD_SMOKE_GATES=pass` and `DAD_SMOKE_OLLAMA=down` (T24.1), `Invoke-PostUpdateSmoke -Name claude-code -Previous 2.1.285 -Package @anthropic-ai/claude-code` prints `[harness] claude-code smoke check passed (local-model check SKIPPED: Ollama not reachable at localhost:11434)` and no line that ends in bare `smoke check passed`; with `DAD_SMOKE_LOCALMODEL=pass` it prints the bare `[harness] claude-code smoke check passed`; `-Name copilot-cli` prints the bare line.
+- **Depends on:** T24.1 (same file; its `DAD_SMOKE_OLLAMA` seam is used by the acceptance)
+- **Refs:** Story S24 (Behavior 3-4, AC3); harness-versions.ps1:133-166; install.ps1:116 (the only caller, unchanged).
+- **Context:** today line 153 prints "local-model check skipped (...)" and line 164 then prints an unqualified "smoke check passed" over a check that did not run - the same principle as S21 (a skip is never reported as a pass). The existing install-stub cases (test-kit `Invoke-HvInstallStub`) set `DAD_SMOKE_LOCALMODEL=skip`, so after this task their output carries `smoke check passed (local-model check SKIPPED: forced by test hook)`; no existing case asserts the bare text, so none should break.
+
+### [ ] T24.3 - test-kit Test-Cases for S24 (AC1-AC3) + full suite   (Story S24)
+- **Goal:** `test-kit.ps1` proves the probe prints the `unrecognized_model` WARN and stays PASS, prints nothing extra without the warning, and that an unreachable Ollama yields SKIP with the skip named in the final smoke line.
+- **Touches:** `test-kit.ps1` (new `Test-Case` blocks directly after `"R40 AC7: measured-version stamp is locked across install.ps1, DESIGN C4a and dad-run-summary; doctor does not hard-code it"`, ~lines 1738-1753 before T21.x-T23.x shift them; anchor by name. That case and `Invoke-HvInstallStub` stay untouched).
+- **Do:** Use the S17 cases' stub style (`Invoke-HvInstallStub`, ~lines 1621-1678): `New-Sandbox`, a `bin` dir put FIRST on a child process PATH (`"$bin;$env:SystemRoot\System32;$env:SystemRoot\System32\WindowsPowerShell\v1.0"`), the child = `Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"`, env vars saved before and restored in `finally` (`PATH`, `DAD_SMOKE_OLLAMA`, `DAD_SMOKE_LOCALMODEL`, `DAD_SMOKE_GATES`), `Remove-Sandbox` in `finally`. Write a small local helper in the case(s) that, given (stderr text or `$null`, Ollama `up`/`down`, a driver body), writes:
+  - `bin\out.json` = `{"result":"pong","modelUsage":{"qwen3-14b-cc":{}}}` (ASCII) and `bin\claude.cmd` = `@echo off`, [when stderr text given: `echo [claude-code:unrecognized_model] qwen3-14b-cc is not in this version's model catalog 1>&2`], `type "%~dp0out.json"`, `exit /b 0`.
+  - `models.json` fixture = `{"models":[{"alias":"fast","name":"qwen3-14b-cc"}]}`.
+  - `driver.ps1` = `$ErrorActionPreference = "Stop"` (as install.ps1:21), dot-source `(Join-Path $kit "harness-versions.ps1")`, then the body; run it `& $ps -NoProfile -ExecutionPolicy Bypass -File $driver 2>&1 | Out-String`. Clear `DAD_SMOKE_LOCALMODEL` (set it to `$null`) for AC1/AC2 so the probe really calls the stub.
+  1. `"S24 AC1/AC2: the local-model probe PRINTS the unrecognized_model WARN and stays PASS"` - body `$r = Test-LocalModelResolves -ModelsJson '<fixture>'; Write-Host "RESULT $($r.Result)"`, `DAD_SMOKE_OLLAMA=up`. With the stderr line: output contains `[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves unknown)` (use `.Contains()` - parentheses are regex metacharacters) and `RESULT PASS`. Without it: `RESULT PASS` and NO `WARN unrecognized_model`.
+  2. `"S24 AC3: Ollama unreachable -> local-model SKIP, and the final smoke line names the skip and its reason"` - `DAD_SMOKE_OLLAMA=down`, `DAD_SMOKE_GATES=pass`: body A `$r = Test-LocalModelResolves -ModelsJson '<fixture>'; Write-Host "RESULT $($r.Result)"` -> `RESULT SKIP`; body B `$null = Invoke-PostUpdateSmoke -Name claude-code -Previous 2.1.285 -Package '@anthropic-ai/claude-code'` -> output contains `smoke check passed (local-model check SKIPPED: Ollama not reachable at localhost:11434)` and has no line matching `smoke check passed\s*$`. Same body B with `-Name copilot-cli` -> a line matching `copilot-cli smoke check passed\s*$` (S24 Behavior 3: non-claude-code keeps the existing line).
+  3. AC4: run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1` -> `0 failed`.
+- **Acceptance:** the full `.\test-kit.ps1` prints `0 failed` and both new case names appear on PASS lines; temporarily restoring `2>$null` on T24.1's `claude` call makes the AC1 WARN assertion fail (verify, then restore).
+- **Depends on:** T24.1, T24.2, T23.2 (sequenced: T21.x-T23.x also add cases to `test-kit.ps1`)
+- **Refs:** Story S24 (AC1-AC4, Dev notes); `docs/DESIGN.md` C4a OPEN-4(b) worked example; test-kit.ps1:1614-1678 (S17 stub style), :1738-1753 (anchor case); harness-versions.ps1:90-166.
+- **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. `Write-Host` in a child `powershell.exe` arrives on its stdout. The cases must make NO real network call (`DAD_SMOKE_OLLAMA` is always set to `up` or `down` here) and must never run the real `claude`, `npm`, `install.ps1` or touch the real `%USERPROFILE%\.claude` (R35b). If T21.1's `Skip-Case` exists, these cases need none (they depend on nothing optional). ASCII only.
+
+### [ ] T25.1 - test-kit: Copilot stamp check over EVERY stamp, factored into a function; the real-repo C2f case uses it   (Story S25)
+- **Goal:** the C2f drift case compares EVERY `MEASURED <date> against GitHub Copilot CLI <v>` stamp in `docs/DESIGN.md` with install.ps1's `$CopilotMeasuredVersion`, through one small function that fixture cases (T25.2) can call.
+- **Touches:** `test-kit.ps1` only - the case `"the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)"` (lines 1562-1590 as of this map; anchor by name) and one new function defined directly ABOVE it. NOT `docs/DESIGN.md`, NOT `install.ps1`, NOT `dad-doctor.ps1`.
+- **Do:**
+  1. Above the case add `function Get-CopilotStampProblems([string]$Text, [string]$Constant, [string]$Label = "DESIGN.md")` returning a string array of problems (empty = all good):
+     - `$ms = [regex]::Matches($Text, 'MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+GitHub\s+Copilot\s+CLI\s+([0-9][0-9.]*)')` - the EXISTING regex from line 1574, byte-identical, but `Matches` not `Match` (it already ignores the `against Claude Code` stamp in C4a).
+     - zero matches -> return one problem `"$Label carries no 'MEASURED <date> against GitHub Copilot CLI <version>' stamp"` (never pass vacuously).
+     - for each match: `$v = $m.Groups[1].Value.TrimEnd('.')` (a stamp ending a sentence would otherwise capture the period); `$line = ([regex]::Matches($Text.Substring(0, $m.Index), "`n")).Count + 1`; if `$v -ne $Constant` add `"${Label}:$line stamped $v != $Constant"`.
+  2. In the case keep lines 1568-1571 (reading the constant) unchanged; replace lines 1573-1578 (single `Match`, its Assert, the equality Assert) with: read `docs\DESIGN.md` `-Raw`; `$probs = @(Get-CopilotStampProblems $design $constant)`; `Assert ($probs.Count -eq 0) ("Copilot MEASURED stamp(s) disagree with install.ps1's `$CopilotMeasuredVersion (C2f/C5f: ONE constant for C2 and C5) - re-measure, then update the constant AND every stamp: " + ($probs -join '; '))`.
+  3. Unchanged: the dad-doctor read-not-copy assertions (lines 1580-1583) and the guards loop (1585-1589); the case name; the comment (append one line: C5f extends the check to every stamp).
+  4. ASCII only, PowerShell 5.1.
+- **Acceptance:** `.\test-kit.ps1 -SkipBuild` shows the case on a PASS line against the real `docs/DESIGN.md` (two stamps today, C2 ~line 682 and C5 ~line 1310, both 1.0.89 = the constant at install.ps1:32); C5f worked example: temporarily changing the C5 stamp in a COPY of the text to `1.0.95` (do NOT edit `docs/DESIGN.md` - T25.2 does this as a fixture) yields exactly one problem, `DESIGN.md:<line of the C5 stamp, ~1310 today> stamped 1.0.95 != 1.0.89` (the line is computed, so it follows any DESIGN edit).
+- **Depends on:** T24.3 (sequenced: both edit `test-kit.ps1`)
+- **Refs:** Story S25 (Behavior, Dev notes, AC4); `docs/DESIGN.md` C2f, C5f (DECIDED 2026-10-01, OPEN-3 = A) and its worked example; install.ps1:32; test-kit.ps1:1562-1590.
+- **Context:** `$CopilotMeasuredVersion = "1.0.89"` (install.ps1:32) covers C2 AND C5 (C5f): the constant may not move until every Copilot stamp moves with it. Today the case uses `[regex]::Match`, so it checks only the FIRST stamp (C2's) and a stale C5 stamp passes silently. The prose lines in C5f that quote `MEASURED <date> against GitHub Copilot CLI <v>` do not match the regex (`<date>` is not digits), so they are not stamps.
+
+### [ ] T25.2 - test-kit fixture cases for S25 (AC1-AC3) + full suite   (Story S25)
+- **Goal:** `test-kit.ps1` proves the every-stamp check passes with two matching stamps, fails naming the SECOND stamp's line when it mismatches, and fails on zero stamps.
+- **Touches:** `test-kit.ps1` (one new `Test-Case` directly after the C2f case `"the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)"`; that case stays as T25.1 left it).
+- **Do:**
+  1. Name: `"S25: the Copilot stamp check covers EVERY MEASURED stamp, not just the first (AC1-AC3)"`. No sandbox needed: fixtures are in-memory strings built from line arrays joined with "`n", so line numbers are exact. Call T25.1's `Get-CopilotStampProblems` with constant `1.0.95`.
+  2. AC1: line 1 `# Design`, line 2 `### C2: x`, line 3 `- **Status: MEASURED 2026-09-29 against GitHub Copilot CLI 1.0.95 on Windows.**`, line 4 ``, line 5 `### C5: y`, line 6 `  MEASURED 2026-09-30 against GitHub Copilot CLI 1.0.95` -> 0 problems.
+  3. AC2 (C5f worked example): the same with line 6 at `1.0.89` -> exactly 1 problem, equal to `DESIGN.md:6 stamped 1.0.89 != 1.0.95` (the first stamp, line 3, is not named).
+  4. AC3: the same text with both stamp lines replaced by prose without `MEASURED <digits-date>` -> exactly 1 problem containing `carries no`.
+  5. Also: a text holding only `MEASURED 2026-09-30 against Claude Code 2.1.285` -> the zero-stamps problem (the Claude Code stamp is not a Copilot stamp).
+  6. AC5: run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1` -> `0 failed`.
+- **Acceptance:** the full `.\test-kit.ps1` prints `0 failed` and the new case name appears on a PASS line; temporarily changing T25.1's `Matches` loop back to a single `[regex]::Match` makes the AC2 assertion fail (verify, then restore).
+- **Depends on:** T25.1
+- **Refs:** Story S25 (AC1-AC5); `docs/DESIGN.md` C5f worked example (C2 bumped to 1.0.95, C5 left at 1.0.89 -> FAIL naming C5's stamp); test-kit.ps1 C2f case (~1562).
+- **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. Assert on the exact problem string with `-eq` (no regex metacharacter trouble). The function counts lines by "`n", so fixtures joined with "`n" or "`r`n" give the same numbers. ASCII only; needs no network, no files outside memory.
+
 ## Open questions
 - **[design] S19 dad-doctor behaviour.** S19 lists `dad-doctor.ps1` but it only REPORTS the docs dir; T19.1 makes it WARN (and use the resolved dir for the RAG check) rather than silently choose a dir. If the human wants it to print the same `WARN: ignoring ...` line instead, amend T19.1 step 3.
 - **[design] S18 file:line resolution rule is not pinned in DESIGN.** T18.1 uses: path relative to project root, else a unique same-name file under the project (excluding .git, _tmp, bin, obj, node_modules); the largest number of a `a-b` range must be <= line count. If the human wants a different rule (e.g. root-relative only), amend T18.1 before building.
@@ -1951,3 +2179,31 @@ executor must NOT run it.)
   is deliberately left to be filled from T16.1's record; if T16.1 finds no route on current Claude Code, R40's
   smoke check will always fail after an update and `/design` may need to say whether that should warn or be
   reworded.
+- **RESOLVED 2026-10-01 - [design] S22 AC5: the kit repo will NOT be silent from pinning C5 alone.** The
+  three DESIGN.md prose hits are being reworded via `/design` (in progress 2026-10-01), and T19.2's AC3 step
+  now reads "marker/contract-9 text" (approved rewording of a closed task; its `[x]` is kept). Original
+  note follows. A case-sensitive grep with
+  S22's reference regex over DESIGN.md / STORIES.md / TASKS.md (2026-10-01, at the time C5 and its
+  sub-contracts were already headed in DESIGN.md) finds four more references that no heading resolves: other
+  projects' contract ids quoted in DESIGN.md prose at lines 163 (a "ten-b" id), 197 and 225 (a "nine" id),
+  and the same "nine" marker id in the CLOSED task T19.2 (TASKS.md, its AC3 step). They are spelled out in
+  words here so this file adds no dangling reference of its own. Silencing them needs a human decision:
+  reword the DESIGN prose via `/design`, and either amend T19.2's text (this update was told to leave closed
+  tasks byte-identical) or accept them. T22.2 reports them and must not edit either file.
+- **RESOLVED 2026-10-01 - [design] S23 count definition vs the confirmation line itself.** S23 now
+  excludes the confirmation line itself from the count (matching T23.1 step 2 and T23.2 AC2 as written).
+  Original note follows. The required line
+  `Security waiver confirmed: <date> (human; auth-keyword hits: <N>)` contains `auth-keyword`, which matches
+  `\bauth\b`. Counted literally, adding the printed line raises M by one, so M > N and the WARN re-fires
+  forever, and AC2's "N=3 and 3 hits" fixture would read 4. T23.1 therefore EXCLUDES the confirmation line
+  from M (every other match in the design doc and STORIES.md is counted, as S23 Behavior 2 says). If the
+  human prefers a literal count, amend T23.1 step 2 and the AC2 expectation in T23.2 before building.
+- S21 scope: other early returns inside `Test-Case` bodies - `$haveGit`, python, ollama, the Copilot harness,
+  and the dotnet / ASP.NET-framework guards in the api-surface case - still count as PASS when they run
+  nothing. S21's Behavior 4 and AC4 cover only `$SkipBuild` / missing-exe returns, and converting the others
+  would make AC2 ("0 skipped on a healthy machine") depend on optional tools being installed, so no task
+  converts them. If wanted, that is a follow-up story; the `Skip-Case` helper from T21.1 already supports it.
+- **[design] S24 `<ctx>` source (not blocking).** C4a OPEN-4(b) pins the printed value as the literal
+  `unknown` until a `/design` decision names a source (models.json `numCtx` = 65536 is no proxy; S16 measured
+  40960 served). T24.1 prints `unknown`; if `/design` later pins a source, amend T24.1 step 3 and T24.3's
+  expected WARN text.

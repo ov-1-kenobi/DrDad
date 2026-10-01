@@ -900,3 +900,160 @@
   - [ ] AC5: close-unit still parses the totals from the new summary, and refuses a run with 0 passed.
   - [ ] AC6: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** keep the skip mechanism one helper, not per-case variants; the reason string is required.
+
+### Story S22: doc-stats flags a contract that is REFERENCED but never PINNED   (R24)   <!-- Status: TODO -->
+- **Goal:** `doc-stats.ps1 -Findings` compares the contract ids the docs REFERENCE against the ids the design
+  doc PINS, and WARNs on every reference that resolves to no contract heading.
+- **Context:** observed 2026-10-01 in `/audit`. DESIGN.md R39(a) promised "a new contract (C5)" from the S14
+  spike; S14 closed DONE with the measurements in its grade card, and C5 was never written into
+  `## Contracts`. Nothing caught it for days - only the librarian's prose read did. Today doc-stats has
+  `-Contract <id>` (on-demand lookup of one id) and the "LOCKED with an EMPTY Contracts section" finding
+  (`doc-stats.ps1` ~237-242), but nothing compares referenced ids with pinned ids. "Does the heading exist"
+  is a grep, so it belongs in the script, not in a model's read (R24).
+- **Behavior:**
+  - Pinned ids = headings matching the EXISTING regex `^#{2,4}\s*(C[0-9]+[A-Za-z0-9-]*)\s*:` in the design
+    doc (DESIGN.md or TEDD.md). Reuse it (~line 238); do not write a second one.
+  - Referenced ids = tokens matching `\bC[0-9]+[a-z]?(?:-[a-z0-9]+)?\b` (case-sensitive) in the design doc,
+    STORIES.md and TASKS.md. It must NOT match `C2PA`, `C#` or `C++`. Grade cards are history and are NOT
+    scanned.
+  - A reference resolves if its exact id is pinned, OR its parent id (the leading `C<digits>`) is pinned:
+    `C4a` -> `C4`, `C3-b` -> `C3`. Sub-contracts are often referenced before or without their own heading.
+  - Gated on the design having a `## Contracts` section (the same gate as the empty-Contracts finding), so a
+    design that deliberately has none stays silent. Fires in DRAFT and LOCKED alike (in DRAFT it is a to-do
+    list; in LOCKED it is a contract gap).
+  - Finding (WARN, tag `[design]`): `[design] N contract id(s) are REFERENCED but never PINNED in <design>:
+    C5 (DESIGN.md:472, STORIES.md:613) ... - pin them via /design (unlock -> architect-agent -> relock), or
+    fix the reference.` At most the first location per file per id; the id list is capped at 8.
+  - Silent when every reference resolves.
+- **Data / interfaces:** `doc-stats.ps1` (`-Findings` block), `test-kit.ps1` (new `Test-Case`, sandbox
+  fixtures in the style of the doc-stats cases, e.g. the Build-order dangling-id case ~test-kit.ps1:4110).
+  Not changed: `-Contract <id>`, the empty-Contracts finding, DESIGN.md.
+- **Dependencies:** none to build. AC5 (the kit repo silent) needs C5 pinned in DESIGN.md via `/design`.
+- **Acceptance (testable):**
+  - [ ] AC1: a fixture with `C1` pinned and `C5` referenced in DESIGN and STORIES -> the finding names `C5`
+    with both locations (file:line).
+  - [ ] AC2: a fixture with `### C4:` pinned, no `#### C4a:` heading, and `C4a` referenced -> silent.
+  - [ ] AC3: prose containing `C2PA` and `C#` (and `C++`) -> silent.
+  - [ ] AC4: a design with no `## Contracts` section -> silent, even with dangling references.
+  - [ ] AC5: the real kit repo, once C5 is pinned -> no dangling-id finding.
+  - [ ] AC6: the full `test-kit.ps1` prints `0 failed`.
+- **Dev notes:** STORIES.md itself is scanned, so this story's own examples were chosen to resolve in the
+  kit (`C4a`, `C3-b` have pinned parents; `C5` is the gap AC5 waits on). The finding is computed state, so
+  it goes into the `$f` list like the other `[design]` findings (dad-run-summary counts it).
+
+### Story S23: An acknowledged FOUNDATIONAL security waiver stops the auth-keyword WARN until NEW mentions appear   (R24)   <!-- Status: TODO -->
+- **Goal:** a human-dated confirmation line in the design header silences doc-stats' auth-keyword
+  admissibility WARN while the keyword count has not grown, and re-fires it the moment it does.
+- **Context:** observed 2026-10-01 in `/audit`. The admissibility check (`doc-stats.ps1` ~271-283) WARNs
+  whenever `Security review: NOT-REQUIRED` coexists with `\b(auth|login|password|token|session)\b` in the
+  design doc or STORIES.md. On this kit it fires every audit, although the human re-confirmed the waiver on
+  2026-09-29 and on 2026-10-01 declared it FOUNDATIONAL (DESIGN header + `## Out of scope` "Handling
+  security"). A finding that fires on settled input is noise; silencing it permanently would hide a future
+  auth feature. DECIDED (human): acknowledge, and re-fire on growth.
+- **Behavior:**
+  - New optional design-doc header line, next to `Security review:`:
+    `Security waiver confirmed: <YYYY-MM-DD> (human; auth-keyword hits: <N>)`.
+  - Count M = the number of matches of the SAME pattern (`$authKw`, case-insensitive) over the design doc
+    raw text PLUS STORIES.md raw text, EXCLUDING the design doc's `Security waiver confirmed:` line itself
+    (the line this check parses) - a match count, not a presence test. The exclusion is required: that
+    line contains `auth`, so counting it would make M = N+1 the moment the printed line is added and
+    re-fire forever. The message and the check use this one definition.
+  - Honoured only when `Security review:` is NOT-REQUIRED. Under REQUIRED or DONE the line is ignored and
+    the existing findings are unchanged.
+  - Valid line and M <= N -> no WARN; instead an informational line
+    `[info] Security waiver confirmed <date> at <N> auth-keyword hits (now <M>) - not re-raised.` It is NOT a
+    finding: it does not go into `$f` and is not counted in dad-run-summary's findings figure.
+  - Valid line and M > N -> the existing WARN fires, extended with `- <M-N> new auth-keyword mention(s)
+    since the <date> confirmation; re-confirm by updating the line to: Security waiver confirmed: <today>
+    (human; auth-keyword hits: <M>)`.
+  - No confirmation line -> the existing WARN fires and also prints the exact line to add with the current
+    M, so nobody counts by hand.
+  - Malformed line (bad date, missing N) -> the WARN fires and says the confirmation line is malformed.
+    Never silently honoured.
+  - Writing or updating the line is a DESIGN edit: it goes through `/design` (unlock), by the human. Agents
+    never write it on their own.
+- **Data / interfaces:** `doc-stats.ps1` (`-Findings`, admissibility block), `test-kit.ps1` (new
+  `Test-Case`, sandbox fixtures in the style of the doc-stats cases ~test-kit.ps1:4110); possibly
+  `dad-run-summary.ps1` (see Dev notes). Not changed: DESIGN.md (the human adds the line via `/design`).
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [ ] AC1: fixture NOT-REQUIRED + 3 hits + no confirmation line -> WARN containing `auth-keyword hits: 3`.
+  - [ ] AC2: confirmation N=3 and 3 hits (the confirmation line's own `auth` not counted) -> no WARN; the
+    `[info]` line is present. Same fixture, the line added exactly as AC1's WARN printed it -> still silent.
+  - [ ] AC3: confirmation N=3 and 5 hits -> WARN naming 2 new mentions and the re-confirm line with 5.
+  - [ ] AC4: malformed confirmation line -> WARN says it is malformed.
+  - [ ] AC5: `Security review: REQUIRED` with a confirmation line -> line ignored; the REQUIRED finding is
+    unchanged.
+  - [ ] AC6: on the AC2 fixture, dad-run-summary's findings figure does not count the `[info]` line.
+  - [ ] AC7: the full `test-kit.ps1` prints `0 failed`.
+- **Dev notes:** doc-stats has no info channel today - only `$f` findings and the STATE FACTS block. And
+  `dad-run-summary.ps1:147` counts every line matching `^\s*\[[a-z]+\]`, so a printed `[info] ...` line
+  WOULD be counted as a finding. DECIDED 2026-10-01 (orchestrator, conventional default): emit the info
+  inside the STATE FACTS block WITHOUT a leading `[tag]` (e.g. `  security waiver: confirmed <date> at <N>
+  auth-keyword hits (now <M>) - not re-raised`); dad-run-summary is NOT changed. AC6 holds by that. Note
+  this story and the regex itself add keyword hits to STORIES.md, so the kit's N is counted after it lands.
+
+### Story S24: The local-model probe SHOWS the unrecognized_model warning instead of discarding it   (R40)   <!-- Status: TODO -->
+- **Goal:** the post-update local-model probe prints Claude Code's `unrecognized_model` warning as a WARN
+  (still a PASS), and a smoke run whose local-model check was skipped never reports an unqualified pass.
+- **Context:** `/audit` 2026-10-01 + `/design` C4a OPEN-4, chosen by the human. `harness-versions.ps1`
+  `Test-LocalModelResolves` (~line 115) runs `claude -p ... --model <cc> --output-format json` with
+  `2>$null`, so Claude Code 2.1.285's `[claude-code:unrecognized_model]` warning (S16 record,
+  `grades/S16_GRADE.md`) is silently dropped. That warning carries the hazard: Claude Code assumes a
+  200000-token window while Ollama serves 40960. Separately, `Invoke-PostUpdateSmoke` prints
+  "local-model check skipped (...)" (~153) and then "smoke check passed" (~164) - an unqualified pass over a
+  check that did not run (same principle as S21).
+- **Behavior:**
+  - The probe captures stderr instead of discarding it. When stderr contains `unrecognized_model`, print
+    `[harness] local model <cc>: WARN unrecognized_model (Claude Code assumes a 200000 context window;
+    Ollama serves <ctx if known, else 'unknown'>)` and still return PASS (WARN, never FAIL - C4a).
+  - Any other stderr content: behaviour unchanged (it does not alter the PASS/FAIL outcome).
+  - When the local-model check was SKIPPED, the final line names it, e.g.
+    `[harness] <name> smoke check passed (local-model check SKIPPED: <reason>)` - never a bare
+    "smoke check passed". A PASS or a non-claude-code harness keeps the existing line.
+  - Unchanged: the probe already uses a local -cc model (the `fast` alias) per R40(d); the
+    `DAD_SMOKE_LOCALMODEL` test hook; FAIL handling and the rollback hint.
+- **Data / interfaces:** `harness-versions.ps1` (`Test-LocalModelResolves`, `Invoke-PostUpdateSmoke`),
+  `test-kit.ps1` (new `Test-Case`s using the sandbox/stub style of the harness cases ~test-kit.ps1:1655).
+  Not changed: DESIGN.md, settings, models.json.
+- **Dependencies:** none (S16 measured the warning; S17 added the probe).
+- **Acceptance (testable):**
+  - [ ] AC1: a stubbed `claude` writing the `unrecognized_model` warning to stderr and valid JSON (non-empty
+    result, `modelUsage` keyed by the -cc name) to stdout -> the WARN line is printed and the probe is PASS.
+  - [ ] AC2: the same stub without the warning -> PASS and no WARN line.
+  - [ ] AC3: Ollama unreachable -> the probe is SKIP and the final smoke line names the skip and its reason.
+  - [ ] AC4: the full `test-kit.ps1` prints `0 failed`.
+- **Dev notes:** the probe checks Ollama reachability with a live request to localhost:11434 before it calls
+  `claude`, so AC1/AC2 need a test seam for reachability (keep it env-only like the existing hooks).
+  QUESTION (human): the source of `<ctx>` is not pinned. models.json `numCtx` is 65536 but S16 measured
+  40960 served, so the manifest is not a reliable proxy; until decided, print `unknown`. Refs: DESIGN C4a
+  (S16 amendment / OPEN-4 decision), R40(d).
+
+### Story S25: The Copilot version drift test checks EVERY measured stamp, not just the first   (R37, R40)   <!-- Status: TODO -->
+- **Goal:** the C2f drift case asserts that EVERY `MEASURED <date> against GitHub Copilot CLI <v>` stamp in
+  DESIGN.md equals `$CopilotMeasuredVersion`, so C5's stamp cannot drift silently.
+- **Context:** `/design` 2026-10-01 OPEN-3, chosen by the human (DESIGN C5f): ONE constant,
+  `$CopilotMeasuredVersion` (defined at `install.ps1:32`), covers both C2 and C5. The current case
+  (`test-kit.ps1` ~1562-1578, "the measured Copilot version cannot drift ...") uses `[regex]::Match`, so it
+  checks only the FIRST stamp (C2's); a second stamp (C5's) is never compared.
+- **Behavior:**
+  - The case collects ALL stamps in DESIGN.md with the existing stamp regex (`[regex]::Matches`, not
+    `Match`) and asserts each equals `$CopilotMeasuredVersion`.
+  - A mismatch FAILS and names the offending stamp's line and both versions (e.g. `DESIGN.md:<line>
+    stamped 1.0.89 != 1.0.95`).
+  - Zero stamps FAILS (never passes vacuously).
+  - Unchanged: reading the constant from `install.ps1`, the dad-doctor read-not-copy assertions.
+- **Data / interfaces:** `test-kit.ps1` (the C2f case, plus fixture cases). Not changed: DESIGN.md,
+  `install.ps1`, `dad-doctor.ps1`.
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [ ] AC1: fixture with two stamps both equal to the constant -> pass.
+  - [ ] AC2: fixture whose SECOND stamp mismatches -> fail, message names that stamp's line.
+  - [ ] AC3: fixture with zero stamps -> fail.
+  - [ ] AC4: the real kit repo DESIGN.md -> pass.
+  - [ ] AC5: the full `test-kit.ps1` prints `0 failed`.
+- **Dev notes:** to fixture-test it, factor the stamp check into a small function taking the doc text and the
+  constant, called by the real-repo case and the fixture cases. Keep the existing regex (it already ignores
+  the `against Claude Code` stamp at C4) and compute the line from the match index. Today the real doc
+  holds two Copilot stamps (C2 ~DESIGN.md:682, C5 ~1307). Refs: DESIGN
+  C2f, C5f (worked example: C2 bumped to 1.0.95, C5 left at 1.0.89 -> FAIL naming C5's stamp).
