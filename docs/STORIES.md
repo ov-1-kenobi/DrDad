@@ -562,7 +562,7 @@
   afterwards and `~/.copilot/` was confirmed returned to stock. Verification mode: **live-sandboxed** for
   AC1-AC5; **deferred, not code-review-only** for AC6 (see above).
 
-### Story S13: gates-smoke proves the LOG is wired, not just the gate   (R38)   <!-- Status: TODO -->
+### Story S13: gates-smoke proves the LOG is wired, not just the gate   (R38)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `dad gates-smoke` gains a FOURTH assertion - after provoking each gate in its own throwaway
   fixture, it asserts that a matching `"decision":"block"` line actually landed in that fixture's
   `grades/gates-log.jsonl` - and `dad-doctor` gains a NEW report of a project's log (size, line count,
@@ -608,7 +608,7 @@
   (whether the real `PreToolUse` payload carries `cwd`) - if that measurement forces a fallback, that is a
   NEW `/design` decision, not something to settle inside this story.
 
-### Story S14: [SPIKE] Measure Copilot CLI's MCP, agent/skill and hook-payload surfaces   (R39)   <!-- Status: TODO -->
+### Story S14: [SPIKE] Measure Copilot CLI's MCP, agent/skill and hook-payload surfaces   (R39)   <!-- Status: DONE closed:close-unit -->
 - **Type:** Measurement spike - no kit code changes. Its output is a MEASURED-FACTS RECORD that `/design`
   turns into contract C5. **C5 stays UNPINNED until a human runs that `/design` step**; no parity story is
   written before then (R39a).
@@ -655,7 +655,7 @@
   writes to `%USERPROFILE%\.copilot\` (R35b) - use the least-invasive route (`--additional-mcp-config`,
   a scratch project dir) and back out every change.
 
-### Story S15: doc-stats' root-junk check must not flag the kit's own scripts   (R24)   <!-- Status: TODO -->
+### Story S15: doc-stats' root-junk check must not flag the kit's own scripts   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `doc-stats -Findings`' `[hygiene]` ad-hoc-file check (and `dad tidy -Fix`, which acts on it) stops
   treating the kit's own `dad-*.ps1` / `dad-*.cmd` scripts as stray summary files.
 - **Context:** S10 shipped `dad-run-summary.ps1` and `dad-run-summary.cmd`. `Get-ProjectJunk` (doc-stats.ps1,
@@ -683,7 +683,7 @@
 - **Dev notes:** the same mistake is possible for any future kit script with "status"/"summary"/"notes" in
   its name - prefer a rule that survives new kit scripts over adding names one at a time.
 
-### Story S16: [SPIKE] Does current Claude Code still run the kit's local models?   (R1, R40)   <!-- Status: TODO -->
+### Story S16: [SPIKE] Does current Claude Code still run the kit's local models?   (R1, R40)   <!-- Status: DONE closed:close-unit -->
 - **Type:** Measurement spike - no kit code changes; its output is a measured record and, if the answer is
   "broken", a proposal for `/design` (a contract amendment or a new story), not a fix made here.
 - **Goal:** Settle, against the installed Claude Code and its version stamped, whether the kit's local
@@ -711,8 +711,9 @@
   - [ ] AC3: any real-machine change made to take the measurement is reverted and confirmed (R35).
 - **Dev notes:** ORDERING - do this before Story S17's smoke check is finalized; if the record says local
   is broken on current Claude Code, R40's post-update check must catch exactly that.
+  RECORD: lives in grades/S16_GRADE.md (Measured-facts record).
 
-### Story S17: Install reports harness versions and asks before updating   (R40)   <!-- Status: TODO -->
+### Story S17: Install reports harness versions and asks before updating   (R40)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** each `install.cmd` run prints, for Claude Code and (when present) Copilot CLI, installed vs
   latest vs measured-against versions, asks before updating, warns loudly when the version is newer than the
   contracts were measured against, and runs a smoke check after any update - replacing today's silent
@@ -752,7 +753,7 @@
     script does NOT roll back or change any security setting.
   - [ ] AC7: the full validation gate passes; the Claude Code stamp constant and the C4a stamp cannot drift.
 
-### Story S18: Verifier claims are computed or cross-checked, not taken on report   (R32, R24)   <!-- Status: TODO -->
+### Story S18: Verifier claims are computed or cross-checked, not taken on report   (R32, R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the failure class S11's decision named - a same-session verifier's unreliable self-report - is
   closed by computed checks, so the kit no longer depends on an agent's word for what a script can settle.
 - **Context:** S11 (Decision, 2026-09-30) kept same-session subagents (Option A) because the observed
@@ -783,3 +784,77 @@
     one-line backfill - decide and state which).
 - **Dev notes:** keep the check cheap and deterministic; it must not judge quality, only that the card
   points at things a script can verify.
+
+### Story S19: A stale or empty LOCALTOOLS_DOCS_DIR must not hide the project's real docs   (R24)   <!-- Status: DONE closed:close-unit -->
+- **Goal:** a `LOCALTOOLS_DOCS_DIR` override in `.mcp.json` is honoured only when that folder actually holds
+  the project's docs; otherwise the kit scripts fall back to `<project>\docs` and say so, so a computed
+  state check never reports an empty project because it read the wrong folder.
+- **Context:** observed 2026-09-30. `doc-stats.ps1` (~lines 98-104) replaces `$docs` with `.mcp.json`'s
+  `LOCALTOOLS_DOCS_DIR` whenever that path merely EXISTS. The kit's dev-path placeholder
+  `C:\Projects\Claude\MCP\DAD-kit\docs` had an empty folder (with an empty `.index`) created by the
+  local-tools MCP server on reconnect; `doc-stats` then reported "no design doc, 0/0 stories, 0/0 tasks" for a
+  LOCKED 12/18-story project. That broke `/build` Gate 3, and the STATUS reindex pointed at the same empty
+  folder. A computed check gave a confidently wrong answer (R24: state findings are computed, and must be
+  computed from the right place). Only `Test-Path` was asked; "exists" is not "is the project's docs".
+- **Behavior:**
+  - ONE shared rule (a small helper, dot-sourced or otherwise reused, not per-script variants): an override
+    dir counts only if it contains `DESIGN.md` or `TEDD.md` or `STORIES.md`.
+  - Override fails the rule (missing, empty, or no project docs) -> use `<project>\docs` and print ONE
+    visible line `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES there); using <project>\docs`.
+  - Override passes the rule -> honoured exactly as today, no warning.
+  - Apply the rule to every kit script that reads this key the same way: check `doc-stats.ps1`,
+    `docs-find.ps1`, `close-unit.ps1`, `dad-doctor.ps1`, and `corpus.ps1` (which deliberately points at a
+    research corpus - confirm whether the rule fits before touching it). Fix those with the same flaw.
+- **Data / interfaces:** `doc-stats.ps1`, plus whichever of the scripts above share the flaw; the shared
+  helper; `test-kit.ps1`. NOT changed: the placeholder in `.mcp.json` (CLAUDE.md convention), and the MCP
+  server still creates its docs folder (no C# change).
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [ ] AC1: a fixture whose `.mcp.json` override points at an existing EMPTY dir makes `doc-stats` read the
+    project's own docs (correct design/story/task counts) and print the WARN line naming the ignored path.
+  - [ ] AC2: an override dir that holds real docs (for example a `STORIES.md`) is still honoured, with no
+    WARN.
+  - [ ] AC3: a `test-kit.ps1` `Test-Case` covers both on fixtures (and each other script fixed gets its
+    case or shares the helper's).
+  - [ ] AC4: the full validation gate (`test-kit.ps1`) prints `0 failed`.
+- **Dev notes:** an existing test (docs-find fallback when the configured dir does not exist, test-kit ~line
+  1917) covers only the "missing" case; extend the same rule rather than adding a second one. The
+  `$env:LOCALTOOLS_DOCS_DIR` set by `corpus.ps1` for a research corpus is a legitimate non-project dir - do
+  not break it.
+
+### Story S20: The local-tools MCP server must not index an empty placeholder docs dir either   (R24)   <!-- Status: TODO -->
+- **Goal:** the C# server applies S19's docs-dir rule to its PRIMARY root, so `index_datasheets` and
+  `search_datasheets` never silently run against an empty placeholder folder.
+- **Context:** observed 2026-10-01 during `/audit`. S19 added the shared `Resolve-DocsDir` rule
+  (`docs-dir.ps1`) for the kit SCRIPTS only. `local-tools/Rag.cs` `BuildRoots()` (~line 49) still takes
+  `LOCALTOOLS_DOCS_DIR` as-is, and `IndexDir`/`WebDir` derive from `BuildRoots()[0]`. The kit repo's own
+  `.mcp.json` must keep the dev-path placeholder `C:\Projects\Claude\MCP\DAD-kit\docs` (test-kit.ps1 ~735
+  asserts it), so in the kit repo `index_datasheets` reported "No documents" and `search_datasheets` searched
+  nothing. Worked around with a local-scope `claude mcp add -s local` override (not in the repo).
+- **Behavior:**
+  - Same predicate as `docs-dir.ps1`: a dir counts only if it contains `DESIGN.md` or `TEDD.md` or
+    `STORIES.md`.
+  - Primary root fails the predicate AND `<cwd>\docs` passes -> `<cwd>\docs` becomes primary, and ONE line
+    `WARN: ignoring LOCALTOOLS_DOCS_DIR <path> (no DESIGN/TEDD/STORIES there); using <cwd>\docs` goes to
+    STDERR (never stdout - stdout is the MCP protocol channel).
+  - Primary passes -> honoured as today, no warning. Primary fails and `<cwd>\docs` also fails -> keep the
+    primary as today, no crash.
+  - Additional `;` roots are unchanged. No env var set -> the existing datasheets fallback is unchanged.
+  - No `.index` (or `web`) folder is created under a rejected override (that empty-folder creation caused
+    S19's original incident).
+- **Data / interfaces:** `local-tools/Rag.cs` (`BuildRoots`, `IndexDir`/`WebDir` init, `CreateDirectory`
+  calls ~371-372), `local-tools/Program.cs` CLI entry points (`--list`, `--reindex`) for tests,
+  `test-kit.ps1`. Not changed: the `.mcp.json` placeholder (CLAUDE.md convention). Re-run `install.cmd`.
+- **Dependencies:** Story S19 (the rule being mirrored).
+- **Acceptance (testable, via `local-tools.exe --list` / `--reindex` in `test-kit.ps1` Test-Cases):**
+  - [ ] AC1: placeholder primary + cwd with `docs\DESIGN.md` -> the cwd docs are indexed and stderr carries
+    the WARN line; stdout carries no WARN.
+  - [ ] AC2: a valid override holding `DESIGN.md` -> honoured, no warning.
+  - [ ] AC3: override invalid and cwd has no `docs` -> behaves as today (keeps the primary), exit 0, no crash.
+  - [ ] AC4: no `.index` folder is created under a rejected override.
+  - [ ] AC5: with a multi-root `;` value, the secondary roots are still indexed.
+  - [ ] AC6: `dotnet build` and the full `test-kit.ps1` pass with `0 failed`.
+- **Dev notes:** QUESTION for the human - `corpus.ps1` and `Program.cs`'s corpus/ingest entry (~lines 20-27)
+  and `--reindex <path>` set `LOCALTOOLS_DOCS_DIR` to a deliberate research-corpus root with no
+  DESIGN/TEDD/STORIES; run from a project folder, the rule as written would redirect them to `<cwd>\docs`.
+  Decide whether an explicit CLI path arg (or a corpus marker) bypasses the rule before implementing.

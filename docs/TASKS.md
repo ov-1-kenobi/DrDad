@@ -151,6 +151,11 @@ prompts) and depends on T15.1 so the junk false positive is fixed before a `[hyg
 to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade cards S1-S12 are GRANDFATHERED
 (see T18.1). After T18.2, `install.cmd` must be re-run by the human - the executor must NOT run it.)
 
+T19.1 -> T19.2
+
+(Story S19 (R24): T19.1 adds the one shared docs-dir helper and wires the four scripts that have the flaw;
+T19.2 is the test-kit coverage and needs T19.1. corpus.ps1 is deliberately NOT changed - see T19.1.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -1505,7 +1510,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
   cannot be SHOWN to have fired is not a gate, so the proof has to be an ACTIVE assertion, not the absence
   of an error.
 
-### [ ] T13.2 - dad-doctor reports the gate log's size, line count and newest-entry age (C3d/C3f)   (Story S13)
+### [x] T13.2 - dad-doctor reports the gate log's size, line count and newest-entry age (C3d/C3f)   (Story S13)
 - **Goal:** `dad-doctor` reports a project's `grades/gates-log.jsonl` size, line count and newest-entry
   AGE, WARNing past 5 MB and naming the manual roll as the fix - and handles a project with no log at all
   without erroring (S13 AC4).
@@ -1535,7 +1540,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
   threshold as a named constant rather than an inline magic number, matching the convention other thresholds
   in this kit already follow.
 
-### [ ] T13.3 - test-kit.ps1 Test-Cases for the fired-but-unlogged gate and the dad-doctor log report   (Story S13)
+### [x] T13.3 - test-kit.ps1 Test-Cases for the fired-but-unlogged gate and the dad-doctor log report   (Story S13)
 - **Goal:** The full validation gate mechanically proves T13.1's fourth assertion actually catches a
   fired-but-unlogged gate and actually rejects a near-miss line, and that T13.2's `dad-doctor` report
   behaves on both a present and an absent log (S13 AC5).
@@ -1567,7 +1572,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
   from T8.1/T8.4 and T9.4's gate-log coverage are the structural patterns to mirror (sandbox fixture -> run
   the script -> assert on output and exit code).
 
-### [ ] T14.1 - MEASURE Copilot CLI's MCP, agent/skill and hook-payload surfaces (feeds contract C5, BLOCKS all other R39 stories)   [research]   (Story S14)
+### [x] T14.1 - MEASURE Copilot CLI's MCP, agent/skill and hook-payload surfaces (feeds contract C5, BLOCKS all other R39 stories)   [research]   (Story S14)
 - **Goal:** Produce a version-stamped MEASURED-FACTS RECORD answering R39(a)'s three unknowns against the
   installed Copilot CLI binary, so `/design` can later pin contract C5 from facts, not vendor docs (R37c).
 - **Touches:** NO kit code changes. The record is returned in the completion report / grade card for this
@@ -1626,7 +1631,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
   workspace `.mcp.json` / `.github/mcp.json` source; the kit's commands and agents install to
   `%USERPROFILE%\.claude\` only. Placeholder rule: no machine path in any committed file (R39c).
 
-### [ ] T15.1 - Get-ProjectJunk must not report the kit's own dad-*.ps1 / dad-*.cmd scripts as stray   (Story S15)
+### [x] T15.1 - Get-ProjectJunk must not report the kit's own dad-*.ps1 / dad-*.cmd scripts as stray   (Story S15)
 - **Goal:** `doc-stats -Findings`' `[hygiene]` ad-hoc-file check and `dad tidy -Fix` stop treating
   `dad-run-summary.ps1` / `dad-run-summary.cmd` (and any future `dad-*` kit script) as stray summary files.
 - **Touches:** `doc-stats.ps1` (function `Get-ProjectJunk`, the `$stray` computation, about lines 31-35).
@@ -1646,7 +1651,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
   fixes both surfaces with no tidy change. The exemption is a name-prefix-plus-extension rule chosen to
   survive new kit scripts (S15 Dev notes) instead of an allow-list of names. Kit text must be ASCII.
 
-### [ ] T15.2 - test-kit.ps1 Test-Case: kit scripts not flagged, real junk classes still flagged   (Story S15)
+### [x] T15.2 - test-kit.ps1 Test-Case: kit scripts not flagged, real junk classes still flagged   (Story S15)
 - **Goal:** lock the S15 fix with a regression case covering AC1, AC2 and AC3.
 - **Touches:** `test-kit.ps1` (extend the existing junk-class Test-Case near line 3108-3134, the one that
   plants `IMPLEMENTATION_SUMMARY.md`, `STORY_S2_COMPLETE.md`, `completed_tasks.txt`, `msbuild.binlog`,
@@ -1670,7 +1675,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
   variable and `$ds`/`$tidy` are the script paths, as used at about lines 3011 and 3115. Keep all text
   ASCII. AC3's "this repo" check is only valid once no other real stray file sits at the kit root.
 
-### [ ] T16.1 - MEASURE whether current Claude Code still runs the kit's local `-cc` models (feeds /design and Story S17's smoke check)   [research]   (Story S16)
+### [x] T16.1 - MEASURE whether current Claude Code still runs the kit's local `-cc` models (feeds /design and Story S17's smoke check)   [research]   (Story S16)
 - **Goal:** Produce a version-stamped MEASURED-FACTS RECORD of what the installed Claude Code does with the
   kit's local Ollama models (R1), why 2.1.285 rejected `--model qwen3-14b-cc`, and end with a recommendation
   for `/design`.
@@ -1736,7 +1741,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
   is a proposal for `/design`, not a fix here. Do this before Story S17's smoke check is finalized. Kit
   text stays ASCII.
 
-### [ ] T17.1 - Harness-version helper: installed vs latest vs measured, printed as [harness] lines   (Story S17)
+### [x] T17.1 - Harness-version helper: installed vs latest vs measured, printed as [harness] lines   (Story S17)
 - **Goal:** One helper script that, for a named harness, reads installed version, latest registry version and the measured-against stamp, compares them, and prints the R40 `[harness]` lines - with no install side effects.
 - **Touches:** `harness-versions.ps1` (new, kit root); `install.ps1` (ONLY add the constant `$ClaudeCodeMeasuredVersion = "2.1.285"` next to `$CopilotMeasuredVersion` at ~line 32).
 - **Do:**
@@ -1750,7 +1755,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S17 (Behavior, AC1, AC3, AC4); `docs/DESIGN.md` R40(a),(c), worked example; R37, C2f, C4a MEASURED stamps.
 - **Context:** Existing: `$CopilotMeasuredVersion = "1.0.89"` in install.ps1 line 32, `Have()` at line 34; Copilot version extract + equality compare at lines 267-283 (the warning wording there stays for `-CopilotCli`; this helper is the new general report). This task must not run npm install or touch the machine - it only READS versions. Any test of it uses sandbox stubs (R35b).
 
-### [ ] T17.2 - install.ps1: replace the unconditional Claude Code npm install with report + ask-before-update   (Story S17)
+### [x] T17.2 - install.ps1: replace the unconditional Claude Code npm install with report + ask-before-update   (Story S17)
 - **Goal:** Step 3 of install.ps1 reports harness versions and installs/updates Claude Code only with consent; Copilot CLI is reported only when present (or `-CopilotCli`) and never installed by default.
 - **Touches:** `install.ps1` (param block line 20; step 3 at line 88; Copilot block lines 256-320).
 - **Do:**
@@ -1767,7 +1772,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S17 (Behavior, AC2, AC3, AC5); `docs/DESIGN.md` R40(a),(b), R37 (`-CopilotCli` stays opt-in).
 - **Context:** Current step 3 (line 87-89) also runs `code --install-extension anthropic.claude-code`; leave that line untouched. `install.cmd` mutates real machine state (npm global, PATH): NEVER run it or `install.ps1` for real to check this; verify only with stubs in a sandbox (or by reading the diff). Keep ASCII; keep the dev-path placeholder untouched.
 
-### [ ] T17.3 - dad-doctor prints the same harness drift report   (Story S17)
+### [x] T17.3 - dad-doctor prints the same harness drift report   (Story S17)
 - **Goal:** `dad-doctor` shows the R40 `[harness]` lines (installed / latest / measured, and the newer-than-measured warning) for Claude Code and for Copilot CLI when present.
 - **Touches:** `dad-doctor.ps1` (near the existing Copilot section, lines ~464-515; also `Say` helper usage).
 - **Do:**
@@ -1779,7 +1784,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S17 (Behavior "dad-doctor prints the same", AC4); `docs/DESIGN.md` R40(c), C2f.
 - **Context:** doctor may take up to the helper's ~10 s npm timeout when the registry is slow; that is accepted. Use only read-only commands; no writes to the machine.
 
-### [ ] T17.4 - Post-update smoke check and the way back   (Story S17)   [needs T16.1]
+### [x] T17.4 - Post-update smoke check and the way back   (Story S17)   [needs T16.1]
 - **Goal:** After install.ps1 updates a harness, run a cheap smoke check and, if it fails, print the previous version and the exact command to return to it - without rolling back or lowering any security setting.
 - **Touches:** `harness-versions.ps1` (add `Invoke-PostUpdateSmoke` and `Test-LocalModelResolves`); `install.ps1` (call it at the T17.2 hook point, passing the previous version).
 - **Do:**
@@ -1792,7 +1797,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S17 (Behavior "After an update", AC6); `docs/DESIGN.md` R40(d), R35, R1; Story S16 / T16.1 (the local-model rule).
 - **Context:** Do not start until T16.1 is ticked. If T16.1's recommendation is a `/design` amendment, take only the smoke rule it states. The previous version is the installed version captured BEFORE `npm install`. The rollback text names the pinned-version command; running it is the human's decision.
 
-### [ ] T17.5 - test-kit cases for R40 (AC1-AC7), all stubbed and sandboxed   (Story S17)
+### [x] T17.5 - test-kit cases for R40 (AC1-AC7), all stubbed and sandboxed   (Story S17)
 - **Goal:** `test-kit.ps1` proves the harness-version report, ask-before-update, offline safety, drift warning, Copilot opt-in, smoke-failure message, and the stamp<->C4a lock.
 - **Touches:** `test-kit.ps1` (new `Test-Case` blocks after `"dad-doctor's Copilot harness section renders without erroring"`, ~line 1589-1610).
 - **Do:** Add cases, each using a temp sandbox dir with stub `.cmd` files (`claude`, `npm` logging its args to a file, `copilot`) put FIRST on a child process PATH, and a sandbox `USERPROFILE`/`HOME` (see how the existing `"uninstall removes the Copilot CLI hook file (sandboxed)"` case at ~line 1540 sandboxes). NEVER run the real `install.ps1`, `install.cmd` or real `npm` against the machine (R35b). Prefer testing `harness-versions.ps1` functions directly (child `powershell -File` with the stub PATH); for `install.ps1` behaviour, run only a stubbed/sandboxed child and assert the npm stub log.
@@ -1809,7 +1814,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S17 (AC1-AC7); `docs/DESIGN.md` R40(e), C2f, C4a MEASURED stamp (line ~1115: `MEASURED 2026-09-30 against Claude Code 2.1.285`); R35b.
 - **Context:** existing pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root (see the C2f case at ~line 1559). Keep ASCII, restore any temporary edit. The suite must not depend on the machine having claude/copilot installed - stubs only.
 
-### [ ] T18.1 - close-unit -RequireGrade: computed citation check on the grade card   (Story S18)
+### [x] T18.1 - close-unit -RequireGrade: computed citation check on the grade card   (Story S18)
 - **Goal:** a grade card that cites nothing checkable FAILS `close-unit -RequireGrade`; a card citing a real test name or `test-kit.ps1` line range, with every `file:line` resolvable, passes.
 - **Touches:** `close-unit.ps1` (function `Test-GradeCard`, ~line 197-204; caller at ~line 502-508 needs no change); `test-kit.ps1` (fixture cards at ~line 4463 in "close-unit refuses a STORY close when tests run zero tests" and ~line 4534 in "close-unit -RequireGrade refuses a story with no real grade card").
 - **Do:** In `Test-GradeCard`, after the existing size and `## Grade history` checks (keep them unchanged), read the card text and add two computed checks, returning a one-line problem string like the existing ones:
@@ -1823,7 +1828,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S18 (Behavior 1, AC1, AC2, AC4, Dev notes); Story S11 Decision (2026-09-30); `docs/DESIGN.md` R24, R32.
 - **Context:** current `Test-GradeCard` only checks existence, `>=800` bytes and `## Grade history`. `$proj` is the project dir variable in close-unit.ps1. `-RequireGrade` turns the returned string into a blocking `$problems` entry; without it it is only a warning. `build.md` step 5's gate names `## Assessment` and `## Suggestions` too, but close-unit does not check them today - leave that as is. ASCII only.
 
-### [ ] T18.2 - build.md: post-hygiene doc-stats re-check + neutral grading prompts   (Story S18)
+### [x] T18.2 - build.md: post-hygiene doc-stats re-check + neutral grading prompts   (Story S18)
 - **Goal:** `/build` re-runs `dad doc-stats -Findings` after hygiene-agent and treats a clean claim contradicted by a `[hygiene]`/`[integrity]` finding as CONTRADICTED and blocking; grading prompts are neutral; step 5 tells graders the card is computed-checked.
 - **Touches:** `global\commands\build.md` (per-STORY steps 5-7, ~lines 148-162; small insertions only).
 - **Do:**
@@ -1837,7 +1842,7 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S18 (Behavior 2 and 3, AC3); Story S11 Decision (failures 2 and 3: S10 hygiene reported clean while `doc-stats` flagged two files; graders biased by known-issue lists); `docs/DESIGN.md` R24, R32.
 - **Context:** current step 5 text: "grade-agent -> grade the completed STORY. It writes `grades/<story id>_GRADE.md` ... Gate ... at least 800 bytes ... `## Grade history`, `## Assessment`, `## Suggestions`". Step 6: "hygiene-agent (give it the story id) -> applies the card's `[mechanical]` items ... then rebuilds." Step 7 runs `dad close-unit -Id <story id> -Title "<story> polish" -RequireGrade`. `doc-stats -Findings` emits tagged findings; there are 9 `[hygiene]`/`[integrity]` mentions in `doc-stats.ps1`. Do not edit grade-agent.md or hygiene-agent.md.
 
-### [ ] T18.3 - test-kit cases for S18 (AC1-AC4)   (Story S18)
+### [x] T18.3 - test-kit cases for S18 (AC1-AC4)   (Story S18)
 - **Goal:** `test-kit.ps1` proves the citation gate and that the build.md text landed.
 - **Touches:** `test-kit.ps1` (new `Test-Case` blocks immediately after `"close-unit -RequireGrade refuses a story with no real grade card"`, ~line 4540).
 - **Do:** Copy that test's sandbox shape (`New-Sandbox`, git init, `Remove-Sandbox`, `if (-not $haveGit) { return }`, `-SkipVerify -NoReindex -RequireGrade`). Cases:
@@ -1850,7 +1855,36 @@ to block a close; T18.3 is the test-kit coverage for AC1-AC4. Existing grade car
 - **Refs:** Story S18 (AC1-AC4); CLAUDE.md "Add a Test-Case for any bug".
 - **Context:** existing pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, `$cu = Join-Path $kit "close-unit.ps1"`. Suite must run without network and without touching the real `%USERPROFILE%\.claude`. ASCII only.
 
+### [x] T19.1 - Shared Resolve-DocsDir helper; wire doc-stats, docs-find, close-unit, dad-doctor   (Story S19)
+- **Goal:** a `LOCALTOOLS_DOCS_DIR` override from `.mcp.json` is honoured only if that dir holds `DESIGN.md`, `TEDD.md` or `STORIES.md`; otherwise the four scripts use `<project>\docs` and print one WARN line.
+- **Touches:** `docs-dir.ps1` (new, kit root); `doc-stats.ps1` (~lines 98-104); `docs-find.ps1` (~lines 34-50); `close-unit.ps1` (~lines 214-222); `dad-doctor.ps1` (~lines 402-405). NOT `corpus.ps1`, NOT `.mcp.json`, NOT any C# file.
+- **Do:**
+  1. Create `docs-dir.ps1` defining `function Resolve-DocsDir([string]$Proj, [switch]$Quiet)` returning the docs path string. Logic: default `$docs = Join-Path $Proj "docs"`; if `<Proj>\.mcp.json` exists, in try/catch read `.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR` into `$d`; if `$d` and `Test-Path -LiteralPath $d -PathType Container` and any of `DESIGN.md`/`TEDD.md`/`STORIES.md` exists in it -> return `(Resolve-Path -LiteralPath $d).Path` with no output. Else if `$d` is set (override present but failing the rule) and not `-Quiet` -> `Write-Host "WARN: ignoring LOCALTOOLS_DOCS_DIR $d (no DESIGN/TEDD/STORIES there); using $Proj\docs"` (exactly ONE line, yellow) and return the default. No override -> return default silently. The helper must NEVER create a directory.
+  2. `doc-stats.ps1`, `close-unit.ps1`, `docs-find.ps1`: delete the inline `.mcp.json` block and replace with `. (Join-Path $PSScriptRoot "docs-dir.ps1")` then `$docs = Resolve-DocsDir $proj`. (doc-stats does not define `$kit`; use `$PSScriptRoot` directly. Keep docs-find's existing no-create comment as a one-line note; its old guard only checked existence, the helper now subsumes it.)
+  3. `dad-doctor.ps1` (line ~402-405): keep the `.mcp.json` parsing for the exe check, but compute the docs dir via `Resolve-DocsDir $p -Quiet`; compare to the configured `$dd`: if they differ, `Say "WARN" "docs dir" "'$dd' has no DESIGN/TEDD/STORIES - scripts use $p\docs instead"`; otherwise OK as today. Use the resolved dir for the `.index\chunks.json` RAG check and the reindex hint. Dot-source the helper near the top using `$kit` (line 19).
+  4. `corpus.ps1` (lines 92-94) only SETS `$env:LOCALTOOLS_DOCS_DIR` to a research corpus for one `--search` call and never reads `.mcp.json`; the rule does not fit (a research corpus has no DESIGN/STORIES). Leave it unchanged; add nothing to it.
+  5. Keep all text ASCII; do not change the `.mcp.json` placeholder.
+- **Acceptance:** for a project whose `.mcp.json` override points at an existing EMPTY dir, `.\doc-stats.ps1 -ProjectDir <p>` prints the WARN line naming that path and reports the project's own `<p>\docs` counts; with the override pointing at a dir containing `STORIES.md`, no WARN is printed and that dir is used; `docs-find.ps1` and `close-unit.ps1` parse and behave the same way (they no longer contain their own `LOCALTOOLS_DOCS_DIR` read). `corpus.ps1` is byte-identical to before.
+- **Depends on:** none
+- **Refs:** Story S19 (Behavior, Data/interfaces); `docs/DESIGN.md` R24 (computed state must be computed from the right place).
+- **Context:** verified flaw in all four: doc-stats.ps1:102 and close-unit.ps1:220 use `if ($d -and (Test-Path $d))`; docs-find.ps1:48 the same (`$docs = $d`); dad-doctor.ps1:403 reports `OK` for any existing dir. Only "exists" was tested. Observed case: the dev-path placeholder folder `C:\Projects\Claude\MCP\DAD-kit\docs` got created empty by the MCP server, and doc-stats then reported 0/0 stories for a locked project. Do NOT create or touch that folder. doc-stats parameter name for the project dir is whatever the script already uses (`$proj` is set before the block). PowerShell 5.1 compatible.
+
+### [x] T19.2 - test-kit Test-Cases for S19 (AC1-AC4)   (Story S19)
+- **Goal:** `test-kit.ps1` proves an empty/no-docs override is ignored with a WARN and a real-docs override is honoured, for doc-stats and docs-find.
+- **Touches:** `test-kit.ps1` (new `Test-Case` blocks directly after `"docs-find NEVER creates a real directory at an unrewritten .mcp.json placeholder"`, ~line 1943; the existing case stays untouched).
+- **Do:** Copy the existing case's sandbox shape (`New-Sandbox`, `$p\docs\DESIGN.md` fixture, `.mcp.json` via ConvertTo-Json, `Remove-Sandbox` in `finally`). Add:
+  1. AC1 (doc-stats): project has `docs\DESIGN.md` plus a `docs\STORIES.md` with one story and `docs\TASKS.md` with one task; `.mcp.json` override = an existing EMPTY dir in the sandbox. Run `powershell -NoProfile -ExecutionPolicy Bypass -File doc-stats.ps1 -ProjectDir $p` (use the parameter name doc-stats actually declares) and assert output contains `WARN: ignoring LOCALTOOLS_DOCS_DIR`, contains the empty dir path, and reports the project's own counts (not 0/0 stories/tasks).
+  2. AC2 (doc-stats): override = a second sandbox dir holding a `STORIES.md` with a DIFFERENT story count than the project's own; assert NO `WARN: ignoring` line and the counts come from the override.
+  3. AC3 (docs-find, empty override): guard with the same `local-tools.exe` exists check as the existing case; override = existing empty dir; search for the marker in the project's `DESIGN.md`; assert output matches the marker/C9 text and contains the WARN line, and the empty dir is still empty (`Get-ChildItem` count 0, nothing created).
+  4. dad-doctor/close-unit share the helper, so no separate case is required; instead add one text assertion that `doc-stats.ps1`, `docs-find.ps1`, `close-unit.ps1`, `dad-doctor.ps1` each reference `Resolve-DocsDir` and that `corpus.ps1` does not (keeps the exemption honest).
+  5. AC4: run `.\test-kit.ps1` and confirm `0 failed`.
+- **Acceptance:** `.\test-kit.ps1` prints `0 failed` and the new case names appear in its output; reverting T19.1's helper use in doc-stats.ps1 makes the AC1 case fail (verify, then restore).
+- **Depends on:** T19.1
+- **Refs:** Story S19 (AC1-AC4, Dev notes); `docs/DESIGN.md` R24; CLAUDE.md "Add a Test-Case for any bug".
+- **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, sandbox helpers `New-Sandbox`/`Remove-Sandbox`. The suite must not touch the real `C:\Projects\Claude\MCP\DAD-kit\docs` nor the real `%USERPROFILE%\.claude`. ASCII only.
+
 ## Open questions
+- **[design] S19 dad-doctor behaviour.** S19 lists `dad-doctor.ps1` but it only REPORTS the docs dir; T19.1 makes it WARN (and use the resolved dir for the RAG check) rather than silently choose a dir. If the human wants it to print the same `WARN: ignoring ...` line instead, amend T19.1 step 3.
 - **[design] S18 file:line resolution rule is not pinned in DESIGN.** T18.1 uses: path relative to project root, else a unique same-name file under the project (excluding .git, _tmp, bin, obj, node_modules); the largest number of a `a-b` range must be <= line count. If the human wants a different rule (e.g. root-relative only), amend T18.1 before building.
 - **[design] needs contract: the loop-guard writer's fallback if `PreToolUse` carries no `cwd`.** C3f's
   PREREQUISITE MEASUREMENT (sharded as T9.5) may come back NO. C3f deliberately does not pre-decide the

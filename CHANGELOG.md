@@ -1,6 +1,64 @@
 # Changelog
 
-All notable changes to DrDad. Versions follow semver; the requirement ids (R1-R21) are in `docs/DESIGN.md`.
+All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
+
+## 0.53.0 - 2026-09-30
+
+### Added - R38(b): the gate-decision log (Story S9, contract C3)
+`dad-gates-log.ps1` appends and queries `grades/gates-log.jsonl`. The four gates now write to it: the loop
+guard and `dad-guard`'s Stop-hook block (hook-based), and `ratchet` and `close-unit` refusals
+(plain-subprocess). Logging never changes a gate's own verdict or exit code. T9.5 measured that Claude Code's
+PreToolUse payload carries `cwd` (2.1.285), so the loop-guard writer can locate the project.
+
+### Added - R38(c): the run summary (Story S10, contract C4)
+`dad-run-summary.ps1` prints wall-clock, files touched (committed and uncommitted, split), findings and gate
+interventions, each naming its source; tokens only when measured from the transcript, otherwise a labelled
+fallback line. `/build` runs it at end of scope and `/audit` after the status update. `dad-guard`'s Stop hook
+records the session pointer `.claude\.dad-session.json` (C4b).
+
+### Added - the gate log is PROVEN to land (Story S13)
+`dad gates-smoke` has a fourth assertion: after each gate fires in its fixture, a matching
+gate-name-AND-`block` line must be in that fixture's log, else `SILENT-FAIL "<gate>-log"` and a non-zero exit.
+`dad-doctor` reports the log's size, line count and newest-entry age and WARNs past 5 MB, naming the manual
+roll as the fix (no automatic roll, by design).
+
+### Added - R40: harness versions are reported, never silently changed (Story S17)
+`harness-versions.ps1` prints `[harness] <name> installed / latest / measured against` lines for Claude Code
+and Copilot CLI. `install.ps1` no longer runs an unconditional `npm install -g @anthropic-ai/claude-code`: it
+reports first, asks `update now? [y/N]` (default NO; `-Yes` consents), and never installs Copilot CLI by
+default. After a real update it runs a smoke check (`dad gates-smoke` plus a local-model probe) and, on
+failure, PRINTS the previous version and the exact way back - it never rolls back or touches settings.
+`dad-doctor` prints the same report. Seven test cases lock it, including the measured-version stamp.
+
+### Added - computed checks on what verifiers claim (Story S18)
+`close-unit -RequireGrade` now requires a grade card to cite something checkable (a `test-kit.ps1:<n>` range,
+a quoted `Test-Case` name, or a resolvable `file:line`) and every `file:line` must resolve. Existing cards are
+grandfathered. `/build` re-runs `dad doc-stats -Findings` and the suite after hygiene-agent and treats a clean
+claim contradicted by a finding as CONTRADICTED (blocks the story close), and grading prompts are neutral.
+**Re-run `install.cmd` for the `build.md` change to take effect (installed commands are copies).**
+
+### Measured (spikes, no kit code) - records live in the grade cards
+- **Story S14 / T14.1 (Copilot CLI 1.0.89):** the repo `.mcp.json` loads as-is once the folder is trusted;
+  agents load as-is; commands need a quoting transform to load as skills; hook payloads always carry a
+  non-empty `cwd` (the launch dir) and a session id. Record: `grades/S14_GRADE.md`. Contract C5 is NOT pinned
+  yet - that is a `/design` step.
+- **Story S16 / T16.1 (Claude Code 2.1.285):** local `-cc` models are NOT broken. `--model <name>-cc` answers;
+  an unrecognised-model line is a warning. The earlier failure was the user `settings.json` env overriding a
+  process `ANTHROPIC_MODEL`. Record: `grades/S16_GRADE.md`.
+- **Story S11:** decision recorded (option A plus computed checks); nothing built toward B or C.
+
+### Fixed
+- **Story S19:** a stale or empty `LOCALTOOLS_DOCS_DIR` no longer hides the project's real docs. The shared
+  `docs-dir.ps1` (`Resolve-DocsDir`) honours the override only if it holds DESIGN, TEDD or STORIES, else falls
+  back to `<project>\docs` with one WARN line. Wired into `doc-stats`, `docs-find`, `close-unit`, `dad-doctor`.
+  Found when the MCP server created an empty placeholder folder and `doc-stats` reported 0/0 for a locked project.
+- **Story S15:** `doc-stats`/`tidy` no longer flag the kit's own `dad-*.ps1` / `dad-*.cmd` scripts as stray
+  (kit root only; a user project's own `dad-*` script is still stray).
+- `close-unit` no longer kills the MCP server when a lock-blocked build is already current.
+
+### Design
+R39 (Copilot parity, gated on measured contract C5), R40 (harness version reporting), C3/C4 amendments; stories
+S14-S19 added with task maps; DESIGN LOCKED.
 
 ## 0.52.0 - 2026-09-29
 

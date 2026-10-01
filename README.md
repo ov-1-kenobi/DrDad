@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.52.0** - local, offline, agentic software development on your own GPU.
+**Version 0.53.0** - local, offline, agentic software development on your own GPU.
 
 DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
 API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
@@ -52,6 +52,9 @@ A few of the gates, each from a real incident:
   status that is not true.
 - **the environment-block detector** - when Windows App Control / WDAC refuses to run a build, the kit
   STOPS and reports it, and forbids agents from disabling your security to get past it (a real run tried).
+- **gate evidence** - `dad gates-smoke` provokes each gate and reports whether it actually fired; every gate
+  decision lands in a committed log (`grades\gates-log.jsonl`); `dad run-summary` reports what a run cost
+  (time, files, findings, gate hits, tokens), each figure labelled with its source.
 
 17 slash commands and 18 sub-agents sit on top of these, but the gates are the point.
 

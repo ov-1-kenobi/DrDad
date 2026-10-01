@@ -182,6 +182,7 @@ Test-Case "a MISTYPED parameter is an error, not a silent default" {
   $missing = @()
   foreach ($f in (Get-KitFiles @("*.ps1"))) {
     $t = Get-Content $f.FullName -Raw
+    if ($f.Name -eq "harness-versions.ps1") { continue }   # dot-sourced library: only FUNCTION param blocks, no script params
     if ($t -notmatch '(?m)^\s*param\s*\(') { continue }
     # [Parameter(...)] on any parameter also makes a script advanced, which is equally sufficient
     if ($t -match '(?m)^\s*\[CmdletBinding' -or $t -match '\[Parameter\(') { continue }
@@ -1101,6 +1102,8 @@ Test-Case "no retired name is still shipped as a command or agent" {
 
 Test-Case "every .ps1 has a .cmd wrapper" {
   foreach ($f in Get-ChildItem $kit -Filter *.ps1 -File) {
+    if ($f.Name -eq "docs-dir.ps1") { continue }   # dot-sourced library (S19), not a runnable command
+    if ($f.Name -eq "harness-versions.ps1") { continue }   # dot-sourced library (S17), not a runnable command
     Assert (Test-Path (Join-Path $kit "$($f.BaseName).cmd")) "$($f.Name) has no .cmd wrapper"
   }
 }
@@ -1608,6 +1611,147 @@ Test-Case "dad-doctor's Copilot harness section renders without erroring" {
   }
 }
 
+# ---- S17 / R40 harness-version cases (T17.5): stubs on a CHILD process PATH only; never a real npm/claude ----
+function Get-InstallMeasuredCc {
+  $t = Get-Content (Join-Path $kit "install.ps1") -Raw
+  return [regex]::Match($t, '(?m)^\$ClaudeCodeMeasuredVersion\s*=\s*"([^"]+)"').Groups[1].Value
+}
+# Runs install.ps1's extracted step-3 (Claude Code) + Copilot harness blocks in a child powershell with stubs.
+# Returns @{ Out; Exit; NpmLog; Settings (before/after hash) }.
+function Invoke-HvInstallStub([string]$ClaudeVer, [string]$CopilotVer, [string]$Latest, [bool]$NpmFail, [string]$Stdin,
+                              [bool]$Yes, [bool]$CopilotCli, [string]$Measured, [hashtable]$ExtraEnv = @{}) {
+  $sb = New-Sandbox
+  $bin = Join-Path $sb "bin"; New-Item -ItemType Directory -Force $bin | Out-Null
+  $home2 = Join-Path $sb "home"; New-Item -ItemType Directory -Force (Join-Path $home2 ".claude") | Out-Null
+  $settings = Join-Path $home2 ".claude\settings.json"
+  Set-Content -Path $settings -Value '{"sandbox":true}' -Encoding ASCII
+  $before = (Get-FileHash $settings).Hash
+  $npmLog = Join-Path $sb "npm.log"
+  if ($ClaudeVer)  { Set-Content -Path (Join-Path $bin "claude.cmd")  -Value "@echo off`r`necho $ClaudeVer (Claude Code)" -Encoding ASCII }
+  if ($CopilotVer) { Set-Content -Path (Join-Path $bin "copilot.cmd") -Value "@echo off`r`necho GitHub Copilot CLI $CopilotVer" -Encoding ASCII }
+  Set-Content -Path (Join-Path $bin "npm.cmd") -Encoding ASCII -Value @(
+    '@echo off', 'echo %* >> "%DAD_NPMLOG%"', 'if "%DAD_NPM_FAIL%"=="1" exit /b 1',
+    'if "%1"=="view" echo %DAD_LATEST%', 'exit /b 0')
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  $s3 = [regex]::Match($inst, '(?s)Write-Host "`n== 3\).*?(?=\r?\nif \(\$haveCode\))').Value
+  $cp = [regex]::Match($inst, '(?s)if \(\(Have copilot\) -or \$CopilotCli\) \{.*?(?=\r?\nif \(\$CopilotCli\) \{)').Value
+  if (-not $s3 -or -not $cp) { Remove-Sandbox $sb; throw "could not extract install.ps1 step-3 / copilot blocks" }
+  $driver = Join-Path $sb "driver.ps1"
+  $head = @(
+    'param([switch]$Yes, [switch]$CopilotCli)',
+    ('$ClaudeCodeMeasuredVersion = "' + $Measured + '"'),
+    '$CopilotMeasuredVersion = "1.0.89"',
+    'function Have($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }',
+    ('. "' + (Join-Path $kit "harness-versions.ps1") + '"'),
+    'function Read-Consent($prompt, [bool]$defaultYes) {',
+    '  if ($Yes) { return $true }',
+    '  $ans = ""; try { $ans = "$(Read-Host $prompt)".Trim() } catch { $ans = "" }',
+    '  if (-not $ans) { return $defaultYes }',
+    '  return ($ans -match ''^(y|yes)$'')',
+    '}',
+    '$haveNode = $true') -join "`r`n"
+  Set-Content -Path $driver -Value ($head + "`r`n" + $s3 + "`r`n" + $cp + "`r`nexit 0`r`n") -Encoding ASCII
+  $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+  $names = @("PATH","USERPROFILE","HOME","DAD_NPMLOG","DAD_NPM_FAIL","DAD_LATEST","DAD_SMOKE_GATES","DAD_SMOKE_LOCALMODEL") + @($ExtraEnv.Keys)
+  $saved = @{}; foreach ($n in $names) { $saved[$n] = [Environment]::GetEnvironmentVariable($n, "Process") }
+  try {
+    $env:PATH = "$bin;$env:SystemRoot\System32;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+    # HOME only: a sandbox USERPROFILE breaks Start-Job in the child (Get-LatestVersion then reports unknown).
+    # The extracted blocks never read USERPROFILE, so the real one is harmless here.
+    $env:HOME = $home2
+    $env:DAD_NPMLOG = $npmLog; $env:DAD_LATEST = $Latest
+    $env:DAD_NPM_FAIL = $(if ($NpmFail) { "1" } else { "" })
+    $env:DAD_SMOKE_GATES = "pass"; $env:DAD_SMOKE_LOCALMODEL = "skip"
+    foreach ($k in $ExtraEnv.Keys) { [Environment]::SetEnvironmentVariable($k, $ExtraEnv[$k], "Process") }
+    $argl = @("-NoProfile","-ExecutionPolicy","Bypass","-File",$driver)
+    if ($Yes) { $argl += "-Yes" }
+    if ($CopilotCli) { $argl += "-CopilotCli" }
+    $out = (& { $Stdin | & $ps @argl 2>&1 } | Out-String)
+    $code = $LASTEXITCODE
+  } finally {
+    foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $saved[$n], "Process") }
+  }
+  $log = ""; if (Test-Path $npmLog) { $log = Get-Content $npmLog -Raw }
+  $after = (Get-FileHash $settings).Hash
+  Remove-Sandbox $sb
+  return @{ Out = $out; Exit = $code; NpmLog = $log; SettingsSame = ($before -eq $after) }
+}
+
+Test-Case "R40 AC1: harness report prints installed / latest / measured for each present CLI" {
+  $m = Get-InstallMeasuredCc
+  Assert ($m) "could not read `$ClaudeCodeMeasuredVersion from install.ps1"
+  $r = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "1.0.89" -Latest "9.9.9" -NpmFail $false -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  Assert ($r.Out -match "\[harness\] claude-code\s+installed $([regex]::Escape($m))\s+latest 9\.9\.9\s+measured against $([regex]::Escape($m))") "claude-code line lacks the three columns:`n$($r.Out)"
+  Assert ($r.Out -match '\[harness\] copilot-cli\s+installed 1\.0\.89\s+latest 9\.9\.9\s+measured against 1\.0\.89') "copilot-cli line lacks the three columns:`n$($r.Out)"
+}
+
+Test-Case "R40 AC2: update is asked first - stdin N installs nothing, -Yes installs exactly once" {
+  $m = Get-InstallMeasuredCc
+  $n = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $false -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  Assert ($n.Out -match 'update available') "no update-available line:`n$($n.Out)"
+  Assert ($n.NpmLog -notmatch '(?m)^install\b') "npm install ran after answering N:`n$($n.NpmLog)"
+  $y = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $false -Stdin "" -Yes $true -CopilotCli $false -Measured $m
+  $installs = @([regex]::Matches($y.NpmLog, '(?m)^install -g @anthropic-ai/claude-code\s*$'))
+  Assert ($installs.Count -eq 1) "expected exactly one 'install -g @anthropic-ai/claude-code' with -Yes, got $($installs.Count):`n$($y.NpmLog)"
+}
+
+Test-Case "R40 AC3: registry unreachable (npm exits 1) reports latest unknown and still exits 0" {
+  $m = Get-InstallMeasuredCc
+  $r = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $true -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  Assert ($r.Out -match 'latest:? unknown') "no 'latest unknown' in output:`n$($r.Out)"
+  Assert ($r.Exit -eq 0) "exit code was $($r.Exit), expected 0"
+  Assert ($r.NpmLog -notmatch '(?m)^install\b') "npm install ran with an unknown latest:`n$($r.NpmLog)"
+}
+
+Test-Case "R40 AC4: installed newer than measured warns and names what to re-check; exit 0" {
+  $m = Get-InstallMeasuredCc
+  $r = Invoke-HvInstallStub -ClaudeVer "99.0.0" -CopilotVer "" -Latest "99.0.0" -NpmFail $false -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  Assert ($r.Out -match 'newer than measured') "no newer-than-measured warning:`n$($r.Out)"
+  foreach ($t in @('hooks/payload (C2, T9.5)','usage fields (C4a)','local model catalog')) {
+    Assert ($r.Out.Contains($t)) "warning does not name '$t':`n$($r.Out)"
+  }
+  Assert ($r.Exit -eq 0) "exit code was $($r.Exit), expected 0"
+}
+
+Test-Case "R40 AC5: no copilot and no -CopilotCli -> one skipped line, no @github/copilot npm call" {
+  $m = Get-InstallMeasuredCc
+  $r = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $false -Stdin "N" -Yes $false -CopilotCli $false -Measured $m
+  $skipped = @($r.Out -split "`r?`n" | Where-Object { $_ -match 'skipped' })
+  Assert ($skipped.Count -eq 1) "expected exactly one 'skipped' line, got $($skipped.Count):`n$($r.Out)"
+  Assert ($skipped[0] -match 'copilot-cli') "the skipped line is not the copilot one: $($skipped[0])"
+  Assert ($r.NpmLog -notmatch '@github/copilot') "npm was called for @github/copilot:`n$($r.NpmLog)"
+}
+
+Test-Case "R40 AC6: a failed post-update smoke names the previous version and the way back, rolls nothing back" {
+  $m = Get-InstallMeasuredCc
+  $r = Invoke-HvInstallStub -ClaudeVer $m -CopilotVer "" -Latest "9.9.9" -NpmFail $false -Stdin "" -Yes $true -CopilotCli $false -Measured $m -ExtraEnv @{ DAD_SMOKE_GATES = "fail" }
+  Assert ($r.Out -match 'smoke check FAILED') "no smoke-failure line:`n$($r.Out)"
+  Assert ($r.Out -match "Previous version was $([regex]::Escape($m))") "previous version not named:`n$($r.Out)"
+  Assert ($r.Out.Contains("npm install -g @anthropic-ai/claude-code@$m")) "way-back command not printed:`n$($r.Out)"
+  $installs = @([regex]::Matches($r.NpmLog, '(?m)^install\b'))
+  Assert ($installs.Count -eq 1) "npm log shows a rollback/extra install (expected only the one update):`n$($r.NpmLog)"
+  Assert ($r.NpmLog -notmatch "@$([regex]::Escape($m))") "npm log shows an install of the previous version (auto-rollback):`n$($r.NpmLog)"
+  Assert $r.SettingsSame "sandbox settings.json changed"
+  Assert ($r.Exit -eq 0) "exit code was $($r.Exit), expected 0 (smoke is loud, never blocking)"
+}
+
+Test-Case "R40 AC7: measured-version stamp is locked across install.ps1, DESIGN C4a and dad-run-summary; doctor does not hard-code it" {
+  $inst = Get-InstallMeasuredCc
+  Assert ($inst) "install.ps1 has no `$ClaudeCodeMeasuredVersion"
+  $design = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
+  $sm = [regex]::Match($design, '(?m)^\s*MEASURED \d{4}-\d\d-\d\d against Claude Code (\d+(?:\.\d+)+)')
+  Assert $sm.Success "DESIGN.md has no 'MEASURED <date> against Claude Code <v>' stamp (MEASURED-LOCAL does not count)"
+  Assert ($sm.Groups[1].Value -eq $inst) "DESIGN C4a stamp '$($sm.Groups[1].Value)' != install.ps1 `$ClaudeCodeMeasuredVersion '$inst'"
+  $rs = Get-Content (Join-Path $kit "dad-run-summary.ps1") -Raw
+  $rv = [regex]::Match($rs, '(?m)^\$MeasuredClaudeCodeVersion\s*=\s*"([^"]+)"').Groups[1].Value
+  Assert ($rv -eq $inst) "dad-run-summary `$MeasuredClaudeCodeVersion '$rv' != install.ps1 '$inst'"
+  $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
+  Assert ($doc -notmatch '(?m)^\s*\$ClaudeCodeMeasuredVersion\s*=\s*"\d') "dad-doctor.ps1 assigns its own measured version (must read install.ps1)"
+  Assert (-not $doc.Contains($inst)) "dad-doctor.ps1 hard-codes the measured version $inst"
+  $instText = Get-Content (Join-Path $kit "install.ps1") -Raw
+  Assert ($instText -notmatch '(?m)^npm install[^\r\n]*claude-code') "install.ps1 has a top-level unconditional npm install of claude-code"
+}
+
 Test-Case "C2f's drift check compares versions by EQUALITY, not substring (graded S12 defect)" {
   # Found by grade-agent on S12. Both consumers originally tested the raw `copilot --version` LINE with
   # -match against the measured number. That is silently wrong: "1.0.890" and "11.0.89" both CONTAIN
@@ -1942,6 +2086,71 @@ Test-Case "docs-find NEVER creates a real directory at an unrewritten .mcp.json 
   } finally { Remove-Sandbox $sb }
 }
 
+function New-S19Fixture([string]$sb, [int]$nStories) {
+  # project with DESIGN + $nStories stories + 1 task; returns the project dir
+  $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+  "# Design`n`n### C9: marker`n- **Decision:** the real project docs dir was used, per this text." |
+    Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+  $st = "# Stories`n"
+  for ($i = 1; $i -le $nStories; $i++) { $st += "`n### Story S${i}: S$i   <!-- Status: TODO -->`n" }
+  $st | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+  "# Task map`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+  return $p
+}
+function Set-S19Override([string]$p, [string]$dir) {
+  @{ mcpServers = @{ 'local-tools' = @{ command = "local-tools.exe"; env = @{ LOCALTOOLS_DOCS_DIR = $dir } } } } |
+    ConvertTo-Json -Depth 10 | Set-Content "$p\.mcp.json" -Encoding UTF8
+}
+
+Test-Case "S19 AC1: doc-stats ignores an EMPTY LOCALTOOLS_DOCS_DIR with a WARN and reads the project's docs" {
+  $sb = New-Sandbox
+  try {
+    $p = New-S19Fixture $sb 2
+    $empty = Join-Path $sb "emptydocs"; New-Item -ItemType Directory -Force $empty | Out-Null
+    Set-S19Override $p $empty
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p 2>&1 | Out-String)
+    Assert ($out -match 'WARN: ignoring LOCALTOOLS_DOCS_DIR') "no WARN line for an empty override:`n$out"
+    Assert ($out.Contains($empty)) "WARN does not name the empty dir:`n$out"
+    Assert ($out -match 'stories\s*:\s*0/2 done') "doc-stats did not report the project's own 2 stories:`n$out"
+    Assert (@(Get-ChildItem -Force $empty).Count -eq 0) "the empty override dir was written to"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S19 AC2: doc-stats honours a LOCALTOOLS_DOCS_DIR that holds STORIES.md (no WARN)" {
+  $sb = New-Sandbox
+  try {
+    $p = New-S19Fixture $sb 2
+    $ov = Join-Path $sb "overridedocs"; New-Item -ItemType Directory -Force $ov | Out-Null
+    "# Stories`n`n### Story S1: a   <!-- Status: TODO -->`n`n### Story S2: b   <!-- Status: TODO -->`n`n### Story S3: c   <!-- Status: TODO -->" |
+      Set-Content "$ov\STORIES.md" -Encoding UTF8
+    Set-S19Override $p $ov
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p 2>&1 | Out-String)
+    Assert (-not ($out -match 'WARN: ignoring')) "a valid override was ignored:`n$out"
+    Assert ($out -match 'stories\s*:\s*0/3 done') "counts did not come from the override (expected 3 stories):`n$out"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S19 AC3: docs-find ignores an EMPTY LOCALTOOLS_DOCS_DIR with a WARN and still finds project docs" {
+  if (-not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) { Write-Host "  SKIP (exe not built): docs-find AC3 case did not run" -ForegroundColor Yellow; return }
+  $sb = New-Sandbox
+  try {
+    $p = New-S19Fixture $sb 1
+    $empty = Join-Path $sb "emptydocs"; New-Item -ItemType Directory -Force $empty | Out-Null
+    Set-S19Override $p $empty
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "docs-find.ps1") -ProjectDir $p "marker" 2>&1 | Out-String)
+    Assert ($out -match 'WARN: ignoring LOCALTOOLS_DOCS_DIR') "docs-find printed no WARN for an empty override:`n$out"
+    Assert ($out -match 'marker|C9') "docs-find did not find the marker in the project docs:`n$out"
+    Assert (@(Get-ChildItem -Force $empty).Count -eq 0) "docs-find created something inside the empty override dir"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S19: doc-stats/docs-find/close-unit/dad-doctor use Resolve-DocsDir; corpus.ps1 does not" {
+  foreach ($f in @("doc-stats.ps1", "docs-find.ps1", "close-unit.ps1", "dad-doctor.ps1")) {
+    Assert ((Get-Content (Join-Path $kit $f) -Raw) -match 'Resolve-DocsDir') "$f does not reference Resolve-DocsDir"
+  }
+  Assert (-not ((Get-Content (Join-Path $kit "corpus.ps1") -Raw) -match 'Resolve-DocsDir')) "corpus.ps1 references Resolve-DocsDir (it is deliberately exempt)"
+}
+
 Test-Case "close-unit RECORDS the commands that worked (RECIPES stops being empty)" {
   # docs\RECIPES.md was designed as a proven-commands log agents append to on success. After nine runs on a
   # real project it held 18 lines - the bare template, zero entries. Meanwhile runs kept emitting broken
@@ -2270,7 +2479,9 @@ Test-Case "dad-gates-smoke reports a genuine per-gate SKIP when one sibling scri
     Copy-Item (Join-Path $kit "dad-gates-smoke.ps1") $isolated
     Copy-Item (Join-Path $kit "dad-loopguard.ps1") $isolated
     Copy-Item (Join-Path $kit "dad-guard.ps1") $isolated
-    # the gate-log writer (T13.1 fourth assertion needs the block lines to land) and its redaction dependency
+    # the gate-log writer (T13.1 fourth assertion needs the block lines to land) and its redaction dependency.
+    # Without these two siblings loop-guard/dad-guard-stop become SILENT-FAIL "<gate>-log", not SKIP, so the
+    # "one SKIP + two INTERCEPTED exits 0" expectation below would break (see the no-writer case after it).
     Copy-Item (Join-Path $kit "dad-gates-log.ps1") $isolated
     Copy-Item (Join-Path $kit "scan-secrets.ps1") $isolated
 
@@ -2288,6 +2499,124 @@ Test-Case "dad-gates-smoke reports a genuine per-gate SKIP when one sibling scri
     Remove-Sandbox $sb
     Remove-Item -LiteralPath $isolated -Recurse -Force -ErrorAction SilentlyContinue
   }
+}
+
+Test-Case "dad-gates-smoke: a fired-but-unlogged gate is a SILENT-FAIL naming the gate (T13.3, S13 AC5/AC1)" {
+  # MANUFACTURED: the smoke script + the two gate siblings are copied WITHOUT dad-gates-log.ps1, so the gates
+  # still fire and block but the writer cannot land a line. The smoke's verdict logic is untouched.
+  $sb = New-Sandbox
+  $isolated = Join-Path $env:TEMP ("dadkit_gs_nolog_" + [guid]::NewGuid().ToString("N").Substring(0,8))
+  New-Item -ItemType Directory -Force $isolated | Out-Null
+  try {
+    Copy-Item (Join-Path $kit "dad-gates-smoke.ps1") $isolated
+    Copy-Item (Join-Path $kit "dad-loopguard.ps1") $isolated
+    Copy-Item (Join-Path $kit "dad-guard.ps1") $isolated
+    Copy-Item (Join-Path $kit "scan-secrets.ps1") $isolated
+    Assert (-not (Test-Path (Join-Path $isolated "dad-gates-log.ps1"))) "sandbox must not contain the log writer"
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $isolated "dad-gates-smoke.ps1") -ProjectDir $sb 2>&1 | Out-String)
+    $exit = $LASTEXITCODE
+    Assert ($out -match 'SILENT-FAIL') "an unlogged block was not reported SILENT-FAIL:`n$out"
+    Assert ($out -match [regex]::Escape("loop-guard-log")) "the SILENT-FAIL did not name the gate ('loop-guard-log'):`n$out"
+    Assert ($out -match 'NOT LOGGED') "the SILENT-FAIL reason did not say NOT LOGGED:`n$out"
+    Assert ($exit -ne 0) "a SILENT-FAIL must exit non-zero (got $exit):`n$out"
+  } finally {
+    Remove-Sandbox $sb
+    Remove-Item -LiteralPath $isolated -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+Test-Case "dad-gates-smoke: Test-BlockLogged near-misses do not satisfy the assertion (T13.3, S13 AC3)" {
+  # Extract the real function from the smoke script (no copy of its logic) and run it against fixture logs.
+  $gsPath = Join-Path $kit "dad-gates-smoke.ps1"
+  $ast = [System.Management.Automation.Language.Parser]::ParseFile($gsPath, [ref]$null, [ref]$null)
+  $fn = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Test-BlockLogged" }, $true) | Select-Object -First 1
+  Assert ($fn) "Test-BlockLogged not found in dad-gates-smoke.ps1"
+  . ([scriptblock]::Create($fn.Extent.Text))
+  $sb = New-Sandbox
+  try {
+    $g = Join-Path $sb "grades"; New-Item -ItemType Directory -Force $g | Out-Null
+    Assert (-not (Test-BlockLogged $sb @("loop-guard"))) "a missing log must not satisfy the assertion"
+    $allowRight = '{"ts":"2026-09-30T10:00:00.000Z","gate":"loop-guard","decision":"allow","reason":"armed"}'
+    $blockWrong = '{"ts":"2026-09-30T10:00:01.000Z","gate":"dad-guard-stop","decision":"block","reason":"x"}'
+    Set-Content -LiteralPath (Join-Path $g "gates-log.jsonl") -Value @($allowRight, "not json at all", $blockWrong) -Encoding ASCII
+    Assert (-not (Test-BlockLogged $sb @("loop-guard"))) "allow line for the right gate + block line for a DIFFERENT gate must NOT pass"
+    Add-Content -LiteralPath (Join-Path $g "gates-log.jsonl") -Value '{"ts":"2026-09-30T10:00:02.000Z","gate":"loop-guard","decision":"block","reason":"y"}' -Encoding ASCII
+    Assert (Test-BlockLogged $sb @("loop-guard")) "adding the matching gate + block line must pass"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-doctor reports the gate log: size, lines, newest-entry age; or plainly none (T13.3, S13 AC4)" {
+  $doctor = Join-Path $kit "dad-doctor.ps1"
+  $with = New-Sandbox
+  $none = New-Sandbox
+  try {
+    New-Item -ItemType Directory -Force (Join-Path $with "grades") | Out-Null
+    $l1 = '{"ts":"2026-09-01T10:00:00.000Z","gate":"loop-guard","decision":"allow","reason":"armed"}'
+    $l2 = '{"ts":"2026-09-02T10:00:00.000Z","gate":"loop-guard","decision":"block","reason":"x"}'
+    Set-Content -LiteralPath (Join-Path $with "grades\gates-log.jsonl") -Value @($l1, $l2) -Encoding ASCII
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $with 2>&1 | Out-String)
+    Assert (($LASTEXITCODE -eq 0) -or ($LASTEXITCODE -eq 1)) "dad-doctor (with-log run) exited $LASTEXITCODE - expected 0 or 1"
+    $m = [regex]::Match($out, '\[\w+\s*\]\s+gate log\s+(.*)')
+    Assert $m.Success "dad-doctor printed no 'gate log' line for a project with a log:`n$out"
+    Assert ($m.Groups[1].Value -match 'KB') "gate log line lacks a size: $($m.Value)"
+    Assert ($m.Groups[1].Value -match '2 line\(s\)') "gate log line lacks the line count (2): $($m.Value)"
+    Assert ($m.Groups[1].Value -match 'newest entry .* old') "gate log line lacks the newest-entry age: $($m.Value)"
+    Assert ($out -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on a fixture with a gate log:`n$out"
+
+    $out2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $none 2>&1 | Out-String)
+    $code2 = $LASTEXITCODE
+    $m2 = [regex]::Match($out2, '\[\w+\s*\]\s+gate log\s+(.*)')
+    Assert $m2.Success "dad-doctor printed no 'gate log' line for a project with no log:`n$out2"
+    Assert ($m2.Groups[1].Value -match 'none yet') "no-log case is not reported plainly: $($m2.Value)"
+    Assert ($out2 -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on a fixture with no gate log:`n$out2"
+    Assert (-not (Test-Path (Join-Path $none "grades\gates-log.jsonl"))) "dad-doctor must never create the log"
+    # Exit-code convention (dad-doctor.ps1 header): 0 = no FAILs, 1 = at least one FAIL. A bare sandbox may
+    # legitimately FAIL unrelated checks, so the exit code is only pinned to {0,1}; any other value (or the
+    # error text asserted above) means a crash rather than a verdict.
+    Assert (($code2 -eq 0) -or ($code2 -eq 1)) "dad-doctor (no-log run) exited $code2 - expected 0 or 1"
+  } finally { Remove-Sandbox $with; Remove-Sandbox $none }
+}
+
+Test-Case "dad-doctor gate log: with-log run exits 0/1 (no crash); over 5 MB WARNs with the manual-roll hint (T13.3)" {
+  $doctor = Join-Path $kit "dad-doctor.ps1"
+  $sb = New-Sandbox
+  try {
+    New-Item -ItemType Directory -Force (Join-Path $sb "grades") | Out-Null
+    $l1 = '{"ts":"2026-09-01T10:00:00.000Z","gate":"loop-guard","decision":"allow","reason":"armed"}'
+    $l2 = '{"ts":"2026-09-02T10:00:00.000Z","gate":"loop-guard","decision":"block","reason":"x"}'
+    # a whitespace-only line is not counted (Trim) but pads the file past 5 MB cheaply
+    $pad = [string]::new(' ', 5600000)
+    [System.IO.File]::WriteAllText((Join-Path $sb "grades\gates-log.jsonl"), ($l1 + "`n" + $pad + "`n" + $l2 + "`n"))
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $sb 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    Assert (($code -eq 0) -or ($code -eq 1)) "dad-doctor (with-log run) exited $code - expected 0 or 1"
+    $m = [regex]::Match($out, '\[\w+\s*\]\s+gate log\s+(.*)')
+    Assert $m.Success "dad-doctor printed no 'gate log' line for an oversized log:`n$out"
+    Assert ($out -match '\[WARN\s*\]\s+gate log') "an over-5-MB log must be a WARN: $($m.Value)"
+    Assert ($m.Groups[1].Value -match 'over 5 MB') "WARN lacks 'over 5 MB': $($m.Value)"
+    Assert ($m.Groups[1].Value -match 'gates-log-<yyyy-MM-dd>\.jsonl') "WARN lacks the manual-roll name: $($m.Value)"
+    Assert ($m.Groups[1].Value -match '2 line\(s\)') "whitespace padding must not be counted as a line: $($m.Value)"
+    Assert ($out -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on an oversized log:`n$out"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "dad-doctor gate log: unparseable newest ts reports 'newest entry age unknown' (T13.3)" {
+  $doctor = Join-Path $kit "dad-doctor.ps1"
+  $sb = New-Sandbox
+  try {
+    New-Item -ItemType Directory -Force (Join-Path $sb "grades") | Out-Null
+    $l1 = '{"ts":"2026-09-01T10:00:00.000Z","gate":"loop-guard","decision":"allow","reason":"armed"}'
+    $bad = '{"ts":"not-a-timestamp","gate":"loop-guard","decision":"block","reason":"x"}'
+    Set-Content -LiteralPath (Join-Path $sb "grades\gates-log.jsonl") -Value @($l1, $bad) -Encoding ASCII
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $doctor -ProjectDir $sb 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    Assert (($code -eq 0) -or ($code -eq 1)) "dad-doctor exited $code - expected 0 or 1"
+    $m = [regex]::Match($out, '\[\w+\s*\]\s+gate log\s+(.*)')
+    Assert $m.Success "dad-doctor printed no 'gate log' line:`n$out"
+    Assert ($m.Groups[1].Value -match 'newest entry age unknown') "unparseable ts not reported as age unknown: $($m.Value)"
+    Assert ($m.Groups[1].Value -match '2 line\(s\)') "line count missing: $($m.Value)"
+    Assert ($out -notmatch 'Exception|cannot be found on this object') "dad-doctor threw on an unparseable ts:`n$out"
+  } finally { Remove-Sandbox $sb }
 }
 
 Test-Case "grade-trends reads the STATED grade, not a capital letter in prose" {
@@ -3127,6 +3456,14 @@ Test-Case "doc-stats flags project-root JUNK and a nav-less layout" {
 
     $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
     Assert ($out -match '(?i)ad-hoc status/summary file') "stray summary files were not flagged"
+    # S15 AC2: the exemption is kit-root-only, so in this NON-kit root dad-run-summary.ps1 AND dad-notes.md are stray
+    "x" | Set-Content "$p\dad-run-summary.ps1" -Encoding UTF8
+    "x" | Set-Content "$p\dad-notes.md" -Encoding UTF8
+    $outS15 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    $hyg = @($outS15 -split "`r?`n" | Where-Object { $_ -match 'ad-hoc status/summary file' }) -join ' '
+    Assert ($hyg -match 'IMPLEMENTATION_SUMMARY\.md') "the stray finding does not name IMPLEMENTATION_SUMMARY.md"
+    Assert ($hyg -match 'dad-run-summary') "a user project's own dad-run-summary.ps1 was exempt (the exemption must be kit-root-only)"
+    Assert ($hyg -match 'dad-notes\.md') "the stray finding does not name dad-notes.md"
     Assert ($out -match '(?i)MANGLED path') "the mangled path directory was not flagged"
     Assert ($out -match '(?i)\.binlog') "the committed .binlog was not flagged"
     Assert ($out -match '(?i)2 solution files') "duplicate solution files were not flagged"
@@ -3158,6 +3495,92 @@ Test-Case "doc-stats flags project-root JUNK and a nav-less layout" {
   $dv = Get-Content (Join-Path $kit "global\agents\dev-agent.md") -Raw
   Assert ($dv -match '(?i)backslash') "dev-agent does not warn against backslash paths under bash"
   Assert ($dv -match '(?i)ad-hoc status|summary') "dev-agent does not warn against ad-hoc summary files"
+}
+
+Test-Case "doc-stats -Junk exempts the kit's own dad-*.ps1/.cmd scripts but still flags real junk (S15)" {
+  # Regression: dad-run-summary.ps1 matched the *summary* junk pattern and was reported as stray. Only
+  # script extensions of dad-* are exempt; dad-notes.md / dad-summary.txt stay junk.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED`nSecurity review: NOT-REQUIRED (test)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $ds = Join-Path $kit "doc-stats.ps1"
+    foreach ($n in "dad-run-summary.ps1","dad-run-summary.cmd","dad-other-notes.ps1",
+                   "IMPLEMENTATION_SUMMARY.md","dad-notes.md","dad-summary.txt") {
+      "x" | Set-Content (Join-Path $p $n) -Encoding UTF8
+    }
+    $raw = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Junk 2>&1 | Out-String
+    $j = $raw | ConvertFrom-Json
+    $stray = @($j.StrayFiles)
+    # (a) NON-kit root: the exemption is kit-root-only, so a user project's own dad-*.ps1/.cmd IS stray
+    Assert ($stray -contains "dad-run-summary.ps1") "a user project's dad-run-summary.ps1 was exempt (must be kit-root-only)"
+    Assert ($stray -contains "dad-run-summary.cmd") "a user project's dad-run-summary.cmd was exempt (must be kit-root-only)"
+    Assert ($stray -contains "dad-other-notes.ps1") "a user project's dad-other-notes.ps1 was exempt (must be kit-root-only)"
+    Assert ($stray -contains "IMPLEMENTATION_SUMMARY.md") "IMPLEMENTATION_SUMMARY.md was not flagged as stray"
+    Assert ($stray -contains "dad-notes.md") "dad-notes.md (non-script dad-*) was not flagged as stray"
+    Assert ($stray -contains "dad-summary.txt") "dad-summary.txt (non-script dad-*) was not flagged as stray"
+  } finally { Remove-Sandbox $sb }
+
+  # (b) a sandbox COPY of doc-stats.ps1 that IS its own kit root: scripts exempt, non-script dad-* and real junk not
+  $sb = New-Sandbox
+  try {
+    $kc = Join-Path $sb "kitcopy"; New-Item -ItemType Directory -Force $kc | Out-Null
+    Copy-Item (Join-Path $kit "doc-stats.ps1") (Join-Path $kc "doc-stats.ps1")
+    foreach ($n in "dad-run-summary.ps1","dad-run-summary.cmd","dad-other-notes.ps1",
+                   "IMPLEMENTATION_SUMMARY.md","dad-notes.md","dad-summary.txt") {
+      "x" | Set-Content (Join-Path $kc $n) -Encoding UTF8
+    }
+    $rawK = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kc "doc-stats.ps1") -ProjectDir $kc -Junk 2>&1 | Out-String
+    $strayK = @(($rawK | ConvertFrom-Json).StrayFiles)
+    Assert ($strayK -notcontains "dad-run-summary.ps1") "kit root: dad-run-summary.ps1 was flagged as stray"
+    Assert ($strayK -notcontains "dad-run-summary.cmd") "kit root: dad-run-summary.cmd was flagged as stray"
+    Assert ($strayK -notcontains "dad-other-notes.ps1") "kit root: dad-other-notes.ps1 was flagged as stray"
+    Assert ($strayK -contains "IMPLEMENTATION_SUMMARY.md") "kit root: IMPLEMENTATION_SUMMARY.md was not flagged as stray"
+    Assert ($strayK -contains "dad-notes.md") "kit root: dad-notes.md was not flagged as stray"
+    Assert ($strayK -contains "dad-summary.txt") "kit root: dad-summary.txt was not flagged as stray"
+    # trailing slash + different case on -ProjectDir still resolves to the kit root
+    $rawK2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kc "doc-stats.ps1") -ProjectDir ($kc.ToUpper() + "\") -Junk 2>&1 | Out-String
+    Assert (@(($rawK2 | ConvertFrom-Json).StrayFiles) -notcontains "dad-run-summary.ps1") "kit root (upper-case, trailing slash) was not recognised as the kit root"
+  } finally { Remove-Sandbox $sb }
+
+  # (c) hardening: root spelled differently from $PSScriptRoot (a DIFFERENT doc-stats scans another kit copy):
+  # holding doc-stats.ps1 makes it the kit root regardless of path spelling; dad-notes.md still flagged
+  $sb = New-Sandbox
+  try {
+    $kc = Join-Path $sb "kitcopy2"; New-Item -ItemType Directory -Force $kc | Out-Null
+    Copy-Item (Join-Path $kit "doc-stats.ps1") (Join-Path $kc "doc-stats.ps1")
+    foreach ($n in "dad-run-summary.ps1","dad-run-summary.cmd","dad-notes.md") { "x" | Set-Content (Join-Path $kc $n) -Encoding UTF8 }
+    $rawH = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir ($kc.Replace('\','/') + "/") -Junk 2>&1 | Out-String
+    $strayH = @(($rawH | ConvertFrom-Json).StrayFiles)
+    Assert ($strayH -notcontains "dad-run-summary.ps1") "hardening: a root holding doc-stats.ps1 (scanned by another doc-stats) flagged dad-run-summary.ps1"
+    Assert ($strayH -notcontains "dad-run-summary.cmd") "hardening: a root holding doc-stats.ps1 flagged dad-run-summary.cmd"
+    Assert ($strayH -contains "dad-notes.md") "hardening: dad-notes.md was not flagged in a kit-root copy"
+  } finally { Remove-Sandbox $sb }
+
+  # AC1: in a NON-kit project the same files are flagged and tidy (dry run) names them; the kit root is clean
+  $sb = New-Sandbox
+  try {
+    $ds = Join-Path $kit "doc-stats.ps1"
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED`nSecurity review: NOT-REQUIRED (test)" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "x" | Set-Content "$p\dad-run-summary.ps1" -Encoding UTF8
+    "x" | Set-Content "$p\dad-run-summary.cmd" -Encoding UTF8
+    $f1 = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String
+    Assert ($f1 -match 'ad-hoc status/summary file') "a user project's dad-run-summary.* did not trigger the ad-hoc summary finding"
+    $t1 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "tidy.ps1") -ProjectDir $p 2>&1 | Out-String
+    Assert ($t1 -match 'dad-run-summary') "tidy (dry run) does not list a user project's dad-run-summary"
+    Assert ((Test-Path "$p\dad-run-summary.ps1") -and (Test-Path "$p\dad-run-summary.cmd")) "dry-run tidy removed files"
+  } finally { Remove-Sandbox $sb }
+
+  # AC3: the kit repo itself has no stray-summary finding, -Junk, or tidy listing for its own scripts
+  $ds = Join-Path $kit "doc-stats.ps1"
+  $fk = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $kit -Findings 2>&1 | Out-String
+  Assert ($fk -notmatch 'ad-hoc status/summary') "the kit repo itself is flagged for ad-hoc status/summary files"
+  $jk = & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $kit -Junk 2>&1 | Out-String
+  $strayKit = @(($jk | ConvertFrom-Json).StrayFiles)
+  Assert (-not (@($strayKit | Where-Object { $_ -match '^dad-.+\.(ps1|cmd)$' }).Count)) "the kit root -Junk StrayFiles names a kit dad-* script: $($strayKit -join ', ')"
+  $tk = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "tidy.ps1") -ProjectDir $kit 2>&1 | Out-String
+  Assert ($tk -notmatch 'dad-run-summary') "tidy (dry run) on the kit root names dad-run-summary"
 }
 
 Test-Case "data-stats gates DATASET integrity, and the corpus indexes data files" {
@@ -4463,7 +4886,7 @@ Test-Case "close-unit refuses a STORY close when tests run zero tests" {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
     "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
     New-Item -ItemType Directory -Force "$p\grades" | Out-Null
-    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | init |`n`n## Assessment`n" + ('detail. ' * 120) + "`n## Suggestions`n1. none") |
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | init |`n`n## Assessment`n" + ('detail. ' * 120) + " See docs/STORIES.md:1.`n## Suggestions`n1. none") |
       Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
     Push-Location $p
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
@@ -4534,12 +4957,104 @@ Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
     Assert ($LASTEXITCODE -ne 0) "accepted a stub grade card"
 
     # real card -> accept
-    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + ('detail. ' * 120) + "`n## Suggestions`n1. none") |
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + ('detail. ' * 120) + " See docs/STORIES.md:1.`n## Suggestions`n1. none") |
       Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
     & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
     Assert ($LASTEXITCODE -eq 0) "rejected a real grade card"
     Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE"
   } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit -RequireGrade AC1: a headings-only card with no citation is refused, a cited one is accepted" {
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# stub`n" | Set-Content "$p\close-unit.ps1" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+    $filler = 'detail. ' * 120
+
+    # headings + size but NO citation -> refuse
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + "`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -SkipVerify -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "accepted a grade card with no citation"
+    # NOTE: close-unit rolls the story up in STORIES.md before the grade gate runs, so the refusal is the
+    # non-zero exit (a later -RequireGrade run is what gates the close), not an un-DONE file.
+
+    # a test-name citation against a sandbox test-kit.ps1 -> accept
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    "Test-Case `"sandbox named case`" {`n  Assert `$true `"x`"`n}" | Set-Content "$p\test-kit.ps1" -Encoding UTF8
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + " Verified by ``sandbox named case``.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "rejected a card citing an existing Test-Case name"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "test-name variant did not mark the story DONE"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit -RequireGrade AC1: a card citing an existing file:line is accepted" {
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# stub`n" | Set-Content "$p\close-unit.ps1" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + ('detail. ' * 120) + " See ``close-unit.ps1:1``.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "rejected a card citing close-unit.ps1:1"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "close-unit -RequireGrade AC2: a card citing an out-of-range line or a missing file is refused" {
+  if (-not $haveGit) { return }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# stub`n" | Set-Content "$p\close-unit.ps1" -Encoding UTF8
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $cu = Join-Path $kit "close-unit.ps1"
+    $filler = 'detail. ' * 120
+
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + " See ``close-unit.ps1:99999``.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -SkipVerify -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "accepted a citation of a line past the end of the file"
+
+    ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + " See ``nosuchfile.ps1:3``.`n## Suggestions`n1. none") |
+      Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -ProjectDir $p -NoReindex -SkipVerify -RequireGrade 2>$null | Out-Null
+    Assert ($LASTEXITCODE -ne 0) "accepted a citation of a file that does not exist"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "build.md carries the S18 post-hygiene re-check and neutral grading prompt text" {
+  $bm = Get-Content (Join-Path $kit "global\commands\build.md") -Raw
+  Assert ($bm -match [regex]::Escape('doc-stats -Findings')) "build.md has no 'doc-stats -Findings' re-check"
+  Assert ($bm -match 'CONTRADICTED') "build.md has no CONTRADICTED handling"
+  Assert ($bm -match 'Neutral prompt') "build.md has no 'Neutral prompt' phrase"
 }
 
 Test-Case "a build FILE-LOCK is cleared (project-scoped) and the build retried" {

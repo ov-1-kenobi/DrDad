@@ -150,9 +150,19 @@ its dependencies satisfied, STOP and report the blocked tasks.
    grade + prioritized, tagged suggestions. **Gate (run these checks - a stub card is NOT a grade):** the
    file must exist, be **at least 800 bytes**, and contain **`## Grade history`**, **`## Assessment`** and
    **`## Suggestions`**. A one-line card saying "all criteria met" FAILS the gate - send it back to write a
-   real assessment citing `file:line`.
+   real assessment citing `file:line`. The gate now also requires the card to cite at least one test name
+   or `test-kit.ps1` line range and every `file:line` to resolve (close-unit `-RequireGrade` enforces it);
+   a card that cites nothing checkable is sent back. Tell graders to cite by FULL RELATIVE PATH (for
+   example `docs/STORIES.md:12`), because bare names like `STORIES.md:12` may not resolve.
+   **Neutral prompt:** give grade-agent ONLY the story id and evidence pointers (the STORIES.md section,
+   TASKS.md, the `grades/` card path, the test command). Do NOT pass your own list of suspected defects or
+   known issues - it biases the grade.
 6. **hygiene-agent** (give it the story id) -> applies the card's `[mechanical]` items plus its standard
-   format/lint + project-file & dependency pass, then rebuilds.
+   format/lint + project-file & dependency pass, then rebuilds. After it returns, run
+   `dad doc-stats -Findings` and the project's test command yourself and compare. If hygiene reported the
+   project clean but a `[hygiene]` or `[integrity]` finding is present (or the suite fails), relay the
+   disagreement as `CONTRADICTED` with the finding text. A CONTRADICTED report BLOCKS the story close
+   (step 7) until resolved (fix, or a human-approved explanation).
 7. If the grade is below B, or the card has critical `[dev]` suggestions: relay them to **dev-agent**, then
    re-grade (max 3 rounds). Then commit the story with the grade REQUIRED - the script fails if the card is
    missing or a stub, so you cannot close a story ungraded:

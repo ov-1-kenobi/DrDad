@@ -194,12 +194,46 @@ function Get-TestCount([string]$out) {
 }
 
 # A grade card must be a real assessment, not a stub. Same thresholds the /build gate uses.
+# GRANDFATHER DECISION (S18): the citation checks below run only inside `close-unit -RequireGrade` at the
+# moment a story is closed. They never rescan grades\, so the existing cards S1_GRADE.md..S12_GRADE.md are
+# grandfathered and need NO backfill; doc-stats is unchanged (it only checks a card exists). A re-grade of
+# an old story does go through the new check.
 function Test-GradeCard([string]$unitId) {
   $card = Join-Path $proj "grades\$($unitId)_GRADE.md"
   if (-not (Test-Path $card)) { return "no grade card (grades\$($unitId)_GRADE.md)" }
   $len = (Get-Item $card).Length
   if ($len -lt 800) { return "grade card is a stub ($len bytes, needs >=800)" }
   if (-not (Select-String -Path $card -Pattern '##\s*Grade history' -Quiet)) { return "grade card has no '## Grade history'" }
+  $text = Get-Content $card -Raw -Encoding UTF8
+  $cites = $false
+  # file:line citations: every one must resolve; report the first failure only.
+  $fileLineRx = '([\w./\\-]+\.(ps1|cmd|md|cs|json|py|ts|js|yml|yaml|csproj|sln)):(\d+)(?:-(\d+))?'
+  foreach ($m in [regex]::Matches($text, $fileLineRx)) {
+    $rel = $m.Groups[1].Value
+    $n = [int]$m.Groups[3].Value
+    if ($m.Groups[4].Success) { $n = [Math]::Max($n, [int]$m.Groups[4].Value) }
+    $target = Join-Path $proj ($rel -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+      $leaf = Split-Path $rel -Leaf
+      $hits = @(Get-ChildItem -Path $proj -Recurse -File -Filter $leaf -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName.Substring($proj.Length) -notmatch '(?i)[\\/](\.git|_tmp|bin|obj|node_modules)[\\/]' })
+      if ($hits.Count -eq 1) { $target = $hits[0].FullName } else { return "grade card cites missing file $rel" }
+    }
+    $count = @(Get-Content -LiteralPath $target -Encoding UTF8).Count
+    if ($n -gt $count) { return "grade card cites $rel`:$n but the file has $count lines" }
+    $cites = $true
+  }
+  $tk = Join-Path $proj "test-kit.ps1"
+  if (-not $cites -and (Test-Path $tk)) {
+    if ($text -match 'test-kit\.ps1:\d+') { $cites = $true }
+    else {
+      foreach ($tm in [regex]::Matches((Get-Content $tk -Raw -Encoding UTF8), '(?m)^\s*Test-Case\s+"([^"]+)"')) {
+        $nm = [regex]::Escape($tm.Groups[1].Value)
+        if ($text -match ('`' + $nm + '`') -or $text -match ('"' + $nm + '"')) { $cites = $true; break }
+      }
+    }
+  }
+  if (-not $cites) { return 'grade card cites no test name, test-kit.ps1 line range or resolvable file:line (expected form: test-kit.ps1:<n>, or a backtick/double-quoted Test-Case name, or a full-relative-path file:line such as global/commands/build.md:150)' }
   return $null
 }
 
@@ -212,14 +246,8 @@ function Save-Text([string]$path, [string[]]$lines) {
 }
 
 # --- where are the docs? (.mcp.json wins, else <proj>\docs) ---
-$docs = Join-Path $proj "docs"
-$mcp = Join-Path $proj ".mcp.json"
-if (Test-Path $mcp) {
-  try {
-    $d = (Get-Content $mcp -Raw | ConvertFrom-Json).mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
-    if ($d -and (Test-Path $d)) { $docs = (Resolve-Path -LiteralPath $d).Path }
-  } catch { }
-}
+. (Join-Path $PSScriptRoot "docs-dir.ps1")
+$docs = Resolve-DocsDir $proj
 $tasksFile   = Join-Path $docs "TASKS.md"
 $storiesFile = Join-Path $docs "STORIES.md"
 $esc = [regex]::Escape($Id)

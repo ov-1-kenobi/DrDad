@@ -17,6 +17,8 @@
 param([string]$ProjectDir = "")
 $ErrorActionPreference = "Continue"     # this script probes things that are ALLOWED to be missing
 $kit = $PSScriptRoot
+. (Join-Path $kit "docs-dir.ps1")
+$GATES_LOG_WARN_BYTES = 5MB   # C3d: WARN past this size; the roll is a HUMAN rename, never automatic
 $script:fails = 0
 $script:warns = 0
 $script:fixes = New-Object System.Collections.Generic.List[string]
@@ -400,9 +402,13 @@ if ($ProjectDir) {
         }
         else { Say "WARN" ".mcp.json" "exe path is '$cmd' - not this kit" "upgrade-project.cmd `"$p`"   (install.cmd only fixes the kit's OWN .mcp.json, never a project's)" }
         $dd = $j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
-        if ($dd -and (Test-Path $dd)) { Say "OK" "docs dir" $dd } else { Say "WARN" "docs dir" "'$dd' not found" }
-        if ($dd -and (Test-Path (Join-Path $dd ".index\chunks.json"))) { Say "OK" "RAG index" "built" }
-        else { Say "WARN" "RAG index" "not built" "run index_datasheets in a session, or reindex.cmd `"$dd`"" }
+        $rd = Resolve-DocsDir $p -Quiet
+        if (-not $dd) { Say "OK" "docs dir" $rd }
+        elseif ($dd -ne $rd -and (Test-Path -LiteralPath $dd) -and ((Resolve-Path -LiteralPath $dd).Path -eq $rd)) { Say "OK" "docs dir" $rd }
+        elseif ($dd -ne $rd) { Say "WARN" "docs dir" "'$dd' has no DESIGN/TEDD/STORIES - scripts use $p\docs instead" }
+        else { Say "OK" "docs dir" $rd }
+        if (Test-Path -LiteralPath (Join-Path $rd ".index\chunks.json")) { Say "OK" "RAG index" "built" }
+        else { Say "WARN" "RAG index" "not built" "run index_datasheets in a session, or reindex.cmd `"$rd`"" }
       } catch { Say "FAIL" ".mcp.json" "invalid JSON" }
     } else { Say "FAIL" ".mcp.json" "missing" "new-project.cmd / upgrade-project.cmd" }
 
@@ -458,8 +464,65 @@ if ($ProjectDir) {
             "powershell -File `"$kit\close-unit.ps1`" -Id <id> -Title `"...`" -ProjectDir `"$p`"   (or dad-guard.ps1 -Ack)"
       }
     }
+
+    # Gate-decision log (C3d/C3f). REPORT ONLY - never creates, trims or renames the log; the roll is a human act.
+    $glog = Join-Path $p "grades\gates-log.jsonl"
+    if (-not (Test-Path -LiteralPath $glog)) {
+      Say "OK" "gate log" "none yet (grades\gates-log.jsonl is created by the first gate decision)"
+    } else {
+      try {
+        $glBytes = (Get-Item -LiteralPath $glog).Length
+        $glLines = 0; $glLast = ""
+        foreach ($ln in [System.IO.File]::ReadLines($glog)) { if ($ln.Trim()) { $glLines++; $glLast = $ln } }
+        $glAge = "newest entry age unknown"
+        if ($glLast) {
+          try {
+            $ts = [datetime]::ParseExact(([string]($glLast | ConvertFrom-Json).ts), "yyyy-MM-ddTHH:mm:ss.fffZ",
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+            $span = [datetime]::UtcNow - $ts
+            if ($span.TotalDays -ge 1) { $glAge = "newest entry {0:N1} day(s) old" -f $span.TotalDays }
+            elseif ($span.TotalHours -ge 1) { $glAge = "newest entry {0:N1} hour(s) old" -f $span.TotalHours }
+            else { $glAge = "newest entry {0:N0} minute(s) old" -f [math]::Max(0, $span.TotalMinutes) }
+          } catch { }
+        }
+        $glDetail = "{0:N1} KB, {1} line(s), {2}" -f ($glBytes / 1KB), $glLines, $glAge
+        if ($glBytes -gt $GATES_LOG_WARN_BYTES) {
+          Say "WARN" "gate log" "$glDetail - over 5 MB; roll by hand: rename to grades/gates-log-<yyyy-MM-dd>.jsonl" `
+              "roll the gate log by hand: rename grades/gates-log.jsonl to grades/gates-log-<yyyy-MM-dd>.jsonl (next append starts a fresh log with a genesis record; nothing rolls it automatically)"
+        } else { Say "OK" "gate log" $glDetail }
+      } catch { Say "WARN" "gate log" "could not read grades\gates-log.jsonl: $($_.Exception.Message)" }
+    }
   }
 }
+
+# ---------------------------------------------------------------- harness versions (R40, C2f)
+# Read-only: installed vs latest vs measured. Newer than measured is a WARN, never a FAIL. Nothing installs.
+Write-Host "`n-- harness versions (R40) --" -ForegroundColor Cyan
+try {
+  . (Join-Path $kit "harness-versions.ps1")
+  $hvRaw = ""
+  try { $hvRaw = Get-Content (Join-Path $kit "install.ps1") -Raw } catch { }
+  $hvMeasured = @{}
+  $hvCc = [regex]::Match($hvRaw, '\$ClaudeCodeMeasuredVersion\s*=\s*"([^"]+)"')
+  if ($hvCc.Success) { $hvMeasured['claude-code'] = $hvCc.Groups[1].Value }
+  $hvCp = [regex]::Match($hvRaw, '\$CopilotMeasuredVersion\s*=\s*"([^"]+)"')
+  if ($hvCp.Success) { $hvMeasured['copilot-cli'] = $hvCp.Groups[1].Value }
+  $hvNames = @('claude-code')
+  if (Get-Exe "copilot") { $hvNames += 'copilot-cli' }
+  foreach ($hvName in $hvNames) {
+    $hvTable = Get-Variable -Name HarnessTable -ValueOnly   # defined by harness-versions.ps1 (dot-sourced)
+    $hvT = $hvTable[$hvName]
+    $hvInst = Get-HarnessVersion -Cli $hvT.Cli
+    $hvLatest = $null
+    if ($hvInst) { $hvLatest = Get-LatestVersion -Package $hvT.Package }
+    $hvM = "$($hvMeasured[$hvName])"
+    Write-HarnessReport -Name $hvName -Installed $hvInst -Latest $hvLatest -Measured $hvM
+    if ($hvInst -and $hvM -and ((Compare-HarnessVersion $hvInst $hvM) -gt 0)) {
+      Say "WARN" "$hvName newer than measured" "$hvInst > $hvM" "re-check $hvName against hooks/payload (C2, T9.5), usage fields (C4a), local model catalog"
+    }
+  }
+} catch { Say "WARN" "harness versions" "could not read: $($_.Exception.Message)" }
 
 # ---------------------------------------------------------------- copilot cli harness (R37)
 # Silent unless this machine actually uses the Copilot harness - either the hooks are installed or the CLI is
