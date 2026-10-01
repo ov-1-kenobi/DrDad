@@ -822,7 +822,7 @@
   `$env:LOCALTOOLS_DOCS_DIR` set by `corpus.ps1` for a research corpus is a legitimate non-project dir - do
   not break it.
 
-### Story S20: The local-tools MCP server must not index an empty placeholder docs dir either   (R24)   <!-- Status: TODO -->
+### Story S20: The local-tools MCP server must not index an empty placeholder docs dir either   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the C# server applies S19's docs-dir rule to its PRIMARY root, so `index_datasheets` and
   `search_datasheets` never silently run against an empty placeholder folder.
 - **Context:** observed 2026-10-01 during `/audit`. S19 added the shared `Resolve-DocsDir` rule

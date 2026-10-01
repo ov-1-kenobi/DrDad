@@ -2838,6 +2838,115 @@ Test-Case "the corpus spans MULTIPLE roots (and does not double-count)" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "T20.2 / S20 AC1-AC5, AC7, AC8: the server's env-var docs-dir rule (--corpus, no Ollama)" {
+  # S20 mirrors S19's docs-dir rule inside the C# server: an ENV-VAR primary root holding none of
+  # DESIGN/TEDD/STORIES/CORPUS.md yields to <cwd>\docs when that one passes, with ONE WARN on stderr (stdout
+  # is the MCP protocol channel). An explicit CLI path arg bypasses the rule. Fixtures live in a %TEMP%
+  # sandbox, never under the kit tree; the process env var is restored exactly as found.
+  if ($SkipBuild) { return }
+  $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+  if (-not (Test-Path $exe)) { return }
+  $sb = New-Sandbox
+  # run the exe with a given LOCALTOOLS_DOCS_DIR ($null = unset), cwd and args; stdout/stderr SEPARATELY
+  $run = {
+    param($envVal, [string]$cwd, [string[]]$argv)
+    $hadOld = Test-Path env:LOCALTOOLS_DOCS_DIR
+    $old = $env:LOCALTOOLS_DOCS_DIR
+    $o = Join-Path $sb ("out_" + [guid]::NewGuid().ToString("N").Substring(0,6) + ".txt")
+    $e = Join-Path $sb ("err_" + [guid]::NewGuid().ToString("N").Substring(0,6) + ".txt")
+    try {
+      if ($null -eq $envVal) { Remove-Item env:LOCALTOOLS_DOCS_DIR -ErrorAction SilentlyContinue }
+      else { $env:LOCALTOOLS_DOCS_DIR = $envVal }
+      $p = Start-Process -FilePath $exe -ArgumentList $argv -WorkingDirectory $cwd -NoNewWindow -Wait -PassThru `
+        -RedirectStandardOutput $o -RedirectStandardError $e
+      $out = if (Test-Path $o) { [string](Get-Content $o -Raw) } else { "" }
+      $err = if (Test-Path $e) { [string](Get-Content $e -Raw) } else { "" }
+      return @{ Out = $out; Err = $err; Code = $p.ExitCode }
+    } finally {
+      if ($hadOld) { $env:LOCALTOOLS_DOCS_DIR = $old } else { Remove-Item env:LOCALTOOLS_DOCS_DIR -ErrorAction SilentlyContinue }
+      Remove-Item $o, $e -Force -ErrorAction SilentlyContinue
+    }
+  }
+  # first root line of --corpus stdout ("  <root>  -> N file(s)")
+  $firstRoot = { param([string]$s) ($s -split "`r?`n" | Where-Object { $_ -match '^\s{2}\S.*->\s+\d+ file\(s\)' } | Select-Object -First 1) }
+  try {
+    $proj = Join-Path $sb "proj"; $empty = Join-Path $sb "empty"; $good = Join-Path $sb "good"
+    $corp = Join-Path $sb "corp"; $shared = Join-Path $sb "shared"; $bare = Join-Path $sb "bare"
+    New-Item -ItemType Directory -Force (Join-Path $proj "docs"), $empty, $good, $corp, $shared, $bare | Out-Null
+    "# design" | Set-Content (Join-Path $proj "docs\DESIGN.md") -Encoding ASCII
+    "# good design" | Set-Content (Join-Path $good "DESIGN.md") -Encoding ASCII
+    "# corpus" | Set-Content (Join-Path $corp "CORPUS.md") -Encoding ASCII
+    "# elsewhere" | Set-Content (Join-Path $shared "finding.md") -Encoding ASCII
+
+    # AC1: placeholder (empty) primary + cwd with docs\DESIGN.md -> cwd docs is primary, WARN on stderr only
+    $r = & $run $empty $proj @("--corpus")
+    Assert ($r.Code -eq 0) "AC1: exit code $($r.Code)`n$($r.Err)"
+    $f = & $firstRoot $r.Out
+    Assert ($f -match 'proj\\docs\s') "AC1: first root is not proj\docs: '$f'`n$($r.Out)"
+    Assert ($r.Out -match 'index: .*proj\\docs\\\.index\\chunks\.json') "AC1: index not under proj\docs\.index:`n$($r.Out)"
+    Assert ($r.Err -match 'WARN: ignoring LOCALTOOLS_DOCS_DIR') "AC1: no WARN on stderr:`n$($r.Err)"
+    Assert ($r.Err -match '\\empty \(no DESIGN/TEDD/STORIES/CORPUS there\); using .*proj\\docs') "AC1: WARN does not name the rejected dir and cwd docs:`n$($r.Err)"
+    Assert ($r.Out -notmatch 'WARN') "AC1: WARN leaked onto stdout (the MCP protocol channel):`n$($r.Out)"
+
+    # AC2: a valid override holding DESIGN.md -> honoured, no warning
+    $r = & $run $good $proj @("--corpus")
+    $f = & $firstRoot $r.Out
+    Assert ($f -match '\\good\s') "AC2: valid override not primary: '$f'`n$($r.Out)"
+    Assert ($r.Err -notmatch 'WARN') "AC2: unexpected WARN:`n$($r.Err)"
+    Assert ($r.Out -notmatch 'WARN') "AC2: WARN on stdout:`n$($r.Out)"
+
+    # AC3: override invalid and cwd has no docs -> keeps the primary, exit 0, no crash, no WARN
+    $r = & $run $empty $bare @("--corpus")
+    Assert ($r.Code -eq 0) "AC3: exit code $($r.Code)`n$($r.Err)"
+    $f = & $firstRoot $r.Out
+    Assert ($f -match '\\empty\s') "AC3: invalid primary not kept: '$f'`n$($r.Out)"
+    Assert ($r.Err -notmatch 'WARN') "AC3: unexpected WARN:`n$($r.Err)"
+
+    # AC4: nothing (.index, web) created under a rejected override. --corpus never creates folders, so
+    # this needs --reindex (no path arg): Rag.IndexAsync creates DocsDir + IndexDir BEFORE any Ollama call.
+    # Only FILESYSTEM facts are asserted - exit code/stdout depend on whether Ollama is up (CI: it is not).
+    $left = @(Get-ChildItem -Force $empty)
+    Assert ($left.Count -eq 0) "AC4: rejected override gained: $(($left | ForEach-Object Name) -join ', ')"
+    $missing = Join-Path $sb "missing"
+    $hadOld = Test-Path env:LOCALTOOLS_DOCS_DIR
+    $old = $env:LOCALTOOLS_DOCS_DIR
+    try {
+      $env:LOCALTOOLS_DOCS_DIR = $missing
+      $p = Start-Process -FilePath $exe -ArgumentList @("--reindex") -WorkingDirectory $proj -NoNewWindow -PassThru `
+        -RedirectStandardOutput (Join-Path $sb "reidx_out.txt") -RedirectStandardError (Join-Path $sb "reidx_err.txt")
+      # a hung Ollama must not stall the suite
+      try { $p | Wait-Process -Timeout 60 -ErrorAction Stop } catch { try { $p.Kill() } catch {}; try { $p.WaitForExit(5000) | Out-Null } catch {} }
+    } finally {
+      if ($hadOld) { $env:LOCALTOOLS_DOCS_DIR = $old } else { Remove-Item env:LOCALTOOLS_DOCS_DIR -ErrorAction SilentlyContinue }
+    }
+    Assert (-not (Test-Path $missing)) "AC4: --reindex created the rejected override dir (or its .index): $missing"
+    Assert (Test-Path (Join-Path $proj "docs\.index")) "AC4: --reindex did not create .index under the substituted cwd docs"
+
+    # AC5: multi-root ';' value -> proj\docs replaces the rejected primary, the secondary root stays listed
+    $r = & $run "$empty;$shared" $proj @("--corpus")
+    $f = & $firstRoot $r.Out
+    Assert ($f -match 'proj\\docs\s') "AC5: first root is not proj\docs: '$f'`n$($r.Out)"
+    Assert ($r.Out -match '\\shared\s') "AC5: secondary root 'shared' not listed:`n$($r.Out)"
+    Assert ($r.Out -match 'finding\.md|2 indexable file\(s\)') "AC5: shared\finding.md not counted:`n$($r.Out)"
+
+    # AC7: env-var primary holding only CORPUS.md -> honoured, no warning (cwd docs is valid too)
+    $r = & $run $corp $proj @("--corpus")
+    $f = & $firstRoot $r.Out
+    Assert ($f -match '\\corp\s') "AC7: CORPUS.md primary not honoured: '$f'`n$($r.Out)"
+    Assert ($r.Err -notmatch 'WARN') "AC7: unexpected WARN:`n$($r.Err)"
+    Assert ($r.Out -notmatch 'WARN') "AC7: WARN on stdout:`n$($r.Out)"
+
+    # AC8: explicit --corpus <dir> with no marker -> used as-is, no warning, even though proj\docs is valid
+    $r = & $run $null $proj @("--corpus", "`"$empty`"")
+    Assert ($r.Code -eq 0) "AC8: exit code $($r.Code)`n$($r.Err)"
+    $f = & $firstRoot $r.Out
+    Assert ($f -match '\\empty\s') "AC8: explicit arg not used as-is: '$f'`n$($r.Out)"
+    Assert ($r.Err -notmatch 'WARN') "AC8: unexpected WARN for an explicit arg:`n$($r.Err)"
+    Assert ($r.Out -notmatch 'WARN') "AC8: WARN on stdout:`n$($r.Out)"
+    Assert (@(Get-ChildItem -Force $empty).Count -eq 0) "AC8: --corpus created something under the explicit dir"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "publish-run secret-scans, records provenance, commits locally, never pushes" {
   # The proving-ground artifact: a session transcript + a COMPUTED state snapshot copied into a repo's
   # runs/, so "runs as they happen" is a real git trail. The gate that matters: a transcript is exactly
