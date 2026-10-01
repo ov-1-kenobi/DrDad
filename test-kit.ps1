@@ -2927,7 +2927,8 @@ Test-Case "T20.2 / S20 AC1-AC5, AC7, AC8: the server's env-var docs-dir rule (--
     $f = & $firstRoot $r.Out
     Assert ($f -match 'proj\\docs\s') "AC5: first root is not proj\docs: '$f'`n$($r.Out)"
     Assert ($r.Out -match '\\shared\s') "AC5: secondary root 'shared' not listed:`n$($r.Out)"
-    Assert ($r.Out -match 'finding\.md|2 indexable file\(s\)') "AC5: shared\finding.md not counted:`n$($r.Out)"
+    Assert ($r.Out -match 'finding\.md') "AC5: shared\finding.md not listed:`n$($r.Out)"
+    Assert ($r.Out -match '\b2 indexable file\(s\)') "AC5: expected 2 indexable files (proj\docs\DESIGN.md + shared\finding.md):`n$($r.Out)"
 
     # AC7: env-var primary holding only CORPUS.md -> honoured, no warning (cwd docs is valid too)
     $r = & $run $corp $proj @("--corpus")

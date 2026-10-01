@@ -101,6 +101,7 @@ public static class Rag
     static bool HasProjectDocs(string d) =>
         Directory.Exists(d) && new[] { "DESIGN.md", "TEDD.md", "STORIES.md", "CORPUS.md" }
             .Any(n => File.Exists(Path.Combine(d, n)));
+
     static string IndexFile => Path.Combine(IndexDir, "chunks.json");
     static string SigFile   => Path.Combine(IndexDir, "manifest.sig");  // corpus signature, for staleness
 
