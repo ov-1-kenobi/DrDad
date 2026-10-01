@@ -9,6 +9,7 @@
 #      anything custom)
 #
 # Usage:  upgrade-project.ps1 [projectDir]     (default: current folder; safe to re-run)
+# Refuses (exit 2, writes nothing) when the target is a DrDad kit checkout (install.ps1 + VERSION + global\commands\).
 
 # CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
 # ADVANCED function, so PowerShell silently drops unmatched arguments into $args instead of failing:
@@ -21,6 +22,20 @@ $ErrorActionPreference = "Stop"
 $kit = $PSScriptRoot
 $templates = Join-Path $kit "templates"
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
+
+# S26: the kit repo is not a project. Retrofitting it repointed its .mcp.json at the repo build (undoing
+# the deliberate "kit repo runs the INSTALLED copy" exception, so local-tools.exe file-locked bin\ and
+# the build failed with MSB3026), restamped .dad-kit-version and rewrote CLAUDE.md - observed 2026-10-01.
+# Refuse BEFORE any write, so "changes nothing" holds by construction. Key on the TARGET ($proj), never
+# on $kit/$PSScriptRoot, so an installed copy run against a checkout is caught too. All three markers are
+# required - one alone is too weak a signal for a user project. Exit 2 = refused (1 = no CLAUDE.md).
+$isKit = (Test-Path -LiteralPath (Join-Path $proj "install.ps1") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $proj "VERSION") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $proj "global\commands") -PathType Container)
+if ($isKit) {
+  # Resolve-Path keeps a trailing '\' from a `kitA\` argument; trim it for the message only (drive root kept).
+  $shown = $proj; if ($shown.Length -gt 3) { $shown = $shown.TrimEnd('\', '/') }
+  Write-Host "$shown is a DrDad kit checkout, not a project - upgrade-project does not retrofit the kit; use install.cmd to deploy it" -ForegroundColor Yellow
+  exit 2
+}
 
 if (-not (Test-Path (Join-Path $proj "CLAUDE.md"))) {
   Write-Host "No CLAUDE.md in $proj - not a DAD project (run new-project.ps1 to scaffold)." -ForegroundColor Yellow

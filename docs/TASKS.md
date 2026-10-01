@@ -2194,7 +2194,7 @@ it is closed, like T22.3 does for S22. It is queued last and blocks nothing.)
 - **Refs:** Story S25 (AC1-AC5); `docs/DESIGN.md` C5f worked example (C2 bumped to 1.0.95, C5 left at 1.0.89 -> FAIL naming C5's stamp); test-kit.ps1 C2f case (~1562).
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. Assert on the exact problem string with `-eq` (no regex metacharacter trouble). The function counts lines by "`n", so fixtures joined with "`n" or "`r`n" give the same numbers. ASCII only; needs no network, no files outside memory.
 
-### [ ] T26.1 - upgrade-project.ps1: refuse a kit checkout (three markers) before any write, exit 2   (Story S26)
+### [x] T26.1 - upgrade-project.ps1: refuse a kit checkout (three markers) before any write, exit 2   (Story S26)
 - **Goal:** `upgrade-project.ps1` detects that the resolved `-ProjectDir` is a DrDad kit checkout and exits 2 with one message line, having written nothing.
 - **Touches:** `upgrade-project.ps1` only - one guard block inserted directly after `$proj = (Resolve-Path -LiteralPath $ProjectDir).Path` (line 23) and BEFORE the `CLAUDE.md` existence check (line 25), i.e. before the stamp/legacy-marker migration (lines 29-42), `docs\` creation (46), the COMMANDS.md migration (1a), the `.mcp.json` repoint (0b, lines 59-79), the CLAUDE.md section refresh and every git step. Also one line in the header comment (lines 1-11). NOT `install.ps1`, NOT `docs/DESIGN.md`, NOT `upgrade-project.cmd`.
 - **Do:**
