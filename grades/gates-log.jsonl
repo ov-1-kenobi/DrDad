@@ -50,3 +50,4 @@
 {"v":1,"ts":"2026-10-01T03:41:00.008Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
 {"v":1,"ts":"2026-10-01T03:48:33.205Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 20, tasks 54)","session":""}
 {"v":1,"ts":"2026-10-01T03:48:39.185Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S20","session":""}
+{"v":1,"ts":"2026-10-01T03:48:45.606Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
