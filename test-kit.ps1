@@ -4368,7 +4368,7 @@ Test-Case "S23: an acknowledged security waiver silences the auth-keyword WARN u
 
     # AC6: on the AC2 fixture the untagged STATE FACTS line is NOT counted as a finding by dad-run-summary
     Set-WaiverDesign $notReq $valid $d3 $st
-    $dsOut = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>$null)
+    $dsOut = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>$null)
     $direct = @($dsOut | Where-Object { ([string]$_) -match '^\s*\[[a-z]+\]' }).Count
     $factLine = @($dsOut | Where-Object { ([string]$_).Contains('not re-raised') })
     Assert ($factLine.Count -eq 1) "AC6: expected exactly one 'not re-raised' line, got $($factLine.Count)"
