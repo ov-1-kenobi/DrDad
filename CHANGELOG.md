@@ -2,6 +2,25 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.55.0 - 2026-10-01
+
+### Fixed - R24: a skipped test-kit case is COUNTED as skipped, never as a pass (Story S21)
+`test-kit.ps1` has a `Skip-Case "<reason>"` helper; a skipped case prints `SKIP  <name> - <reason>` and the
+summary is `== N passed, M failed, K skipped ==`. Under a full run a missing built exe is a FAIL, not a skip.
+Every build-dependent early return was converted. `close-unit`'s test-count parser now takes the LAST
+`N passed` match, so a test NAME containing "0 passed" can no longer read a green run as zero tests.
+**Upgrade note:** an installed 0.54.0 `close-unit` reads this kit's own 0.55.0 suite as "ZERO TESTS" and
+refuses story closes - install 0.55.0 before closing stories on the kit repo.
+
+### Added - R24: doc-stats flags a contract REFERENCED but never PINNED (Story S22)
+`doc-stats -Findings` reports a `[design]` finding for contract ids (`C<n>`, `C<n>a`, `C<n>-x`) that DESIGN,
+STORIES or TASKS reference but DESIGN has no heading for, with the first location per file (capped at 8).
+A sub-id resolves through its pinned parent (`C4a` via `C4`); lowercase `c<n>` is not a reference.
+
+### Changed - design retrofit
+DESIGN unlocked, amended and re-locked: contract C5 (Copilot CLI parity, C5a-C5f) pinned; C4a/R1/R40
+amended; the NOT-REQUIRED security posture recorded as foundational. Stories S21-S25 added and mapped.
+
 ## 0.54.0 - 2026-10-01
 
 ### Fixed - R24: the local-tools server no longer indexes an empty placeholder docs dir (Story S20)
