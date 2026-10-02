@@ -260,7 +260,7 @@ if ($Findings) {
         $refLines = @(Get-Content -LiteralPath $src[0] -Encoding UTF8)
         $seenHere = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
         for ($i = 0; $i -lt $refLines.Count; $i++) {
-          foreach ($rm in [regex]::Matches([string]$refLines[$i], '\bC[0-9]+[a-z]?(?:-[a-z0-9]+)?\b')) {
+          foreach ($rm in [regex]::Matches([string]$refLines[$i], '\bC[0-9]+[a-z]?(?:-[A-Za-z0-9]+)?\b')) {
             $rid = $rm.Value
             $rparent = [regex]::Match($rid, '^C[0-9]+').Value
             if ($pinnedIds.Contains($rid) -or $pinnedIds.Contains($rparent)) { continue }

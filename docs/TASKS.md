@@ -2062,7 +2062,7 @@ keeps Story S23 open until it is closed, and is queued at the very end.)
 - **Refs:** Story S22 (AC1-AC6); test-kit.ps1:4092-4135, :4137-4184 (fixture style); doc-stats.ps1:233-242 (Contracts gate); CLAUDE.md "Add a Test-Case for any bug".
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. In assertions on the finding text use `-match` with escaped regex or `.Contains()` for the literal line (parentheses and dots are regex metacharacters). The suite needs no network and must not touch the real `%USERPROFILE%\.claude`. ASCII only.
 
-### [ ] T22.3 - doc-stats: contract-id heading and reference patterns agree on suffix case   (Story S22)
+### [x] T22.3 - doc-stats: contract-id heading and reference patterns agree on suffix case   (Story S22)
 - **Goal:** a contract reference with an uppercase hyphen suffix (an id shaped `C<n>-API`) parses as the same id its heading pins, so a heading such as `### C<n>-API:` + a reference `C<n>-API` no longer yields a false "REFERENCED but never PINNED" finding. (Example ids in this task are written `C<n>...` on purpose so this text carries no parsable unpinned id; the fixture uses n = 7, see Do step 3.)
 - **Touches:** `doc-stats.ps1` (the reference regex inside T22.1's referenced-but-not-pinned block in `-Findings`, ~line 262); `test-kit.ps1` (the existing S22 Test-Case, ~lines 4204-4270, AC2 block ~4239-4244). Locate both by content; line numbers are approximate. NOT the heading regex `$contractHeadingRx`, NOT the `-Contract <id>` lookup, NOT `docs/DESIGN.md`.
 - **Do:**

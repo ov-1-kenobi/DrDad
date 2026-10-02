@@ -4243,6 +4243,16 @@ Test-Case "S22: doc-stats flags contract ids REFERENCED but never PINNED (AC1-AC
     $o = Findings
     Assert (-not $o.Contains($tag)) "AC2: a sub-contract id (C4a / C3-b) was not resolved via its pinned parent. Output: $o"
 
+    # T22.3: an uppercase hyphen suffix parses the same in heading and reference (id built by concatenation)
+    $id = 'C' + '7-API'
+    Set-S22Doc "DESIGN.md" ($hdrDraft + @('## Contracts', "### ${id}: x", '', "The client follows $id."))
+    Set-S22Doc "STORIES.md" $null
+    $o = Findings
+    Assert (-not $o.Contains($tag)) "T22.3 (a): a pinned uppercase-suffix id was reported as unpinned. Output: $o"
+    Set-S22Doc "DESIGN.md" ($hdrDraft + @('## Contracts', '### C1: x', '', "The client follows $id."))
+    $o = Findings
+    Assert ($o.Contains($tag) -and $o.Contains($id + ' (')) "T22.3 (b): an unpinned uppercase-suffix id was not named in the finding. Output: $o"
+
     # AC3: C2PA, C# and C++ are not contract ids, and matching is case-SENSITIVE (a lowercase c<n> is prose, not an id)
     Set-S22Doc "DESIGN.md" ($hdrDraft + @('## Contracts', '### C1: x', '', 'signed with C2PA, written in C# and C++.', ('see c' + 9 + ' and c' + 12 + '.')))
     Set-S22Doc "STORIES.md" @('# Stories', '', '### Story S1: one   <!-- Status: TODO -->', '- **Goal:** signed with C2PA, written in C# and C++.')
