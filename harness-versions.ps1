@@ -83,10 +83,11 @@ function Write-HarnessReport {
 # --output-format json` with per-process env ANTHROPIC_BASE_URL=http://localhost:11434 and a dummy
 # ANTHROPIC_AUTH_TOKEN, ideally `--setting-sources project,local` so the user settings.json env cannot
 # override, exits 0 with a non-empty result and `modelUsage` keyed by the -cc name. The
-# `unrecognized_model` line is a WARN, not a FAIL. Probe only when Ollama is reachable, otherwise SKIP
+# probe's stderr is captured and an `unrecognized_model` warning is PRINTED as a WARN (never a FAIL). Probe only when Ollama is reachable, otherwise SKIP
 # (reported as skipped, never as a pass). Per-process env only: settings.json / use-model state / any
 # security setting is never touched.
 # Test hook: env DAD_SMOKE_LOCALMODEL = pass | fail | skip forces the outcome (stubs in tests).
+# Test hook: env DAD_SMOKE_OLLAMA = up | down forces Ollama reachability (no request is made).
 function Test-LocalModelResolves {
   param([string]$ModelsJson = "")
   $res = { param($r, $ok, $why) [pscustomobject]@{ Result = $r; Ok = $ok; Reason = $why } }
@@ -103,17 +104,27 @@ function Test-LocalModelResolves {
   } catch { }
   if (-not $model) { return (& $res "SKIP" $false "skipped (no model name in models.json)") }
   $reachable = $false
-  try {
-    $null = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-    $reachable = $true
-  } catch { }
+  $o = "$env:DAD_SMOKE_OLLAMA"
+  if ($o -eq "up") { $reachable = $true }
+  elseif ($o -eq "down") { $reachable = $false }
+  else {
+    try {
+      $null = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+      $reachable = $true
+    } catch { }
+  }
   if (-not $reachable) { return (& $res "SKIP" $false "skipped (Ollama not reachable at localhost:11434)") }
   $saveUrl = $env:ANTHROPIC_BASE_URL; $saveTok = $env:ANTHROPIC_AUTH_TOKEN
   try {
+    $ErrorActionPreference = 'Continue'
+    $errFile = [IO.Path]::GetTempFileName()
     $env:ANTHROPIC_BASE_URL = "http://localhost:11434"
     $env:ANTHROPIC_AUTH_TOKEN = "ollama"
-    $raw = (& claude -p "Reply with the single word: pong" --max-turns 1 --model $model --output-format json --setting-sources project,local 2>$null | Out-String)
+    $raw = (& claude -p "Reply with the single word: pong" --max-turns 1 --model $model --output-format json --setting-sources project,local 2> $errFile | Out-String)
     $code = $LASTEXITCODE
+    $errText = ""
+    if (Test-Path $errFile) { $errText = "$(Get-Content $errFile -Raw)" }
+    if ($errText -match 'unrecognized_model') { Write-Host "[harness] local model ${model}: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves unknown)" -ForegroundColor Yellow }
     if ($code -ne 0) { return (& $res "FAIL" $false "claude exited $code for model $model") }
     $j = $null
     try { $j = $raw | ConvertFrom-Json } catch { }
@@ -127,6 +138,7 @@ function Test-LocalModelResolves {
     return (& $res "FAIL" $false "probe error: $($_.Exception.Message)")
   } finally {
     $env:ANTHROPIC_BASE_URL = $saveUrl; $env:ANTHROPIC_AUTH_TOKEN = $saveTok
+    if ($errFile) { Remove-Item $errFile -Force -ErrorAction SilentlyContinue }
   }
 }
 
