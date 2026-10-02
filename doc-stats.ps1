@@ -248,7 +248,8 @@ if ($Findings) {
     # Same section gate as the empty-Contracts finding, but in DRAFT and LOCKED alike (a to-do list in DRAFT,
     # a contract gap in LOCKED). The reference regex is [regex] (case-SENSITIVE: -match/Select-String would
     # also hit a lowercase 'c1') and does not match C2PA / C# / C++. A sub-id resolves via its parent
-    # (C4a -> C4, C3-b -> C3). Grade cards are history and are NOT scanned. Fenced code blocks are NOT
+    # (C4a -> C4, C3-b -> C3); likewise a capitalised
+    # word after a hyphen ('C1-Based') parses as a sub-id and resolves via its parent. Grade cards are history and are NOT scanned. Fenced code blocks are NOT
     # skipped: a C<n> inside a code sample counts as a reference like any other line.
     if ($designRaw -match '(?m)^##\s*Contracts\b') {
       $pinnedIds = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)

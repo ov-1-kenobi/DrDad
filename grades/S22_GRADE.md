@@ -1,58 +1,51 @@
 # Story S22 - doc-stats flags a contract that is REFERENCED but never PINNED (R24) : report card
 
-**Current grade: A-**  (as of 2026-10-01, iteration 2)
+**Current grade: A**  (as of 2026-10-02, iteration 3)
 
 ## Grade history
 | Iter | Date (YYYY-MM-DD) | Grade | Delta (one line: what changed since last) |
 |------|-------------------|-------|--------------------------------------------|
 | 1    | 2026-10-01        | A-    | first card for S22; T22.1 (da3cecf) doc-stats.ps1 check and T22.2 (23e1015) Test-Case READ |
 | 2    | 2026-10-01        | A-    | cites rewritten as full relative paths; doc-stats.ps1 cites after line 250 shifted +1 by hygiene's comment edit; mechanical item applied; AC5 confirmed by a live doc-stats run |
+| 3    | 2026-10-02        | A     | T22.3 (07617ee) landed: reference regex suffix now `[A-Za-z0-9]+`, closing iter-2 suggestion 1; two new assertions added |
 
 ## Assessment (this iteration)
-Read (line numbers re-verified against the files as they are NOW): docs/STORIES.md:904-942 (S22), docs/TASKS.md:2005-2039
-(T22.1, T22.2), doc-stats.ps1:111-121 (`$storiesFile`, `$tasksFile`, `$designName`), doc-stats.ps1:220-282 (design
-findings block incl. the new check), test-kit.ps1:4204-4270 (the new case), docs/DESIGN.md:545-1468 (Contracts headings
-only, via grep). Hygiene added a 2-line comment edit at doc-stats.ps1:250-251 (the "Fenced code blocks are NOT skipped"
-note), so every doc-stats.ps1 cite after line 250 moved down by 1; all cites below use the current numbers. test-kit.ps1
-was not shifted. Not run by me: build/tests, and `git show` (assessor has no shell; commits judged from the files at HEAD).
+Read now (line numbers re-verified against the current files, 2026-10-02): docs/STORIES.md:904-934 (S22 Behavior/AC),
+docs/TASKS.md:2029-2076 (T22.1-T22.3), doc-stats.ps1:240-279 (the whole referenced-but-not-pinned block),
+test-kit.ps1:4204-4280 (Test-Case "S22: doc-stats flags contract ids REFERENCED but never PINNED (AC1-AC4)"). Not run by me:
+build/tests (no shell), so the green suite is taken from the T22.3 close, not observed.
 
-- Correctness: good. The existing heading regex is hoisted once as `$contractHeadingRx` (doc-stats.ps1:237) and reused by
-  both the empty-Contracts check (doc-stats.ps1:239) and the new check (doc-stats.ps1:254) - no second regex (Behavior 1).
-  References use `[regex]::Matches` with `\bC[0-9]+[a-z]?(?:-[a-z0-9]+)?\b` (doc-stats.ps1:262), case-sensitive as the
-  story requires. Resolution is exact-or-parent via `^C[0-9]+` (doc-stats.ps1:264-265). Sources are design, STORIES,
-  TASKS in that order, each skipped if absent, never grades\ (doc-stats.ps1:256-258). First location per file per id via a
-  per-file HashSet (doc-stats.ps1:260, 266); an ordered dictionary keeps first-seen id order (doc-stats.ps1:255, 267).
-  The gate is ONLY the `## Contracts` section, no Status test (doc-stats.ps1:252), so DRAFT and LOCKED both fire. Message
-  text, 8-entry cap and ` ...` suffix match the story wording (doc-stats.ps1:272-276); it goes into `$f` with the other
-  `[design]` findings (Dev notes, docs/STORIES.md:940-942).
-- Acceptance: AC1 test-kit.ps1:4222-4237 - the exact expected string at test-kit.ps1:4227 ends with the fixture's TASKS
-  location followed by a closing paren, which proves the fixture's second DESIGN reference (line 9) is not listed; the
-  LOCKED re-run is at test-kit.ps1:4231-4233 and pinning clears it at test-kit.ps1:4235-4237. AC2 test-kit.ps1:4239-4244
-  (C4a, C3-b). AC3 test-kit.ps1:4246-4250 (C2PA, C#, C++, plus lowercase `c9`/`c12` built at runtime - stronger than
-  asked). AC4 test-kit.ps1:4252-4257 (ids built as `"C" + 7`, so the suite text carries no dangling id). Cap
-  test-kit.ps1:4259-4268 (count 10, exactly 8 entries, ` ...`). AC5: CONFIRMED - `dad doc-stats -Findings` on the kit
-  printed no "REFERENCED but never PINNED" finding (2026-10-01, reported by the coordinator). That matches my grep:
-  docs/DESIGN.md:545 is `## Contracts`, docs/DESIGN.md:1301 pins `### C5:`, and a case-sensitive grep of DESIGN/STORIES/
-  TASKS found no id numbered 0 or >= 6; every C1-C5 sub-id has a pinned parent. AC6 and the T22.2 mutation check (parent
-  rule as a no-op -> AC2 fails) are not verifiable by me without a shell.
-- Design: in scope. `-Contract <id>` (doc-stats.ps1:88-108 per the T22.1 Refs) and the empty-Contracts finding's
-  behaviour are unchanged apart from using the hoisted variable; docs/DESIGN.md was not edited to silence anything.
-- Quality: compact, commented with the why (doc-stats.ps1:244-251), PS 5.1-safe (no ternary, explicit generic types).
-  Edge gap: the heading regex accepts UPPERCASE suffixes (`[A-Za-z0-9-]*`) but the reference regex only lowercase ones,
-  so a heading `### C7-API:` pins `C7-API`, while a reference `C7-API` is read as `C7` (\b before `-`), whose parent is not
-  pinned -> a false WARN. The kit does not hit this today. The gate uses `-match` (case-insensitive) on `## Contracts`,
-  the same as the existing gate - consistent.
-- Hygiene: only doc-stats.ps1 and test-kit.ps1 touched per the tasks; ASCII; the test cleans its sandbox in `finally`
-  (test-kit.ps1:4269) and removes the TASKS/STORIES fixtures between sub-cases via `Set-S22Doc ... $null`
-  (test-kit.ps1:4214).
-- Verification mode: no AC touches real machine state (doc-stats only reads docs; fixtures are New-Sandbox %TEMP% dirs).
-  AC5 was verified by a live read-only doc-stats run on the kit repo (2026-10-01, per the coordinator), backed by my
-  code review and grep.
+- Correctness: good. Reference regex at doc-stats.ps1:264 is `\bC[0-9]+[a-z]?(?:-[A-Za-z0-9]+)?\b`, run through the
+  case-sensitive `[regex]::Matches`, so the hyphen suffix accepts the same alphabet as the heading regex
+  (`$contractHeadingRx`, reused at doc-stats.ps1:256). `### C7-API:` + reference `C7-API` resolves exactly
+  (doc-stats.ps1:267). Resolve rule: exact id or `^C[0-9]+` parent (doc-stats.ps1:266-267), so C4a -> C4 and C3-b -> C3.
+  Gate is only the `## Contracts` section (doc-stats.ps1:254), DRAFT and LOCKED alike; grade cards are not scanned (stated
+  doc-stats.ps1:252, and the sources list at :258 is only DESIGN/STORIES/TASKS); first location per file per id
+  (`$seenHere`, doc-stats.ps1:262,268); 8-entry cap with ` ...` (doc-stats.ps1:275-276); finding text at :277.
+- Acceptance:
+  - AC1 (finding names each id with file:line, first line per file only; fires in DRAFT and LOCKED; pinning clears it):
+    test-kit.ps1:4222-4237, exact string at :4227 (`C5 (DESIGN.md:8, STORIES.md:4, TASKS.md:5)`; DESIGN.md:9 is deliberately absent).
+  - AC2 (sub-id resolves via parent): test-kit.ps1:4239-4244 (C4a, C3-b).
+  - AC3 (C2PA, C#, C++ and lowercase c<n> are not ids): test-kit.ps1:4256-4260, lowercase ids built at runtime (:4257).
+  - AC4 (no `## Contracts` section -> silent): test-kit.ps1:4262-4267.
+  - Cap: test-kit.ps1:4269-4278 (10 counted, exactly 8 entries shown, ` ...` present).
+  - T22.3 assertions: (a) test-kit.ps1:4248-4251 pinned uppercase-suffix id not flagged; (b) :4252-4254 an unpinned one IS
+    named (guards against the regex simply going silent). The id is built by concatenation (:4247) so the suite text carries
+    no dangling id. AC5 (kit repo silent) confirmed live in iter 2; AC6 and the mutation checks need a shell, unverified by me.
+- Design: in scope. Heading regex, `-Contract <id>` and DESIGN.md untouched by T22.3. One check, no second heading regex
+  (the heading regex is reused, doc-stats.ps1:256). Same section gate as the empty-Contracts finding (doc-stats.ps1:241-243).
+- Quality: compact, why-comments at doc-stats.ps1:245-253, PS 5.1-safe, no dead code. Residual behaviour: a prose word like
+  `C1-Based` is read as sub-id `C1-Based`, which resolves only via parent `C1` - harmless when C1 is pinned, a (correct)
+  WARN when it is not. This is now documented at doc-stats.ps1:250-252, though the wrap is ragged (`likewise a capitalised`
+  alone on :251, a very long :252).
+- Hygiene: only doc-stats.ps1 and test-kit.ps1 touched; ASCII; fixtures live in a temp sandbox removed in `finally`
+  (test-kit.ps1:4279).
+- Verification mode: no AC touches real machine state (reads docs only; fixtures are temp sandboxes). Code-review plus
+  fixture-test evidence; AC5 was live-run read-only on the kit repo in iter 2.
 
 ## Suggestions (prioritized; tag each so the team knows who acts)
-1. [dev] Make the two id formats agree: either let resolution also succeed when a pinned id has the same `^C[0-9]+`
-   parent as the reference (doc-stats.ps1:264-265), or restrict the heading regex suffix to the reference format. Today
-   `### C7-API:` plus a reference to `C7-API` WARNs falsely. Add a check for it to the AC2 block (test-kit.ps1:4239-4244).
-2. [human] Confirm the T22.2 mutation check (parent rule as a no-op makes the AC2 assert fail) was actually performed;
-   AC5 itself is now confirmed by a live run.
-3. ~~[mechanical] Note in the comment that fenced code blocks are scanned.~~ APPLIED by hygiene: doc-stats.ps1:250-251.
+1. ~~[dev] Make heading and reference suffix formats agree.~~ APPLIED by T22.3 (doc-stats.ps1:264, test-kit.ps1:4246-4254).
+2. [human] Confirm the T22.2/T22.3 "revert the change and the assertion fails" mutation checks were actually performed
+   (I cannot run them); low risk since assertion (b) and the cap case would expose a silent regex.
+3. ~~[mechanical] Note that a capitalised word after a hyphen parses as a sub-id.~~ APPLIED (doc-stats.ps1:250-252);
+   optional leftover: re-wrap that comment (:251 is a one-line fragment, :252 is overlong).
