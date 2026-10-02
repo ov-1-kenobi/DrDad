@@ -316,8 +316,12 @@ if ($Findings) {
       # acknowledges the waiver. M is a MATCH COUNT over the design doc + STORIES.md, EXCLUDING the
       # confirmation line itself (its own 'auth-keyword' matches \bauth\b and would make M = N+1 forever).
       # M <= N -> no finding, a STATE FACTS line instead; M > N, malformed, or no line -> the WARN fires.
-      $wl = [regex]::Match($designRaw, '(?im)^\s*Security waiver confirmed:\s*(.*?)\s*$')
-      $designForCount = [regex]::Replace($designRaw, '(?im)^\s*Security waiver confirmed:.*$', '')
+      # The confirmation is a HEADER line (before the first '## ' heading); a body line with the same
+      # prefix is ordinary text: never honoured, never malformed, and counted in M.
+      $hm = [regex]::Match($designRaw, '(?m)^##\s')
+      $designHeader = if ($hm.Success) { $designRaw.Substring(0, $hm.Index) } else { $designRaw }
+      $wl = [regex]::Match($designHeader, '(?im)^\s*Security waiver confirmed:\s*(.*?)\s*$')
+      $designForCount = if ($wl.Success) { $designRaw.Remove($wl.Index, $wl.Length) } else { $designRaw }
       $M = [regex]::Matches($designForCount, $authKw).Count
       if (Test-Path $storiesFile) { $M += [regex]::Matches((Get-Content $storiesFile -Raw), $authKw).Count }
       $today = (Get-Date).ToString('yyyy-MM-dd')

@@ -4369,12 +4369,32 @@ Test-Case "S23: an acknowledged security waiver silences the auth-keyword WARN u
       Assert ($o -notmatch 'not re-raised') "AC4: malformed line '$bad' was honoured. Output: $o"
     }
 
+    # (a) T23.3: a BODY line with the confirmation prefix is ordinary text - not honoured, not malformed, counted
+    $bodyDoc = @("# Design", "", "Status: LOCKED", "Security review: $notReq", "", "## Requirements", "- R1: a",
+      "Security waiver confirmed: YYYY-MM-DD (human; auth-keyword hits: N)", "- R2: login with a password", "",
+      "## Contracts", "### C1: x", "- **Decision:** y") -join "`r`n"
+    Set-Content "$p\docs\DESIGN.md" $bodyDoc -Encoding UTF8
+    Set-Content "$p\docs\STORIES.md" $st -Encoding UTF8
+    $o = Findings
+    Assert ($o -match 'NOT-REQUIRED, but') "T23.3(a): a body confirmation-prefix line silenced the WARN. Output: $o"
+    Assert ($o.Contains('To acknowledge it')) "T23.3(a): the WARN lacks the acknowledge hint. Output: $o"
+    Assert ($o -notmatch 'malformed') "T23.3(a): a body line was reported as a malformed confirmation. Output: $o"
+    Assert ($o -notmatch 'not re-raised') "T23.3(a): a body line was honoured as the confirmation. Output: $o"
+    Assert ($o -match 'auth-keyword hits: 4\)') "T23.3(a): the body line was not counted in M (expected 4). Output: $o"
+
     # AC5: REQUIRED ignores a confirmation line entirely
     Set-WaiverDesign "REQUIRED" $valid $d3 $st
     $o = Findings
     Assert ($o.Contains('Security review: REQUIRED and not done')) "AC5: REQUIRED + a confirmation line lost the REQUIRED finding. Output: $o"
     Assert ($o -notmatch 'not re-raised') "AC5: a confirmation line was honoured under REQUIRED. Output: $o"
     Assert ($o -notmatch 'malformed') "AC5: a confirmation line was parsed under REQUIRED. Output: $o"
+
+    # (b) T23.3: DONE + a body-only confirmation-prefix line (under ## Security decisions) -> no waiver reading
+    Set-WaiverDesign "DONE 2026-10-01" $valid ("## Security decisions`r`n- D1: local only, no network listener [S001]") $st
+    $o = Findings
+    Assert ($o -notmatch 'not re-raised') "T23.3(b): DONE branch honoured a waiver line. Output: $o"
+    Assert ($o -notmatch 'malformed') "T23.3(b): DONE branch reported a malformed waiver. Output: $o"
+    Assert (-not $o.Contains('Security review: DONE but')) "T23.3(b): DONE branch raised its finding. Output: $o"
 
     # AC6: on the AC2 fixture the untagged STATE FACTS line is NOT counted as a finding by dad-run-summary
     Set-WaiverDesign $notReq $valid $d3 $st
