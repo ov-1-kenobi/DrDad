@@ -4344,7 +4344,6 @@ Test-Case "S23: an acknowledged security waiver silences the auth-keyword WARN u
     function Findings() { return (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String) }
 
     $notReq = "NOT-REQUIRED (small personal project, low risk)"
-    $valid = "Security waiver confirmed: 2026-10-01 (human; auth-keyword hits: 3)"
     # 3 hits: design 'login' + 'password' (2) + STORIES.md 'token' (1) - proves M sums both files.
     # 5 hits: the same plus design 'session' + 'auth' (+2). ('tokens'/'sessions' would NOT match: \b.)
     $d3 = "- R2: login with a password"
@@ -4357,19 +4356,23 @@ Test-Case "S23: an acknowledged security waiver silences the auth-keyword WARN u
     Assert ($o -match 'NOT-REQUIRED, but') "AC1: no confirmation line + 3 hits did not raise the WARN. Output: $o"
     Assert ($o -match 'auth-keyword hits: 3') "AC1: the WARN does not report M = 3 (design + STORIES.md). Output: $o"
     Assert ($o -match 'Security waiver confirmed: \d{4}-\d{2}-\d{2} \(human; auth-keyword hits: 3\)') "AC1: the WARN does not carry the confirmation line to add. Output: $o"
+    # the line AC2+ add is the one AC1's WARN printed, verbatim (round trip), not a literal
+    $vm = [regex]::Match($o, 'Security waiver confirmed: (\d{4}-\d{2}-\d{2}) \(human; auth-keyword hits: 3\)')
+    $valid = $vm.Value; $vdate = $vm.Groups[1].Value
+    Assert ($vm.Success) "AC1: could not harvest the confirmation line from the WARN. Output: $o"
 
     # AC2: a valid line at N = 3 with M = 3 -> silenced; STATE FACTS says so ('now 3' also proves the
     # confirmation line's own 'auth-keyword' text is not counted)
     Set-WaiverDesign $notReq $valid $d3 $st
     $o = Findings
     Assert ($o -notmatch 'NOT-REQUIRED, but') "AC2: a valid waiver at M <= N still raised the WARN. Output: $o"
-    Assert ($o.Contains('security waiver: confirmed 2026-10-01 at 3 auth-keyword hits (now 3) - not re-raised')) "AC2: the STATE FACTS waiver line is missing or wrong. Output: $o"
+    Assert ($o.Contains("security waiver: confirmed $vdate at 3 auth-keyword hits (now 3) - not re-raised")) "AC2: the STATE FACTS waiver line is missing or wrong. Output: $o"
 
     # AC3: the same line, 5 hits -> re-fires with the delta and the refreshed line
     Set-WaiverDesign $notReq $valid $d5 $st
     $o = Findings
     # anchored on the WARN's preceding text so a sign-flipped delta ('- -2 new ...') cannot match
-    Assert ($o -match 'still holds here\. - 2 new auth-keyword mention\(s\) since the 2026-10-01 confirmation') "AC3: growth M = 5 > N = 3 did not re-fire with the delta. Output: $o"
+    Assert ($o -match ('still holds here\. - 2 new auth-keyword mention\(s\) since the ' + $vdate + ' confirmation')) "AC3: growth M = 5 > N = 3 did not re-fire with the delta. Output: $o"
     Assert ($o -match 'auth-keyword hits: 5\)') "AC3: the re-confirm line does not carry M = 5. Output: $o"
 
     # AC4: malformed lines (impossible date; missing N) are never honoured, regardless of M
