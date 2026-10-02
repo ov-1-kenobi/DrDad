@@ -996,7 +996,7 @@
   auth-keyword hits (now <M>) - not re-raised`); dad-run-summary is NOT changed. AC6 holds by that. Note
   this story and the regex itself add keyword hits to STORIES.md, so the kit's N is counted after it lands.
 
-### Story S24: The local-model probe SHOWS the unrecognized_model warning instead of discarding it   (R40)   <!-- Status: TODO -->
+### Story S24: The local-model probe SHOWS the unrecognized_model warning instead of discarding it   (R40)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the post-update local-model probe prints Claude Code's `unrecognized_model` warning as a WARN
   (still a PASS), and a smoke run whose local-model check was skipped never reports an unqualified pass.
 - **Context:** `/audit` 2026-10-01 + `/design` C4a OPEN-4, chosen by the human. `harness-versions.ps1`

@@ -1770,6 +1770,63 @@ Test-Case "R40 AC7: measured-version stamp is locked across install.ps1, DESIGN 
   Assert ($instText -notmatch '(?m)^npm install[^\r\n]*claude-code') "install.ps1 has a top-level unconditional npm install of claude-code"
 }
 
+# ---- S24 (T24.3): local-model probe WARN / SKIP. Stub claude on a CHILD process PATH only; no network
+# (DAD_SMOKE_OLLAMA is always forced), never the real claude/npm/install.ps1 or %USERPROFILE%\.claude.
+# Runs $Body in a child powershell after dot-sourcing harness-versions.ps1; returns the merged output.
+# $StderrText = the line the stub claude writes to stderr ($null = none). The body may use $fixture.
+function Invoke-S24Probe([string]$StderrText, [string]$Ollama, [string]$Body) {
+  $sb = New-Sandbox
+  $names = @("PATH","DAD_SMOKE_OLLAMA","DAD_SMOKE_LOCALMODEL","DAD_SMOKE_GATES")
+  $saved = @{}; foreach ($n in $names) { $saved[$n] = [Environment]::GetEnvironmentVariable($n, "Process") }
+  try {
+    $bin = Join-Path $sb "bin"; New-Item -ItemType Directory -Force $bin | Out-Null
+    Set-Content -Path (Join-Path $bin "out.json") -Value '{"result":"pong","modelUsage":{"qwen3-14b-cc":{}}}' -Encoding ASCII
+    $cmd = @('@echo off')
+    if ($StderrText) { $cmd += "echo $StderrText 1>&2" }
+    $cmd += @('type "%~dp0out.json"', 'exit /b 0')
+    Set-Content -Path (Join-Path $bin "claude.cmd") -Value $cmd -Encoding ASCII
+    $fixture = Join-Path $sb "models.json"
+    Set-Content -Path $fixture -Value '{"models":[{"alias":"fast","name":"qwen3-14b-cc"}]}' -Encoding ASCII
+    $driver = Join-Path $sb "driver.ps1"
+    Set-Content -Path $driver -Encoding ASCII -Value @(
+      '$ErrorActionPreference = "Stop"',
+      ('$kit = ''' + ($kit -replace "'", "''") + ''''),
+      ('$fixture = ''' + ($fixture -replace "'", "''") + ''''),
+      '. (Join-Path $kit "harness-versions.ps1")',
+      $Body)
+    $env:PATH = "$bin;$env:SystemRoot\System32;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+    $env:DAD_SMOKE_OLLAMA = $Ollama
+    $env:DAD_SMOKE_LOCALMODEL = $null
+    $env:DAD_SMOKE_GATES = "pass"
+    $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    return (& $ps -NoProfile -ExecutionPolicy Bypass -File $driver 2>&1 | Out-String)
+  } finally {
+    foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $saved[$n], "Process") }
+    Remove-Sandbox $sb
+  }
+}
+
+Test-Case "S24 AC1/AC2: the local-model probe PRINTS the unrecognized_model WARN and stays PASS" {
+  $body = '$r = Test-LocalModelResolves -ModelsJson $fixture; Write-Host "RESULT $($r.Result)"'
+  $warn = '[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves unknown)'
+  $w = Invoke-S24Probe "[claude-code:unrecognized_model] qwen3-14b-cc is not in this version's model catalog" "up" $body
+  Assert ($w.Contains($warn)) "AC1: the unrecognized_model WARN was not printed:`n$w"
+  Assert ($w.Contains("RESULT PASS")) "AC1: the probe did not stay PASS with the warning:`n$w"
+  $c = Invoke-S24Probe $null "up" $body
+  Assert ($c.Contains("RESULT PASS")) "AC2: the probe did not PASS without the warning:`n$c"
+  Assert (-not $c.Contains("WARN unrecognized_model")) "AC2: a WARN was printed with no warning on stderr:`n$c"
+}
+
+Test-Case "S24 AC3: Ollama unreachable -> local-model SKIP, and the final smoke line names the skip and its reason" {
+  $a = Invoke-S24Probe $null "down" '$r = Test-LocalModelResolves -ModelsJson $fixture; Write-Host "RESULT $($r.Result)"'
+  Assert ($a.Contains("RESULT SKIP")) "probe with Ollama down did not SKIP:`n$a"
+  $b = Invoke-S24Probe $null "down" '$null = Invoke-PostUpdateSmoke -Name claude-code -Previous 2.1.285 -Package ''@anthropic-ai/claude-code'''
+  Assert ($b.Contains("smoke check passed (local-model check SKIPPED: Ollama not reachable at localhost:11434)")) "final smoke line does not name the skip and its reason:`n$b"
+  Assert (-not ($b -match '(?m)smoke check passed\s*$')) "a bare 'smoke check passed' line hides the skip:`n$b"
+  $cp = Invoke-S24Probe $null "down" '$null = Invoke-PostUpdateSmoke -Name copilot-cli -Previous 2.1.285 -Package ''@anthropic-ai/claude-code'''
+  Assert ($cp -match '(?m)copilot-cli smoke check passed\s*$') "copilot-cli lost its plain 'smoke check passed' line:`n$cp"
+}
+
 Test-Case "C2f's drift check compares versions by EQUALITY, not substring (graded S12 defect)" {
   # Found by grade-agent on S12. Both consumers originally tested the raw `copilot --version` LINE with
   # -match against the measured number. That is silently wrong: "1.0.890" and "11.0.89" both CONTAIN
