@@ -294,7 +294,10 @@ if ($Findings) {
         }
       }
     }
-    $sr = [regex]::Match($designRaw, '(?im)^\s*Security review:\s*(.+?)\s*$')
+    $hm = [regex]::Match($designRaw, '(?m)^##\s')
+    $designHeader = if ($hm.Success) { $designRaw.Substring(0, $hm.Index) } else { $designRaw }
+    # The review status is a HEADER field (before the first '## '); a body line with the same prefix is ordinary text.
+    $sr = [regex]::Match($designHeader, '(?im)^\s*Security review:\s*(.+?)\s*$')
     if (-not $sr.Success) {
       $f.Add("[design] no 'Security review:' header in $designName - scaffolded before this existed; add REQUIRED or NOT-REQUIRED (<why>)")
     } elseif ($sr.Groups[1].Value.Trim() -match '^NOT-REQUIRED') {
@@ -319,8 +322,6 @@ if ($Findings) {
       # M <= N -> no finding, a STATE FACTS line instead; M > N, malformed, or no line -> the WARN fires.
       # The confirmation is a HEADER line (before the first '## ' heading); a body line with the same
       # prefix is ordinary text: never honoured, never malformed, and counted in M.
-      $hm = [regex]::Match($designRaw, '(?m)^##\s')
-      $designHeader = if ($hm.Success) { $designRaw.Substring(0, $hm.Index) } else { $designRaw }
       $wl = [regex]::Match($designHeader, '(?im)^\s*Security waiver confirmed:\s*(.*?)\s*$')
       $designForCount = if ($wl.Success) { $designRaw.Remove($wl.Index, $wl.Length) } else { $designRaw }
       $M = [regex]::Matches($designForCount, $authKw).Count

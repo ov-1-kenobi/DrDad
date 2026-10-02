@@ -941,7 +941,7 @@
   kit (`C4a`, `C3-b` have pinned parents; `C5` is the gap AC5 waits on). The finding is computed state, so
   it goes into the `$f` list like the other `[design]` findings (dad-run-summary counts it).
 
-### Story S23: An acknowledged FOUNDATIONAL security waiver stops the auth-keyword WARN until NEW mentions appear   (R24)   <!-- Status: TODO -->
+### Story S23: An acknowledged FOUNDATIONAL security waiver stops the auth-keyword WARN until NEW mentions appear   (R24)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** a human-dated confirmation line in the design header silences doc-stats' auth-keyword
   admissibility WARN while the keyword count has not grown, and re-fires it the moment it does.
 - **Context:** observed 2026-10-01 in `/audit`. The admissibility check (`doc-stats.ps1` ~271-283) WARNs

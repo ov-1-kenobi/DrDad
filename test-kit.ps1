@@ -1968,6 +1968,18 @@ Test-Case "the security review is a gated header, settled before stories" {
     $old = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
     Assert ($old -match "no 'Security review:' header") "a pre-existing project's missing header was not reported"
     Assert ($LASTEXITCODE -eq 0) "-Findings should never exit non-zero"
+    # T23.4: the review status is read from the HEADER only; a body line with the same prefix is ordinary text
+    $reqLine = "Security review: REQUIRED"; $noLine = "Security review: NOT-REQUIRED (poc, no auth)"
+    (@("# Design", "", "Status: LOCKED", "", "## Requirements", "- R1: a", $reqLine) -join "`n") | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $oa = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($oa -match "no 'Security review:' header") "body-only 'Security review:' line was read as the header"
+    Assert ($oa -notmatch 'Security review: REQUIRED and not done') "body-only REQUIRED line produced a REQUIRED finding"
+    (@("# Design", "", "Status: LOCKED", $noLine, "", "## Requirements", "- R1: a", $reqLine) -join "`n") | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $ob = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($ob -notmatch 'Security review: REQUIRED and not done') "a body REQUIRED line overrode the NOT-REQUIRED header"
+    (@("# Design", "", "Status: LOCKED", $reqLine, "", "## Requirements", "- R1: a", $noLine) -join "`n") | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $oc = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($oc -match 'Security review: REQUIRED and not done') "a body NOT-REQUIRED line overrode the REQUIRED header"
   } finally { Remove-Sandbox $sb }
 
   # the agent, and the two commands that must route to / gate on it
