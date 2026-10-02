@@ -2180,7 +2180,7 @@ nothing.)
 - **Refs:** Story S24 (Behavior 1-2, 4; Dev notes); `docs/DESIGN.md` C4a S16 amendment item 3 and "Where S17 differed ... (OPEN-4)" (b) with its worked example, R40(d); harness-versions.ps1:80-131.
 - **Context:** today line 115 runs `claude -p "Reply with the single word: pong" --max-turns 1 --model $model --output-format json --setting-sources project,local 2>$null`, so Claude Code 2.1.285's `[claude-code:unrecognized_model]` warning (measured in S16, `grades/S16_GRADE.md`) is dropped. That warning is the only visible trace of the hazard: Claude Code assumes a 200000-token window while Ollama serves the `-cc` model at 40960. The model is the `fast` alias from models.json (line 101; R40(d) as amended) - keep that. Per-process env only (`ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` saved and restored as now); never touch settings.json, use-model state or any security setting.
 
-### [ ] T24.2 - Invoke-PostUpdateSmoke: a skipped local-model check is named in the final smoke line   (Story S24)
+### [x] T24.2 - Invoke-PostUpdateSmoke: a skipped local-model check is named in the final smoke line   (Story S24)
 - **Goal:** when the local-model check was SKIPPED, the final line is `[harness] <name> smoke check passed (local-model check SKIPPED: <reason>)`, never a bare "smoke check passed".
 - **Touches:** `harness-versions.ps1` only - `Invoke-PostUpdateSmoke` (lines 136-166). NOT `Test-LocalModelResolves` (T24.1).
 - **Do:**

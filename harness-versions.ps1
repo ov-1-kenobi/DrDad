@@ -148,6 +148,7 @@ function Test-LocalModelResolves {
 function Invoke-PostUpdateSmoke {
   param([string]$Name, [string]$Previous, [string]$Package)
   $reason = ""
+  $skipNote = ""
   try {
     $g = "$env:DAD_SMOKE_GATES"
     if ($g -eq "fail") { $reason = "dad gates-smoke failed (forced by test hook)" }
@@ -162,7 +163,10 @@ function Invoke-PostUpdateSmoke {
     if (-not $reason -and $Name -eq "claude-code") {
       $lm = Test-LocalModelResolves
       if ($lm.Result -eq "FAIL") { $reason = "local model: $($lm.Reason)" }
-      elseif ($lm.Result -eq "SKIP") { Write-Host "[harness] $Name local-model check $($lm.Reason)" }
+      elseif ($lm.Result -eq "SKIP") {
+        Write-Host "[harness] $Name local-model check $($lm.Reason)"
+        $skipNote = ("$($lm.Reason)" -replace '^skipped \((.*)\)$', '$1')
+      }
     }
   } catch { $reason = "smoke error: $($_.Exception.Message)" }
   if ($reason -and -not $Previous) {
@@ -173,6 +177,7 @@ function Invoke-PostUpdateSmoke {
     Write-Host "[harness] $Name smoke check FAILED ($reason). Previous version was $Previous. To return to it: npm install -g $Package@$Previous" -ForegroundColor Red
     return $false
   }
-  Write-Host "[harness] $Name smoke check passed"
+  if ($skipNote) { Write-Host "[harness] $Name smoke check passed (local-model check SKIPPED: $skipNote)" -ForegroundColor Yellow }
+  else { Write-Host "[harness] $Name smoke check passed" }
   return $true
 }
