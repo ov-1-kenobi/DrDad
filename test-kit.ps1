@@ -1823,7 +1823,7 @@ Test-Case "S24 AC3: Ollama unreachable -> local-model SKIP, and the final smoke 
   $b = Invoke-S24Probe $null "down" '$null = Invoke-PostUpdateSmoke -Name claude-code -Previous 2.1.285 -Package ''@anthropic-ai/claude-code'''
   Assert ($b.Contains("smoke check passed (local-model check SKIPPED: Ollama not reachable at localhost:11434)")) "final smoke line does not name the skip and its reason:`n$b"
   Assert (-not ($b -match '(?m)smoke check passed\s*$')) "a bare 'smoke check passed' line hides the skip:`n$b"
-  $cp = Invoke-S24Probe $null "down" '$null = Invoke-PostUpdateSmoke -Name copilot-cli -Previous 2.1.285 -Package ''@anthropic-ai/claude-code'''
+  $cp = Invoke-S24Probe $null "down" '$null = Invoke-PostUpdateSmoke -Name copilot-cli -Previous 2.1.285 -Package ''@github/copilot'''
   Assert ($cp -match '(?m)copilot-cli smoke check passed\s*$') "copilot-cli lost its plain 'smoke check passed' line:`n$cp"
 }
 

@@ -82,10 +82,10 @@ function Write-HarnessReport {
 # /design"): "local model resolves" = `claude -p "<tiny prompt>" --max-turns 1 --model <-cc name>
 # --output-format json` with per-process env ANTHROPIC_BASE_URL=http://localhost:11434 and a dummy
 # ANTHROPIC_AUTH_TOKEN, ideally `--setting-sources project,local` so the user settings.json env cannot
-# override, exits 0 with a non-empty result and `modelUsage` keyed by the -cc name. The
-# probe's stderr is captured and an `unrecognized_model` warning is PRINTED as a WARN (never a FAIL). Probe only when Ollama is reachable, otherwise SKIP
-# (reported as skipped, never as a pass). Per-process env only: settings.json / use-model state / any
-# security setting is never touched.
+# override, exits 0 with a non-empty result and `modelUsage` keyed by the -cc name. The probe's stderr
+# is captured and an `unrecognized_model` warning is PRINTED as a WARN (never a FAIL). Probe only when
+# Ollama is reachable, otherwise SKIP (reported as skipped, never as a pass). Per-process env only:
+# settings.json / use-model state / any security setting is never touched.
 # Test hook: env DAD_SMOKE_LOCALMODEL = pass | fail | skip forces the outcome (stubs in tests).
 # Test hook: env DAD_SMOKE_OLLAMA = up | down forces Ollama reachability (no request is made).
 function Test-LocalModelResolves {
