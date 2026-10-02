@@ -218,6 +218,12 @@ T23.4 (cleanup; needs T23.3; run after T23.3 - it edits `doc-stats.ps1` and `tes
 scopes the `Security review:` lookup to the same HEADER T23.3 defines, reusing T23.3's header variable. It
 keeps Story S23 open until it is closed, and is queued at the very end.)
 
+T23.5 (cleanup; needs T23.4; run after T23.4 - it edits `doc-stats.ps1` and `test-kit.ps1` too)
+
+(T23.5 is a cleanup task added 2026-10-02 from grades/S23_GRADE.md suggestion 2 [dev] (human-approved as a cleanup
+task 2026-10-02). It REOPENS Story S23 until it is closed, like T22.3 does for S22. It is queued last and blocks
+nothing.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -2147,6 +2153,18 @@ keeps Story S23 open until it is closed, and is queued at the very end.)
 - **Depends on:** T23.3 (reuses its `$designHeader`; sequenced last in the Build order: shares `doc-stats.ps1` and `test-kit.ps1`)
 - **Refs:** Story S23 (the confirmation and the review status are HEADER lines); T23.3 Context (notes `$sr` is whole-document and out of T23.3's scope); taskmap note in T23.3 + human approval 2026-10-01; doc-stats.ps1:296-357 (`$sr` and every branch reading it); test-kit.ps1:1942-1972.
 - **Context:** defect: `$sr` runs the multiline regex over the WHOLE design doc and takes the FIRST match. When the header carries `Security review:`, the header line is always the first match (it precedes every body line), so fixtures (b) and (c) are regression guards that pass with or without the scoping; the bug bites when the header LACKS the line and a body line supplies one - a body `Security review: REQUIRED` example would block `/build`, a body `NOT-REQUIRED (...)` example would silently waive the review. Fixture (a) is the one the mutation must fail. `^##\s` does not match `###` or the `# Title` line. Test pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `New-Sandbox`/`Remove-Sandbox`. ASCII only, PowerShell 5.1.
+
+### [x] T23.5 - doc-stats: a malformed waiver line with zero auth keywords no longer claims keyword mentions   (Story S23)
+- **Goal:** when the `Security waiver confirmed:` header line is malformed and the auth-keyword count M is 0, the WARN does not claim the docs mention auth/login/password/token/session (that claim is false then); when M > 0 the WARN text is unchanged.
+- **Touches:** `doc-stats.ps1` (the S23 block, NOT-REQUIRED branch of `-Findings`: the `elseif (-not $wValid)` malformed branch, ~line 345, and `$base`, ~330; locate by content); `test-kit.ps1` (the existing S23 Test-Case `"S23: an acknowledged security waiver silences the auth-keyword WARN until NEW mentions appear (AC1-AC6)"`; anchor by name, next to its AC4 block). NOT the no-line / M<=N / M>N branches, NOT the REQUIRED/DONE branches, NOT `docs/DESIGN.md`.
+- **Do:**
+  1. In `doc-stats.ps1`, in the malformed branch only: if `$M -gt 0` keep the existing `$f.Add("$base The 'Security waiver confirmed:' line is malformed ...")` text byte-identical; else (`$M -eq 0`) add a finding that starts `[design] Security review: NOT-REQUIRED, but the 'Security waiver confirmed:' line is malformed` and does NOT contain `mentions auth/login`, followed by the same remainder (`(expected: Security waiver confirmed: YYYY-MM-DD (human; auth-keyword hits: N)), so it is NOT honoured; fix it via /design, e.g.: $addLine`). Keep the `Security review: NOT-REQUIRED, but` prefix so prefix-based checks still match. Do not change `$base`.
+  2. In the S23 Test-Case, directly after the AC4 block, add a sub-case: write `$p\docs\DESIGN.md` and `$p\docs\STORIES.md` with NO auth keywords (no `auth`, `login`, `password`, `token`, `session` as whole words) and a malformed header line, e.g. `Security waiver confirmed: someday (human; auth-keyword hits: N)` (use the same fixture helper/shape as AC4, but with keyword-free text). Assert: output matches `NOT-REQUIRED, but`; matches `malformed`; does NOT match `mentions auth/login`.
+  3. Run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1`.
+- **Acceptance:** the full `.\test-kit.ps1` prints `0 failed` with the S23 case on a PASS line (all existing AC1-AC6 assertions unchanged and passing); mutation: temporarily restoring the single unconditional malformed text makes the new `does NOT match mentions auth/login` assertion fail - verify, then restore.
+- **Depends on:** T23.4 (sequenced last in the Build order: shares `doc-stats.ps1` and `test-kit.ps1`)
+- **Refs:** Story S23 (Behavior 1-8); grades/S23_GRADE.md suggestion 2 [dev] (human-approved as a cleanup task 2026-10-02); doc-stats.ps1:~330 (`$base`), :~345 (malformed branch); test-kit.ps1 S23 case AC4 block.
+- **Context:** defect: the malformed branch always emits `$base`, whose text says `$designName (or STORIES.md) mentions auth/login/password/token/session`, even when M = 0 (e.g. a header line malformed and no keywords anywhere), which is untrue. Keyword regex `(?i)\b(auth|login|password|token|session)\b` (`tokens`/`sessions` do not match). This task REOPENS Story S23 until it is closed, like T22.3 does for S22. Test pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `New-Sandbox`/`Remove-Sandbox`; the case's local `Findings` helper returns `-Findings` output as one string. ASCII only, PowerShell 5.1.
 
 ### [x] T24.1 - Test-LocalModelResolves: capture stderr, print the unrecognized_model WARN, env-only Ollama reachability seam   (Story S24)
 - **Goal:** the post-update local-model probe stops discarding the `claude` call's stderr; when it contains `unrecognized_model` it prints one WARN line and the outcome is unchanged (a PASS stays PASS); tests can force Ollama reachability through an env var.

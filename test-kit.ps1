@@ -4384,6 +4384,13 @@ Test-Case "S23: an acknowledged security waiver silences the auth-keyword WARN u
       Assert ($o -notmatch 'not re-raised') "AC4: malformed line '$bad' was honoured. Output: $o"
     }
 
+    # T23.5: malformed line with ZERO auth keywords -> still not honoured, but no false 'mentions auth/login' claim
+    Set-WaiverDesign $notReq "Security waiver confirmed: someday (human; auth-keyword hits: N)" "- R2: a plain thing" "# Stories`r`n`r`n- **Goal:** add a widget"
+    $o = Findings
+    Assert ($o -match 'NOT-REQUIRED, but') "T23.5: malformed line + 0 keywords did not keep the WARN. Output: $o"
+    Assert ($o -match 'malformed') "T23.5: malformed line + 0 keywords was not reported as malformed. Output: $o"
+    Assert ($o -notmatch 'mentions auth/login') "T23.5: WARN claims keyword mentions when there are none. Output: $o"
+
     # (a) T23.3: a BODY line with the confirmation prefix is ordinary text - not honoured, not malformed, counted
     $bodyDoc = @("# Design", "", "Status: LOCKED", "Security review: $notReq", "", "## Requirements", "- R1: a",
       "Security waiver confirmed: YYYY-MM-DD (human; auth-keyword hits: N)", "- R2: login with a password", "",

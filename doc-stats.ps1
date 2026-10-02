@@ -342,7 +342,12 @@ if ($Findings) {
       if (-not $wl.Success) {
         if ($M -gt 0) { $f.Add("$base To acknowledge it, the human adds this header line via /design: $addLine") }
       } elseif (-not $wValid) {
-        $f.Add("$base The 'Security waiver confirmed:' line is malformed (expected: Security waiver confirmed: YYYY-MM-DD (human; auth-keyword hits: N)), so it is NOT honoured; fix it via /design, e.g.: $addLine")
+        if ($M -gt 0) {
+          $f.Add("$base The 'Security waiver confirmed:' line is malformed (expected: Security waiver confirmed: YYYY-MM-DD (human; auth-keyword hits: N)), so it is NOT honoured; fix it via /design, e.g.: $addLine")
+        } else {
+          # M = 0: no keyword mentions exist, so $base's 'mentions auth/login...' claim would be false
+          $f.Add("[design] Security review: NOT-REQUIRED, but the 'Security waiver confirmed:' line is malformed (expected: Security waiver confirmed: YYYY-MM-DD (human; auth-keyword hits: N)), so it is NOT honoured; fix it via /design, e.g.: $addLine")
+        }
       } elseif ($M -le $wN) {
         $securityWaiverFact = "security waiver: confirmed $wDate at $wN auth-keyword hits (now $M) - not re-raised"
       } else {
