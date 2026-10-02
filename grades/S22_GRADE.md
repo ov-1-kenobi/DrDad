@@ -24,7 +24,7 @@ build/tests (no shell), so the green suite is taken from the T22.3 close, not ob
   (`$seenHere`, doc-stats.ps1:262,268); 8-entry cap with ` ...` (doc-stats.ps1:275-276); finding text at :277.
 - Acceptance:
   - AC1 (finding names each id with file:line, first line per file only; fires in DRAFT and LOCKED; pinning clears it):
-    test-kit.ps1:4222-4237, exact string at :4227 (`C5 (DESIGN.md:8, STORIES.md:4, TASKS.md:5)`; DESIGN.md:9 is deliberately absent).
+    test-kit.ps1:4222-4237, exact string at :4227 (fixture string lists the id's FIRST line in the design, stories and tasks fixtures; the design fixture's second reference, line 9, is deliberately absent).
   - AC2 (sub-id resolves via parent): test-kit.ps1:4239-4244 (C4a, C3-b).
   - AC3 (C2PA, C#, C++ and lowercase c<n> are not ids): test-kit.ps1:4256-4260, lowercase ids built at runtime (:4257).
   - AC4 (no `## Contracts` section -> silent): test-kit.ps1:4262-4267.

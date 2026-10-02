@@ -196,3 +196,9 @@
 {"v":1,"ts":"2026-10-02T15:18:26.473Z","gate":"ratchet","decision":"block","tool":"","reason":"gradeBytes: 186399-\u003e185533","session":""}
 {"v":1,"ts":"2026-10-02T15:18:31.971Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
 {"v":1,"ts":"2026-10-02T15:25:45.894Z","gate":"ratchet","decision":"block","tool":"","reason":"gradeBytes: 186399-\u003e185533","session":""}
+{"v":1,"ts":"2026-10-02T15:25:53.191Z","gate":"close-unit-refusal","decision":"block","tool":"","reason":"S22 INCOMPLETE: story S22 : grade card cites missing file DESIGN.md - run /grade S22","session":""}
+{"v":1,"ts":"2026-10-02T15:25:56.341Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
+{"v":1,"ts":"2026-10-02T15:33:20.578Z","gate":"ratchet","decision":"block","tool":"","reason":"gradeBytes: 186399-\u003e185606","session":""}
+{"v":1,"ts":"2026-10-02T15:33:24.231Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
+{"v":1,"ts":"2026-10-02T15:40:39.084Z","gate":"ratchet","decision":"block","tool":"","reason":"gradeBytes: 186399-\u003e185606","session":""}
+{"v":1,"ts":"2026-10-02T15:40:46.087Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S22","session":""}
