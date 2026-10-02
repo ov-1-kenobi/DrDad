@@ -1097,3 +1097,38 @@
   NOTHING" holds by construction. All three markers are required (one alone is too weak a signal for a
   user project). The CRLF rewrite of CLAUDE.md in step 3 is a separate defect for normal projects too; it
   is out of scope here - QUESTION (human): file it as its own story? Refs: DESIGN R15.
+
+### Story S27: upgrade-project writes the files it refreshes with the project's line endings, not CRLF   (R15)   <!-- Status: TODO -->
+- **Goal:** an upgrade changes only the content it means to change; each file it rewrites keeps the line
+  endings the project already uses, so an upgrade never shows up as a whole-file line-ending diff.
+- **Context:** observed 2026-10-01 (S26 Dev notes open question; human-approved as a story 2026-10-01).
+  `upgrade-project.ps1` step 3 CLAUDE.md section refresh (~181-242) joins its lines with "`r`n" and writes
+  them with `WriteAllText`; the version stamp write (~244) hardcodes "`r`n"; the step 0b `.mcp.json`
+  repoint (~89) writes `ConvertTo-Json` output, which is CRLF on Windows PowerShell. In a project whose
+  `.gitattributes` sets `eol=lf`, every upgrade turns CLAUDE.md into a whole-file CRLF diff (content
+  unchanged) and can trip a line-ending check; on the kit repo the same rewrite failed test-kit's
+  line-ending case. Note: `templates\_common` ships no `.gitattributes` today (the kit repo has its own),
+  so most scaffolded projects declare no `eol` - the LF default below covers them.
+- **Behavior:**
+  - For each file upgrade-project rewrites (CLAUDE.md, `.mcp.json`, `.dad-kit-version`): if it already
+    exists, detect LF vs CRLF from its current content and write the new text with that same ending,
+    uniformly (no mixed endings).
+  - A file created fresh follows the project's `.gitattributes` `eol` if one is declared for it, else LF.
+  - Content is otherwise unchanged (same sections refreshed, same JSON, same stamp value).
+  - No other step changes; the S26 kit-checkout guard stays first.
+- **Data / interfaces:** `upgrade-project.ps1` (a small line-ending helper used by the three writes);
+  `test-kit.ps1` (fixture cases). Not changed: DESIGN.md, `new-project.ps1`, templates.
+- **Dependencies:** S26 (same script; its guard stays first).
+- **Acceptance (testable):**
+  - [ ] AC1: sandbox project with an LF CLAUDE.md -> after upgrade, CLAUDE.md contains no CR bytes and
+    its kit-owned sections are refreshed.
+  - [ ] AC2: sandbox project with a CRLF CLAUDE.md -> stays CRLF throughout (every line ends CRLF, no
+    bare LF).
+  - [ ] AC3: the `.mcp.json` repoint and `.dad-kit-version` follow the same rule (existing ending kept;
+    fresh file -> `.gitattributes` `eol` if declared, else LF).
+  - [ ] AC4: the existing upgrade-project cases (including S26's) still pass.
+  - [ ] AC5: the full `test-kit.ps1` prints `0 failed`.
+- **Dev notes:** fixtures only under `%TEMP%`; never run upgrade-project against the kit repo
+  (`D:\projects\DrDad`) or `D:\Tools`. Detect the ending from raw bytes (`ReadAllText` + `Contains("`r`n")`),
+  not `Get-Content`, which strips endings. Same bug class as the LF fixes in close-unit.ps1 (~244) and
+  doc-stats.ps1 (~813). Refs: DESIGN R15.

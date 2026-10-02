@@ -2,6 +2,25 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.56.0 - 2026-10-01
+
+### Added - R24: an acknowledged security waiver stops re-raising the keyword WARN (Story S23)
+Under `Security review: NOT-REQUIRED`, a design header line
+`Security waiver confirmed: <YYYY-MM-DD> (human; auth-keyword hits: <N>)` silences doc-stats'
+admissibility WARN while the keyword count stays <= N, printing an untagged STATE FACTS line instead (so
+`dad run-summary` does not count it as a finding). The WARN returns, with the delta and the line to update,
+when the count grows; a malformed line is never honoured; REQUIRED and DONE ignore it. Without a line, the
+WARN now prints the exact line a human would add via `/design`. The kit's own DESIGN carries the line.
+
+### Fixed - R15: upgrade-project refuses to run against a kit checkout (Story S26)
+A target holding `install.ps1` + `VERSION` + `global\commands\` is a DrDad kit, not a project:
+upgrade-project prints one line, exits 2 and writes nothing. Running it on the kit repo had repointed the
+repo's `.mcp.json` at the repo build (which then locked the exe the suite rebuilds) and rewritten
+`CLAUDE.md` with CRLF.
+
+### Planned
+S27 (upgrade-project keeps each file's line endings) and cleanups T22.3, T23.3, T23.4 are mapped in TASKS.
+
 ## 0.55.0 - 2026-10-01
 
 ### Fixed - R24: a skipped test-kit case is COUNTED as skipped, never as a pass (Story S21)

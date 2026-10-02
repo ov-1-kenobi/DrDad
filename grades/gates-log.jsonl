@@ -163,3 +163,4 @@
 {"v":1,"ts":"2026-10-01T23:35:37.127Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S26","session":""}
 {"v":1,"ts":"2026-10-01T23:35:44.555Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
 {"v":1,"ts":"2026-10-01T23:44:19.903Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
+{"v":1,"ts":"2026-10-02T01:00:57.890Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"e28b4b7d-cd9b-4086-84d8-49a2f15f435c"}
