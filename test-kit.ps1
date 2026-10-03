@@ -5239,6 +5239,61 @@ Test-Case "S27 follow-up: .gitignore keeps its line ending" {
   } finally { Remove-Sandbox $sb }
 }
 
+# T27.5: AppendAllText wrote right after the last byte, so an existing .gitignore whose last line had no
+# final newline got the first appended entry glued onto it ('custom/' + '.env' -> 'custom/.env'), and .env
+# was NOT ignored. An append onto an unterminated last line now starts with one line break in the file's ending.
+Test-Case "S27 follow-up: an appended .gitignore entry is never glued onto an unterminated last line" {
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git not on PATH - upgrade-project only writes .gitignore when git is present" }
+  $sb = New-Sandbox
+  try {
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $claudeLf = ($script:S27Lines -join "`n") + "`n"
+
+    # (a): LF .gitignore, last line unterminated
+    $pa = Join-Path $sb "lf-unterminated"; New-Item -ItemType Directory -Force $pa | Out-Null
+    Write-S27File "$pa\CLAUDE.md" $claudeLf
+    Write-S27File "$pa\.gitignore" "node_modules/`ncustom/"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pa 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(a) upgrade-project failed: exit $code. Output: $o"
+    $rawA = [System.IO.File]::ReadAllText("$pa\.gitignore")
+
+    # (b): CRLF .gitignore, last line unterminated
+    $pb = Join-Path $sb "crlf-unterminated"; New-Item -ItemType Directory -Force $pb | Out-Null
+    Write-S27File "$pb\CLAUDE.md" $claudeLf
+    Write-S27File "$pb\.gitignore" "node_modules/`r`ncustom/"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pb 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(b) upgrade-project failed: exit $code. Output: $o"
+    $rawB = [System.IO.File]::ReadAllText("$pb\.gitignore")
+
+    # (c): LF .gitignore that already ends in a newline -> no separator, no blank line
+    $pc = Join-Path $sb "lf-terminated"; New-Item -ItemType Directory -Force $pc | Out-Null
+    Write-S27File "$pc\CLAUDE.md" $claudeLf
+    $origC = "node_modules/`ncustom/`n"
+    Write-S27File "$pc\.gitignore" $origC
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pc 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(c) upgrade-project failed: exit $code. Output: $o"
+    $rawC = [System.IO.File]::ReadAllText("$pc\.gitignore")
+
+    # Glue check first, so one message names every glued sub-case.
+    $glued = @(); if ($rawA.Contains("custom/.env")) { $glued += "(a) LF" }; if ($rawB.Contains("custom/.env")) { $glued += "(b) CRLF" }
+    Assert ($glued.Count -eq 0) "appended entry glued onto an unterminated last line ('custom/.env') in: $($glued -join ', ')"
+
+    Assert ([System.IO.File]::ReadAllBytes("$pa\.gitignore") -notcontains 13) "(a) CR bytes found in an LF .gitignore after upgrade"
+    Assert ($rawA -match '(?m)^custom/$' -and $rawA -match '(?m)^\.env$') "(a) 'custom/' and '.env' are not each on their own line: $rawA"
+    Assert ($rawA.StartsWith("node_modules/`ncustom/`n.env`n")) "(a) the first appended entry (.env) does not start on the line after 'custom/': $rawA"
+    Assert (-not $rawA.Contains("`n`n")) "(a) blank line found (separator added twice?): $rawA"
+    Assert ($rawA -match '(?m)^bin/$') "(a) the build-output append is missing (bin/): $rawA"
+
+    Assert (Test-S27Crlf "$pb\.gitignore") "(b) a CRLF .gitignore is not CRLF throughout after upgrade (bare LF found)"
+    Assert ($rawB.StartsWith("node_modules/`r`ncustom/`r`n.env`r`n")) "(b) the first appended entry (.env) does not start on the line after 'custom/' with CRLF"
+    Assert (-not $rawB.Contains("`r`n`r`n")) "(b) blank line found (separator added twice?)"
+
+    Assert ($rawC.StartsWith($origC)) "(c) the user's existing .gitignore lines were not kept as-is: $rawC"
+    Assert ($rawC.Substring($origC.Length).StartsWith(".env")) "(c) a separator was added to a .gitignore that already ends in a newline: $rawC"
+    Assert (-not $rawC.Contains("`n`n")) "(c) blank line found in a .gitignore that already ended in a newline: $rawC"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-doctor's fix hints name commands that actually fix the thing" {
   $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
   # install.cmd does NOT touch a project's .mcp.json - suggesting it sent you in a circle.

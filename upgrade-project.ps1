@@ -146,7 +146,9 @@ New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 if (Get-Command git -ErrorAction SilentlyContinue) {
   $gi = Join-Path $proj ".gitignore"
   # The .gitignore writes follow the S27 rule (existing ending kept; fresh -> .gitattributes eol, else LF).
+  # An append onto an unterminated last line starts with one $gEol (T27.5).
   $gEol = Get-ProjectEol $gi
+  function Get-GitignoreLead([string]$Path, [string]$Eol) { $raw = [System.IO.File]::ReadAllText($Path); if ($raw.Length -gt 0 -and $raw[$raw.Length - 1] -ne [char]10) { return $Eol }; return "" }
   $secretIgnores = @(".env",".env.*","!.env.example","*.pem","*.pfx","*.key","secrets/","appsettings.*.local.json","*.binlog","_tmp/")
   # `nul` is what a bash `2>nul` leaves behind - a reserved Windows device name, awkward to delete and
   # poisonous in a repo other Windows machines clone. Never commit one.
@@ -162,11 +164,13 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     $cur = Get-Content $gi -Encoding UTF8
     $missing = ($secretIgnores + $noiseIgnores + $noiseIgnores2) | Where-Object { $cur -notcontains $_ }
     if ($missing) {
-      [System.IO.File]::AppendAllText($gi, (ConvertTo-Eol (($missing -join "`n") + "`n") $gEol), (New-Object System.Text.UTF8Encoding($false)))
+      $lead = Get-GitignoreLead $gi $gEol
+      [System.IO.File]::AppendAllText($gi, ($lead + (ConvertTo-Eol (($missing -join "`n") + "`n") $gEol)), (New-Object System.Text.UTF8Encoding($false)))
       Write-Host "  .gitignore: added $($missing.Count) secret-file pattern(s)" -ForegroundColor Green
     }
     if ($cur -notcontains "bin/") {
-      [System.IO.File]::AppendAllText($gi, (ConvertTo-Eol "bin/`nobj/`ndocs/.index/`n" $gEol), (New-Object System.Text.UTF8Encoding($false)))
+      $lead = Get-GitignoreLead $gi $gEol
+      [System.IO.File]::AppendAllText($gi, ($lead + (ConvertTo-Eol "bin/`nobj/`ndocs/.index/`n" $gEol)), (New-Object System.Text.UTF8Encoding($false)))
       Write-Host "  .gitignore: added build-output patterns" -ForegroundColor Green
     }
   }
