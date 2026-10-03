@@ -313,3 +313,6 @@
 {"v":1,"ts":"2026-10-03T13:56:58.051Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
 {"v":1,"ts":"2026-10-03T14:09:50.904Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 27, tasks 79)","session":""}
 {"v":1,"ts":"2026-10-03T14:09:57.961Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T27.5","session":""}
+{"v":1,"ts":"2026-10-03T14:10:03.148Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
+{"v":1,"ts":"2026-10-03T14:46:50.304Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 27, tasks 79)","session":""}
+{"v":1,"ts":"2026-10-03T14:46:58.418Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S27","session":""}
