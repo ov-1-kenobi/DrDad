@@ -1774,7 +1774,8 @@ Test-Case "R40 AC7: measured-version stamp is locked across install.ps1, DESIGN 
 # (DAD_SMOKE_OLLAMA is always forced), never the real claude/npm/install.ps1 or %USERPROFILE%\.claude.
 # Runs $Body in a child powershell after dot-sourcing harness-versions.ps1; returns the merged output.
 # $StderrText = the line the stub claude writes to stderr ($null = none). The body may use $fixture.
-function Invoke-S24Probe([string]$StderrText, [string]$Ollama, [string]$Body) {
+# $LocalModel = DAD_SMOKE_LOCALMODEL for the child (pass|fail|skip; empty = cleared).
+function Invoke-S24Probe([string]$StderrText, [string]$Ollama, [string]$Body, [string]$LocalModel = "") {
   $sb = New-Sandbox
   $names = @("PATH","DAD_SMOKE_OLLAMA","DAD_SMOKE_LOCALMODEL","DAD_SMOKE_GATES")
   $saved = @{}; foreach ($n in $names) { $saved[$n] = [Environment]::GetEnvironmentVariable($n, "Process") }
@@ -1796,7 +1797,7 @@ function Invoke-S24Probe([string]$StderrText, [string]$Ollama, [string]$Body) {
       $Body)
     $env:PATH = "$bin;$env:SystemRoot\System32;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
     $env:DAD_SMOKE_OLLAMA = $Ollama
-    $env:DAD_SMOKE_LOCALMODEL = $null
+    $env:DAD_SMOKE_LOCALMODEL = $(if ($LocalModel) { $LocalModel } else { $null })
     $env:DAD_SMOKE_GATES = "pass"
     $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
     return (& $ps -NoProfile -ExecutionPolicy Bypass -File $driver 2>&1 | Out-String)
@@ -1825,6 +1826,26 @@ Test-Case "S24 AC3: Ollama unreachable -> local-model SKIP, and the final smoke 
   Assert (-not ($b -match '(?m)smoke check passed\s*$')) "a bare 'smoke check passed' line hides the skip:`n$b"
   $cp = Invoke-S24Probe $null "down" '$null = Invoke-PostUpdateSmoke -Name copilot-cli -Previous 2.1.285 -Package ''@github/copilot'''
   Assert ($cp -match '(?m)copilot-cli smoke check passed\s*$') "copilot-cli lost its plain 'smoke check passed' line:`n$cp"
+}
+
+Test-Case "S24 Behavior 2: ordinary stderr from claude is not a WARN and the probe stays PASS" {
+  $o = Invoke-S24Probe "some other notice" "up" '$r = Test-LocalModelResolves -ModelsJson $fixture; Write-Host "RESULT $($r.Result)"'
+  Assert ($o.Contains("RESULT PASS")) "the probe did not stay PASS with ordinary stderr:`n$o"
+  Assert (-not $o.Contains("WARN unrecognized_model")) "ordinary stderr was reported as an unrecognized_model WARN:`n$o"
+}
+
+Test-Case "S24 Behavior 3: a PASSing local-model check keeps the bare claude-code smoke line" {
+  $o = Invoke-S24Probe $null "up" '$null = Invoke-PostUpdateSmoke -Name claude-code -Previous 2.1.285 -Package ''@anthropic-ai/claude-code''' "pass"
+  Assert ($o -match '(?m)claude-code smoke check passed\s*$') "a PASSing local-model check lost the bare 'claude-code smoke check passed' line:`n$o"
+  Assert (-not $o.Contains("SKIPPED")) "a PASSing local-model check printed a SKIPPED note:`n$o"
+}
+
+Test-Case "S24 cleanup: the probe's finally never deletes a caller-scope errFile" {
+  # GetTempFileName() throws with TMP/TEMP at a missing dir, BEFORE the function assigns its own $errFile;
+  # without `$errFile = $null` ahead of the try, the finally would Remove-Item the driver's $errFile.
+  $o = Invoke-S24Probe $null "up" '$errFile = Join-Path (Split-Path $fixture) ''keep.txt''; Set-Content $errFile ''x''; $bad = Join-Path (Split-Path $fixture) ''no-such-dir''; $env:TMP = $bad; $env:TEMP = $bad; $r = Test-LocalModelResolves -ModelsJson $fixture; Write-Host "RESULT $($r.Result)"; Write-Host "KEPT $(Test-Path $errFile)"'
+  Assert ($o.Contains("RESULT FAIL")) "setup did not reach the GetTempFileName-throws path:`n$o"
+  Assert ($o.Contains("KEPT True")) "the probe's finally deleted the caller-scope errFile:`n$o"
 }
 
 Test-Case "C2f's drift check compares versions by EQUALITY, not substring (graded S12 defect)" {

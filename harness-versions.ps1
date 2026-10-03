@@ -115,6 +115,7 @@ function Test-LocalModelResolves {
   }
   if (-not $reachable) { return (& $res "SKIP" $false "skipped (Ollama not reachable at localhost:11434)") }
   $saveUrl = $env:ANTHROPIC_BASE_URL; $saveTok = $env:ANTHROPIC_AUTH_TOKEN
+  $errFile = $null
   try {
     $ErrorActionPreference = 'Continue'
     $errFile = [IO.Path]::GetTempFileName()
