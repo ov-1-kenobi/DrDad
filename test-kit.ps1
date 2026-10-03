@@ -1621,6 +1621,39 @@ Test-Case "the measured Copilot version cannot drift between DESIGN's C2 and ins
   }
 }
 
+Test-Case "S25: the Copilot stamp check covers EVERY MEASURED stamp, not just the first (AC1-AC3)" {
+  # In-memory fixtures only (no sandbox): lines joined with "`n" so the reported line numbers are exact.
+  $c = "1.0.95"
+  $good = @(
+    '# Design',
+    '### C2: x',
+    '- **Status: MEASURED 2026-09-29 against GitHub Copilot CLI 1.0.95 on Windows.**',
+    '',
+    '### C5: y',
+    '  MEASURED 2026-09-30 against GitHub Copilot CLI 1.0.95'
+  )
+  # AC1: two matching stamps -> no problems.
+  $p1 = @(Get-CopilotStampProblems ($good -join "`n") $c)
+  Assert ($p1.Count -eq 0) ("AC1: two stamps matching the constant reported problems: " + ($p1 -join '; '))
+
+  # AC2 (C5f worked example): C2 bumped, C5 left behind -> FAIL naming the SECOND stamp's line only.
+  $drift = $good.Clone()
+  $drift[5] = '  MEASURED 2026-09-30 against GitHub Copilot CLI 1.0.89'
+  $p2 = @(Get-CopilotStampProblems ($drift -join "`n") $c)
+  Assert (($p2.Count -eq 1) -and ($p2[0] -eq 'DESIGN.md:6 stamped 1.0.89 != 1.0.95')) ("AC2: a stale SECOND stamp must give exactly 'DESIGN.md:6 stamped 1.0.89 != 1.0.95', got: [" + ($p2 -join '; ') + "]")
+
+  # AC3: no stamp at all -> one 'carries no' problem (never a vacuous pass).
+  $none = $good.Clone()
+  $none[2] = '- **Status: measured on Windows against the Copilot CLI.**'
+  $none[5] = '  Verified by hand against the Copilot CLI.'
+  $p3 = @(Get-CopilotStampProblems ($none -join "`n") $c)
+  Assert (($p3.Count -eq 1) -and ($p3[0] -like '*carries no*')) ("AC3: zero stamps must give exactly one 'carries no' problem, got: [" + ($p3 -join '; ') + "]")
+
+  # A Claude Code MEASURED stamp is not a Copilot stamp -> still the zero-stamps problem.
+  $p4 = @(Get-CopilotStampProblems 'MEASURED 2026-09-30 against Claude Code 2.1.285' $c)
+  Assert (($p4.Count -eq 1) -and ($p4[0] -like '*carries no*')) ("a Claude Code stamp was counted as a Copilot stamp, got: [" + ($p4 -join '; ') + "]")
+}
+
 Test-Case "dad-doctor's Copilot harness section renders without erroring" {
   # The R37 section was previously covered only by the parse check and C2f's static assertions - nothing
   # ever RAN it. Guarded so it never becomes environment-dependent (the trap the corpus shell-door case

@@ -1032,7 +1032,7 @@
   40960 served, so the manifest is not a reliable proxy; until decided, print `unknown`. Refs: DESIGN C4a
   (S16 amendment / OPEN-4 decision), R40(d).
 
-### Story S25: The Copilot version drift test checks EVERY measured stamp, not just the first   (R37, R40)   <!-- Status: TODO -->
+### Story S25: The Copilot version drift test checks EVERY measured stamp, not just the first   (R37, R40)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the C2f drift case asserts that EVERY `MEASURED <date> against GitHub Copilot CLI <v>` stamp in
   DESIGN.md equals `$CopilotMeasuredVersion`, so C5's stamp cannot drift silently.
 - **Context:** `/design` 2026-10-01 OPEN-3, chosen by the human (DESIGN C5f): ONE constant,

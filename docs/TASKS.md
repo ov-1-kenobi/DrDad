@@ -2247,7 +2247,7 @@ last and blocks nothing.)
 - **Refs:** Story S25 (Behavior, Dev notes, AC4); `docs/DESIGN.md` C2f, C5f (DECIDED 2026-10-01, OPEN-3 = A) and its worked example; install.ps1:32; test-kit.ps1:1562-1590.
 - **Context:** `$CopilotMeasuredVersion = "1.0.89"` (install.ps1:32) covers C2 AND C5 (C5f): the constant may not move until every Copilot stamp moves with it. Today the case uses `[regex]::Match`, so it checks only the FIRST stamp (C2's) and a stale C5 stamp passes silently. The prose lines in C5f that quote `MEASURED <date> against GitHub Copilot CLI <v>` do not match the regex (`<date>` is not digits), so they are not stamps.
 
-### [ ] T25.2 - test-kit fixture cases for S25 (AC1-AC3) + full suite   (Story S25)
+### [x] T25.2 - test-kit fixture cases for S25 (AC1-AC3) + full suite   (Story S25)
 - **Goal:** `test-kit.ps1` proves the every-stamp check passes with two matching stamps, fails naming the SECOND stamp's line when it mismatches, and fails on zero stamps.
 - **Touches:** `test-kit.ps1` (one new `Test-Case` directly after the C2f case `"the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)"`; that case stays as T25.1 left it).
 - **Do:**
