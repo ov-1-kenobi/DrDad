@@ -1652,6 +1652,10 @@ Test-Case "S25: the Copilot stamp check covers EVERY MEASURED stamp, not just th
   # A Claude Code MEASURED stamp is not a Copilot stamp -> still the zero-stamps problem.
   $p4 = @(Get-CopilotStampProblems 'MEASURED 2026-09-30 against Claude Code 2.1.285' $c)
   Assert (($p4.Count -eq 1) -and ($p4[0] -like '*carries no*')) ("a Claude Code stamp was counted as a Copilot stamp, got: [" + ($p4 -join '; ') + "]")
+
+  # A stamp ending a sentence captures the trailing period; TrimEnd('.') must drop it.
+  $p5 = @(Get-CopilotStampProblems 'Verified: MEASURED 2026-09-30 against GitHub Copilot CLI 1.0.95.' $c)
+  Assert ($p5.Count -eq 0) ("a stamp ending a sentence ('... CLI 1.0.95.') must match constant 1.0.95, got: [" + ($p5 -join '; ') + "]")
 }
 
 Test-Case "dad-doctor's Copilot harness section renders without erroring" {

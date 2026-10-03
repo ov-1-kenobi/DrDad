@@ -232,6 +232,14 @@ cleanup task 2026-10-02). It does NOT reopen Story S24: close-unit never un-mark
 yet", and ticking T24.4 re-runs the roll-up, which finds S24 already DONE and changes nothing. It is queued
 last and blocks nothing.)
 
+T25.3 (cleanup; needs T25.2; run after T24.4 - it edits `test-kit.ps1`)
+
+(T25.3 is a cleanup task added 2026-10-03 from grades/S25_GRADE.md suggestion 3 [dev] (human-approved as a
+cleanup task 2026-10-03). It does NOT reopen Story S25: close-unit never un-marks a DONE story, so S25 stays
+`DONE` in STORIES.md; while T25.3 is open a close of an S25 unit only notes "2/3 tasks done - not rolling up
+yet", and ticking T25.3 re-runs the roll-up, which finds S25 already DONE and changes nothing. It is queued
+last and blocks nothing.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -2261,6 +2269,18 @@ last and blocks nothing.)
 - **Depends on:** T25.1
 - **Refs:** Story S25 (AC1-AC5); `docs/DESIGN.md` C5f worked example (C2 bumped to 1.0.95, C5 left at 1.0.89 -> FAIL naming C5's stamp); test-kit.ps1 C2f case (~1562).
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root. Assert on the exact problem string with `-eq` (no regex metacharacter trouble). The function counts lines by "`n", so fixtures joined with "`n" or "`r`n" give the same numbers. ASCII only; needs no network, no files outside memory.
+
+### [x] T25.3 - S25 cleanup: assert a sentence-ending Copilot stamp (version then a period) gives 0 problems   (Story S25)
+- **Goal:** the S25 Test-Case proves the `TrimEnd('.')` in `Get-CopilotStampProblems`: a stamp whose version ends a sentence (`... against GitHub Copilot CLI 1.0.95.`) with constant `1.0.95` yields 0 problems.
+- **Touches:** `test-kit.ps1` only - the existing Test-Case `"S25: the Copilot stamp check covers EVERY MEASURED stamp, not just the first (AC1-AC3)"` (anchor by name; locate by content, not line number), one new assertion added at the end of its body (after the Claude Code stamp assertion, before the closing `}`). NOT `Get-CopilotStampProblems` itself, NOT the C2f case, NOT the existing AC1/AC2/AC3/Claude-Code assertions, NOT `docs/`.
+- **Do:**
+  1. At the end of the S25 case body add a comment (a stamp ending a sentence captures the trailing period; `TrimEnd('.')` must drop it) and: `$p5 = @(Get-CopilotStampProblems 'Verified: MEASURED 2026-09-30 against GitHub Copilot CLI 1.0.95.' $c)`; `Assert ($p5.Count -eq 0) ("a stamp ending a sentence ('... CLI 1.0.95.') must match constant 1.0.95, got: [" + ($p5 -join '; ') + "]")`. `$c` is the case's existing `"1.0.95"`. Single-quoted fixture string, so `$`-free text needs no escaping.
+  2. Mutation check: temporarily change `$v = $m.Groups[1].Value.TrimEnd('.')` in `Get-CopilotStampProblems` to `$v = $m.Groups[1].Value`, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1 -SkipBuild`, confirm the S25 case FAILS on the new assertion (problem `DESIGN.md:1 stamped 1.0.95. != 1.0.95`), then RESTORE the `TrimEnd('.')` exactly.
+  3. Run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1`.
+- **Acceptance:** the full `.\test-kit.ps1` prints `0 failed` and the existing case `"S25: the Copilot stamp check covers EVERY MEASURED stamp, not just the first (AC1-AC3)"` is still on a PASS line (its AC1/AC2/AC3/Claude-Code assertions unchanged); mutation: removing `TrimEnd('.')` makes the new assertion fail - verify, then restore.
+- **Depends on:** T25.2 (sequenced last in the Build order, after T24.4: shares `test-kit.ps1`)
+- **Refs:** Story S25 (Behavior, Dev notes); grades/S25_GRADE.md suggestion 3 [dev] (human-approved as a cleanup task 2026-10-03); T25.1 Do step 1 (the `TrimEnd('.')` rationale); `docs/DESIGN.md` C5f; test-kit.ps1 `function Get-CopilotStampProblems` and the S25 Test-Case named above.
+- **Context:** the stamp regex `MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+GitHub\s+Copilot\s+CLI\s+([0-9][0-9.]*)` captures `1.0.95.` when the version ends a sentence; `Get-CopilotStampProblems` trims it with `$m.Groups[1].Value.TrimEnd('.')` before comparing to the constant, but no fixture exercised that (every existing fixture's version is followed by a space or end of string). Problem strings have the shape `"${Label}:$line stamped $v != $Constant"` (Label defaults to `DESIGN.md`). This task does NOT reopen Story S25 (see the Build order note): S25 stays DONE. Test pattern: `Test-Case "name" { ... Assert <bool> "message" }`. ASCII only, PowerShell 5.1; no network, no files.
 
 ### [x] T26.1 - upgrade-project.ps1: refuse a kit checkout (three markers) before any write, exit 2   (Story S26)
 - **Goal:** `upgrade-project.ps1` detects that the resolved `-ProjectDir` is a DrDad kit checkout and exits 2 with one message line, having written nothing.

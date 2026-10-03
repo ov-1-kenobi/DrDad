@@ -1050,11 +1050,11 @@
   `install.ps1`, `dad-doctor.ps1`.
 - **Dependencies:** none.
 - **Acceptance (testable):**
-  - [ ] AC1: fixture with two stamps both equal to the constant -> pass.
-  - [ ] AC2: fixture whose SECOND stamp mismatches -> fail, message names that stamp's line.
-  - [ ] AC3: fixture with zero stamps -> fail.
-  - [ ] AC4: the real kit repo DESIGN.md -> pass.
-  - [ ] AC5: the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC1: fixture with two stamps both equal to the constant -> pass.
+  - [x] AC2: fixture whose SECOND stamp mismatches -> fail, message names that stamp's line.
+  - [x] AC3: fixture with zero stamps -> fail.
+  - [x] AC4: the real kit repo DESIGN.md -> pass.
+  - [x] AC5: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** to fixture-test it, factor the stamp check into a small function taking the doc text and the
   constant, called by the real-repo case and the fixture cases. Keep the existing regex (it already ignores
   the `against Claude Code` stamp at C4) and compute the line from the match index. Today the real doc
@@ -1085,14 +1085,14 @@
   cases). Exit code 2 = refused, kit checkout. Not changed: DESIGN.md, `install.ps1`.
 - **Dependencies:** none.
 - **Acceptance (testable):**
-  - [ ] AC1: sandbox with the three kit markers + a CLAUDE.md + `.mcp.json` -> exit 2, the message, and
+  - [x] AC1: sandbox with the three kit markers + a CLAUDE.md + `.mcp.json` -> exit 2, the message, and
     every file byte-identical afterwards (hash before/after).
-  - [ ] AC2: same result when upgrade-project is invoked from a different directory than the target
+  - [x] AC2: same result when upgrade-project is invoked from a different directory than the target
     (installed-copy case).
-  - [ ] AC3: a normal sandbox project (CLAUDE.md, no kit markers) still upgrades as before (existing
+  - [x] AC3: a normal sandbox project (CLAUDE.md, no kit markers) still upgrades as before (existing
     upgrade-project test cases keep passing).
-  - [ ] AC4: the suite does NOT run it against the real kit repo (`D:\projects\DrDad`) - fixtures only.
-  - [ ] AC5: the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC4: the suite does NOT run it against the real kit repo (`D:\projects\DrDad`) - fixtures only.
+  - [x] AC5: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** put the guard first, before any step that touches the filesystem or git, so "changes
   NOTHING" holds by construction. All three markers are required (one alone is too weak a signal for a
   user project). The CRLF rewrite of CLAUDE.md in step 3 is a separate defect for normal projects too; it
