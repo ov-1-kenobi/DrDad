@@ -265,3 +265,7 @@
 {"v":1,"ts":"2026-10-03T04:08:50.847Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T25.2","session":""}
 {"v":1,"ts":"2026-10-03T04:08:58.692Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
 {"v":1,"ts":"2026-10-03T04:17:46.984Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 27, tasks 75)","session":""}
+{"v":1,"ts":"2026-10-03T04:17:54.343Z","gate":"close-unit-refusal","decision":"block","tool":"","reason":"S25 INCOMPLETE: story S25 : grade card cites missing file DESIGN.md - run /grade S25","session":""}
+{"v":1,"ts":"2026-10-03T04:17:57.780Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
+{"v":1,"ts":"2026-10-03T04:25:30.262Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 27, tasks 75)","session":""}
+{"v":1,"ts":"2026-10-03T04:25:38.823Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S25","session":""}

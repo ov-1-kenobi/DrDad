@@ -15,7 +15,7 @@
 - Acceptance (code-cited; I did not run the suite - assessor role):
   - AC1: test-kit.ps1:1627-1637 - two 1.0.95 stamps -> 0 problems.
   - AC2: test-kit.ps1:1640-1643 - second stamp at 1.0.89 -> exactly one problem, asserted with `-eq` against
-    'DESIGN.md:6 stamped 1.0.89 != 1.0.95' (first stamp not named). Matches the C5f worked example at docs/DESIGN.md:1481-1484.
+    the problem string for line 6 (stamped 1.0.89 vs constant 1.0.95; first stamp not named). Matches the C5f worked example at docs/DESIGN.md:1481-1484.
   - AC3: test-kit.ps1:1646-1650 - both stamps replaced by prose -> exactly one "carries no" problem; plus
     test-kit.ps1:1653-1654 shows a `against Claude Code` stamp is not counted (the C4a stamp at docs/DESIGN.md:1127).
   - AC4: real-repo case "the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)"
