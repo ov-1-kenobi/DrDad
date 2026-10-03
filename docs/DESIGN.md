@@ -1181,17 +1181,38 @@ local-model ceiling, but every command, agent, and gate is identical across all 
   stderr and, when it contains `unrecognized_model`, print one line
   `[harness] local model <cc>: WARN unrecognized_model (Claude Code assumes a 200000 context window;
   Ollama serves <ctx>)` while the result stays a PASS (WARN, never FAIL); it must never discard stderr, and
-  other stderr content does not change the outcome. The SOURCE of `<ctx>` is NOT pinned here (`models.json`
-  `numCtx` says 65536 while S16 measured 40960 served, so the manifest is no proxy); until a `/design`
-  decision it prints `unknown`. Reason for (b): that warning is the only visible trace of the context-window
+  other stderr content does not change the outcome. **The SOURCE of `<ctx>` - DECIDED 2026-10-03, chosen by
+  the human (OPEN-4(b), `<ctx>`):** the local Ollama's `/api/show` for the model's `-cc` name. `<ctx>` = the
+  LOWER of (i) the integer on the `num_ctx` line of the response's `parameters` text and (ii) the integer at
+  `model_info` key `<arch>.context_length`, where `<arch>` is the value of `model_info` `general.architecture`;
+  it is printed as a plain integer. It is `unknown` - never a guess, never the manifest `numCtx` - when Ollama
+  is unreachable (including the `DAD_SMOKE_OLLAMA=down` test seam), the `/api/show` call fails or times out
+  (3 seconds, the same bound as the reachability check), the response is not JSON, or either value is missing or not a positive integer. The lookup never changes
+  the outcome: the WARN stays a WARN and the check stays PASS in every case (no FAIL from the ctx lookup).
+  `models.json` `numCtx` is NOT a proxy (65536 configured while S16 measured 40960 served). The min() rule
+  rests on ONE measured model, where `num_ctx` > `context_length` (65536 > 40960) and the lower value is the
+  one S16 measured as served; it is therefore stated as the rule, not as a universal law. Before this
+  decision the WARN carried `unknown` unconditionally; it now carries the derived number, and `unknown` only
+  in the cases above. Reason for (b): that warning is the only visible trace of the context-window
   hazard in Open (ii) below. Rejected: B, keep discarding stderr - a WARN nobody can see is exactly the
   silent outcome R40 ("never a silent one") forbids.
-  Today's `Test-LocalModelResolves` still discards stderr; bringing it into line is a follow-up story, not
-  part of this contract text. **Worked example:** row (e) above (`fast` = `qwen3-14b-cc` in `models.json`),
-  whose stderr carries `[claude-code:unrecognized_model]` -> exit 0, `result` `"pong"`, `modelUsage` key
-  `"qwen3-14b-cc"` -> the probe prints `[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude
-  Code assumes a 200000 context window; Ollama serves unknown)` and scores PASS; the same run with empty
-  stderr scores PASS and prints no WARN line.
+  **DONE 2026-10-03 via S24:** `Test-LocalModelResolves` no longer discards stderr - it keeps it via a temp
+  file and prints the WARN line while the result stays PASS; other stderr content does not change the
+  outcome; an unreachable Ollama gives SKIP, and a skipped local-model check is named in the final smoke line
+  (`[harness] <name> smoke check passed (local-model check SKIPPED: <reason>)`), never a bare pass. The S24
+  code still prints `unknown` for `<ctx>`; applying the 2026-10-03 source rule above is not yet implemented.
+  **Worked example:** row (e) above (`fast` = `qwen3-14b-cc` in `models.json`), whose stderr carries
+  `[claude-code:unrecognized_model]` -> exit 0, `result` `"pong"`, `modelUsage` key `"qwen3-14b-cc"`. The
+  `<ctx>` lookup (measured on this machine 2026-10-03, Ollama 0.35.0): `/api/show` for `qwen3-14b-cc` returns
+  `parameters` containing `num_ctx 65536` and `model_info` `general.architecture` = `qwen3`,
+  `qwen3.context_length` = 40960 -> `<ctx>` = min(65536, 40960) = 40960, which equals what S16 measured as
+  served -> the probe prints `[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude Code
+  assumes a 200000 context window; Ollama serves 40960)` and scores PASS. Second row: the same run, but the
+  `<ctx>` lookup finds Ollama down -> `[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude
+  Code assumes a 200000 context window; Ollama serves unknown)`, still PASS. The same run with empty stderr
+  scores PASS and prints no WARN line. Interplay with item 3: an Ollama unreachable when the probe STARTS
+  gives SKIP and no `claude` call, so no WARN line at all; the `unknown` row is what the `<ctx>` lookup itself
+  yields whenever it finds Ollama unreachable (live, or forced by `DAD_SMOKE_OLLAMA=down`).
 - **Open:** (i) local usage fields on 2.1.285 - re-measuring is NO LONGER BLOCKED (the local run succeeds,
   amendment item 1); it is simply UNMEASURED. Until someone measures it the local stamp stays at 2.1.191,
   and `test-kit.ps1`'s drift case must compare BOTH constants to their stamps and must not pass merely
@@ -1468,20 +1489,24 @@ story that needs one must first get it measured and amended into C5 via `/design
 
 #### C5f: Version stamp and drift for C5
 - **Fact:** C5 and C2 were measured against the SAME binary (1.0.89). C2f's `$CopilotMeasuredVersion` in
-  `install.ps1` is the one Copilot constant today, and `test-kit.ps1`'s C2f case compares it to the FIRST
-  `MEASURED <date> against GitHub Copilot CLI <v>` stamp in this doc, which is C2's.
+  `install.ps1` is the one Copilot constant today, and `test-kit.ps1`'s C2f case compares it to EVERY
+  `MEASURED <date> against GitHub Copilot CLI <v>` stamp in this doc, C2's and C5's (DONE via S25, below).
 - **Whether that constant also governs C5: DECIDED 2026-10-01, chosen by the human (OPEN-3 = A, ONE
   constant).** `$CopilotMeasuredVersion` covers C2 AND C5. Consequence: a Copilot update that is
   re-measured re-measures BOTH, and the constant may not move until every Copilot stamp in this doc moves
-  with it. The C2f drift test must therefore be extended so that EVERY
-  `MEASURED <date> against GitHub Copilot CLI <v>` stamp in DESIGN equals `$CopilotMeasuredVersion` (today it
-  checks only the FIRST, C2's); that `test-kit.ps1` change is a follow-up story, not part of this text.
+  with it. The C2f drift test therefore had to be extended so that EVERY
+  `MEASURED <date> against GitHub Copilot CLI <v>` stamp in DESIGN equals `$CopilotMeasuredVersion` (it used
+  to check the first stamp alone, C2's). **DONE 2026-10-03 via S25:** `test-kit.ps1`'s
+  `Get-CopilotStampProblems` finds every such stamp (`[regex]::Matches`, not `Match`), FAILS when there is
+  none (never a vacuous pass), and names the line of each stamp that differs from the one constant; the C2f
+  case and the fixture case "S25: the Copilot stamp check covers EVERY MEASURED stamp, not just the first
+  (AC1-AC3)" both use it.
   Rejected: B, a second constant for C5 - two numbers to keep true for one binary, and nothing gained while
   C2 and C5 are measured together; C, no constant for C5 - C5 could silently go stale.
   **Worked example:** `$CopilotMeasuredVersion = '1.0.89'`; DESIGN holds two stamps, C2's and C5's, both
   `... against GitHub Copilot CLI 1.0.89` -> the extended case PASSES. Someone re-measures C2 on 1.0.95, bumps
   the constant and C2's stamp but not C5's -> the case FAILS naming the C5 stamp `1.0.89 != 1.0.95` (the
-  current first-stamp-only case would pass it).
+  pre-S25 first-stamp-only case would have passed it).
 
 #### C5 worked example - the transform on real bytes, and a subdirectory launch traced to the log
 - **Worked example:** (1/2) `Convert-CommandToSkill` on two real command files. Input frontmatter of

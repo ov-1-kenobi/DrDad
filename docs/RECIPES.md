@@ -128,6 +128,12 @@
 - **Gotcha:** hook commands run under a bash-like shell here, so use forward-slash paths (`cmd /c more > D:\x` and backslash PowerShell paths wrote nothing); `< /dev/null` avoids a 3s stdin wait; a failed hook is SILENT - always check the capture file exists. T9.5 measurement (claude 2.1.285, 2026-09-29): payload keys = session_id, transcript_path, cwd, prompt_id, permission_mode, effort, hook_event_name, tool_name, tool_input, tool_use_id - `cwd` IS present (absolute Windows path, backslashes), so T9.2 proceeds. Not measured: `cwd` after an in-session `cd` or when launched from a subdirectory - resolve the project defensively (walk up to `docs`/`grades`), do not assume cwd is the root.
 - **Verified:** 2026-09-29, Sonnet 5.5
 
+- **Command:** `powershell -NoProfile -Command '$r = Invoke-RestMethod -Uri http://localhost:11434/api/show -Method Post -Body (@{model="qwen3-14b-cc"} | ConvertTo-Json) -ContentType "application/json" -TimeoutSec 15; $r.parameters; $r.model_info.PSObject.Properties | Where-Object { $_.Name -match "context|architecture" } | ForEach-Object { $_.Name + " = " + $_.Value }'`
+- **Does:** reads what the local Ollama reports for a model: `parameters` (holds the configured `num_ctx`) and `model_info` (`general.architecture`, `<arch>.context_length` = the model's own maximum). The served context is the LOWER of `num_ctx` and `<arch>.context_length` (C4a OPEN-4(b), decided 2026-10-03).
+- **When:** checking or deriving the context Ollama really serves for a `-cc` model; the `<ctx>` source for the S24 WARN.
+- **Gotcha:** `/api/show` replies with a very large JSON (the whole licence text), so parse it - do not dump it. A `python` one-liner failed here (Python is not installed); Invoke-RestMethod parses it natively in 5.1. Read-only: it changes nothing. Needs Ollama up (it returns nothing and times out when it is down).
+- **Verified:** 2026-10-03, Sonnet 5.5 (Ollama 0.35.0: qwen3-14b-cc -> `num_ctx 65536`, `qwen3.context_length = 40960`)
+
 ## Verified by close-unit
 <!-- Appended automatically when a unit closes clean. These ran and worked ON THIS MACHINE. -->
 | Command | Does | When | Gotcha | Verified |
