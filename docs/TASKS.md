@@ -240,6 +240,23 @@ cleanup task 2026-10-03). It does NOT reopen Story S25: close-unit never un-mark
 yet", and ticking T25.3 re-runs the roll-up, which finds S25 already DONE and changes nothing. It is queued
 last and blocks nothing.)
 
+T27.3 (cleanup; needs T27.2; run after T25.3 - it edits `test-kit.ps1`)
+
+(T27.3 is a cleanup task added 2026-10-03 from grades/S27_GRADE.md suggestion 1 [dev] (human-approved as a
+cleanup task 2026-10-03). It does NOT reopen Story S27: close-unit never un-marks a DONE story, so S27 stays
+`DONE` in STORIES.md; while T27.3/T27.4 are open a close of an S27 unit only notes "3/4 tasks done - not
+rolling up yet", and ticking the last of them re-runs the roll-up, which finds S27 already DONE ("story S27
+already DONE") and changes nothing in STORIES.md (it re-runs the S27 grade-card check). It is test-only and
+blocks only T27.4.)
+
+T27.4 (cleanup; needs T27.3; run after T27.3 - it edits `upgrade-project.ps1` and `test-kit.ps1`)
+
+(T27.4 is a cleanup task added 2026-10-03 from grades/S27_GRADE.md suggestion 3 [human] (human-approved as a
+cleanup task 2026-10-03). It extends T27.1's line-ending rule to the `.gitignore` writes T27.1 excluded. It does NOT
+reopen Story S27 (see the T27.3 note): S27 stays `DONE`. It edits `upgrade-project.ps1`, so every QA run of
+upgrade-project goes to a sandbox under %TEMP% - never the kit repo (D:\projects\DrDad) or D:\Tools. It is
+queued last and blocks nothing.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -2341,6 +2358,68 @@ last and blocks nothing.)
 - **Depends on:** T27.1 (sequenced after T25.2: both edit `test-kit.ps1`)
 - **Refs:** Story S27 (AC1-AC5, Dev notes); test-kit.ps1:4748 (repoint case: `.mcp.json` writer style), :4801-4890 (S26 cases), :5051 and :5895 (existing byte-level LF checks to copy); upgrade-project.ps1 step 0b, step 3, stamp write.
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, `New-Sandbox`/`Remove-Sandbox` = temp folders under `%TEMP%`. A normal upgrade-project run does `git init` + a baseline commit in the sandbox, as the existing cases already do. `Get-Content` strips line endings - never use it for the ending checks. The suite needs no network and must not touch the real `%USERPROFILE%\.claude`, the real kit repo or `D:\Tools`. ASCII only, PowerShell 5.1.
+
+### [x] T27.3 - S27 cleanup: test that an existing file's line ending beats a conflicting .gitattributes eol   (Story S27)
+- **Goal:** `test-kit.ps1` proves S27's existing-file rule wins over `.gitattributes`. An LF `CLAUDE.md` and an LF `.mcp.json` stay LF under `* text=auto eol=crlf`, and a CRLF `CLAUDE.md` stays CRLF under `* text=auto eol=lf`. A regression that consulted `.gitattributes` first would then FAIL instead of passing silently.
+- **Touches:** `test-kit.ps1` only. Add one new `Test-Case` directly AFTER the case `"S27 AC3: .mcp.json repoint and .dad-kit-version follow the same rule"` and before `"dad-doctor's fix hints name commands that actually fix the thing"` (anchor by name; locate by content, not line number). Reuse `$script:S27Lines`, `Write-S27File` and `Test-S27Crlf` unchanged. Out of scope: the existing S27 AC1/AC2/AC3 cases and `docs/`. `upgrade-project.ps1` is edited TEMPORARILY for the mutation check only and must be restored exactly.
+- **Do:**
+  1. Name the case `"S27 AC3 follow-up: an existing file's line ending beats a conflicting .gitattributes eol"`. Follow the style of the neighbouring S27 cases: `$sb = New-Sandbox`; `try { ... } finally { Remove-Sandbox $sb }`; `$up = Join-Path $kit "upgrade-project.ps1"`; `$exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"`; `$stale = 'D:\gone\OLD-kit\local-tools\bin\Release\net8.0\local-tools.exe'`. Run each sandbox as `$o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir <sandbox> 2>&1 | Out-String); $code = $LASTEXITCODE`, then `Assert ($code -eq 0) "(x) upgrade-project failed: exit $code. Output: $o"`. Write fixtures with `Write-S27File` only, so the endings are exactly the ones the test chose. `-ProjectDir` is always a folder under `$sb`, never `$kit`.
+  2. Sub-case (a), LF files under eol=crlf. `$pa = Join-Path $sb "lf-vs-crlf"`, created with a `docs` subfolder. `.gitattributes` = "* text=auto eol=crlf" + "`n". `CLAUDE.md` = `$script:S27Lines` joined with "`n", plus a final "`n". `.mcp.json` = the same fixture as AC3 (a): stale `local-tools` command, `LOCALTOOLS_DOCS_DIR` = "$pa\docs", `ConvertTo-Json -Depth 10`, normalised with -replace "`r?`n", "`n" plus a final "`n". Keep the guard that the fixture `.mcp.json` has no CR byte (message "fixture error: ..."). Run, then assert:
+     - the `.mcp.json` `local-tools` command `-eq $exe` (the file really was rewritten);
+     - `[System.IO.File]::ReadAllBytes("$pa\.mcp.json") -notcontains 13`;
+     - `[System.IO.File]::ReadAllBytes("$pa\CLAUDE.md") -notcontains 13`;
+     - `CLAUDE.md` no longer contains `- old modes text` (it really was rewritten);
+     - control, proving the attribute file IS read: the FRESH `$pa\.dad-kit-version` ends with "`r`n".
+  3. Sub-case (b), CRLF file under eol=lf. `$pb = Join-Path $sb "crlf-vs-lf"`. `.gitattributes` = "* text=auto eol=lf" + "`n". `CLAUDE.md` = `$script:S27Lines` joined with "`r`n", plus a final "`r`n". Run, then assert:
+     - `Test-S27Crlf "$pb\CLAUDE.md"` (CRLF present, no bare LF);
+     - `- old modes text` is gone;
+     - control: the fresh `$pb\.dad-kit-version` has no CR byte.
+  4. Mutation check (it edits the kit repo's `upgrade-project.ps1` TEMPORARILY; test-kit still runs upgrade-project only against `%TEMP%` sandboxes):
+     - Temporarily edit `function Get-ProjectEol` in `upgrade-project.ps1` so the `.gitattributes` walk runs BEFORE the existing-file branch and an applying `eol=` token wins. For example: walk `.gitattributes` first and note whether an applying `eol=` was seen; if so, `return` it; otherwise fall through to the existing `ReadAllText` check, then LF.
+     - Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1 -SkipBuild` and confirm the NEW case FAILS: (a) finds CR bytes, or (b) finds a bare LF. The existing S27 AC1/AC2/AC3 cases are expected to still PASS under this mutation; that blind spot is what this task closes.
+     - Restore with `git checkout -- upgrade-project.ps1` and confirm `git diff -- upgrade-project.ps1` prints nothing (`git diff --quiet -- upgrade-project.ps1` exits 0).
+  5. Run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1`.
+- **Acceptance:** the full `.\test-kit.ps1` prints `0 failed`; the new case `"S27 AC3 follow-up: an existing file's line ending beats a conflicting .gitattributes eol"` and the existing `"S27 AC1: ..."`, `"S27 AC2: ..."` and `"S27 AC3: ..."` cases appear on PASS lines; mutation: making `Get-ProjectEol` consult `.gitattributes` before the existing file's ending makes the new case FAIL - verify, then restore, and `git diff -- upgrade-project.ps1` is empty.
+- **Depends on:** T27.2 (sequenced after T25.3 in the Build order: shares `test-kit.ps1`)
+- **Refs:** Story S27 (Behavior bullet 1 - an EXISTING file keeps its ending; AC3; Dev notes); grades/S27_GRADE.md suggestion 1 [dev] (human-approved as a cleanup task 2026-10-03); T27.1 Do step 1 (existing-file branch first, fresh-file `.gitattributes` rule second); upgrade-project.ps1 `function Get-ProjectEol` (right after the S26 guard); test-kit.ps1 `$script:S27Lines`, `function Write-S27File`, `function Test-S27Crlf` and the case `"S27 AC3: .mcp.json repoint and .dad-kit-version follow the same rule"` (its (b) sub-case puts a CRLF `.mcp.json` under `eol=crlf`, so it cannot tell which rule produced the result).
+- **Context:** `Get-ProjectEol` checks the EXISTING file first, as raw text: if it holds any "`n", it returns "`r`n" when the text contains "`r`n", else "`n". Only a missing file, or one with no newline, falls to the `.gitattributes` subset (`*`, exact file name, `*.<ext>`; `eol=lf|crlf`; last applying line wins; default LF). `.mcp.json` is rewritten only when its `local-tools` command differs from this kit's exe, hence the stale command. `.dad-kit-version` does not exist in these sandboxes, so it is a FRESH file and correctly follows the attribute: that is the control, not a failure. upgrade-project's git step runs `git add -A` in the sandbox, and under `eol=crlf` git may print LF->CRLF notices on stderr. They land in `$o`, and the git calls sit in a try/catch, so the exit code stays 0: assert exit 0 and never assert that git printed nothing. `Get-Content` strips line endings - never use it for the ending checks. This task does NOT reopen Story S27 (see the Build order note): S27 stays DONE. Test pattern: `Test-Case "name" { ... Assert <bool> "message" }` (`Test-Case` itself sets `$ErrorActionPreference = "Continue"`). ASCII only, PowerShell 5.1, no network. Fixtures go only under `%TEMP%` via `New-Sandbox`; never run upgrade-project against the kit repo (D:\projects\DrDad) or D:\Tools.
+
+### [ ] T27.4 - upgrade-project.ps1: the .gitignore writes follow S27's line-ending rule (existing ending kept; fresh -> .gitattributes eol, else LF)   (Story S27)
+- **Goal:** upgrade-project never forces CRLF lines into a `.gitignore`. An existing `.gitignore` keeps its ending, and each appended block uses that ending uniformly. A fresh `.gitignore` follows the project's `.gitattributes` `eol`, else LF. Everything else stays the same: the entries, their order, the conditions and the console lines.
+- **Touches:** `upgrade-project.ps1` - ONLY the three `.gitignore` writes inside step 2 "Git safety net" (the `if (Get-Command git ...)` block, ~lines 154-169 as of this map; locate by content): the fresh-file `$ignore = (... -join "`r`n") + "`r`n"` and its `WriteAllText`; `Add-Content $gi (($missing -join "`r`n"))`; `Add-Content $gi "bin/`r`nobj/`r`ndocs/.index/"`. `test-kit.ps1` - one new `Test-Case` directly AFTER T27.3's case `"S27 AC3 follow-up: an existing file's line ending beats a conflicting .gitattributes eol"` (anchor by name). Do NOT touch: the S26 guard (stays first); `Get-ProjectEol` / `ConvertTo-Eol` (reuse unchanged); the `$secretIgnores`, `$noiseIgnores2` and `$noiseIgnores` arrays (the line `$noiseIgnores  = @(".claude/")` is pinned by a source regex in the T10.5 case); the `$cur`/`$missing` computation; the git-untrack and git-init steps; `new-project.ps1`, templates, `docs/`.
+- **Do:**
+  1. In step 2, directly after `$gi = Join-Path $proj ".gitignore"`, add `$gEol = Get-ProjectEol $gi`. It must run before anything writes `$gi`. For an existing file it returns that file's own ending; for a missing one, the `.gitattributes` rule, else LF.
+  2. Fresh file: build the same array expression joined with "`n" plus a final "`n", and pass it through `ConvertTo-Eol <text> $gEol` instead of joining with "`r`n". Keep the same `WriteAllText` with UTF-8 no BOM and the same "added .gitignore" line.
+  3. Appends. Replace `Add-Content $gi (($missing -join "`r`n"))` with `[System.IO.File]::AppendAllText($gi, (ConvertTo-Eol (($missing -join "`n") + "`n") $gEol), (New-Object System.Text.UTF8Encoding($false)))`. Replace `Add-Content $gi "bin/`r`nobj/`r`ndocs/.index/"` with the same call on "bin/`nobj/`ndocs/.index/`n". Keep the entries, their order, the final terminator `Add-Content` used to write, both conditions and both console lines. Add no leading separator; the `Add-Content` calls being replaced add none either. The user's existing lines are never rewritten.
+  4. Add one comment line in the block: the `.gitignore` writes follow the S27 rule (existing ending kept; fresh -> `.gitattributes` eol, else LF). The header comment's S27 line already states the rule; leave it alone.
+  5. Test-Case `"S27 follow-up: .gitignore keeps its line ending"`.
+     - Before the case's own `try`, skip if git is missing: `if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git not on PATH - upgrade-project only writes .gitignore when git is present" }`. Note that `$haveGit` is defined later in the file, so do not use it.
+     - Use the neighbouring S27 style: `$sb = New-Sandbox`, `Write-S27File`, `Test-S27Crlf`, `$o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir <sandbox> 2>&1 | Out-String)`, `Assert ($LASTEXITCODE -eq 0)`, and `Remove-Sandbox` in `finally`.
+     - Every sandbox gets an LF `CLAUDE.md` (`$script:S27Lines` joined with "`n", plus a final "`n"). Without one, upgrade-project exits 1.
+     - (a) Existing LF file. `.gitignore` = "node_modules/`ncustom/`n". It has no `.env` and no `bin/`, so BOTH appends fire. After the run, assert:
+       - `ReadAllBytes -notcontains 13`;
+       - the raw text starts with "node_modules/`ncustom/`n";
+       - it matches `(?m)^\.env$`, `(?m)^\.claude/$`, `(?m)^bin/$` and `(?m)^docs/\.index/$`;
+       - it ends with "`n".
+     - (b) Existing CRLF file. The same two lines joined with "`r`n", plus a final "`r`n". After the run, assert:
+       - `Test-S27Crlf "$pb\.gitignore"` (CRLF throughout, no bare LF);
+       - it starts with "node_modules/`r`ncustom/`r`n";
+       - it contains "`r`n.env`r`n" and "`r`nbin/`r`n".
+     - (c) Fresh file, no `.gitattributes`: no `.gitignore` in the sandbox. After the run, assert:
+       - `.gitignore` exists;
+       - `ReadAllBytes -notcontains 13`;
+       - it matches `(?m)^bin/$`, `(?m)^\.env$` and `(?m)^\.claude/$`.
+     - (d) Fresh file under eol=crlf: no `.gitignore`, and `.gitattributes` = "* text=auto eol=crlf" + "`n". After the run, assert `Test-S27Crlf "$pd\.gitignore"`.
+  6. Mutation checks:
+     - First, stage the finished T27.4 edit with `git add -- upgrade-project.ps1`, so the index holds the intended version.
+     - (i) Temporarily put "`r`n" back in place of `$gEol` in the two append calls, run `.\test-kit.ps1 -SkipBuild`, and confirm sub-case (a) FAILS (CR bytes in an LF `.gitignore`).
+     - (ii) Temporarily put "`r`n" back in the fresh-file write and confirm sub-case (c) FAILS.
+     - After each check, restore with `git checkout -- upgrade-project.ps1` (from the index) and confirm `git diff -- upgrade-project.ps1` prints nothing (working tree vs index). Finally, `git diff --cached -- upgrade-project.ps1` must show hunks ONLY in the step-2 `.gitignore` block.
+  7. Run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1`.
+- **Acceptance:** the full `.\test-kit.ps1` prints `0 failed`; `"S27 follow-up: .gitignore keeps its line ending"` appears on a PASS line (not SKIP); these also stay on PASS lines: `"T10.5 (C4b): non-DAD dir gets no .claude; .claude occupied by a FILE -> exit code unchanged; .claude/ is gitignored by new-project and upgrade-project"`, `"scaffold and upgrade ignore .claude/ (agent worktrees are not source)"`, the three S26 cases (S26 AC1 asserts a kit sandbox gets no `.gitignore`), the three S27 AC cases and T27.3's case; mutations (i) and (ii) each make their sub-case FAIL - verify, then restore, and `git diff -- upgrade-project.ps1` (working tree vs the staged T27.4 edit) is empty.
+- **Depends on:** T27.3 (both edit `test-kit.ps1`, and T27.4's case is anchored on T27.3's; sequenced last in the Build order)
+- **Refs:** Story S27 (Goal - "each file it rewrites keeps the line endings the project already uses"; Behavior bullets 1-2; Dev notes - raw bytes, fixtures only under %TEMP%); grades/S27_GRADE.md suggestion 3 [human] (human-approved as a cleanup task 2026-10-03); T27.1 Touches (the `.gitignore` writes were excluded there on purpose) and Do steps 1-2 (`Get-ProjectEol`, `ConvertTo-Eol`); upgrade-project.ps1 step 2 "Git safety net" (`$gi`, `$secretIgnores`, `$noiseIgnores2`, `$noiseIgnores`, `$cur`, `$missing`); test-kit.ps1 the T10.5 and "scaffold and upgrade ignore .claude/" cases (source-regex pins on `.claude/`), the S26 AC1 case, and T27.3's case.
+- **Context:** defect: today the fresh `.gitignore` is joined with "`r`n", and `Add-Content` appends with "`r`n" between entries plus a CRLF terminator, so an upgrade of an LF project leaves mixed endings in `.gitignore`. The step only runs when `git` is on PATH. Scope note: STORIES.md S27 never names `.gitignore`. Its Behavior limits the rule to CLAUDE.md, `.mcp.json` and `.dad-kit-version` and says "No other step changes"; the by-name exclusion lives in T27.1's Touches. This task extends the same rule to `.gitignore` under S27's Goal, on the human's 2026-10-03 approval of grade suggestion 3, and does not edit STORIES.md or DESIGN.md. Known edge, out of scope: a `.gitignore` with no final newline gets the first appended entry glued to its last line, before and after this change - do not fix it here. An existing mixed-ending file resolves to CRLF (any CRLF wins, per `Get-ProjectEol`); only the appended block is uniform, and the user's existing lines are not rewritten. This task does NOT reopen Story S27 (see the Build order note): when it is ticked, close-unit finds S27 already DONE and changes nothing in STORIES.md. This task edits `upgrade-project.ps1`, so QA runs upgrade-project ONLY on sandboxes under %TEMP% - never against the kit repo (D:\projects\DrDad) or D:\Tools. `test-kit.ps1` tests the repo copy through `$kit`; the installed copy only picks the change up on the next `install.cmd`, which is not part of this task. Test pattern: `Test-Case "name" { ... Assert <bool> "message" }`. ASCII only, PowerShell 5.1, no network.
 
 ## Open questions
 - **[design] S19 dad-doctor behaviour.** S19 lists `dad-doctor.ps1` but it only REPORTS the docs dir; T19.1 makes it WARN (and use the resolved dir for the RAG check) rather than silently choose a dir. If the human wants it to print the same `WARN: ignoring ...` line instead, amend T19.1 step 3.

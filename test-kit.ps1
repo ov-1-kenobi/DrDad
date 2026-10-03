@@ -5147,6 +5147,45 @@ Test-Case "S27 AC3: .mcp.json repoint and .dad-kit-version follow the same rule"
   } finally { Remove-Sandbox $sb }
 }
 
+# S27 follow-up: AC3 (b) puts a CRLF file under eol=crlf, so it cannot tell which rule won. Here the
+# existing ending and the .gitattributes eol DISAGREE: the existing file must win; only the FRESH stamp
+# follows the attribute (the control that proves .gitattributes is read at all).
+Test-Case "S27 AC3 follow-up: an existing file's line ending beats a conflicting .gitattributes eol" {
+  $sb = New-Sandbox
+  try {
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    $stale = 'D:\gone\OLD-kit\local-tools\bin\Release\net8.0\local-tools.exe'
+
+    # (a): LF CLAUDE.md + LF .mcp.json under eol=crlf -> both stay LF
+    $pa = Join-Path $sb "lf-vs-crlf"; New-Item -ItemType Directory -Force "$pa\docs" | Out-Null
+    Write-S27File "$pa\.gitattributes" "* text=auto eol=crlf`n"
+    Write-S27File "$pa\CLAUDE.md" (($script:S27Lines -join "`n") + "`n")
+    $mcp = @{ mcpServers = @{ 'local-tools' = @{
+      command = $stale; args = @(); env = @{ LOCALTOOLS_DOCS_DIR = "$pa\docs" } } } } | ConvertTo-Json -Depth 10
+    Write-S27File "$pa\.mcp.json" ((($mcp -replace "`r?`n", "`n")) + "`n")
+    Assert ([System.IO.File]::ReadAllBytes("$pa\.mcp.json") -notcontains 13) "fixture error: LF .mcp.json has CR"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pa 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(a) upgrade-project failed: exit $code. Output: $o"
+    $j = [System.IO.File]::ReadAllText("$pa\.mcp.json") | ConvertFrom-Json
+    Assert ($j.mcpServers.'local-tools'.command -eq $exe) "(a) .mcp.json not repointed at this kit: $($j.mcpServers.'local-tools'.command)"
+    Assert ([System.IO.File]::ReadAllBytes("$pa\.mcp.json") -notcontains 13) "(a) CR bytes found in an LF .mcp.json under eol=crlf (.gitattributes beat the existing ending)"
+    Assert ([System.IO.File]::ReadAllBytes("$pa\CLAUDE.md") -notcontains 13) "(a) CR bytes found in an LF CLAUDE.md under eol=crlf (.gitattributes beat the existing ending)"
+    Assert (-not ([System.IO.File]::ReadAllText("$pa\CLAUDE.md")).Contains("- old modes text")) "(a) the old ## Modes body was not refreshed from the template"
+    Assert ([System.IO.File]::ReadAllText("$pa\.dad-kit-version").EndsWith("`r`n")) "(a) control: fresh stamp under eol=crlf does not end CRLF (.gitattributes not read)"
+
+    # (b): CRLF CLAUDE.md under eol=lf -> stays CRLF throughout
+    $pb = Join-Path $sb "crlf-vs-lf"; New-Item -ItemType Directory -Force $pb | Out-Null
+    Write-S27File "$pb\.gitattributes" "* text=auto eol=lf`n"
+    Write-S27File "$pb\CLAUDE.md" (($script:S27Lines -join "`r`n") + "`r`n")
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pb 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(b) upgrade-project failed: exit $code. Output: $o"
+    Assert (Test-S27Crlf "$pb\CLAUDE.md") "(b) a CRLF CLAUDE.md under eol=lf is not CRLF throughout (bare LF found - .gitattributes beat the existing ending)"
+    Assert (-not ([System.IO.File]::ReadAllText("$pb\CLAUDE.md")).Contains("- old modes text")) "(b) the old ## Modes body was not refreshed from the template"
+    Assert ([System.IO.File]::ReadAllBytes("$pb\.dad-kit-version") -notcontains 13) "(b) control: fresh stamp under eol=lf has CR bytes (.gitattributes not read)"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-doctor's fix hints name commands that actually fix the thing" {
   $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
   # install.cmd does NOT touch a project's .mcp.json - suggesting it sent you in a circle.
