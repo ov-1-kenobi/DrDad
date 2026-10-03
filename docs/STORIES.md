@@ -1098,7 +1098,7 @@
   user project). The CRLF rewrite of CLAUDE.md in step 3 is a separate defect for normal projects too; it
   is out of scope here - QUESTION (human): file it as its own story? Refs: DESIGN R15.
 
-### Story S27: upgrade-project writes the files it refreshes with the project's line endings, not CRLF   (R15)   <!-- Status: TODO -->
+### Story S27: upgrade-project writes the files it refreshes with the project's line endings, not CRLF   (R15)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** an upgrade changes only the content it means to change; each file it rewrites keeps the line
   endings the project already uses, so an upgrade never shows up as a whole-file line-ending diff.
 - **Context:** observed 2026-10-01 (S26 Dev notes open question; human-approved as a story 2026-10-01).

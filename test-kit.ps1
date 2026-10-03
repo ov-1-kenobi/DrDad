@@ -5057,6 +5057,96 @@ Test-Case "S26 AC3: a normal project (no kit markers) still upgrades" {
   } finally { Remove-Sandbox $sb }
 }
 
+# S27: files upgrade-project rewrites keep their existing line ending; fresh files follow .gitattributes
+# eol, else LF. Byte-level checks only (Get-Content strips endings). FIXTURES ONLY - $kit locates the
+# script under test and is never passed as -ProjectDir.
+$script:S27Lines = @("# Project: t", "## Stack", "- x", "## Modes", "- old modes text")
+function Write-S27File([string]$path, [string]$text) {
+  [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+function Test-S27Crlf([string]$path) {
+  $raw = [System.IO.File]::ReadAllText($path)
+  return ($raw.Contains("`r`n") -and -not ($raw -match "(?<!`r)`n"))
+}
+
+Test-Case "S27 AC1: upgrade-project keeps an LF CLAUDE.md LF and still refreshes kit sections" {
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force $p | Out-Null
+    Write-S27File "$p\CLAUDE.md" (($script:S27Lines -join "`n") + "`n")
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "upgrade-project failed: exit $code. Output: $o"
+    $b = [System.IO.File]::ReadAllBytes("$p\CLAUDE.md")
+    Assert ($b -notcontains 13) "CR bytes found in an LF project's CLAUDE.md after upgrade"
+    $raw = [System.IO.File]::ReadAllText("$p\CLAUDE.md")
+    Assert (-not $raw.Contains("- old modes text")) "the old ## Modes body was not refreshed from the template"
+    Assert ($raw -match '(?m)^## Stack$' -and $raw -match '(?m)^- x$') "the user's ## Stack section was not preserved"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S27 AC2: upgrade-project keeps a CRLF CLAUDE.md CRLF throughout" {
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force $p | Out-Null
+    Write-S27File "$p\CLAUDE.md" (($script:S27Lines -join "`r`n") + "`r`n")
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "upgrade-project failed: exit $code. Output: $o"
+    Assert (Test-S27Crlf "$p\CLAUDE.md") "a CRLF project's CLAUDE.md is not CRLF throughout after upgrade (bare LF found)"
+    $raw = [System.IO.File]::ReadAllText("$p\CLAUDE.md")
+    Assert (-not $raw.Contains("- old modes text")) "the old ## Modes body was not refreshed from the template"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S27 AC3: .mcp.json repoint and .dad-kit-version follow the same rule" {
+  $sb = New-Sandbox
+  try {
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    $kitVer = ([System.IO.File]::ReadAllText((Join-Path $kit "VERSION"))).Trim()
+    $stale = 'D:\gone\OLD-kit\local-tools\bin\Release\net8.0\local-tools.exe'
+
+    # (a)+(c): LF .mcp.json, no stamp, no .gitattributes
+    $pa = Join-Path $sb "lf"; New-Item -ItemType Directory -Force "$pa\docs" | Out-Null
+    Write-S27File "$pa\CLAUDE.md" (($script:S27Lines -join "`n") + "`n")
+    $mcp = @{ mcpServers = @{ 'local-tools' = @{
+      command = $stale; args = @(); env = @{ LOCALTOOLS_DOCS_DIR = "$pa\docs" } } } } | ConvertTo-Json -Depth 10
+    Write-S27File "$pa\.mcp.json" ((($mcp -replace "`r?`n", "`n")) + "`n")
+    Assert ([System.IO.File]::ReadAllBytes("$pa\.mcp.json") -notcontains 13) "fixture error: LF .mcp.json has CR"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pa 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(a) upgrade-project failed: exit $code. Output: $o"
+    $j = [System.IO.File]::ReadAllText("$pa\.mcp.json") | ConvertFrom-Json
+    Assert ($j.mcpServers.'local-tools'.command -eq $exe) "(a) .mcp.json not repointed at this kit: $($j.mcpServers.'local-tools'.command)"
+    Assert ([System.IO.File]::ReadAllBytes("$pa\.mcp.json") -notcontains 13) "(a) CR bytes found in an LF .mcp.json after repoint"
+    Assert ([System.IO.File]::ReadAllBytes("$pa\.dad-kit-version") -notcontains 13) "(c) fresh stamp with no .gitattributes has CR bytes"
+
+    # (b)+(d): CRLF .mcp.json, no stamp, .gitattributes eol=crlf
+    $pb = Join-Path $sb "crlf"; New-Item -ItemType Directory -Force "$pb\docs" | Out-Null
+    Write-S27File "$pb\CLAUDE.md" (($script:S27Lines -join "`r`n") + "`r`n")
+    Write-S27File "$pb\.gitattributes" "* text=auto eol=crlf`r`n"
+    $mcp = @{ mcpServers = @{ 'local-tools' = @{
+      command = $stale; args = @(); env = @{ LOCALTOOLS_DOCS_DIR = "$pb\docs" } } } } | ConvertTo-Json -Depth 10
+    Write-S27File "$pb\.mcp.json" ((($mcp -replace "`r?`n", "`r`n")) + "`r`n")
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pb 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(b) upgrade-project failed: exit $code. Output: $o"
+    $j = [System.IO.File]::ReadAllText("$pb\.mcp.json") | ConvertFrom-Json
+    Assert ($j.mcpServers.'local-tools'.command -eq $exe) "(b) .mcp.json not repointed at this kit: $($j.mcpServers.'local-tools'.command)"
+    Assert (Test-S27Crlf "$pb\.mcp.json") "(b) a CRLF .mcp.json is not CRLF throughout after repoint"
+    Assert ([System.IO.File]::ReadAllText("$pb\.dad-kit-version").EndsWith("`r`n")) "(d) fresh stamp under eol=crlf does not end CRLF"
+
+    # (e): an existing CRLF stamp is rewritten CRLF with the current kit version
+    $pe = Join-Path $sb "stamp"; New-Item -ItemType Directory -Force $pe | Out-Null
+    Write-S27File "$pe\CLAUDE.md" (($script:S27Lines -join "`n") + "`n")
+    Write-S27File "$pe\.dad-kit-version" "0.0.0`r`n"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pe 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(e) upgrade-project failed: exit $code. Output: $o"
+    $st = [System.IO.File]::ReadAllText("$pe\.dad-kit-version")
+    Assert ($st.EndsWith("`r`n")) "(e) an existing CRLF stamp was not rewritten CRLF"
+    Assert ($st.Trim() -eq $kitVer) "(e) stamp does not hold the current kit version ($kitVer): '$($st.Trim())'"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-doctor's fix hints name commands that actually fix the thing" {
   $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
   # install.cmd does NOT touch a project's .mcp.json - suggesting it sent you in a circle.
