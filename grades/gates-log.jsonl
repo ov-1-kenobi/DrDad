@@ -250,3 +250,6 @@
 {"v":1,"ts":"2026-10-03T00:16:32.923Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
 {"v":1,"ts":"2026-10-03T00:23:58.944Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 27, tasks 75)","session":""}
 {"v":1,"ts":"2026-10-03T00:24:05.825Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T24.4","session":""}
+{"v":1,"ts":"2026-10-03T00:24:12.357Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
+{"v":1,"ts":"2026-10-03T03:22:44.163Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 27, tasks 75)","session":""}
+{"v":1,"ts":"2026-10-03T03:22:51.166Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S24","session":""}

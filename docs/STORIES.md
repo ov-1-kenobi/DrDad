@@ -1021,11 +1021,11 @@
   Not changed: DESIGN.md, settings, models.json.
 - **Dependencies:** none (S16 measured the warning; S17 added the probe).
 - **Acceptance (testable):**
-  - [ ] AC1: a stubbed `claude` writing the `unrecognized_model` warning to stderr and valid JSON (non-empty
+  - [x] AC1: a stubbed `claude` writing the `unrecognized_model` warning to stderr and valid JSON (non-empty
     result, `modelUsage` keyed by the -cc name) to stdout -> the WARN line is printed and the probe is PASS.
-  - [ ] AC2: the same stub without the warning -> PASS and no WARN line.
-  - [ ] AC3: Ollama unreachable -> the probe is SKIP and the final smoke line names the skip and its reason.
-  - [ ] AC4: the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC2: the same stub without the warning -> PASS and no WARN line.
+  - [x] AC3: Ollama unreachable -> the probe is SKIP and the final smoke line names the skip and its reason.
+  - [x] AC4: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** the probe checks Ollama reachability with a live request to localhost:11434 before it calls
   `claude`, so AC1/AC2 need a test seam for reachability (keep it env-only like the existing hooks).
   QUESTION (human): the source of `<ctx>` is not pinned. models.json `numCtx` is 65536 but S16 measured
