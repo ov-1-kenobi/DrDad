@@ -1096,7 +1096,7 @@
 - **Dev notes:** put the guard first, before any step that touches the filesystem or git, so "changes
   NOTHING" holds by construction. All three markers are required (one alone is too weak a signal for a
   user project). The CRLF rewrite of CLAUDE.md in step 3 is a separate defect for normal projects too; it
-  is out of scope here - QUESTION (human): file it as its own story? Refs: DESIGN R15.
+  is out of scope here - ANSWERED 2026-10-03: filed as Story S27 (DONE). Refs: DESIGN R15.
 
 ### Story S27: upgrade-project writes the files it refreshes with the project's line endings, not CRLF   (R15)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** an upgrade changes only the content it means to change; each file it rewrites keeps the line
@@ -1114,10 +1114,25 @@
     exists, detect LF vs CRLF from its current content and write the new text with that same ending,
     uniformly (no mixed endings).
   - A file created fresh follows the project's `.gitattributes` `eol` if one is declared for it, else LF.
-  - Content is otherwise unchanged (same sections refreshed, same JSON, same stamp value).
-  - No other step changes; the S26 kit-checkout guard stays first.
-- **Data / interfaces:** `upgrade-project.ps1` (a small line-ending helper used by the three writes);
-  `test-kit.ps1` (fixture cases). Not changed: DESIGN.md, `new-project.ps1`, templates.
+  - The `.gitignore` writes in step 2 follow the same rule: an existing `.gitignore` keeps its ending and
+    each appended block uses it uniformly (the user's existing lines are never rewritten); a fresh
+    `.gitignore` follows `.gitattributes` `eol`, else LF.
+  - Appended `.gitignore` entries start on their own line: when an existing non-empty `.gitignore` does
+    not end with a newline, one line break in the file's own ending is written first (T27.5). A file that
+    already ends with a newline, or an empty one, gets no separator.
+  - A file that already mixes LF and CRLF is treated as CRLF when it contains any CRLF (human decision
+    2026-10-03, rule kept). A rewritten file comes out uniformly CRLF; in `.gitignore` only the appended
+    block is uniform.
+  - An existing file with no newline at all is handled by the fresh-file rule (`.gitattributes` `eol`,
+    else LF).
+  - Content is otherwise unchanged (same sections refreshed, same JSON, same stamp value, same
+    `.gitignore` entries in the same order).
+  - Only these writes change: the step 0b `.mcp.json` repoint, the step 2 `.gitignore` writes, the step 3
+    CLAUDE.md refresh and the version stamp. No other step changes; the S26 kit-checkout guard stays first.
+- **Data / interfaces:** `upgrade-project.ps1` (line-ending helpers `Get-ProjectEol` and `ConvertTo-Eol`,
+  used by the CLAUDE.md, `.mcp.json`, `.dad-kit-version` and `.gitignore` writes; `Get-GitignoreLead` for
+  the `.gitignore` appends); `test-kit.ps1` (fixture cases). Not changed: DESIGN.md, `new-project.ps1`,
+  templates.
 - **Dependencies:** S26 (same script; its guard stays first).
 - **Acceptance (testable):**
   - [x] AC1: sandbox project with an LF CLAUDE.md -> after upgrade, CLAUDE.md contains no CR bytes and
@@ -1128,7 +1143,13 @@
     fresh file -> `.gitattributes` `eol` if declared, else LF).
   - [x] AC4: the existing upgrade-project cases (including S26's) still pass.
   - [x] AC5: the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC6: `.gitignore` follows the same rule (existing ending kept; fresh file -> `.gitattributes`
+    `eol` if declared, else LF), and an appended entry is never glued onto an unterminated last line
+    (test-kit cases "S27 follow-up: .gitignore keeps its line ending" and "S27 follow-up: an appended
+    .gitignore entry is never glued onto an unterminated last line"; added 2026-10-03 with T27.4/T27.5).
 - **Dev notes:** fixtures only under `%TEMP%`; never run upgrade-project against the kit repo
   (`D:\projects\DrDad`) or `D:\Tools`. Detect the ending from raw bytes (`ReadAllText` + `Contains("`r`n")`),
   not `Get-Content`, which strips endings. Same bug class as the LF fixes in close-unit.ps1 (~244) and
-  doc-stats.ps1 (~813). Refs: DESIGN R15.
+  doc-stats.ps1 (~813). `.gitignore` was left out of T27.1 on purpose (its Touches excluded the step-2
+  writes); follow-up cleanup tasks T27.4 (line-ending rule) and T27.5 (no glued append), both
+  human-approved, added it on 2026-10-03 without reopening S27 (it stays DONE). Refs: DESIGN R15.
