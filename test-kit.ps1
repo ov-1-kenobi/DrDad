@@ -5294,6 +5294,70 @@ Test-Case "S27 follow-up: an appended .gitignore entry is never glued onto an un
   } finally { Remove-Sandbox $sb }
 }
 
+# T27.6: three S27 Behavior rules that had no test - a mixed CLAUDE.md comes out uniformly CRLF (any CRLF
+# wins); a no-newline CLAUDE.md follows the fresh-file rule (.gitattributes eol, else LF); an empty
+# .gitignore gets no separator before its first appended entry.
+Test-Case "S27 follow-up: mixed endings, a no-newline file and an empty .gitignore follow the rule" {
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git not on PATH - upgrade-project only writes .gitignore when git is present" }
+  $sb = New-Sandbox
+  try {
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $claudeLf = ($script:S27Lines -join "`n") + "`n"
+
+    # (a): mixed CLAUDE.md (one CRLF line, the rest bare LF), no .gitattributes -> uniformly CRLF
+    $pa = Join-Path $sb "mixed"; New-Item -ItemType Directory -Force $pa | Out-Null
+    Write-S27File "$pa\CLAUDE.md" ($script:S27Lines[0] + "`r`n" + (($script:S27Lines[1..4]) -join "`n") + "`n")
+    $fx = [System.IO.File]::ReadAllText("$pa\CLAUDE.md")
+    Assert (([regex]::Matches($fx, "`r`n").Count -eq 1) -and ($fx -match "(?<!`r)`n")) "(a) fixture error: the mixed CLAUDE.md must hold exactly one CRLF and some bare LF"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pa 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(a) upgrade-project failed: exit $code. Output: $o"
+    Assert (Test-S27Crlf "$pa\CLAUDE.md") "(a) a mixed CLAUDE.md (one CRLF line, the rest LF) is not CRLF throughout after upgrade - any CRLF must win"
+    $rawA = [System.IO.File]::ReadAllText("$pa\CLAUDE.md")
+    Assert (-not $rawA.Contains("- old modes text")) "(a) the old ## Modes body was not refreshed from the template"
+    Assert ($rawA.Contains("## Stack`r`n- x`r`n")) "(a) the user's ## Stack section was not kept (as CRLF) after upgrade"
+
+    # (b1): CLAUDE.md with no newline at all, no .gitattributes -> fresh-file rule -> LF
+    $pb1 = Join-Path $sb "nonl-lf"; New-Item -ItemType Directory -Force $pb1 | Out-Null
+    Write-S27File "$pb1\CLAUDE.md" "# Project: t"
+    $fb = [System.IO.File]::ReadAllBytes("$pb1\CLAUDE.md")
+    Assert (($fb -notcontains 10) -and ($fb -notcontains 13)) "(b1) fixture error: the no-newline CLAUDE.md holds a line break"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pb1 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(b1) upgrade-project failed: exit $code. Output: $o"
+    Assert ([System.IO.File]::ReadAllBytes("$pb1\CLAUDE.md") -notcontains 13) "(b1) a no-newline CLAUDE.md with no .gitattributes has CR bytes after upgrade - the fresh-file rule is LF"
+    $rawB1 = [System.IO.File]::ReadAllText("$pb1\CLAUDE.md")
+    Assert ($rawB1.StartsWith("# Project: t`n")) "(b1) the CLAUDE.md does not start with '# Project: t' and an LF after upgrade"
+    Assert ($rawB1 -match '(?m)^## Modes') "(b1) the kit sections (## Modes ...) were not added to a no-newline CLAUDE.md"
+
+    # (b2): CLAUDE.md with no newline at all, .gitattributes eol=crlf -> fresh-file rule -> CRLF
+    $pb2 = Join-Path $sb "nonl-crlf"; New-Item -ItemType Directory -Force $pb2 | Out-Null
+    Write-S27File "$pb2\.gitattributes" "* text eol=crlf`n"
+    Write-S27File "$pb2\CLAUDE.md" "# Project: t"
+    $fb = [System.IO.File]::ReadAllBytes("$pb2\CLAUDE.md")
+    Assert (($fb -notcontains 10) -and ($fb -notcontains 13)) "(b2) fixture error: the no-newline CLAUDE.md holds a line break"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pb2 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(b2) upgrade-project failed: exit $code. Output: $o"
+    Assert (Test-S27Crlf "$pb2\CLAUDE.md") "(b2) a no-newline CLAUDE.md under eol=crlf is not CRLF throughout - the fresh-file rule was not used"
+    $rawB2 = [System.IO.File]::ReadAllText("$pb2\CLAUDE.md")
+    Assert ($rawB2.StartsWith("# Project: t`r`n")) "(b2) the CLAUDE.md does not start with '# Project: t' and a CRLF after upgrade"
+    Assert ($rawB2 -match '(?m)^## Modes') "(b2) the kit sections (## Modes ...) were not added to a no-newline CLAUDE.md"
+
+    # (c): empty .gitignore, no .gitattributes -> no separator before the first appended entry, LF
+    $pc = Join-Path $sb "empty-gitignore"; New-Item -ItemType Directory -Force $pc | Out-Null
+    Write-S27File "$pc\CLAUDE.md" $claudeLf
+    Write-S27File "$pc\.gitignore" ""
+    Assert ([System.IO.File]::ReadAllBytes("$pc\.gitignore").Length -eq 0) "(c) fixture error: .gitignore is not 0 bytes"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pc 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(c) upgrade-project failed: exit $code. Output: $o"
+    $bC = [System.IO.File]::ReadAllBytes("$pc\.gitignore")
+    $rawC = [System.IO.File]::ReadAllText("$pc\.gitignore")
+    Assert ($bC.Length -gt 0 -and $bC[0] -eq 46) "(c) an empty .gitignore got a leading separator: byte 0 is not the '.' of .env"
+    Assert ($rawC.StartsWith(".env`n")) "(c) the first appended entry of an empty .gitignore is not '.env' on its own LF line: $rawC"
+    Assert (-not $rawC.Contains("`n`n")) "(c) blank line found in a .gitignore that started empty: $rawC"
+    Assert ($bC -notcontains 13) "(c) CR bytes found in a .gitignore that started empty with no .gitattributes - the fresh-file rule is LF"
+    Assert ($rawC -match '(?m)^bin/$') "(c) the build-output append is missing (bin/): $rawC"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-doctor's fix hints name commands that actually fix the thing" {
   $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
   # install.cmd does NOT touch a project's .mcp.json - suggesting it sent you in a circle.
