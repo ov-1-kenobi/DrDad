@@ -1577,23 +1577,37 @@ Test-Case "uninstall removes the Copilot CLI hook file (sandboxed)" {
   } finally { Remove-Sandbox $sb }
 }
 
+# S25 / C5f: compare EVERY 'MEASURED <date> against GitHub Copilot CLI <v>' stamp with the constant, not
+# just the first. Returns problem strings (empty = all good); zero stamps is a problem (never vacuous).
+function Get-CopilotStampProblems([string]$Text, [string]$Constant, [string]$Label = "DESIGN.md") {
+  $problems = @()
+  $ms = [regex]::Matches($Text, 'MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+GitHub\s+Copilot\s+CLI\s+([0-9][0-9.]*)')
+  if ($ms.Count -eq 0) {
+    return @("$Label carries no 'MEASURED <date> against GitHub Copilot CLI <version>' stamp")
+  }
+  foreach ($m in $ms) {
+    $v = $m.Groups[1].Value.TrimEnd('.')
+    $line = ([regex]::Matches($Text.Substring(0, $m.Index), "`n")).Count + 1
+    if ($v -ne $Constant) { $problems += "${Label}:$line stamped $v != $Constant" }
+  }
+  return $problems
+}
+
 Test-Case "the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)" {
   # Contract C2f names install.ps1's $CopilotMeasuredVersion the ONE source of truth for the version C2 was
   # measured against, and requires this assertion so the doc and the code cannot disagree silently. That is
   # the contract applying its own rule to itself: every OTHER silent-drift failure here (hook location,
   # event casing, block semantics) is invisible at runtime, and so is this one - a stale number would keep
   # claiming a contract had been verified against a harness nobody ever tested.
+  # C5f extends the check to EVERY Copilot MEASURED stamp in DESIGN (C2 and C5 share the one constant).
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   $m = [regex]::Match($inst, '\$CopilotMeasuredVersion\s*=\s*"([^"]+)"')
   Assert $m.Success "install.ps1 has no `$CopilotMeasuredVersion constant (contract C2f requires one)"
   $constant = $m.Groups[1].Value
 
   $design = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
-  $d = [regex]::Match($design, 'MEASURED\s+\d{4}-\d{2}-\d{2}\s+against\s+GitHub\s+Copilot\s+CLI\s+([0-9][0-9.]*)')
-  Assert $d.Success "DESIGN.md contract C2 carries no 'MEASURED <date> against GitHub Copilot CLI <version>' stamp"
-  $stamped = $d.Groups[1].Value
-
-  Assert ($constant -eq $stamped) "install.ps1 says Copilot $constant but DESIGN.md C2 is stamped $stamped - re-measure C2a-C2e, then update BOTH"
+  $probs = @(Get-CopilotStampProblems $design $constant)
+  Assert ($probs.Count -eq 0) ("Copilot MEASURED stamp(s) disagree with install.ps1's `$CopilotMeasuredVersion (C2f/C5f: ONE constant for C2 and C5) - re-measure, then update the constant AND every stamp: " + ($probs -join '; '))
 
   # dad-doctor must READ the constant, not carry its own copy: two hard-coded numbers is the drift C2f bans.
   $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
