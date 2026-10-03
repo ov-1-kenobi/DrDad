@@ -1120,14 +1120,14 @@
   `test-kit.ps1` (fixture cases). Not changed: DESIGN.md, `new-project.ps1`, templates.
 - **Dependencies:** S26 (same script; its guard stays first).
 - **Acceptance (testable):**
-  - [ ] AC1: sandbox project with an LF CLAUDE.md -> after upgrade, CLAUDE.md contains no CR bytes and
+  - [x] AC1: sandbox project with an LF CLAUDE.md -> after upgrade, CLAUDE.md contains no CR bytes and
     its kit-owned sections are refreshed.
-  - [ ] AC2: sandbox project with a CRLF CLAUDE.md -> stays CRLF throughout (every line ends CRLF, no
+  - [x] AC2: sandbox project with a CRLF CLAUDE.md -> stays CRLF throughout (every line ends CRLF, no
     bare LF).
-  - [ ] AC3: the `.mcp.json` repoint and `.dad-kit-version` follow the same rule (existing ending kept;
+  - [x] AC3: the `.mcp.json` repoint and `.dad-kit-version` follow the same rule (existing ending kept;
     fresh file -> `.gitattributes` `eol` if declared, else LF).
-  - [ ] AC4: the existing upgrade-project cases (including S26's) still pass.
-  - [ ] AC5: the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC4: the existing upgrade-project cases (including S26's) still pass.
+  - [x] AC5: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** fixtures only under `%TEMP%`; never run upgrade-project against the kit repo
   (`D:\projects\DrDad`) or `D:\Tools`. Detect the ending from raw bytes (`ReadAllText` + `Contains("`r`n")`),
   not `Get-Content`, which strips endings. Same bug class as the LF fixes in close-unit.ps1 (~244) and
