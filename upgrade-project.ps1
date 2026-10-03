@@ -7,6 +7,7 @@
 #     (kit-owned: Modes / flow, Design doc(s), Proven recipes, Web / grounding, Hybrid (local co-processor),
 #      Working agreement; preserved: Project name, Stack, Placeholder convention, Build / test, Human-in-loop,
 #      anything custom)
+#   - rewritten files keep their existing line ending; fresh files follow .gitattributes eol, else LF (S27)
 #
 # Usage:  upgrade-project.ps1 [projectDir]     (default: current folder; safe to re-run)
 # Refuses (exit 2, writes nothing) when the target is a DrDad kit checkout (install.ps1 + VERSION + global\commands\).
@@ -35,6 +36,43 @@ if ($isKit) {
   $shown = $proj; if ($shown.Length -gt 3) { $shown = $shown.TrimEnd('\', '/') }
   Write-Host "$shown is a DrDad kit checkout, not a project - upgrade-project does not retrofit the kit; use install.cmd to deploy it" -ForegroundColor Yellow
   exit 2
+}
+
+# S27: line endings. Every file this script rewrites keeps its EXISTING ending (raw bytes - Get-Content
+# strips endings); a fresh file (or one with no newline) follows the project's .gitattributes eol, else LF.
+# Pinned subset: patterns '*', the exact file name, '*.<ext>'; eol=lf / eol=crlf; last applying line wins;
+# directory patterns, '!' negation and macros are ignored.
+function Get-ProjectEol([string]$Path) {
+  if (Test-Path -LiteralPath $Path -PathType Leaf) {
+    $raw = [System.IO.File]::ReadAllText($Path)
+    if ($raw.Contains("`n")) {
+      if ($raw.Contains("`r`n")) { return "`r`n" } else { return "`n" }
+    }
+  }
+  $eol = "`n"
+  $ga = Join-Path $proj ".gitattributes"
+  if (Test-Path -LiteralPath $ga -PathType Leaf) {
+    $name = Split-Path -Leaf $Path
+    $ext = [System.IO.Path]::GetExtension($Path)
+    foreach ($ln in ([System.IO.File]::ReadAllText($ga) -split "`r?`n")) {
+      $l = $ln.Trim()
+      if ($l -eq "" -or $l.StartsWith("#")) { continue }
+      $tok = @($l -split '\s+')
+      $pat = $tok[0]
+      $applies = ($pat -eq "*") -or ($pat -eq $name) -or ($ext -ne "" -and $pat -eq ("*" + $ext))
+      if (-not $applies) { continue }
+      for ($i = 1; $i -lt $tok.Count; $i++) {
+        if ($tok[$i] -eq "eol=lf") { $eol = "`n" }
+        elseif ($tok[$i] -eq "eol=crlf") { $eol = "`r`n" }
+      }
+    }
+  }
+  return $eol
+}
+function ConvertTo-Eol([string]$Text, [string]$Eol) {
+  $t = $Text -replace "`r?`n", "`n"
+  if ($Eol -eq "`n") { return $t }
+  return ($t -replace "`n", "`r`n")
 }
 
 if (-not (Test-Path (Join-Path $proj "CLAUDE.md"))) {
@@ -86,7 +124,8 @@ if (Test-Path $mcpPath) {
     if ($cur -ne $exe) {
       $j.mcpServers.'local-tools'.command = $exe
       # The corpus stays the PROJECT's own docs - only the server binary moves.
-      [System.IO.File]::WriteAllText($mcpPath, ($j | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+      $mEol = Get-ProjectEol $mcpPath
+      [System.IO.File]::WriteAllText($mcpPath, (ConvertTo-Eol ($j | ConvertTo-Json -Depth 10) $mEol), (New-Object System.Text.UTF8Encoding($false)))
       Write-Host "  .mcp.json repointed at this kit's local-tools.exe" -ForegroundColor Green
       Write-Host "    was: $cur" -ForegroundColor DarkGray
     }
@@ -207,6 +246,7 @@ function Add-Section($out, [string]$header, [string[]]$body) {
 }
 
 $cmPath = Join-Path $proj "CLAUDE.md"
+$cmEol = Get-ProjectEol $cmPath
 $projSecs = Split-Sections (Get-Content $cmPath -Encoding UTF8)
 $tmplSecs = Split-Sections (Get-Content (Join-Path $templates "generic\CLAUDE.md") -Encoding UTF8)
 
@@ -238,10 +278,11 @@ foreach ($s in $tmplSecs) {
     Write-Host "  CLAUDE.md: added '$($s[0])'" -ForegroundColor Green
   }
 }
-$text = ((($out -join "`r`n") -replace '__DESIGN_DOC__', "``docs/$docName``")).TrimEnd() + "`r`n"
+$text = ((($out -join $cmEol) -replace '__DESIGN_DOC__', "``docs/$docName``")).TrimEnd() + $cmEol
 [System.IO.File]::WriteAllText($cmPath, $text, (New-Object System.Text.UTF8Encoding($false)))
 
-[System.IO.File]::WriteAllText($stampFile, "$kitVer`r`n", (New-Object System.Text.UTF8Encoding($false)))
+$stEol = Get-ProjectEol $stampFile
+[System.IO.File]::WriteAllText($stampFile, "$kitVer$stEol", (New-Object System.Text.UTF8Encoding($false)))
 
 # The security-review header is deliberately NOT injected here. Adding 'Security review: REQUIRED' to a
 # project already mid-build would block its very next /build - a kit upgrade must not stop work that was

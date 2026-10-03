@@ -2312,7 +2312,7 @@ last and blocks nothing.)
 - **Refs:** Story S26 (AC1-AC5); test-kit.ps1:4748-4772 (repoint case: sandbox + `.mcp.json` writer style), :4818, :5083, :5330 (other upgrade-project cases); upgrade-project.ps1:19-28 (param, `$proj`, exit 1 on no CLAUDE.md).
 - **Context:** pattern: `Test-Case "name" { ... Assert <bool> "message" }`, `$kit` = kit root, `New-Sandbox`/`Remove-Sandbox` = temp folders. A normal upgrade-project run does `git init` + a baseline commit in the sandbox, as the existing cases already do. The suite needs no network and must not touch the real `%USERPROFILE%\.claude` or the real kit repo. ASCII only, PowerShell 5.1.
 
-### [ ] T27.1 - upgrade-project.ps1: refreshed files keep the project's line endings (CLAUDE.md, .mcp.json, .dad-kit-version)   (Story S27)
+### [x] T27.1 - upgrade-project.ps1: refreshed files keep the project's line endings (CLAUDE.md, .mcp.json, .dad-kit-version)   (Story S27)
 - **Goal:** each file upgrade-project rewrites keeps its existing line ending (LF or CRLF, uniformly); a freshly created one follows the project's `.gitattributes` `eol` if declared for it, else LF; content is otherwise unchanged.
 - **Touches:** `upgrade-project.ps1` only - two small helpers defined after the S26 kit-checkout guard and before step 0b; the step 0b `.mcp.json` write (~line 89); the step 3 CLAUDE.md join + write (~lines 209-242); the `.dad-kit-version` write (~line 244). Locate by content. NOT the S26 guard (stays first), NOT the `.gitignore` writes (~116-128) or the COMMANDS.md -> RECIPES.md migration (~70), NOT `new-project.ps1`, templates or `docs/DESIGN.md`.
 - **Do:**
