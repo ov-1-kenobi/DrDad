@@ -5186,6 +5186,59 @@ Test-Case "S27 AC3 follow-up: an existing file's line ending beats a conflicting
   } finally { Remove-Sandbox $sb }
 }
 
+# T27.4: the .gitignore writes (step 2, only when git is on PATH) follow the same S27 rule. Before, the
+# fresh file was joined with CRLF and Add-Content appended CRLF lines, so an LF project got mixed endings.
+Test-Case "S27 follow-up: .gitignore keeps its line ending" {
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git not on PATH - upgrade-project only writes .gitignore when git is present" }
+  $sb = New-Sandbox
+  try {
+    $up = Join-Path $kit "upgrade-project.ps1"
+    $claudeLf = ($script:S27Lines -join "`n") + "`n"
+
+    # (a): existing LF .gitignore with no .env and no bin/ -> both appends fire, all LF
+    $pa = Join-Path $sb "lf"; New-Item -ItemType Directory -Force $pa | Out-Null
+    Write-S27File "$pa\CLAUDE.md" $claudeLf
+    Write-S27File "$pa\.gitignore" "node_modules/`ncustom/`n"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pa 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(a) upgrade-project failed: exit $code. Output: $o"
+    Assert ([System.IO.File]::ReadAllBytes("$pa\.gitignore") -notcontains 13) "(a) CR bytes found in an LF .gitignore after upgrade"
+    $raw = [System.IO.File]::ReadAllText("$pa\.gitignore")
+    Assert ($raw.StartsWith("node_modules/`ncustom/`n")) "(a) the user's existing .gitignore lines were not kept as-is: $raw"
+    Assert ($raw -match '(?m)^\.env$' -and $raw -match '(?m)^\.claude/$') "(a) the secret/noise append is missing (.env / .claude/): $raw"
+    Assert ($raw -match '(?m)^bin/$' -and $raw -match '(?m)^docs/\.index/$') "(a) the build-output append is missing (bin/ / docs/.index/): $raw"
+    Assert ($raw.EndsWith("`n")) "(a) the .gitignore does not end with a newline after upgrade"
+
+    # (b): existing CRLF .gitignore -> stays CRLF throughout, appends included
+    $pb = Join-Path $sb "crlf"; New-Item -ItemType Directory -Force $pb | Out-Null
+    Write-S27File "$pb\CLAUDE.md" $claudeLf
+    Write-S27File "$pb\.gitignore" "node_modules/`r`ncustom/`r`n"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pb 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(b) upgrade-project failed: exit $code. Output: $o"
+    Assert (Test-S27Crlf "$pb\.gitignore") "(b) a CRLF .gitignore is not CRLF throughout after upgrade (bare LF found)"
+    $raw = [System.IO.File]::ReadAllText("$pb\.gitignore")
+    Assert ($raw.StartsWith("node_modules/`r`ncustom/`r`n")) "(b) the user's existing .gitignore lines were not kept as-is"
+    Assert ($raw.Contains("`r`n.env`r`n") -and $raw.Contains("`r`nbin/`r`n")) "(b) the appended .env / bin/ lines are missing or not CRLF"
+
+    # (c): fresh .gitignore, no .gitattributes -> LF
+    $pc = Join-Path $sb "fresh-lf"; New-Item -ItemType Directory -Force $pc | Out-Null
+    Write-S27File "$pc\CLAUDE.md" $claudeLf
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pc 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(c) upgrade-project failed: exit $code. Output: $o"
+    Assert (Test-Path -LiteralPath "$pc\.gitignore" -PathType Leaf) "(c) no .gitignore was created. Output: $o"
+    Assert ([System.IO.File]::ReadAllBytes("$pc\.gitignore") -notcontains 13) "(c) CR bytes found in a fresh .gitignore with no .gitattributes"
+    $raw = [System.IO.File]::ReadAllText("$pc\.gitignore")
+    Assert ($raw -match '(?m)^bin/$' -and $raw -match '(?m)^\.env$' -and $raw -match '(?m)^\.claude/$') "(c) the fresh .gitignore is missing bin/ / .env / .claude/: $raw"
+
+    # (d): fresh .gitignore under eol=crlf -> CRLF throughout
+    $pd = Join-Path $sb "fresh-crlf"; New-Item -ItemType Directory -Force $pd | Out-Null
+    Write-S27File "$pd\CLAUDE.md" $claudeLf
+    Write-S27File "$pd\.gitattributes" "* text=auto eol=crlf`n"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $pd 2>&1 | Out-String); $code = $LASTEXITCODE
+    Assert ($code -eq 0) "(d) upgrade-project failed: exit $code. Output: $o"
+    Assert (Test-S27Crlf "$pd\.gitignore") "(d) a fresh .gitignore under eol=crlf is not CRLF throughout"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "dad-doctor's fix hints name commands that actually fix the thing" {
   $doc = Get-Content (Join-Path $kit "dad-doctor.ps1") -Raw
   # install.cmd does NOT touch a project's .mcp.json - suggesting it sent you in a circle.
