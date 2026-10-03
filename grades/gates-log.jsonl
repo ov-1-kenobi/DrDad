@@ -328,3 +328,6 @@
 {"v":1,"ts":"2026-10-03T16:54:16.271Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
 {"v":1,"ts":"2026-10-03T17:02:04.743Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 27, tasks 80)","session":""}
 {"v":1,"ts":"2026-10-03T17:02:12.485Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T27.6","session":""}
+{"v":1,"ts":"2026-10-03T17:02:38.270Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
+{"v":1,"ts":"2026-10-03T17:51:22.275Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
+{"v":1,"ts":"2026-10-03T18:15:11.031Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}

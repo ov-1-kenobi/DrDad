@@ -277,6 +277,20 @@ close-unit finds S27 already DONE and changes nothing in STORIES.md. Its mutatio
 TEMPORARILY, so every QA run of upgrade-project goes to a sandbox under %TEMP% - never the kit repo
 (D:\projects\DrDad) or D:\Tools. It is queued last and blocks nothing.)
 
+T24.5 (follow-up; needs T24.4; run after T27.6 - it edits `harness-versions.ps1`) -> T24.6 (needs T24.5; run directly after T24.5 - it edits `test-kit.ps1`)
+
+(T24.5 and T24.6 are follow-up tasks added 2026-10-03 for the human decision in `docs/DESIGN.md` C4a OPEN-4(b),
+"The SOURCE of `<ctx>` - DECIDED 2026-10-03" (both tasks human-approved 2026-10-03). T24.5 makes the
+`unrecognized_model` WARN print the context the local Ollama serves, read from its `/api/show`; T24.6 brings the S24
+Test-Cases in line. Together they supersede the literal `Ollama serves unknown` that T24.1 and T24.3 pinned before
+that decision and that the `"S24 AC1/AC2: ..."` case asserts today. They do NOT reopen Story S24: close-unit never
+un-marks a DONE story, so S24 stays `DONE` in STORIES.md and AC1-AC4 are neither reworded nor unticked (S24 Dev
+notes, "ANSWERED 2026-10-03"); closing T24.5 only notes "story S24 : 5/6 tasks done - not rolling up yet", and
+ticking T24.6 re-runs the roll-up, which finds S24 already DONE and changes nothing in STORIES.md. Run T24.6
+directly after T24.5: in between, the AC1/AC2 case's probe would make a REAL `/api/show` call, so T24.5's QA runs
+the suite with `DAD_SMOKE_OLLAMA_SHOW=down` inherited (T24.5 Do step 6). No test may reach a real Ollama; only
+T24.5's optional read-only manual probe may. Both are queued last.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -2276,6 +2290,136 @@ TEMPORARILY, so every QA run of upgrade-project goes to a sandbox under %TEMP% -
 - **Refs:** Story S24 (Behavior 2-3); grades/S24_GRADE.md suggestions 1-3 [dev] (human-approved as one cleanup task 2026-10-02); T24.2 Acceptance (the `DAD_SMOKE_LOCALMODEL=pass` half); harness-versions.ps1 `Test-LocalModelResolves` (`$errFile` lines, ~117-141); test-kit.ps1 `Invoke-S24Probe` (~1777) and the S24 cases (~1809-1828).
 - **Context:** PowerShell uses dynamic scoping: if anything in the `try` throws before `$errFile = [IO.Path]::GetTempFileName()` assigns the function-local variable, `if ($errFile)` in `finally` reads a caller's `$errFile` and `Remove-Item`s it. `$errFile = $null` before the `try` makes the name local first. `Invoke-S24Probe` runs a child `powershell.exe` with a stub `bin\claude.cmd` first on PATH (stderr line via `echo <text> 1>&2`, stdout `{"result":"pong","modelUsage":{"qwen3-14b-cc":{}}}`), `models.json` fixture alias `fast` = `qwen3-14b-cc`, `DAD_SMOKE_GATES=pass`, env restored in `finally`; the driver variable `$fixture` is available to the body. `DAD_SMOKE_LOCALMODEL = pass | fail | skip` short-circuits `Test-LocalModelResolves` (no `claude` call). Setting `$env:X` to `""`/`$null` removes it. No real network, `claude`, `npm` or `%USERPROFILE%\.claude` (R35b). This task does NOT reopen Story S24 (see the Build order note). Test pattern: `Test-Case "name" { ... Assert <bool> "message" }`. ASCII only, PowerShell 5.1.
 
+### [ ] T24.5 - harness-versions.ps1: the unrecognized_model WARN prints the context Ollama serves (from /api/show), 'unknown' on any failure   (Story S24)
+- **Goal:** the WARN line that `Test-LocalModelResolves` prints for `unrecognized_model` names the context the local Ollama really serves for the `-cc` model - the LOWER of `num_ctx` and `<arch>.context_length` from Ollama's `/api/show` - instead of the hard-coded `unknown`, and prints `unknown` only when that lookup fails. A new env seam, `DAD_SMOKE_OLLAMA_SHOW`, lets tests supply the `/api/show` reply with no network call. The WARN stays a WARN and every outcome (PASS / FAIL / SKIP) is unchanged.
+- **Touches:** `harness-versions.ps1` only, in three places: (1) the test-hook comment lines directly above `function Test-LocalModelResolves` (the block that ends `# Test hook: env DAD_SMOKE_OLLAMA = up | down forces Ollama reachability (no request is made).`); (2) ONE new function `Get-OllamaServedContext`, defined directly after the closing `}` of `Test-LocalModelResolves` and before the comment line that begins `# Runs` and introduces `Invoke-PostUpdateSmoke`; (3) inside `Test-LocalModelResolves`, ONLY the line that starts `if ($errText -match 'unrecognized_model')`. Do NOT touch: the `DAD_SMOKE_LOCALMODEL` hook, the `DAD_SMOKE_OLLAMA` reachability block and its SKIP return text, the `$errFile` lines, the `claude` call, the FAIL / PASS returns, `Invoke-PostUpdateSmoke`, `test-kit.ps1` (T24.6), `models.json`, `install.ps1`, `docs/`.
+- **Do:**
+  1. Add the function (PowerShell 5.1, ASCII) with two comment lines above it:
+     ```powershell
+     # C4a OPEN-4(b), decided 2026-10-03: the context Ollama serves = min(num_ctx in /api/show parameters,
+     # model_info <general.architecture>.context_length). Returns digits, or 'unknown' on ANY failure; prints nothing.
+     function Get-OllamaServedContext {
+       param([string]$Model)
+       $ErrorActionPreference = 'Stop'
+       try {
+         if ("$env:DAD_SMOKE_OLLAMA" -eq "down") { return "unknown" }
+         $seam = "$env:DAD_SMOKE_OLLAMA_SHOW"
+         if ($seam -eq "down") { return "unknown" }
+         if ($seam) { $j = Get-Content -LiteralPath $seam -Raw | ConvertFrom-Json }
+         else { $j = Invoke-RestMethod -Uri "http://localhost:11434/api/show" -Method Post -Body (@{ model = $Model } | ConvertTo-Json -Compress) -ContentType "application/json" -TimeoutSec 3 }
+         if (-not $j -or $j -is [string] -or -not $j.model_info) { return "unknown" }
+         $n = [regex]::Match("$($j.parameters)", '(?m)^[ \t]*num_ctx[ \t]+(\d+)[ \t]*\r?$')
+         if (-not $n.Success) { return "unknown" }
+         $arch = "$($j.model_info.'general.architecture')"
+         if (-not $arch) { return "unknown" }
+         $p = $j.model_info.PSObject.Properties[$arch + ".context_length"]
+         if (-not $p -or ("$($p.Value)" -notmatch '^\d+$')) { return "unknown" }
+         $a = [long]$n.Groups[1].Value; $b = [long]"$($p.Value)"
+         if ($a -le 0 -or $b -le 0) { return "unknown" }
+         return "$([Math]::Min($a, $b))"
+       } catch { return "unknown" }
+     }
+     ```
+     - Call `Invoke-RestMethod` by that bare name (not module-qualified): T24.6's test driver shadows it with a guard function to prove no test makes a request.
+     - `$ErrorActionPreference = 'Stop'` is local to the function (the caller's `Continue` is untouched). It turns every error - a missing seam file, non-JSON for `ConvertFrom-Json`, a refused or timed-out request, a `[long]` overflow - into a jump to `catch`, i.e. `unknown`.
+     - Order matters: `DAD_SMOKE_OLLAMA=down` is checked first and wins even when `DAD_SMOKE_OLLAMA_SHOW` names a valid file (DESIGN: `unknown` "including the `DAD_SMOKE_OLLAMA=down` test seam").
+     - Never fall back to the other value when one is missing or bad, never read `models.json` `numCtx`, never print the reply.
+  2. Wire it in. Replace ONLY the WARN line in `Test-LocalModelResolves` with:
+     `if ($errText -match 'unrecognized_model') { $ctx = Get-OllamaServedContext $model; Write-Host "[harness] local model ${model}: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves $ctx)" -ForegroundColor Yellow }`
+     The lookup runs ONLY inside this branch (no warning -> no lookup, no request). The printed text is byte-identical to today's apart from `unknown` -> `$ctx`; keep `${model}:` in braces. Nothing else in the function changes: the WARN never makes a FAIL, and the result logic and the SKIP / FAIL paths stay as they are.
+  3. Document the seam where the other `DAD_SMOKE_*` seams are documented - the comment block above `Test-LocalModelResolves` - directly after the `DAD_SMOKE_OLLAMA = up | down` line:
+     `# Test hook: env DAD_SMOKE_OLLAMA_SHOW = down | <path to a JSON file> stands in for /api/show in the WARN's`
+     `# context lookup (Get-OllamaServedContext): down = unreachable, a path = that file is the reply (no request).`
+     `# Unset = the real call. DAD_SMOKE_OLLAMA = down also makes the lookup 'unknown'.`
+     Optionally extend the sentence "... an `unrecognized_model` warning is PRINTED as a WARN (never a FAIL)" with "naming the context Ollama serves ('unknown' when it cannot be read)".
+  4. Self-check with a scratch driver (NOT a test-kit case; T24.6 adds those). Write `_tmp\t245\driver.ps1` (`_tmp` is the gitignored scratch area):
+     ```powershell
+     $ErrorActionPreference = "Stop"
+     . (Join-Path (Split-Path (Split-Path $PSScriptRoot)) "harness-versions.ps1")
+     function Invoke-RestMethod { Write-Host "NETWORK-CALL"; throw "no network in this check" }
+     $f = Join-Path $PSScriptRoot "show.json"
+     Set-Content -Path $f -Encoding ASCII -Value '{"parameters":"num_ctx                        65536\ntemperature                    0.6","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}'
+     $env:DAD_SMOKE_OLLAMA = $null
+     $env:DAD_SMOKE_OLLAMA_SHOW = $f
+     Write-Host "A=$(Get-OllamaServedContext 'qwen3-14b-cc')"
+     $env:DAD_SMOKE_OLLAMA_SHOW = "down"
+     Write-Host "B=$(Get-OllamaServedContext 'qwen3-14b-cc')"
+     $env:DAD_SMOKE_OLLAMA = "down"; $env:DAD_SMOKE_OLLAMA_SHOW = $f
+     Write-Host "C=$(Get-OllamaServedContext 'qwen3-14b-cc')"
+     ```
+     From the repo root run `powershell -NoProfile -ExecutionPolicy Bypass -File _tmp\t245\driver.ps1`. The env changes live only in that child process.
+  5. Optional, read-only manual probe of the REAL Ollama (never inside test-kit): from the repo root, with no `DAD_SMOKE_*` variable set, `powershell -NoProfile -Command '. .\harness-versions.ps1; Get-OllamaServedContext qwen3-14b-cc'` -> `40960` when Ollama is up with `qwen3-14b-cc` (the DESIGN worked example, measured 2026-10-03 on Ollama 0.35.0), otherwise `unknown`. It only reads; never pull, create or change a model.
+  6. Suite. Until T24.6 lands, the `"S24 AC1/AC2: ..."` case still expects the literal `Ollama serves unknown`, and its probe runs with `DAD_SMOKE_OLLAMA=up` without the new seam, so the lookup would make a REAL `/api/show` call (and, with Ollama up, print 40960 and fail that case). So run `dotnet build local-tools\local-tools.csproj -c Release`, then the full suite with the seam inherited from the caller: `powershell -NoProfile -ExecutionPolicy Bypass -Command '$env:DAD_SMOKE_OLLAMA_SHOW = "down"; & .\test-kit.ps1; exit $LASTEXITCODE'` (keep the outer single quotes: under bash, `$env` inside double quotes is expanded by bash itself). Do not run the plain suite between T24.5 and T24.6.
+  7. Mutation check. First stage the finished edit with `git add -- harness-versions.ps1`, so the index holds the intended version. In `Get-OllamaServedContext` change `[Math]::Min` to `[Math]::Max` and re-run the driver: it must print `A=65536`. Restore with `git checkout -- harness-versions.ps1` (from the index), confirm `git diff --quiet -- harness-versions.ps1` exits 0, and re-run the driver: `A=40960` again.
+- **Acceptance:** the scratch driver prints `A=40960` (C4a worked example: `num_ctx 65536`, `general.architecture` = `qwen3`, `qwen3.context_length` = 40960 -> min(65536, 40960) = 40960), `B=unknown` and `C=unknown`, and no `NETWORK-CALL`. `harness-versions.ps1` no longer contains the text `Ollama serves unknown` and contains `Ollama serves $ctx)` exactly once. The full suite run with `DAD_SMOKE_OLLAMA_SHOW=down` inherited (step 6) prints `0 failed`, with `"S24 AC1/AC2: the local-model probe PRINTS the unrecognized_model WARN and stays PASS"`, `"S24 AC3: Ollama unreachable -> local-model SKIP, and the final smoke line names the skip and its reason"`, `"S24 Behavior 2: ordinary stderr from claude is not a WARN and the probe stays PASS"`, `"S24 Behavior 3: a PASSing local-model check keeps the bare claude-code smoke line"` and `"S24 cleanup: the probe's finally never deletes a caller-scope errFile"` on PASS lines - AC1/AC2 still matching its full WARN line with `unknown` proves the line is byte-identical apart from the number. Mutation: Min -> Max makes the driver print `A=65536`; verify, then restore (`git diff -- harness-versions.ps1` against the staged edit is empty).
+- **Depends on:** T24.4 (same function in the same file; sequenced last in the Build order)
+- **Refs:** `docs/DESIGN.md` C4a, "Where S17 differed from this text - DECIDED 2026-10-01 (OPEN-4)" item (b): the paragraph "The SOURCE of `<ctx>` - DECIDED 2026-10-03, chosen by the human (OPEN-4(b), `<ctx>`)" and its worked example (row 1: `Ollama serves 40960`, PASS; row 2: the lookup finds Ollama down -> `Ollama serves unknown`, still PASS); Story S24 Behavior bullet 1 (`Ollama serves <ctx if known, else 'unknown'>`) and Dev notes ("ANSWERED 2026-10-03 ... follow-up tasks T24.5 (code) and T24.6 (tests)"); both tasks human-approved 2026-10-03; `docs/RECIPES.md` the `/api/show` entry (verified 2026-10-03, Ollama 0.35.0); T24.1 Do step 3 (it pinned the literal `unknown` until a `/design` decision - this is that decision). Code: harness-versions.ps1 `function Test-LocalModelResolves` (the `if ($errText -match 'unrecognized_model')` line; the `DAD_SMOKE_OLLAMA` block and its `-TimeoutSec 3` `/api/tags` check; the test-hook comment lines).
+- **Context:**
+  - The rule (DESIGN C4a OPEN-4(b), DECIDED 2026-10-03): `<ctx>` = the LOWER of (i) the integer on the `num_ctx` line of the reply's `parameters` text and (ii) the integer at `model_info` key `<arch>.context_length`, where `<arch>` is `model_info` `general.architecture`; printed as a plain integer. It is `unknown` - never a guess, never `models.json` `numCtx` (65536 configured while S16 measured 40960 served) - when Ollama is unreachable (including `DAD_SMOKE_OLLAMA=down`), the call fails or times out (3 seconds, the same bound as the reachability check), the reply is not JSON, or either value is missing or not a positive integer. The lookup never changes the outcome: the WARN stays a WARN and the check stays PASS. This supersedes S24 AC1's literal `unknown`; S24 stays `DONE` (see the Build order note).
+  - The reply (Ollama 0.35.0) is ONE large JSON object (it carries the whole licence text - parse it, never print it). `parameters` is a single text with one `key<spaces>value` per line, e.g. `num_ctx                        65536`; `model_info` holds `"general.architecture":"qwen3"` and `"qwen3.context_length":40960`. Request: POST to `http://localhost:11434/api/show` with the JSON body `{"model":"<-cc name>"}`.
+  - PowerShell 5.1: a dotted property name needs quotes or the Properties indexer (`$j.model_info.'general.architecture'`, `$j.model_info.PSObject.Properties[$arch + ".context_length"]`); `Invoke-RestMethod` returns a parsed object for a JSON reply and a plain string otherwise; `"$model:"` parses as a scope-qualified variable, so keep `${model}:`; in a .NET `(?m)` regex `$` does not match before a CR, hence `\r?$`. A value whose text is not all digits (a float such as `40960.0`, a negative, a word) is `unknown`.
+  - Where the WARN line runs, `DAD_SMOKE_OLLAMA` is `up` or unset: `down` makes the probe SKIP before `claude` runs, so there is no WARN at all. The helper still checks `down` itself, so a direct call honours it (DESIGN's `unknown` row).
+  - The installed copy under D:\Tools only picks this change up on the next `install.cmd`, which the human runs - the executor must NOT run it.
+  - QA: no test may reach a real Ollama (only step 5's read-only manual probe may); never the real `claude`, `npm`, `install.ps1` or `%USERPROFILE%\.claude` (R35b). ASCII only, PowerShell 5.1.
+
+### [ ] T24.6 - test-kit: S24 WARN cases use an /api/show fixture (40960); min() both orders, seams down and bad replies -> unknown, no network   (Story S24)
+- **Goal:** `test-kit.ps1` proves the decided `<ctx>` rule end to end through the probe, using a stand-in `/api/show` reply: the C4a worked example prints `Ollama serves 40960`; the lower value wins in either order; the WARN says `unknown` and the probe stays PASS when the lookup seam is down, when `DAD_SMOKE_OLLAMA=down`, or when the reply is malformed or lacks a positive integer; and no S24 probe makes a network call.
+- **Touches:** `test-kit.ps1` only: `function Invoke-S24Probe` and the comment lines above it (they start `# ---- S24 (T24.3): local-model probe WARN / SKIP.`); NEW, directly after `Invoke-S24Probe` and before the AC1/AC2 case, `$script:S24Stderr`, `$script:S24Body`, `$script:S24Worked` and `function Get-S24Warn`; the case `"S24 AC1/AC2: the local-model probe PRINTS the unrecognized_model WARN and stays PASS"` (its `$warn` line, its FIRST `Invoke-S24Probe` call and one new Assert - name unchanged, AC2 half unchanged); three NEW `Test-Case` blocks directly after `"S24 cleanup: the probe's finally never deletes a caller-scope errFile"` and before `"C2f's drift check compares versions by EQUALITY, not substring (graded S12 defect)"` (anchor by name). Do NOT touch: the `"S24 AC3: ..."`, `"S24 Behavior 2: ..."`, `"S24 Behavior 3: ..."` and `"S24 cleanup: ..."` cases (their calls keep 3 or 4 arguments); the R40 / `Invoke-HvInstallStub` cases; `harness-versions.ps1` (edited TEMPORARILY for the mutation checks only, then restored exactly); `docs/`.
+- **Do:**
+  1. `Invoke-S24Probe`:
+     - Signature: add a 5th optional parameter, `[string]$Show = "down"`.
+     - Add `"DAD_SMOKE_OLLAMA_SHOW"` to `$names`, so it is saved first and restored in `finally` like the others.
+     - After `$env:DAD_SMOKE_GATES = "pass"` add: `if ($Show -and $Show -ne "down") { $showFile = Join-Path $sb "show.json"; Set-Content -Path $showFile -Value $Show -Encoding ASCII; $env:DAD_SMOKE_OLLAMA_SHOW = $showFile } else { $env:DAD_SMOKE_OLLAMA_SHOW = "down" }`. `down` (the default, also used for an empty value) means the lookup sees Ollama as unreachable; any other value is the JSON TEXT of the stand-in reply. Because the seam is never left unset, no S24 probe can fall through to a real `/api/show` call.
+     - Network guard: in the driver's `-Value @(...)` array, directly BEFORE the item `'. (Join-Path $kit "harness-versions.ps1")'`, add two items:
+       `'function Invoke-RestMethod { Write-Host "NETWORK-CALL Invoke-RestMethod"; throw "test-kit: no network in S24 probes" }',`
+       `'function Invoke-WebRequest { Write-Host "NETWORK-CALL Invoke-WebRequest"; throw "test-kit: no network in S24 probes" }',`
+       A function shadows the cmdlet of the same name for everything the driver calls, so any request the code under test attempts is stopped and named in the output.
+     - Comments: in the header, "(DAD_SMOKE_OLLAMA is always forced)" becomes "(DAD_SMOKE_OLLAMA and DAD_SMOKE_OLLAMA_SHOW are always forced, and the driver shadows Invoke-RestMethod / Invoke-WebRequest with guards that print NETWORK-CALL)"; after the `$LocalModel` line add `# $Show = DAD_SMOKE_OLLAMA_SHOW for the child: down (default) or the JSON text of a stand-in /api/show reply.`
+     - Existing calls stay as they are. They now run with the seam `down` and the guard; none of them reaches the lookup or a request (AC3 SKIPs before `claude`; AC2, Behavior 2 and cleanup print no WARN; Behavior 3 short-circuits).
+  2. Shared values, directly after `Invoke-S24Probe` (the same script-scope pattern as `$script:S27Lines`):
+     - `$script:S24Stderr = "[claude-code:unrecognized_model] qwen3-14b-cc is not in this version's model catalog"` (the AC1 stderr text);
+     - `$script:S24Body = '$r = Test-LocalModelResolves -ModelsJson $fixture; Write-Host "RESULT $($r.Result)"'`;
+     - `$script:S24Worked = '{"parameters":"num_ctx                        65536\ntemperature                    0.6","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}'` (DESIGN C4a worked example in Ollama's `key<spaces>value` format; in a single-quoted PowerShell string `\n` stays two characters and the JSON parser turns it into a newline);
+     - `function Get-S24Warn([string]$Ctx) { return "[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves $Ctx)" }`.
+  3. Update `"S24 AC1/AC2: ..."` (DESIGN C4a OPEN-4(b) supersedes AC1's literal `unknown` with the derived number):
+     - `$warn = Get-S24Warn "40960"`;
+     - the first call becomes `$w = Invoke-S24Probe "[claude-code:unrecognized_model] qwen3-14b-cc is not in this version's model catalog" "up" $body "" $script:S24Worked`;
+     - directly after that call, BEFORE the WARN assertion, add `Assert (-not $w.Contains("NETWORK-CALL")) "AC1: the context lookup attempted a network call ..."` (it must come first so mutation (v) fails with this message);
+     - keep the two AC1 Asserts (the WARN one now expects 40960; say "C4a worked example: min(65536, 40960) = 40960" in its message) and leave the AC2 half (`$c = Invoke-S24Probe $null "up" $body` and its two Asserts) unchanged.
+  4. NEW case `"S24 ctx: the WARN names the LOWER of num_ctx and the architecture's context_length, in either order"`. For each sub-case run `$o = Invoke-S24Probe $script:S24Stderr "up" $script:S24Body "" <json>`, then Assert, in this order: no `NETWORK-CALL`; `$o.Contains((Get-S24Warn "<n>"))`; `$o.Contains("RESULT PASS")`. Start each message with the sub-case label.
+     - (a1) `$script:S24Worked` (num_ctx 65536 above context_length 40960) -> `40960`;
+     - (a2) `'{"parameters":"num_ctx                        8192","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}'` (num_ctx is the lower) -> `8192`;
+     - (a3) the architecture key decides: `'{"parameters":"num_ctx                        65536","model_info":{"general.architecture":"qwen3","llama.context_length":1024,"qwen3.context_length":40960}}'` -> `40960` (not 1024).
+  5. NEW case `"S24 ctx: with the lookup seam down or DAD_SMOKE_OLLAMA=down Ollama serves unknown, and the probe stays PASS"`:
+     - (b1) DESIGN's second worked-example row: `Invoke-S24Probe $script:S24Stderr "up" $script:S24Body "" "down"` -> no `NETWORK-CALL`, contains `Get-S24Warn "unknown"`, contains `RESULT PASS`.
+     - (b2) `DAD_SMOKE_OLLAMA=down` wins over a valid reply. Under `down` the probe SKIPs before any WARN, so call the helper directly with the body `$cb = 'Write-Host "CTX=$(Get-OllamaServedContext ''qwen3-14b-cc'')"'`. Control first: `Invoke-S24Probe $null "up" $cb "" $script:S24Worked` contains `CTX=40960` (the direct call works, so the next result is not vacuous). Then `Invoke-S24Probe $null "down" $cb "" $script:S24Worked` contains `CTX=unknown`. Both: no `NETWORK-CALL`.
+  6. NEW case `"S24 ctx: a malformed reply or a missing, zero or non-numeric value gives unknown, never a guess (still PASS)"`. One ordered table and one loop:
+     - `$fx = [ordered]@{ ... }` with
+       `"(c1) not JSON"` = `'{"parameters":"num_ctx 65536","model_info":{"general.architecture":"qwen3"'` (truncated);
+       `"(c2) no num_ctx line"` = `'{"parameters":"temperature 0.6","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}'` (must not print 40960);
+       `"(c3) no qwen3.context_length"` = `'{"parameters":"num_ctx 65536","model_info":{"general.architecture":"qwen3"}}'` (must not print 65536);
+       `"(c4) non-numeric num_ctx"` = `'{"parameters":"num_ctx abc","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}'`;
+       `"(c5) zero context_length"` = `'{"parameters":"num_ctx 65536","model_info":{"general.architecture":"qwen3","qwen3.context_length":0}}'`.
+     - `foreach ($k in @($fx.Keys)) { $o = Invoke-S24Probe $script:S24Stderr "up" $script:S24Body "" $fx[$k]; ... }` asserting, in order: no `NETWORK-CALL`; `$o.Contains((Get-S24Warn "unknown"))`; `$o.Contains("RESULT PASS")`. Start each message with `${k}` - the braces matter before a colon (`"$k:"` is a scope-qualified variable).
+  7. Mutation checks. `harness-versions.ps1` was committed when T24.5 closed, so `git diff --quiet -- harness-versions.ps1` must exit 0 first (if it does not, stage the current version with `git add -- harness-versions.ps1` so the checkout restores from the index). For each mutation: apply it in `Get-OllamaServedContext`, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1 -SkipBuild`, confirm the named case FAILS at the named sub-case, restore with `git checkout -- harness-versions.ps1`, and confirm `git diff --quiet -- harness-versions.ps1` exits 0. Other cases may fail too; what is required is the named FAIL.
+     - (i) make the first statement inside the function's `try` `return "unknown"` -> `"S24 AC1/AC2: ..."` FAILS (no `Ollama serves 40960`);
+     - (ii) `[Math]::Min` -> `[Math]::Max` -> the "LOWER of num_ctx ..." case FAILS at (a1) (it prints 65536);
+     - (iii) delete the `if ("$env:DAD_SMOKE_OLLAMA" -eq "down") { return "unknown" }` line -> the "lookup seam down ..." case FAILS at (b2) (`CTX=40960`);
+     - (iv) delete the `if ($a -le 0 -or $b -le 0) { return "unknown" }` line -> the "malformed reply ..." case FAILS at (c5) (`Ollama serves 0`);
+     - (v) change `if ($seam) {` to `if ($false) {` (the file seam is ignored, the live call runs) -> `"S24 AC1/AC2: ..."` FAILS with the NETWORK-CALL message.
+  8. Run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-kit.ps1` with NO `DAD_SMOKE_OLLAMA_SHOW` in the calling environment (T24.5's interim workaround is no longer needed: every S24 probe now sets the seam itself).
+- **Acceptance:** the full `.\test-kit.ps1`, run with no `DAD_SMOKE_OLLAMA_SHOW` set by the caller, prints `0 failed`. On PASS lines: the updated `"S24 AC1/AC2: the local-model probe PRINTS the unrecognized_model WARN and stays PASS"` (now asserting `Ollama serves 40960)`, the C4a worked example); the three new cases `"S24 ctx: the WARN names the LOWER of num_ctx and the architecture's context_length, in either order"`, `"S24 ctx: with the lookup seam down or DAD_SMOKE_OLLAMA=down Ollama serves unknown, and the probe stays PASS"` and `"S24 ctx: a malformed reply or a missing, zero or non-numeric value gives unknown, never a guess (still PASS)"`; and the unchanged `"S24 AC3: ..."`, `"S24 Behavior 2: ..."`, `"S24 Behavior 3: ..."` and `"S24 cleanup: ..."` cases. Mutations (i)-(v) each make the named case FAIL - verify each, then restore; at the end `git diff HEAD -- harness-versions.ps1` is empty (T24.6 changes `test-kit.ps1` only).
+- **Depends on:** T24.5 (the helper, the seam and the WARN wiring under test; run directly after T24.5, last in the Build order)
+- **Refs:** `docs/DESIGN.md` C4a OPEN-4(b), "The SOURCE of `<ctx>` - DECIDED 2026-10-03", and its worked example (row 1: `Ollama serves 40960`, PASS; row 2: the lookup finds Ollama down -> `Ollama serves unknown`, still PASS; empty stderr -> PASS and no WARN); Story S24 Behavior bullet 1, AC1 and Dev notes "ANSWERED 2026-10-03"; both tasks human-approved 2026-10-03; T24.5 (`Get-OllamaServedContext`, `DAD_SMOKE_OLLAMA_SHOW`); T24.3 Do step 1 (the literal `unknown` assertion this task replaces) and T24.4 (`Invoke-S24Probe`'s 4th parameter). Code: test-kit.ps1 `function Invoke-S24Probe`, the five S24 cases, `$script:S27Lines` (the script-scope pattern); harness-versions.ps1 `function Get-OllamaServedContext`.
+- **Context:**
+  - Seams the S24 cases use: `DAD_SMOKE_OLLAMA = up | down` (reachability; `down` -> SKIP before `claude`, and the lookup says `unknown`); `DAD_SMOKE_OLLAMA_SHOW = down | <path to a JSON file>` (the lookup's `/api/show` reply; unset = the real call, which no test may make); `DAD_SMOKE_LOCALMODEL = pass | fail | skip` (short-circuits the probe); `DAD_SMOKE_GATES = pass` (always set by `Invoke-S24Probe`). Setting `$env:X` to `""` / `$null` removes it.
+  - `Invoke-S24Probe` runs a child `powershell.exe` with a stub `bin\claude.cmd` first on PATH (stderr line via `echo <text> 1>&2`, stdout `{"result":"pong","modelUsage":{"qwen3-14b-cc":{}}}`, exit 0), a `models.json` fixture whose `fast` alias is `qwen3-14b-cc`, and a `driver.ps1` that sets `$ErrorActionPreference = "Stop"`, defines `$kit` and `$fixture`, dot-sources harness-versions.ps1 and runs the body; it returns the merged output and restores env in `finally`. `Write-Host` in the child arrives on its stdout. Each call starts a child process (about a second); this task adds about 11 calls.
+  - Rule under test (DESIGN C4a OPEN-4(b)): `<ctx>` = min(`num_ctx` from the `parameters` text, `model_info` `<general.architecture>.context_length`), printed as a plain integer; `unknown` when Ollama is unreachable (including `DAD_SMOKE_OLLAMA=down`), the call fails, the reply is not JSON, or a value is missing or not a positive integer - never a guess. The WARN stays a WARN and the result stays PASS.
+  - Match the WARN line with `.Contains()`, not `-match` (parentheses are regex metacharacters).
+  - S24 stays `DONE` and its AC1-AC4 text is not reworded or unticked; this task's AC1 test change implements DESIGN C4a OPEN-4(b), which supersedes AC1's literal `unknown` (see the Build order note).
+  - QA never reaches a real Ollama: every probe forces both seams, and the guard catches any attempt. Never the real `claude`, `npm`, `install.ps1` or `%USERPROFILE%\.claude` (R35b).
+  - Test pattern: `Test-Case "name" { ... Assert <bool> "message" }`; `Test-Case` sets `$ErrorActionPreference = "Continue"`; `Assert` throws at the first failure. ASCII only, PowerShell 5.1.
+
 ### [x] T25.1 - test-kit: Copilot stamp check over EVERY stamp, factored into a function; the real-repo C2f case uses it   (Story S25)
 - **Goal:** the C2f drift case compares EVERY `MEASURED <date> against GitHub Copilot CLI <v>` stamp in `docs/DESIGN.md` with install.ps1's `$CopilotMeasuredVersion`, through one small function that fixture cases (T25.2) can call.
 - **Touches:** `test-kit.ps1` only - the case `"the measured Copilot version cannot drift between DESIGN's C2 and install.ps1 (C2f)"` (lines 1562-1590 as of this map; anchor by name) and one new function defined directly ABOVE it. NOT `docs/DESIGN.md`, NOT `install.ps1`, NOT `dad-doctor.ps1`.
@@ -2580,7 +2724,17 @@ TEMPORARILY, so every QA run of upgrade-project goes to a sandbox under %TEMP% -
   nothing. S21's Behavior 4 and AC4 cover only `$SkipBuild` / missing-exe returns, and converting the others
   would make AC2 ("0 skipped on a healthy machine") depend on optional tools being installed, so no task
   converts them. If wanted, that is a follow-up story; the `Skip-Case` helper from T21.1 already supports it.
-- **[design] S24 `<ctx>` source (not blocking).** C4a OPEN-4(b) pins the printed value as the literal
+- **RESOLVED 2026-10-03 - [design] S24 `<ctx>` source.** `/design` pinned it (C4a OPEN-4(b), "The SOURCE of
+  `<ctx>` - DECIDED 2026-10-03": the lower of `/api/show` `num_ctx` and `<arch>.context_length`, else
+  `unknown`). It is implemented by the follow-up tasks T24.5 (code) and T24.6 (tests), not by amending the
+  closed T24.1 / T24.3. Original note follows. C4a OPEN-4(b) pins the printed value as the literal
   `unknown` until a `/design` decision names a source (models.json `numCtx` = 65536 is no proxy; S16 measured
   40960 served). T24.1 prints `unknown`; if `/design` later pins a source, amend T24.1 step 3 and T24.3's
   expected WARN text.
+- **[design] after T24.6: C4a's "DONE 2026-10-03 via S24" text goes stale (not blocking).** That paragraph
+  says "The S24 code still prints `unknown` for `<ctx>`; applying the 2026-10-03 source rule above is not yet
+  implemented." Once T24.6 closes this is no longer true, and neither task may edit DESIGN.md, so a `/design`
+  pass should record it as done. Also unpinned by DESIGN, and settled only inside T24.5: a value is accepted
+  when its text is all digits (so a JSON string `"40960"` counts, a float `40960.0` is `unknown`); the first
+  `num_ctx` line wins; and a forced `DAD_SMOKE_OLLAMA=up` does not suppress the real `/api/show` call (only
+  `DAD_SMOKE_OLLAMA_SHOW` does). Amend T24.5 before building if the human wants any of these otherwise.

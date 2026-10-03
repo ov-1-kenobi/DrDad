@@ -2,6 +2,41 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.57.0 - 2026-10-03
+
+### Fixed - R15: upgrade-project keeps each file's line endings (Story S27)
+upgrade-project no longer rewrites a project's files as CRLF. CLAUDE.md, `.mcp.json`, `.dad-kit-version`
+and the `.gitignore` writes keep the ending the file already has (a file mixing the two counts as CRLF when
+it holds any CRLF); a fresh file follows the project's `.gitattributes` `eol`, else LF. In an LF project an
+upgrade is no longer a whole-file diff with unchanged content. An entry appended to a `.gitignore` whose last
+line had no final newline used to be glued onto it (`custom/` + `.env` -> `custom/.env`, so `.env` was NOT
+ignored); it now starts on its own line.
+
+### Added - R40: the local-model probe shows the unrecognized_model warning (Story S24)
+`Test-LocalModelResolves` keeps the `claude` stderr instead of discarding it and prints the
+`unrecognized_model` WARN while the result stays PASS. An unreachable Ollama gives SKIP, and a skipped
+local-model check is named in the final smoke line (`... smoke check passed (local-model check SKIPPED:
+<reason>)`), never a bare pass.
+
+### Fixed - R37, R40: the Copilot stamp drift check covers every stamp (Story S25)
+The C2f check compared only the first `MEASURED <date> against GitHub Copilot CLI <v>` stamp; a stale C5
+stamp passed silently. It now checks every stamp, fails when there is none, and names the line that differs.
+
+### Fixed - R24: doc-stats (Stories S22, S23)
+A contract id with an uppercase hyphen suffix (`C7-API`) no longer reads as unpinned; the waiver
+confirmation and the `Security review:` status are read from the design doc's header only, never from a body
+line that quotes the format; a malformed waiver line with zero keyword hits no longer claims keyword mentions.
+
+### Docs
+DESIGN C4a OPEN-4(b) decided: the `<ctx>` in the WARN comes from the local Ollama's `/api/show` (the lower
+of `num_ctx` and the model's `context_length`; `unknown` when it cannot be read). C5f and C4a text corrected
+to match S24 and S25. Stories S24-S27 carry ticked acceptance criteria.
+
+### Known gaps / Planned
+- Not yet implemented: the `/api/show` lookup above (tasks T24.5 and T24.6); the probe still prints `unknown`.
+- `new-project.ps1` still writes CRLF for the fresh stamp and `.gitignore` of a newly scaffolded project.
+- Many older stories (S3-S23) keep unticked acceptance boxes; some are deliberately manual or deferred.
+
 ## 0.56.0 - 2026-10-01
 
 ### Added - R24: an acknowledged security waiver stops re-raising the keyword WARN (Story S23)

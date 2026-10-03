@@ -1030,7 +1030,10 @@
   `claude`, so AC1/AC2 need a test seam for reachability (keep it env-only like the existing hooks).
   QUESTION (human): the source of `<ctx>` is not pinned. models.json `numCtx` is 65536 but S16 measured
   40960 served, so the manifest is not a reliable proxy; until decided, print `unknown`. Refs: DESIGN C4a
-  (S16 amendment / OPEN-4 decision), R40(d).
+  (S16 amendment / OPEN-4 decision), R40(d). ANSWERED 2026-10-03 (DESIGN C4a OPEN-4(b)): the shipped code
+  and the AC1 test's literal `Ollama serves unknown` are the pre-decision behavior; follow-up tasks T24.5
+  (code) and T24.6 (tests) implement the decision and update that test text. S24 stays DONE; AC1-AC4 are
+  not reworded or unticked.
 
 ### Story S25: The Copilot version drift test checks EVERY measured stamp, not just the first   (R37, R40)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the C2f drift case asserts that EVERY `MEASURED <date> against GitHub Copilot CLI <v>` stamp in
