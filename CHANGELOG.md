@@ -2,6 +2,17 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.57.1 - 2026-10-04
+
+### Fixed - R24: doc-stats NEXT follows Build order and dependencies
+NEXT (the `next task` line, the STATE FACTS line and the STATUS Snapshot) was the first unchecked task in FILE
+order, so a task whose dependency sat later in the file was named although it could not start. It is now the
+first unchecked task, in `## Build order` sequence (file order when the section is absent), whose dependencies
+are all [x] - read from each task's `- **Depends on:**` line and the Build order's `(needs ...)` clauses. When
+none is ready it reports `none ready (blocked: <first unchecked> needs <ids>)` instead of naming a blocked task.
+Output fields are unchanged. Covered by a new test-kit case (a file-first task blocked by a later one; an
+all-blocked case).
+
 ## 0.57.0 - 2026-10-03
 
 ### Fixed - R15: upgrade-project keeps each file's line endings (Story S27)

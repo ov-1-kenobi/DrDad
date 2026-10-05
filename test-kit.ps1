@@ -5493,6 +5493,48 @@ Test-Case "the guard blames only THIS session, not inherited dirt" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "doc-stats NEXT follows Build order + dependencies, not file order (ready one; all-blocked text)" {
+  # NEXT was the first unchecked task in FILE order, so a task whose dependency sits LATER in the file was
+  # named as next although it could not start. NEXT is now the first unchecked task, in Build order, whose
+  # deps are all [x]; when none is ready it says what the first unchecked task waits on.
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Design`n`nStatus: LOCKED" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    $stats = Join-Path $kit "doc-stats.ps1"
+
+    # file order: T1.1 (needs T2.1, unchecked) first, T2.1 later; Build order lists T2.1 first
+    ("# Tasks`n`n## Build order (dependency-sorted)`nT2.1 -> T1.1 (needs T2.1)`n`n## Tasks`n`n" +
+     "### [ ] T1.1 - first in file   (Story S1)`n- **Depends on:** T2.1`n- **Goal:** x`n`n" +
+     "### [ ] T2.1 - ready   (Story S1)`n- **Depends on:** none`n- **Goal:** y`n") |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $stats -ProjectDir $p 2>&1 | Out-String)
+    Assert ($out -match 'next task\s*:\s*T2\.1\b') "NEXT was not the ready T2.1:`n$out"
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $stats -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($out -match '\| next T2\.1\b') "the STATE FACTS line did not name T2.1:`n$out"
+    Copy-Item (Join-Path $kit "templates\_common\docs\STATUS.md") "$p\docs\STATUS.md" -Force
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $stats -ProjectDir $p -UpdateStatus 2>&1 | Out-Null
+    Assert ((Get-Content "$p\docs\STATUS.md" -Raw) -match 'NEXT: T2\.1\b') "the Snapshot did not name T2.1"
+
+    # all blocked: a cycle between two unchecked tasks -> nothing is ready
+    ("# Tasks`n`n## Build order`nT1.1 -> T2.1`n`n## Tasks`n`n" +
+     "### [ ] T1.1 - a   (Story S1)`n- **Depends on:** T2.1`n- **Goal:** x`n`n" +
+     "### [ ] T2.1 - b   (Story S1)`n- **Depends on:** T1.1`n- **Goal:** y`n") |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $stats -ProjectDir $p 2>&1 | Out-String)
+    Assert ($out -match 'next task\s*:\s*none ready \(blocked: T1\.1 needs T2\.1\)') "all-blocked text missing:`n$out"
+    Assert ($out -notmatch 'next task\s*:\s*T\d') "a blocked task was named as NEXT:`n$out"
+
+    # a (needs ...) clause in the Build order blocks even with no Depends-on line; all [x] -> plain none
+    ("# Tasks`n`n## Build order`nT1.1 (needs T2.1) -> T2.1`n`n## Tasks`n`n" +
+     "### [ ] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [x] T2.1 - b   (Story S1)`n- **Goal:** y`n") |
+      Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $stats -ProjectDir $p 2>&1 | Out-String)
+    Assert ($out -match 'next task\s*:\s*T1\.1\b') "a satisfied (needs) dep should leave T1.1 ready:`n$out"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "doc-stats -UpdateStatus writes the Snapshot; the model never counts" {
   # A real audit claimed "STATUS.md refreshed with current progress metrics" having never run doc-stats.
   # Prose telling an agent to run a script is not a gate. The counts are generated now.

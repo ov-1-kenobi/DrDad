@@ -145,20 +145,63 @@ if (Test-Path $storiesFile) {
 
 # --- tasks: '### [ ] <id>' blocks ---
 $tasks = @()
+$buildOrder = @(); $boNeeds = @{}
 if (Test-Path $tasksFile) {
+  $cur = $null; $inBO = $false
   foreach ($line in Get-Content $tasksFile -Encoding UTF8) {
+    if ($line -match '^##\s+Build order\b') { $inBO = $true; $cur = $null; continue }
+    if ($line -match '^#{2,3}\s') { $inBO = $false }   # the next heading (a '### [ ] T' task too) ends the section
+    if ($inBO) {
+      # 'T1.1 -> T1.2 (needs T1.1) -> T3.1 (needs T1.2, T2.1)': order = left to right; (needs ...) = deps
+      foreach ($seg in ($line -split '->')) {
+        $sm = [regex]::Match($seg, '^\s*[-*]?\s*`?([A-Za-z][A-Za-z0-9._-]*)`?')
+        if (-not $sm.Success) { continue }
+        $bid = $sm.Groups[1].Value
+        if ($buildOrder -notcontains $bid) { $buildOrder += $bid }
+        $nm = [regex]::Match($seg, '\(\s*needs\s+([^)]*)\)')
+        if ($nm.Success) {
+          if (-not $boNeeds.ContainsKey($bid)) { $boNeeds[$bid] = @() }
+          $boNeeds[$bid] += @([regex]::Matches($nm.Groups[1].Value, '[A-Za-z][A-Za-z0-9._-]*') | ForEach-Object { $_.Value })
+        }
+      }
+      continue
+    }
     if ($line -match '^###\s*\[( |x)\]\s*([A-Za-z0-9._-]+)') {
       $story = if ($line -match '\(Story\s+([A-Za-z0-9._-]+)\)') { $Matches[1] } else { "" }
       # NOTE: $Matches was overwritten above - re-match for the id/state
       $m2 = [regex]::Match($line, '^###\s*\[( |x)\]\s*([A-Za-z0-9._-]+)')
-      $tasks += [pscustomobject]@{ Id = $m2.Groups[2].Value; Done = ($m2.Groups[1].Value -eq 'x'); Story = $story }
+      $cur = [pscustomobject]@{ Id = $m2.Groups[2].Value; Done = ($m2.Groups[1].Value -eq 'x'); Story = $story; Deps = @() }
+      $tasks += $cur
+    } elseif ($cur -and $line -match '^\s*-\s*\*\*Depends on:\*\*\s*(.*)$') {
+      $cur.Deps = @([regex]::Matches($Matches[1], '[A-Za-z][A-Za-z0-9._-]*') |
+        ForEach-Object { $_.Value } | Where-Object { $_ -ne 'none' -and $_ -ne 'None' })
     }
   }
 }
 $tasksDone = @($tasks | Where-Object { $_.Done })
 
-# --- next ready: first unchecked task in file order (deps unresolved here - the map's Build order rules) ---
-$next = ($tasks | Where-Object { -not $_.Done } | Select-Object -First 1)
+# --- next ready: first unchecked task, in '## Build order' sequence (file order when absent / for ids it
+# omits), whose dependencies are all [x]. Deps = the task's 'Depends on:' line + '(needs ...)' clauses in
+# the Build order. A dep id that is not a task here is ignored (a dangling id is its own [taskmap] finding;
+# blocking on it forever would deadlock the loop). Nothing ready -> report what the first unchecked waits on.
+$doneIds = @{}; foreach ($t in $tasksDone) { $doneIds[$t.Id] = $true }
+$knownIds = @{}; foreach ($t in $tasks) { $knownIds[$t.Id] = $true }
+$byId = @{}; foreach ($t in $tasks) { if (-not $byId.ContainsKey($t.Id)) { $byId[$t.Id] = $t } }
+$ordered = @()
+foreach ($bid in $buildOrder) { if ($byId.ContainsKey($bid) -and $ordered -notcontains $byId[$bid]) { $ordered += $byId[$bid] } }
+foreach ($t in $tasks) { if ($ordered -notcontains $t) { $ordered += $t } }
+function Get-UnmetDeps($t) {
+  $all = @($t.Deps) + @($(if ($boNeeds.ContainsKey($t.Id)) { $boNeeds[$t.Id] }))
+  @($all | Where-Object { $_ -and $_ -ne $t.Id -and $knownIds.ContainsKey($_) -and -not $doneIds.ContainsKey($_) } | Select-Object -Unique)
+}
+$next = $null; $nextBlocked = $null
+$unchecked = @($ordered | Where-Object { -not $_.Done })
+foreach ($t in $unchecked) {
+  if ((Get-UnmetDeps $t).Count -eq 0) { $next = $t; break }
+}
+if (-not $next -and $unchecked.Count -gt 0) {
+  $nextBlocked = "none ready (blocked: $($unchecked[0].Id) needs $((Get-UnmetDeps $unchecked[0]) -join ', '))"
+}
 
 # --- DONE STORIES missing a REAL grade card (>=800 bytes and has a history table) ---
 # STORIES ONLY. This used to include every done TASK, contradicting the rest of the kit - /build:2
@@ -202,7 +245,7 @@ $result = [ordered]@{
   storiesDone   = $storiesDone.Count
   tasksTotal    = $tasks.Count
   tasksDone     = $tasksDone.Count
-  nextTask      = if ($next) { "$($next.Id)$(if($next.Story){" (Story $($next.Story))"})" } else { "none" }
+  nextTask      = if ($next) { "$($next.Id)$(if($next.Story){" (Story $($next.Story))"})" } elseif ($nextBlocked) { $nextBlocked } else { "none" }
   gradesMissing = $missing
   orphanTests   = $orphanTests
 }
@@ -763,7 +806,7 @@ if ($Findings) {
     $verifiedTasks = $tasksDone.Count - $uncommittedTaskCount
     $taskFacts = "$($tasksDone.Count)/$($tasks.Count) [x] ($verifiedTasks committed, $uncommittedTaskCount UNVERIFIED)"
   }
-  $nextId = if ($next) { $next.Id } else { "none" }
+  $nextId = if ($next) { $next.Id } elseif ($nextBlocked) { $nextBlocked } else { "none" }
   Write-Host "  design ${designName}: Status $designStatus | stories $($storiesDone.Count)/$($storyIds.Count) DONE | tasks $taskFacts | next $nextId"
   if ($securityWaiverFact) { Write-Host "  $securityWaiverFact" }
   if ($null -ne $uncommittedTaskCount -and $uncommittedTaskCount -gt 0) {
