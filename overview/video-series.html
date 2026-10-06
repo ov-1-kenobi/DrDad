@@ -136,6 +136,9 @@
   <p class="lede">Two shows, not one. A short evergreen course that explains DrDad one concept at a time, and a
   loose weekly devlog that shows the sausage being made. Both lean on the same move: don't tell people the tool
   is honest &mdash; show a gate catching a model in the act.</p>
+  <p class="lede">The posture is show-and-tell, not a pitch: "I built this to understand how agent loops work and
+  it turned out useful." Cloud and Hybrid are the primary modes; Local is a resilience mode for a disconnected
+  afternoon. Never frame local-only as the goal.</p>
 </header>
 
 <section>
@@ -163,6 +166,9 @@
     <div class="anchor"><span class="mk">&#9646;</span><div><q>The CHANGELOG is a field log &mdash; every gate is a scar with a test.</q><span class="use">The "how we got here" line. Use it opening the devlog's "what shipped."</span></div></div>
     <div class="anchor"><span class="mk">&#9646;</span><div><q>Retrieve the one passage the step needs &mdash; not the kitchen sink.</q><span class="use">The RAG episode.</span></div></div>
     <div class="anchor"><span class="mk">&#9646;</span><div><q>Cloud is the brain; the GPU is senses and drudge-work.</q><span class="use">The cloud / hybrid episode.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>Local-only was where I started. Now it's the disconnected-afternoon mode, not the goal.</q><span class="use">Whenever local mode comes up. Never imply local is the headline.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>A spec before code, a verifier that checks, context that persists &mdash; and scripts that enforce it.</q><span class="use">The loop-engineering framing. Credit it: the loop is Karpathy's autoresearch; the label comes from write-ups, not from him.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>I wasn't the only one who landed here: claude-gates and claude-code-audit-gate got there independently.</q><span class="use">The convergence line. Name them on screen, link both repos, say they are worth a look.</span></div></div>
     <div class="anchor"><span class="mk">&#9646;</span><div><q>And no &mdash; not a medical doctor. It just makes you prove your work.</q><span class="use">The recurring sign-off. Your wink; keep it.</span></div></div>
   </div>
 </section>
@@ -184,7 +190,7 @@
     <div class="ep">
       <div class="ep-h"><span class="ep-n">E1</span><span class="ep-t">Why DrDad exists</span><span class="ep-len">6&ndash;8 min</span></div>
       <dl>
-        <dt>Cover</dt><dd>The problem (local models cheat, spiral, fabricate "done"); the thesis; the origin &mdash; a note-to-self backronym that stuck because it's also what the tool acts like.</dd>
+        <dt>Cover</dt><dd>The problem (models cheat, spiral and fabricate "done" - small local models loudest, frontier models too); the thesis; the origin &mdash; a note-to-self backronym that stuck because it's also what the tool acts like.</dd>
         <dt>Money shot</dt><dd class="shot">A real transcript: 1023 identical searches, or a suite that went green after 15 of 16 tests vanished.</dd>
         <dt>Anchor</dt><dd class="line">Prompts don't hold; scripts that check do.</dd>
       </dl>
@@ -192,7 +198,7 @@
     <div class="ep">
       <div class="ep-h"><span class="ep-n">E2</span><span class="ep-t">Install &amp; first run</span><span class="ep-len">8&ndash;10 min</span></div>
       <dl>
-        <dt>Cover</dt><dd>The three modes in one breath; <code>install.cmd</code>; <code>dad doctor</code>; scaffold a project.</dd>
+        <dt>Cover</dt><dd>The three modes in one breath (Cloud and Hybrid first, Local as the resilience mode); <code>install.cmd</code> (note: the no-flag install is still Local today); <code>dad doctor</code>; scaffold a project.</dd>
         <dt>Money shot</dt><dd class="shot"><code>dad doctor</code> going green, then a real project scaffolded and committed in two minutes.</dd>
         <dt>Anchor</dt><dd class="line">If a script can check it, a script checks it &mdash; even your setup.</dd>
       </dl>
@@ -230,9 +236,9 @@
       </dl>
     </div>
     <div class="ep">
-      <div class="ep-h"><span class="ep-n">E7</span><span class="ep-t">Cloud, and the hybrid GPU</span><span class="ep-len">7&ndash;9 min</span></div>
+      <div class="ep-h"><span class="ep-n">E7</span><span class="ep-t">Cloud, hybrid, and local as the fallback</span><span class="ep-len">7&ndash;9 min</span></div>
       <dl>
-        <dt>Cover</dt><dd>The three modes in depth; <code>local_generate</code>; the GPU as a drudge co-processor; the gates are identical across all three.</dd>
+        <dt>Cover</dt><dd>The three modes in depth, primary first; <code>local_generate</code>; the GPU as a drudge co-processor; local as the disconnected-afternoon mode (datasheets in, a simple SoC/IC wiring plan out; or a small Unity3D prototype from a one-page design doc); the gates are identical across all three.</dd>
         <dt>Money shot</dt><dd class="shot">The same gates on a cloud model catching an A-graded Delete button that returns 405 &mdash; live curl.</dd>
         <dt>Anchor</dt><dd class="line">Cloud is the brain; the GPU is senses and drudge-work.</dd>
       </dl>
@@ -241,7 +247,11 @@
   <p style="margin-top:1rem;font-size:.88rem;color:var(--muted)">Later add-ons, same format, when you feel like
   it: <strong>Brownfield</strong> (<code>/assess</code> + <code>/document</code> on someone else's codebase),
   <strong>Corpora &amp; skins</strong> (cited knowledge banks; a UI stack the agent "wears"), and
-  <strong>dad watch</strong> (the no-progress alarm). Each is a self-contained 6&ndash;8 min drop.</p>
+  <strong>dad watch</strong> (the no-progress alarm), and <strong>Where this sits</strong> (Karpathy's
+  autoresearch as the loop, claude-gates and claude-code-audit-gate as independent convergence, BMAD as the
+  planning layer DrDad sits under, and the one real disagreement: claude-gates blocks AI attribution trailers
+  by default, DrDad requires them). Each is a self-contained 6&ndash;8 min drop. GitHub Copilot CLI as a
+  second harness is a pilot and unverified &mdash; if it appears on camera, say so.</p>
 </section>
 
 <section>
@@ -257,9 +267,11 @@
     <div class="beat"><div class="t">16:00</div><div><b>Sign-off</b><p>The recurring anchor line. Same close every week so people know the show landed.</p></div></div>
   </div>
   <div class="callout">
-    <p><strong>Your first devlog writes itself.</strong> This week: <code>0.47</code> (corpus ingest was
-    landing in the wrong project &mdash; the fix), <code>0.48</code> (hybrid mode &mdash; the GPU as a co-processor),
-    and the cms3 run where a full <code>/audit</code> caught three bugs a frontier model had graded an A
+    <p><strong>Your first devlog writes itself.</strong> Open the CHANGELOG for the real list: for example
+    <code>0.57.0</code> (upgrade-project stopped rewriting a project's line endings, and an appended
+    <code>.gitignore</code> entry no longer got glued onto an unterminated last line, which had left
+    <code>.env</code> un-ignored), <code>0.58.0</code> (the mission restated: cloud and hybrid first, local as
+    the resilience mode), and the cms3 run where a full <code>/audit</code> caught three bugs a frontier model had graded an A
     (Delete-405, an upload wired to an API that doesn't exist, a modal that crashes before it renders). Cold
     open on the Delete-405 curl, and you're off.</p>
   </div>
@@ -304,7 +316,8 @@
     <div class="principle"><div class="i">&#9646;</div><div><b>Order of filming.</b><p>Trailer + E1 first (they set the frame), then the gates episode (E5) &mdash; it's the strongest, and if only one basics video ever gets watched, that's the one.</p></div></div>
     <div class="principle"><div class="i">&#9646;</div><div><b>Source material is already on disk.</b><p>Your run transcripts (run15Sept26 and the earlier spirals), the grade cards, the CHANGELOG. The disasters are documented &mdash; you're editing, not staging.</p></div></div>
     <div class="principle"><div class="i">&#9646;</div><div><b>Keep it cheap to make.</b><p>Screen + webcam + the anchor lines. No intro animation budget. The candor is the production value; polish would fight the brand.</p></div></div>
-    <div class="principle"><div class="i">&#9646;</div><div><b>Point everything at the two links.</b><p>Repo in every description; the Field Manual as the "read the overview" link. The videos exist so you stop re-explaining &mdash; so always hand people the next step.</p></div></div>
+    <div class="principle"><div class="i">&#9646;</div><div><b>Check the numbers before you say them.</b><p>Figures such as 68 of 70 tasks and 111 closes come from the cms3 run log, not from this repository. Confirm them against the transcript and grade cards before filming; the kit's own counts (267 checks, 17 commands, 18 agents) are computed in the repo at v0.58.0.</p></div></div>
+    <div class="principle"><div class="i">&#9646;</div><div><b>Point everything at the two links.</b><p>Repo in every description; the Field Manual as the "read the overview" link. Both pages now live in the repo's <code>overview/</code> folder, and GitHub is the source of truth. The videos exist so you stop re-explaining &mdash; so always hand people the next step.</p></div></div>
     <div class="principle"><div class="i">&#9646;</div><div><b>Miss a week without guilt.</b><p>The devlog is "when there's something worth showing," not a contract. A shipped gate or a good failure is the bar; a quiet week just waits.</p></div></div>
   </div>
 </section>

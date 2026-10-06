@@ -192,20 +192,21 @@
   <span class="stamp">&#9646; Status: candid &middot; pre-1.0</span>
   <div class="titlerow">
     <h1>DrDad</h1>
-    <span class="eyebrow">Field Manual<br>v0.48.1 &middot; 2026</span>
+    <span class="eyebrow">Field Manual<br>v0.58.0 &middot; 2026</span>
   </div>
   <p class="subtitle">Design Research Document, Agentic Development</p>
-  <p class="lede">The real Claude Code agent loop, run against your own GPU, wrapped in deterministic
-  gates so a small local model cannot quietly wreck your project. The design document is the contract;
-  every mode aligns to it.</p>
+  <p class="lede">A guard layer for agentic coding: a spec before code, a verifier that checks real
+  correctness, and context that persists across sessions &mdash; enforced by deterministic gates the model
+  cannot skip. A working implementation of the loop-engineering idea, built to understand how agent loops
+  work, and it turned out useful. Cloud and Hybrid are the primary modes; Local is a resilience mode.</p>
 
   <div class="spec">
     <div><div class="n">3</div><div class="l">backend modes</div></div>
     <div><div class="n">17 / 18</div><div class="l">commands / agents</div></div>
-    <div><div class="n">8 + 1</div><div class="l">MCP tools</div></div>
-    <div><div class="n">1</div><div class="l">C# server, no cloud</div></div>
-    <div><div class="n">143</div><div class="l">gate tests, green</div></div>
-    <div><div class="n">34</div><div class="l">requirements (R1&#8211;R34)</div></div>
+    <div><div class="n">8 + 1</div><div class="l">MCP tools (+1 in hybrid)</div></div>
+    <div><div class="n">1</div><div class="l">C# server, the only compiled piece</div></div>
+    <div><div class="n">267</div><div class="l">kit checks, 0 failed</div></div>
+    <div><div class="n">39</div><div class="l">requirements (R1&#8211;R40)</div></div>
   </div>
 </header>
 
@@ -213,54 +214,58 @@
   <p class="kicker">01 &middot; The idea</p>
   <h2>Never accept an assertion a script can settle</h2>
   <div class="thesis">
-    <p>A 14&#8211;32B local model, driven hard, does things a frontier model rarely does: it deletes tests
-    to make a suite pass, reports work it did not do, writes a task list no tool can parse, and loops one
-    failing command a thousand times. Across many graded runs, <strong>every prose rule failed at least
+    <p>Models, driven hard, do things you would not accept from a colleague: delete tests to make a suite
+    pass, report work they did not do, write a task list no tool can parse, and loop one failing command a
+    thousand times. Small local models did most of this in the early runs; a frontier model still graded
+    broken code an A (section 05). Across many graded runs, <strong>every prose rule failed at least
     once and every deterministic gate held.</strong> So the rule is: <span class="q">if a script can check
     it, a script checks it, and the model does not get a vote.</span></p>
   </div>
   <p>Everything below is downstream of that one decision. The commands and agents are the ergonomics; the
-  gates are the point. The <a href="#">CHANGELOG</a> reads as a field log &mdash; every gate earned from a
+  gates are the point. The CHANGELOG in the repository reads as a field log &mdash; every gate earned from a
   measured failure on a real run, with the deterministic check that stopped it.</p>
 </section>
 
 <section>
   <p class="kicker">02 &middot; How it reaches the model</p>
   <h2>Three backends, one loop</h2>
-  <p>Offline-first is the default and the thesis. Two opt-in backends share every command, agent, and gate
-  &mdash; only where the <em>agent loop</em> runs changes. In all three, your GPU stays busy.</p>
+  <p>Cloud and Hybrid are the primary modes; Local is a resilience mode. All three share every command,
+  agent, and gate &mdash; only where the <em>agent loop</em> runs changes. Local-only was the naive starting
+  point; it is not a pursuit any more.</p>
   <div class="modes">
     <div class="mode">
-      <h3>Local <span class="tag def">default</span></h3>
-      <p>Claude Code points at Ollama. The whole loop runs on the GPU &mdash; no Anthropic account, no
-      network after setup.</p>
-      <div class="gpu">GPU: the entire agent</div>
-      <div class="cmd">install.cmd</div>
-    </div>
-    <div class="mode">
-      <h3>Cloud <span class="tag opt">opt-in</span></h3>
-      <p>The Ollama redirect is dropped; the loop runs on Anthropic (Sonnet / Opus / Haiku by alias). For
-      delivery, or to clear a local-model ceiling.</p>
+      <h3>Cloud <span class="tag def">primary</span></h3>
+      <p>The Ollama redirect is dropped; the loop runs on Anthropic (Sonnet / Opus / Haiku by alias).</p>
       <div class="gpu">GPU: RAG + vision, verified</div>
       <div class="cmd">install.cmd -Cloud</div>
     </div>
     <div class="mode">
-      <h3>Hybrid <span class="tag opt">opt-in</span></h3>
+      <h3>Hybrid <span class="tag def">primary</span></h3>
       <p>The cloud loop <em>plus</em> the GPU offered to the cloud model as a drudge co-processor via the
       <code>local_generate</code> tool.</p>
       <div class="gpu">GPU: RAG + vision + drudge</div>
       <div class="cmd">install.cmd -Hybrid</div>
     </div>
+    <div class="mode">
+      <h3>Local <span class="tag opt">resilience</span></h3>
+      <p>Claude Code points at Ollama; the whole loop runs on the GPU with no network. For a disconnected
+      afternoon: a datasheet-fed SoC/IC wiring plan, or a small Unity3D prototype from a one-page design doc.
+      Not for large unattended builds.</p>
+      <div class="gpu">GPU: the entire agent</div>
+      <div class="cmd">install.cmd (no flag, today)</div>
+    </div>
   </div>
+  <p class="flow-note">Today the installer's no-flag default is still Local. Whether it should flip to Cloud
+  is an open design decision, not settled here.</p>
   <p class="flow-note"><strong>Division of labor in hybrid:</strong> cloud is the brain; the local GPU is
   senses (embeddings, vision) and drudge-work (implementation guesses, test data). <code>local_generate</code>
   is a separate tool registered <em>only</em> when the mode flag is set &mdash; in local/cloud it does not
-  exist, so the weak model cannot be handed a job the mode exists to keep on the cloud brain. Its output is
+  exist, so a model cannot be handed a job the mode exists to keep on the cloud brain. Its output is
   labelled <code>[LOCAL DRAFT - verify before use]</code>.</p>
 </section>
 
 <section>
-  <p class="kicker">03 &middot; The subsystem you asked about</p>
+  <p class="kicker">03 &middot; Context that persists</p>
   <h2>Precise-context RAG</h2>
   <p>The kit never re-sends the kitchen sink. Instead of loading whole documents into the window each turn,
   an agent asks for the <em>specific</em> passage it needs &mdash; a contract, a spec value, an exact API
@@ -332,7 +337,8 @@
 <section>
   <p class="kicker">05 &middot; Field evidence</p>
   <h2>What the gates caught that the model missed</h2>
-  <p>From the cms3 run of 2026-09-15 &mdash; on a <strong>frontier cloud model</strong>, which sharpens the
+  <p><em>Figures in this section come from the author's run log of the cms3 build; the transcript is not
+  reproduced in this repository.</em> From the cms3 run of 2026-09-15 &mdash; on a <strong>frontier cloud model</strong>, which sharpens the
   point. The model wrote plausible code and graded its own stories generously (A / A / B). A deterministic
   close on every unit (it ran 111 times), plus a full <code>/audit</code> that reads real code and issues live
   HTTP instead of trusting a checked box, found user-facing defects that green tests had hidden. The run was
@@ -378,7 +384,8 @@
   <p class="kicker">06 &middot; Components &amp; dependencies</p>
   <h2>What it's built from</h2>
   <p>A set of global Claude Code commands, agents, hooks, and PowerShell gate scripts, plus one small C#
-  MCP server. No fork of Claude Code, no second server, nothing sent anywhere once installed.</p>
+  MCP server. No fork of Claude Code, no second server, and no service of its own that your code is sent to
+  (in Cloud and Hybrid the model provider still sees what the model sees).</p>
   <div class="rows">
     <div class="row"><div class="k">local-tools</div><div class="v">The one C# MCP server (<code>net8.0</code>, <code>RollForward=LatestMajor</code>). Tools: <code>index_datasheets</code>, <code>search_datasheets</code>, <code>list_datasheets</code>, <code>ingest_url</code>, <code>web_search</code>, <code>describe_image</code>, <code>detect_objects</code>, <code>transcribe_audio</code> &mdash; plus <code>local_generate</code> in hybrid.</div></div>
     <div class="row"><div class="k">Runtime deps</div><div class="v">Windows 10/11 &middot; Ollama (local/hybrid; verified-optional in cloud) &middot; Claude Code CLI (Node) &middot; .NET 8+ SDK &middot; git. Optional: VS Code + extension, <code>uv</code> (voice / transcription), an NVIDIA GPU (tuned on a 16&nbsp;GB RTX&nbsp;5080).</div></div>
@@ -403,16 +410,17 @@
         <li>Turns a vague idea into a locked design doc, then stories, then a task map, then built &amp; tested units.</li>
         <li>Reverse-engineers a brownfield codebase into a cited, prioritized assessment (<code>/assess</code>).</li>
         <li>Precise, cited retrieval from a project corpus &mdash; specs, signatures, prior research &mdash; without context bloat.</li>
-        <li>Keeps a small local model honest: no phantom "done", no shrinking test surface, no thousand-call spiral.</li>
-        <li>Runs fully offline on your own GPU, or on cloud/hybrid with the identical gates.</li>
+        <li>Keeps any model honest: no phantom "done", no shrinking test surface, no thousand-call spiral.</li>
+        <li>Runs the identical gates on cloud, hybrid, or &mdash; for small jobs when the network is gone &mdash; local.</li>
       </ul>
     </div>
     <div class="col cant">
       <h3>&#9646; Limited at</h3>
       <ul>
-        <li>A full <code>/design &rarr; /build &rarr; close</code> has not yet completed on a <em>local</em> model without human repair &mdash; getting one clean end-to-end run is the current goal, in the open.</li>
+        <li>A full <code>/design &rarr; /build &rarr; close</code> has not completed on a <em>local</em> model without human repair. That is why Local is a resilience mode, not the headline.</li>
         <li>Pixel-level visual taste. There is no exit code for taste; the UI loop reviews behavior and screenshots, not beauty.</li>
-        <li>Hard reasoning at the local tier &mdash; the 14&#8211;32B model is the ceiling; cloud / hybrid exist to clear it.</li>
+        <li>Hard reasoning at the local tier &mdash; the local model is the ceiling; cloud / hybrid are the primary modes for that reason.</li>
+        <li>GitHub Copilot CLI as a second harness is a pilot, measured once against one version &mdash; unverified, not a supported target.</li>
         <li>Windows-only by design (PowerShell + <code>.cmd</code>); cross-platform is a deliberate post-1.0 question.</li>
       </ul>
     </div>
@@ -420,40 +428,37 @@
 </section>
 
 <section>
-  <p class="kicker">08 &middot; Positioning</p>
-  <h2>Compared to BMAD</h2>
-  <p>The honest framing flatters both. <strong>BMAD is a <em>method</em>; DrDad is a <em>runtime with a
-  floor</em>.</strong> BMAD-METHOD is a set of agent personas (Analyst, PM, Architect, Scrum Master, Dev, QA)
-  plus templates and workflows; its signature bets are strong agentic <em>planning</em> and
-  <em>context-engineered</em> story files that embed everything a dev agent needs. It is model-agnostic,
-  cross-tool, mature, and community-backed &mdash; and its enforcement is prose the model chooses to follow.
-  DrDad addresses the case that assumes away: a model that won't.</p>
+  <p class="kicker">08 &middot; Where this sits</p>
+  <h2>The field, honestly</h2>
+  <p>DrDad's three ingredients &mdash; a spec before code, a verifier that checks real correctness, and
+  persistent context across sessions &mdash; are the shape people have started calling "loop engineering".
+  That is a 2026 label used in blog posts and guides about the agent loop Andrej Karpathy published as
+  <a href="https://github.com/karpathy/autoresearch">autoresearch</a>: a human-edited <code>program.md</code>
+  as the spec, a fixed five-minute budget, and a numeric verifier (<code>val_bpb</code>) the agent cannot
+  grade for itself. No source I found has Karpathy using the phrase himself, so the credit goes to
+  autoresearch for the loop and to the write-ups for the label. DrDad is one working implementation of that
+  shape for coding, with the enforcement done by scripts instead of instructions.</p>
   <div class="cmp-wrap">
     <table class="cmp">
-      <thead><tr><th></th><th>BMAD</th><th class="h-dd">DrDad</th></tr></thead>
+      <thead><tr><th></th><th>What it is</th><th class="h-dd">Relation to DrDad</th></tr></thead>
       <tbody>
-        <tr><td>Core bet</td><td>Context engineering &mdash; front-load everything into the story</td><td>Deterministic gates &mdash; verify what the model claims</td></tr>
-        <tr><td>Enforcement</td><td>Instructions the model <em>chooses</em> to follow</td><td>Hooks / scripts the model <em>cannot skip</em></td></tr>
-        <tr><td>Model target</td><td>A capable (usually frontier) model</td><td>Weak-local-first; cloud / hybrid optional</td></tr>
-        <tr><td>Ships</td><td>Personas, templates, workflows (prompts)</td><td>A RAG server, gates, hooks, installer (code)</td></tr>
-        <tr><td>Runtime</td><td>Whatever host you run it in</td><td>Its own: Claude Code &rarr; your GPU, offline</td></tr>
-        <tr><td>Maturity</td><td>Mature, cross-platform, large community</td><td>Pre-1.0, Windows-only, one author</td></tr>
+        <tr><td><a href="https://github.com/DevRik99/claude-gates">claude-gates</a></td><td>Installable deterministic hooks for Claude Code that block or warn when a tool call breaks a rule (DevRik99; MIT)</td><td>Independent, same conviction: enforcement lives outside the model</td></tr>
+        <tr><td><a href="https://github.com/fotografvecerek-ai/claude-code-audit-gate">claude-code-audit-gate</a></td><td>An independent audit agent that never writes code, re-verifies every fix, and gates the release with hooks, pre-commit and GitHub Actions (fotografvecerek-ai; MIT)</td><td>Independent, same conviction, different mechanism: an auditor rather than in-loop gates</td></tr>
+        <tr><td><a href="https://github.com/bmad-code-org/BMAD-METHOD">BMAD-METHOD</a></td><td>Agentic planning: personas, templates, context-engineered story files (MIT)</td><td>State of the industry for planning. DrDad is the guard layer under it, not a rival</td></tr>
       </tbody>
     </table>
   </div>
-  <p style="margin-top:1.2rem">They independently converge on one insight &mdash; <strong>don't re-send the
-  kitchen sink</strong> &mdash; and solve it differently. BMAD's context-engineered stories embed full context
-  <em>up front</em>; DrDad's precise-context RAG <em>retrieves</em> the one passage each step needs, with
-  computed state and exact signatures so retrieval is grounded. Same disease, two treatments: front-load
-  versus retrieve-on-demand. On a frontier model, greenfield, cross-platform, BMAD's planning discipline may
-  carry you further faster. When the model is weak, or you need offline / private / on-your-own-GPU, or you
-  want claims <em>verified</em> rather than trusted &mdash; that is DrDad's reason to exist, and the evidence in
-  section 05 shows the floor earns its keep even on a frontier model.</p>
+  <p style="margin-top:1.2rem"><strong>The one real disagreement.</strong> claude-gates ships a
+  <code>no-coauthor</code> gate that blocks a commit carrying an AI or agent attribution trailer
+  (<code>Co-Authored-By</code> and similar); it is enabled by default and can be overridden per commit or in
+  config. DrDad goes the other way: AI attribution is required, and the commit trailers are how this
+  repository's own history says which changes were AI-assisted. A guard layer that makes agents prove their
+  work should not also make the authorship harder to see.</p>
   <div class="synth">
-    <p>The synthesis is <strong>"BMAD <em>on</em> DrDad"</strong>, not "versus": DrDad is the enforcement floor
-    and local runtime that a method like BMAD assumes but never ships. Run the method for its planning rigor,
-    on a substrate that won't let a model quietly cheat. The honest claim isn't "DrDad beats BMAD" &mdash; it's
-    that DrDad addresses the failure mode BMAD leaves to the model's good behavior.</p>
+    <p>BMAD is the planning layer; DrDad is a guard layer that any methodology can run on top of &mdash;
+    <strong>"BMAD <em>on</em> DrDad"</strong>, not "versus". Run the method for its planning rigor, on a
+    substrate that will not let a model quietly cheat. The convergence with the projects above is the
+    reassuring part: several people arrived at the same shape independently.</p>
   </div>
 </section>
 
@@ -470,21 +475,23 @@
       <div class="stage was">
         <div class="when">Where it started</div>
         <ul>
-          <li>An offline kit: Claude Code redirected at Ollama, one C# RAG server, a design/proto/spec/build loop.</li>
+          <li>A local-only kit (the naive starting point): Claude Code redirected at Ollama, one C# RAG server, a design/proto/spec/build loop.</li>
           <li>The core gates from real disasters: close-unit, the ratchet, the loop guard, dad-guard.</li>
         </ul>
       </div>
       <div class="stage now">
-        <div class="when">Where it is (v0.48)</div>
+        <div class="when">Where it is (v0.58)</div>
         <ul>
           <li>Integrity-aware state, exact API surfaces, domain grounding, research provenance, corpora, brownfield <code>/assess</code>.</li>
-          <li>Cloud mode validated the design end-to-end; hybrid adds the GPU as a co-processor. 143 green gate tests.</li>
+          <li>Cloud and hybrid are the primary modes; local is kept as a resilience mode. 267 checks in the kit's own suite, 0 failed.</li>
+          <li>GitHub Copilot CLI as a second harness: a pilot, unverified.</li>
         </ul>
       </div>
       <div class="stage next">
         <div class="when">Where it can go</div>
         <ul>
-          <li>One clean local end-to-end run with no human repair &mdash; the headline goal.</li>
+          <li>Open question: should the installer's no-flag default flip to Cloud? A design decision, not made yet.</li>
+          <li>Reconcile the locked design doc's wording with the cloud-first mission (queued as a story for a <code>/design</code> pass).</li>
           <li>A library of authoritative UI "skins" as corpora; wider stack templates; cross-platform after 1.0.</li>
           <li>Autonomous routines &mdash; the loop that grounds and re-grounds itself unattended.</li>
         </ul>
@@ -522,10 +529,11 @@
 
 <p class="footnote">
   DrDad &middot; Design Research Document, Agentic Development &mdash; designed and directed by Kristen Overmyer;
-  implemented with Claude Code. MIT-licensed; it redistributes no model weights and sends no code anywhere once
-  installed. That a project about honest engineering under AI assistance was itself AI-assisted is the point,
-  not a caveat.<br>
-  Figures current at v0.48.1. This page is a reference overview, not the contract &mdash; the contract is
+  implemented with Claude Code. MIT-licensed; it redistributes no model weights and runs no service of its own
+  that your code is sent to. That a project about honest engineering under AI assistance was itself
+  AI-assisted is the point, not a caveat.<br>
+  Figures computed at v0.58.0 (test-kit.ps1, doc-stats, the commands/ and agents/ folders). This page is a
+  reference overview, not the contract &mdash; the contract is
   <span class="m">docs/DESIGN.md</span> (Status: LOCKED).
 </p>
 </div>
