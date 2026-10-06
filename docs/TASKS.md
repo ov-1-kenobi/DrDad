@@ -11,6 +11,7 @@
 > go stale, per R24).
 
 ## Build order (dependency-sorted)
+(Story S12 has no tasks on purpose - its work was delivered ahead of its card by the copilot pilot; see S12 in `docs/STORIES.md`.)
 T1.1 -> T1.2 -> T1.3 -> T1.4
 T2.1
 T3.1 -> T3.2

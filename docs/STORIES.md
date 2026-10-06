@@ -522,6 +522,8 @@
   the facts from memory, and re-measure before trusting it on any later version (C2f).
   **Delivered ahead of this card** by the `dogfood/copilot-pilot` research pilot (commit `64188cc`); the card
   exists so the work is gradeable and closeable through the normal gate, not to schedule new work.
+  **No tasks, by design:** S12 has NO entries in `docs/TASKS.md` and needs none - there is nothing left to
+  build, so `/taskmap` skipping it (and `doc-stats`' "stories with NO tasks" finding) is expected, not a gap.
 - **Behavior:** `install.ps1 -CopilotCli` is ADDITIVE - it leaves the Claude Code wiring untouched and also
   writes `%USERPROFILE%\.copilot\hooks\dad.json`, so one machine runs both harnesses. The Stop hook goes
   through a thin adapter, `dad-guard-copilot.ps1`, because Copilot IGNORES exit code 2 and discards stdout
