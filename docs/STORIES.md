@@ -1158,3 +1158,45 @@
   doc-stats.ps1 (~813). `.gitignore` was left out of T27.1 on purpose (its Touches excluded the step-2
   writes); follow-up cleanup tasks T27.4 (line-ending rule) and T27.5 (no glued append), both
   human-approved, added it on 2026-10-03 without reopening S27 (it stays DONE). Refs: DESIGN R15.
+
+### Story S28: DESIGN's Goal, R34, R37(b) and Out of scope are reconciled with the cloud-first mission   (Goal, R1, R34, R37)   <!-- Status: TODO -->
+- **Goal:** `docs/DESIGN.md` no longer says offline-first is "the DEFAULT and the thesis". It states the
+  restated mission: a working implementation of the loop-engineering shape (spec before code, a verifier that
+  checks real correctness, persistent context across sessions) enforced by deterministic gates, with Cloud and
+  Hybrid primary and Local kept as a resilience mode.
+- **Context:** README.md, the Field Manual and the video bible were restated in v0.58.0 (CHANGELOG 0.58.0).
+  DESIGN.md is LOCKED and was deliberately NOT edited there, so these passages now contradict the mission. The
+  thesis, "never accept an assertion a script can settle", is unchanged. This story needs a `/design` pass (the
+  unlock flow); it must not be worked by `/spec` or `/build` while DESIGN is LOCKED.
+- **Behavior:** the contradicting passages, by line number at the time of writing (re-check; lines drift):
+  - `docs/DESIGN.md:4` - the Security review reason says "Local-only dev CLI". Cloud and Hybrid are primary.
+  - `docs/DESIGN.md:9-14` (`## Goal`) - "fully offline", "No Anthropic account; offline after first setup",
+    "Offline is the DEFAULT and the thesis; the same loop can opt into a cloud or hybrid backend (R34)".
+  - `docs/DESIGN.md:26-27` (R34) - "Offline-first (R1) is the DEFAULT and the thesis; two opt-in alternate
+    backends". Cloud and Hybrid are not "alternate"; Local is the resilience mode.
+  - `docs/DESIGN.md:417-422` (R37b) - "The offline thesis survives, or the harness is out of scope"; rejects a
+    harness with no offline path "on that ground". Copilot CLI is now a pilot and unverified, not a gate on the
+    mission.
+  - `docs/DESIGN.md:495-496` (R37e) - "Same offline thesis (R37b)".
+  - `docs/DESIGN.md:506` (R40) - "how the offline path (R1) behaves - this project's thesis".
+  - `docs/DESIGN.md:768-773` (C2e) - "the R37(b) thesis check"; Copilot is in scope only because of an offline path.
+  - `docs/DESIGN.md:1594-1595` (`## Out of scope`) - "Cloud models as the DEFAULT. Offline-first is the default
+    and the thesis; cloud and hybrid are opt-in alternate backends".
+  - Review, probably fine as mechanics (offline-capable retrieval, not a framing of the thesis):
+    `docs/DESIGN.md:108`, `:122` ("everything downstream stays offline"), `:362` ("build offline after").
+  - Open decision for the human, not for this story to make: whether `install.ps1`'s no-flag default should
+    flip from Local to `-Cloud`. R34(a) and `install.ps1` ("MODE" banners near lines 366-383) encode Local as
+    the no-flag default today. Decide it in `/design` BEFORE rewording R34.
+- **Data / interfaces:** `docs/DESIGN.md` prose only (Goal, R34, R37b/e, R40, C2e, Out of scope, line 4).
+  Not changed: any code, `install.ps1`, `models.json`, tests, README.
+- **Dependencies:** none. Needs the human's `/design` unlock; DESIGN returns to LOCKED on their confirmation.
+- **Acceptance (testable):**
+  - [ ] AC1: `docs/DESIGN.md` `## Goal` states the restated mission and names Local as a resilience mode.
+  - [ ] AC2: grep for `Offline is the DEFAULT` and `Offline-first .* is the default and the thesis` over
+    `docs/DESIGN.md` finds no hit.
+  - [ ] AC3: R34 orders Cloud and Hybrid as primary and describes Local as the resilience mode with its use case.
+  - [ ] AC4: the no-flag-default question is recorded as decided (either way) in R34 or its contract.
+  - [ ] AC5: `dad doc-stats -Findings` reports no new finding, and the full `test-kit.ps1` prints `0 failed`.
+- **Dev notes:** DESIGN edits go through `/design` (architect-agent) with the unlock/relock flow; never hand-edit
+  while LOCKED. R1 itself (the Local wiring) stays valid as the description of Local mode. Keep ASCII. If the
+  default flips, that is a code change (`install.ps1`, `dad-doctor.ps1`, tests) and needs its own tasks.
