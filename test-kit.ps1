@@ -1822,13 +1822,14 @@ Test-Case "R40 AC7: measured-version stamp is locked across install.ps1, DESIGN 
 }
 
 # ---- S24 (T24.3): local-model probe WARN / SKIP. Stub claude on a CHILD process PATH only; no network
-# (DAD_SMOKE_OLLAMA is always forced), never the real claude/npm/install.ps1 or %USERPROFILE%\.claude.
+# (DAD_SMOKE_OLLAMA and DAD_SMOKE_OLLAMA_SHOW are always forced, and the driver shadows Invoke-RestMethod / Invoke-WebRequest with guards that print NETWORK-CALL), never the real claude/npm/install.ps1 or %USERPROFILE%\.claude.
 # Runs $Body in a child powershell after dot-sourcing harness-versions.ps1; returns the merged output.
 # $StderrText = the line the stub claude writes to stderr ($null = none). The body may use $fixture.
 # $LocalModel = DAD_SMOKE_LOCALMODEL for the child (pass|fail|skip; empty = cleared).
-function Invoke-S24Probe([string]$StderrText, [string]$Ollama, [string]$Body, [string]$LocalModel = "") {
+# $Show = DAD_SMOKE_OLLAMA_SHOW for the child: down (default) or the JSON text of a stand-in /api/show reply.
+function Invoke-S24Probe([string]$StderrText, [string]$Ollama, [string]$Body, [string]$LocalModel = "", [string]$Show = "down") {
   $sb = New-Sandbox
-  $names = @("PATH","DAD_SMOKE_OLLAMA","DAD_SMOKE_LOCALMODEL","DAD_SMOKE_GATES")
+  $names = @("PATH","DAD_SMOKE_OLLAMA","DAD_SMOKE_LOCALMODEL","DAD_SMOKE_GATES","DAD_SMOKE_OLLAMA_SHOW")
   $saved = @{}; foreach ($n in $names) { $saved[$n] = [Environment]::GetEnvironmentVariable($n, "Process") }
   try {
     $bin = Join-Path $sb "bin"; New-Item -ItemType Directory -Force $bin | Out-Null
@@ -1844,12 +1845,15 @@ function Invoke-S24Probe([string]$StderrText, [string]$Ollama, [string]$Body, [s
       '$ErrorActionPreference = "Stop"',
       ('$kit = ''' + ($kit -replace "'", "''") + ''''),
       ('$fixture = ''' + ($fixture -replace "'", "''") + ''''),
+      'function Invoke-RestMethod { Write-Host "NETWORK-CALL Invoke-RestMethod"; throw "test-kit: no network in S24 probes" }',
+      'function Invoke-WebRequest { Write-Host "NETWORK-CALL Invoke-WebRequest"; throw "test-kit: no network in S24 probes" }',
       '. (Join-Path $kit "harness-versions.ps1")',
       $Body)
     $env:PATH = "$bin;$env:SystemRoot\System32;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
     $env:DAD_SMOKE_OLLAMA = $Ollama
     $env:DAD_SMOKE_LOCALMODEL = $(if ($LocalModel) { $LocalModel } else { $null })
     $env:DAD_SMOKE_GATES = "pass"
+    if ($Show -and $Show -ne "down") { $showFile = Join-Path $sb "show.json"; Set-Content -Path $showFile -Value $Show -Encoding ASCII; $env:DAD_SMOKE_OLLAMA_SHOW = $showFile } else { $env:DAD_SMOKE_OLLAMA_SHOW = "down" }
     $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
     return (& $ps -NoProfile -ExecutionPolicy Bypass -File $driver 2>&1 | Out-String)
   } finally {
@@ -1858,11 +1862,17 @@ function Invoke-S24Probe([string]$StderrText, [string]$Ollama, [string]$Body, [s
   }
 }
 
+$script:S24Stderr = "[claude-code:unrecognized_model] qwen3-14b-cc is not in this version's model catalog"
+$script:S24Body = '$r = Test-LocalModelResolves -ModelsJson $fixture; Write-Host "RESULT $($r.Result)"'
+$script:S24Worked = '{"parameters":"num_ctx                        65536\ntemperature                    0.6","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}'
+function Get-S24Warn([string]$Ctx) { return "[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves $Ctx)" }
+
 Test-Case "S24 AC1/AC2: the local-model probe PRINTS the unrecognized_model WARN and stays PASS" {
   $body = '$r = Test-LocalModelResolves -ModelsJson $fixture; Write-Host "RESULT $($r.Result)"'
-  $warn = '[harness] local model qwen3-14b-cc: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves unknown)'
-  $w = Invoke-S24Probe "[claude-code:unrecognized_model] qwen3-14b-cc is not in this version's model catalog" "up" $body
-  Assert ($w.Contains($warn)) "AC1: the unrecognized_model WARN was not printed:`n$w"
+  $warn = Get-S24Warn "40960"
+  $w = Invoke-S24Probe "[claude-code:unrecognized_model] qwen3-14b-cc is not in this version's model catalog" "up" $body "" $script:S24Worked
+  Assert (-not $w.Contains("NETWORK-CALL")) "AC1: the context lookup attempted a network call:`n$w"
+  Assert ($w.Contains($warn)) "AC1: the unrecognized_model WARN was not printed (C4a worked example: min(65536, 40960) = 40960):`n$w"
   Assert ($w.Contains("RESULT PASS")) "AC1: the probe did not stay PASS with the warning:`n$w"
   $c = Invoke-S24Probe $null "up" $body
   Assert ($c.Contains("RESULT PASS")) "AC2: the probe did not PASS without the warning:`n$c"
@@ -1897,6 +1907,50 @@ Test-Case "S24 cleanup: the probe's finally never deletes a caller-scope errFile
   $o = Invoke-S24Probe $null "up" '$errFile = Join-Path (Split-Path $fixture) ''keep.txt''; Set-Content $errFile ''x''; $bad = Join-Path (Split-Path $fixture) ''no-such-dir''; $env:TMP = $bad; $env:TEMP = $bad; $r = Test-LocalModelResolves -ModelsJson $fixture; Write-Host "RESULT $($r.Result)"; Write-Host "KEPT $(Test-Path $errFile)"'
   Assert ($o.Contains("RESULT FAIL")) "setup did not reach the GetTempFileName-throws path:`n$o"
   Assert ($o.Contains("KEPT True")) "the probe's finally deleted the caller-scope errFile:`n$o"
+}
+
+Test-Case "S24 ctx: the WARN names the LOWER of num_ctx and the architecture's context_length, in either order" {
+  $subs = [ordered]@{
+    "(a1) num_ctx above context_length" = @($script:S24Worked, "40960")
+    "(a2) num_ctx is the lower" = @('{"parameters":"num_ctx                        8192","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}', "8192")
+    "(a3) the architecture key decides" = @('{"parameters":"num_ctx                        65536","model_info":{"general.architecture":"qwen3","llama.context_length":1024,"qwen3.context_length":40960}}', "40960")
+  }
+  foreach ($k in @($subs.Keys)) {
+    $o = Invoke-S24Probe $script:S24Stderr "up" $script:S24Body "" $subs[$k][0]
+    Assert (-not $o.Contains("NETWORK-CALL")) "${k}: a network call was attempted:`n$o"
+    Assert ($o.Contains((Get-S24Warn $subs[$k][1]))) "${k}: the WARN does not say Ollama serves $($subs[$k][1]):`n$o"
+    Assert ($o.Contains("RESULT PASS")) "${k}: the probe did not stay PASS:`n$o"
+  }
+}
+
+Test-Case "S24 ctx: with the lookup seam down or DAD_SMOKE_OLLAMA=down Ollama serves unknown, and the probe stays PASS" {
+  $o = Invoke-S24Probe $script:S24Stderr "up" $script:S24Body "" "down"
+  Assert (-not $o.Contains("NETWORK-CALL")) "(b1) a network call was attempted:`n$o"
+  Assert ($o.Contains((Get-S24Warn "unknown"))) "(b1) the WARN does not say Ollama serves unknown:`n$o"
+  Assert ($o.Contains("RESULT PASS")) "(b1) the probe did not stay PASS:`n$o"
+  $cb = 'Write-Host "CTX=$(Get-OllamaServedContext ''qwen3-14b-cc'')"'
+  $up = Invoke-S24Probe $null "up" $cb "" $script:S24Worked
+  Assert (-not $up.Contains("NETWORK-CALL")) "(b2) control: a network call was attempted:`n$up"
+  Assert ($up.Contains("CTX=40960")) "(b2) control: the direct helper call did not give 40960:`n$up"
+  $dn = Invoke-S24Probe $null "down" $cb "" $script:S24Worked
+  Assert (-not $dn.Contains("NETWORK-CALL")) "(b2) a network call was attempted:`n$dn"
+  Assert ($dn.Contains("CTX=unknown")) "(b2) DAD_SMOKE_OLLAMA=down did not win over a valid reply:`n$dn"
+}
+
+Test-Case "S24 ctx: a malformed reply or a missing, zero or non-numeric value gives unknown, never a guess (still PASS)" {
+  $fx = [ordered]@{
+    "(c1) not JSON" = '{"parameters":"num_ctx 65536","model_info":{"general.architecture":"qwen3"'
+    "(c2) no num_ctx line" = '{"parameters":"temperature 0.6","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}'
+    "(c3) no qwen3.context_length" = '{"parameters":"num_ctx 65536","model_info":{"general.architecture":"qwen3"}}'
+    "(c4) non-numeric num_ctx" = '{"parameters":"num_ctx abc","model_info":{"general.architecture":"qwen3","qwen3.context_length":40960}}'
+    "(c5) zero context_length" = '{"parameters":"num_ctx 65536","model_info":{"general.architecture":"qwen3","qwen3.context_length":0}}'
+  }
+  foreach ($k in @($fx.Keys)) {
+    $o = Invoke-S24Probe $script:S24Stderr "up" $script:S24Body "" $fx[$k]
+    Assert (-not $o.Contains("NETWORK-CALL")) "${k}: a network call was attempted:`n$o"
+    Assert ($o.Contains((Get-S24Warn "unknown"))) "${k}: the WARN does not say Ollama serves unknown:`n$o"
+    Assert ($o.Contains("RESULT PASS")) "${k}: the probe did not stay PASS:`n$o"
+  }
 }
 
 Test-Case "C2f's drift check compares versions by EQUALITY, not substring (graded S12 defect)" {
