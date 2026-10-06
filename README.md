@@ -1,13 +1,15 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.57.1** - local, offline, agentic software development on your own GPU.
+**Version 0.58.0** - a guard layer for agentic coding: a spec before code, a verifier that checks real
+correctness, and context that persists across sessions, enforced by deterministic gates.
 
-DrDad runs the real Claude Code agentic loop against **local Ollama models** - no Anthropic account, no
-API key, no internet after first setup - and wraps it in **deterministic gates** so a small local model
-cannot quietly wreck your project. The design document is the contract; every mode aligns to it.
+DrDad is a working implementation of the loop-engineering idea (see "Where this sits" below). It wraps the
+real Claude Code agent loop in scripts the model cannot skip, so that "done" has to be demonstrated rather
+than asserted. The design document is the contract; every mode aligns to it. Cloud and Hybrid are the primary
+ways to run it; Local (your own GPU, no network) is kept as a resilience mode.
 
-Built for one specific person: the developer with a capable-but-not-frontier GPU (this was tuned on a
-16 GB RTX 5080) who wants an agentic coding loop that stays on their own machine.
+I built this to understand how agent loops work, and it turned out to be useful. It is a show-and-tell, not
+a pitch: pre-1.0, one author, Windows-only, and the CHANGELOG is the honest record of how it got here.
 
 ---
 
@@ -15,29 +17,33 @@ Built for one specific person: the developer with a capable-but-not-frontier GPU
 
 This is **pre-1.0 and candid about it.**
 
-- The gates are real, tested (130+ cases, green), and each one was earned from a **measured failure** on a
-  real run - see [CHANGELOG.md](CHANGELOG.md), which reads as a field log of every way a local model
-  sabotaged itself and the deterministic check that stopped it.
-- **A full `/design -> /build -> close` has not yet completed on a local model without human repair.** The
-  best run to date produced a real ASP.NET Core app - controllers, EF Core migrations, integration tests,
-  15 of 44 tasks closed - before an external Windows policy blocked test execution. Getting one clean,
-  reproducible end-to-end run is the current goal, in the open.
-- **Windows-only, by design.** Built for a Windows + Ollama box: PowerShell + `.cmd` scripts, a
-  Windows-native installer and hooks. Cross-platform is a deliberate post-1.0 question (the C# server is
-  already portable; the plumbing is not), not a near-term goal.
+- The gates are real, tested (the kit's own suite, `test-kit.ps1`, runs 267 checks and must print
+  `0 failed`), and each one was earned from a **measured failure** on a real run - see
+  [CHANGELOG.md](CHANGELOG.md), which reads as a field log of every way a model sabotaged itself and the
+  deterministic check that stopped it. Most of those failures came from small local models driven hard;
+  the same gates are what remain useful when the model is a frontier one.
+- **Local mode is the weakest backend, and that is understood.** A full `/design -> /build -> close` has not
+  completed on a local model without human repair. The best local run produced a real ASP.NET Core app -
+  controllers, EF Core migrations, integration tests, 15 of 44 tasks closed - before an external Windows
+  policy blocked test execution. That is why Local is a resilience mode and not the headline: it exists for
+  the afternoon the network is gone and you still want output (see below), not as the way to run the kit.
+- **Windows-only, by design.** Built for a Windows box: PowerShell + `.cmd` scripts, a Windows-native
+  installer and hooks. Cross-platform is a deliberate post-1.0 question (the C# server is already portable;
+  the plumbing is not), not a near-term goal.
+- **AI-assisted, openly.** See Credits.
 
-If you want a polished product, this is not it yet. If you want to watch a local-first agentic harness get
-hardened failure by failure - and help - you are in the right place.
+If you want a polished product, this is not it yet. If you want to see a guard layer for agent loops get
+hardened failure by failure, you are in the right place.
 
 ---
 
 ## The idea: never accept an assertion a script can settle
 
-A 14-32B local model, driven hard, does things a frontier model rarely does: it deletes tests to make a
-suite pass, reports work it did not do, writes a task list no tool can parse, and loops one failing command
-a thousand times. Prompting against this does not hold - across many graded runs, **every prose rule failed
-at least once and every deterministic gate held.** So DrDad's rule is: if a script can check it, a script
-checks it, and the model does not get a vote.
+Models, driven hard, do things you would not accept from a colleague: delete tests to make a suite pass,
+report work they did not do, write a task list no tool can parse, and loop one failing command a thousand
+times. Prompting against this does not hold - across many graded runs, **every prose rule failed at least
+once and every deterministic gate held.** So DrDad's rule is: if a script can check it, a script checks it,
+and the model does not get a vote.
 
 A few of the gates, each from a real incident:
 
@@ -60,14 +66,51 @@ A few of the gates, each from a real incident:
 
 ---
 
+## Where this sits
+
+DrDad's three ingredients - a spec before code, a verifier that checks real correctness, and persistent
+context across sessions - are the shape that people have started calling "loop engineering". It is a 2026
+term used in blog posts and guides about the agent loop Andrej Karpathy published as
+[autoresearch](https://github.com/karpathy/autoresearch): a human-edited `program.md` as the spec, a fixed
+time budget, and a numeric verifier (`val_bpb`) the agent cannot grade for itself. I could not find Karpathy
+using the phrase "loop engineering" himself, so I credit the loop to autoresearch and the label to the
+write-ups, not the other way round. DrDad is one working implementation of that shape for coding, with the
+enforcement done by scripts instead of instructions.
+
+Two independent projects landed in the same place, and I would rather point at them than pretend to be
+alone:
+
+- [claude-gates](https://github.com/DevRik99/claude-gates) (DevRik99) - installable, deterministic hooks for
+  Claude Code that block or warn when a tool call breaks a rule (50 gates across 11 families at the time of
+  writing).
+- [claude-code-audit-gate](https://github.com/fotografvecerek-ai/claude-code-audit-gate)
+  (fotografvecerek-ai) - an independent audit agent that never writes code, hands findings to the project
+  agent, re-verifies each fix, and gates the release with hooks, a git pre-commit and GitHub Actions.
+
+Both are MIT-licensed and worth a look. The shape converges: enforcement lives outside the model.
+
+**One real disagreement.** claude-gates ships a `no-coauthor` gate that blocks a commit carrying an AI or
+agent attribution trailer (`Co-Authored-By` and similar), enabled by default and overridable per commit or
+in config. DrDad goes the other way: AI attribution is required, and the commit trailers are how this
+repository's own history says which changes were AI-assisted. A guard layer that makes agents prove their
+work should not also make the authorship harder to see.
+
+**BMAD is the planning layer; DrDad is a guard layer.** [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD)
+is where much of the industry has landed for agentic planning: personas, templates and context-engineered
+story files. It is a method; DrDad is enforcement underneath whatever method you run. They are meant to
+stack ("BMAD on DrDad"), not compete, and any methodology that writes a spec and tasks can run on top of the
+gates.
+
+---
+
 ## What it is / what it isn't
 
 **It is:** a set of global Claude Code commands, agents, hooks, and deterministic scripts, plus one small
-C# MCP server for local RAG and web search. It redirects Claude Code at Ollama and enforces a
-design-doc-driven loop.
+C# MCP server for document RAG and web search (8 tools, plus `local_generate` in hybrid mode). It enforces a
+design-doc-driven loop whichever backend runs the model.
 
 **It isn't:** a model, a fork of Claude Code, or a cloud service. It does not train or fine-tune anything.
-It does not send your code anywhere once installed.
+It has no server of its own that your code is sent to.
 
 **Good fits today:** C#/.NET services and web apps, Python apps and data pipelines, research projects with a
 document corpus and datasets (harvest logs, measurements) rendered as a site. **Weakest at:** anything
@@ -78,13 +121,15 @@ needing pixel-level visual judgement (there is no exit code for taste).
 ## Requirements
 
 - Windows 10/11
-- [Ollama](https://ollama.com) with a coding-capable model (Devstral, Qwen3-Coder, gpt-oss, etc.) - **local
-  mode only**; with `install.ps1 -Cloud` you use Anthropic's API instead and Ollama is optional
-- [Claude Code](https://www.anthropic.com/claude-code) (the CLI harness; DrDad points it at Ollama)
+- [Claude Code](https://www.anthropic.com/claude-code) (the CLI harness)
+- For **Cloud** and **Hybrid**: an Anthropic login or API key held by Claude Code itself (the kit never
+  reads or stores it)
+- [Ollama](https://ollama.com) - required for **Local** and **Hybrid**, and optional but recommended in
+  **Cloud** (semantic search and screenshot review run on it; without it search falls back to a literal
+  scan and the install says so)
 - .NET 8+ SDK (builds the one C# MCP server)
-- A GPU with enough VRAM for your chosen model (16 GB runs the recommended set; the kit reports fit)
-
-Everything after first install runs offline.
+- A GPU with enough VRAM for your chosen local model, if you use Ollama (16 GB runs the recommended set;
+  the kit reports fit)
 
 ---
 
@@ -93,21 +138,25 @@ Everything after first install runs offline.
 ```
 git clone <your-fork-url> drdad
 cd drdad
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-# ...or add -Cloud to run the SAME loop against Anthropic's API instead of local Ollama:
-#    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud
 # ...or -Hybrid: the cloud loop PLUS your GPU as a drudge co-processor (the local_generate tool):
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Hybrid
+# ...or no flag, for Local mode: the same loop against Ollama on your own GPU, no network needed:
+#    powershell -ExecutionPolicy Bypass -File .\install.ps1
 # ...and -CopilotCli ADDS GitHub Copilot CLI as a second harness (combine with any of the above):
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -CopilotCli
 ```
 
+Note: today `install.ps1` with **no flag installs Local mode**. Cloud and Hybrid are what I recommend and
+use, but they are still opt-in switches; whether the no-flag default should change is an open design
+question, not something this README decides.
+
 `-CopilotCli` is a HARNESS switch, not a backend mode: `-Cloud`/`-Hybrid` change where the model runs,
-this changes which agent CLI enforces the gates. It leaves the Claude Code wiring untouched and also
-writes `%USERPROFILE%\.copilot\hooks\dad.json`, so the SAME stop guard and loop guard run under
-`copilot` too - including on a subagent's own tool calls. Copilot CLI normally signs in to GitHub, but
-it can run account-free against your local Ollama (`COPILOT_PROVIDER_BASE_URL=http://localhost:11434/v1`),
-which is the only reason it is in scope for an offline-first kit. See `docs/DESIGN.md` R37 / contract C2.
+this changes which agent CLI enforces the gates. It is a **pilot and unverified**: the contracts were
+measured once, against one Copilot CLI version, and full parity is not claimed (`docs/DESIGN.md` R37, R39
+and contract C2 say exactly what was and was not measured). It leaves the Claude Code wiring untouched and
+also writes `%USERPROFILE%\.copilot\hooks\dad.json`, so the same stop guard and loop guard are wired into
+`copilot` too.
 
 `install.ps1` detects its own location, reconciles Ollama with `models.json`, builds the C# server,
 installs the global commands/agents and `settings.json` (paths auto-fixed), and puts `dad` on your PATH.
@@ -123,7 +172,7 @@ Then, in a new shell:
 dad doctor
 ```
 
-confirms the install. Scaffold and run a project:
+confirms the install and reports which mode is active. Scaffold and run a project:
 
 ```
 dad new-project general C:\src\myapp
@@ -139,34 +188,46 @@ Full manual: **[docs/GUIDE.md](docs/GUIDE.md)**. Every subcommand: run `dad` wit
 
 ## How it reaches the model
 
-**Local (default):** there is no proxy. `settings.json` sets `ANTHROPIC_BASE_URL` to Ollama's local port and
-Claude Code talks to it directly, so this depends on your Ollama version serving an Anthropic-compatible
-endpoint. Telemetry, error reporting, and the auto-updater are disabled; after install you can unplug the
-network.
+The commands, agents, and every gate are identical in all three modes. Only where the agent loop runs
+changes.
 
-**Cloud (`install.ps1 -Cloud`):** the base-URL redirect is dropped, so Claude Code uses its normal Anthropic
-auth. The commands, agents, and every gate are identical - only the backend changes. Aliases map to Anthropic
-models (`fast` -> Haiku 4.5, `dev`/`coder`/`oss`/`gemma` -> Sonnet 5, `quality` -> Opus 5); switch tiers with
-`dad use-model <alias>`. This trades the offline/private/free properties for a model strong enough to clear
-the local-model hurdles - use cloud for delivery, local for private discovery. Your GPU is **not** idle here:
-the `local-tools` RAG (semantic search, corpus, `describe_image` UI review) still runs on Ollama if it is up,
-so cloud mode VERIFIES the embed/vision models are pulled (otherwise search quietly degrades to a literal scan).
+**Cloud (`install.ps1 -Cloud`):** the primary mode. The base-URL redirect is dropped, so Claude Code uses
+its normal Anthropic auth. Aliases map to Anthropic models (`fast` -> Haiku 4.5, `dev`/`coder`/`oss`/`gemma`
+-> Sonnet 5, `quality` -> Opus 5); switch tiers with `dad use-model <alias>`. Your GPU is **not** idle
+here: the `local-tools` RAG (semantic search, corpus, `describe_image` UI review) still runs on Ollama if it
+is up, so cloud mode VERIFIES the embed/vision models are pulled (otherwise search quietly degrades to a
+literal scan).
 
-**Hybrid (`install.ps1 -Hybrid`):** the cloud agent loop of `-Cloud`, **plus** your GPU offered to the cloud
-model as a drudge co-processor. It sets `LOCALTOOLS_HYBRID=1`, which turns on one extra MCP tool,
-`local_generate`: the cloud model delegates BOUNDED, low-stakes generation to the local model - a first-pass
-implementation guess it will review, synthetic test data, boilerplate - and keeps that work off the cloud
-budget. The output is always a DRAFT the cloud model verifies; it is never banked or shipped raw. Division of
-labor: cloud = the brain, the local GPU = senses (embeddings, vision) and drudge-work. `dad doctor` reports
-the mode and confirms `local_generate` is actually exposed.
+**Hybrid (`install.ps1 -Hybrid`):** also primary. The cloud agent loop of `-Cloud`, **plus** your GPU
+offered to the cloud model as a drudge co-processor. It sets `LOCALTOOLS_HYBRID=1`, which turns on one extra
+MCP tool, `local_generate`: the cloud model delegates BOUNDED, low-stakes generation to the local model - a
+first-pass implementation guess it will review, synthetic test data, boilerplate - and keeps that work off
+the cloud budget. The output is always a DRAFT the cloud model verifies; it is never banked or shipped raw.
+Division of labor: cloud = the brain, the local GPU = senses (embeddings, vision) and drudge-work. `dad
+doctor` reports the mode and confirms `local_generate` is actually exposed.
+
+**Local (`install.ps1`, no flag today):** a resilience mode, not the goal. There is no proxy:
+`settings.json` sets `ANTHROPIC_BASE_URL` to Ollama's local port and Claude Code talks to it directly, so
+this depends on your Ollama version serving an Anthropic-compatible endpoint. Telemetry, error reporting,
+and the auto-updater are disabled. It exists for one real case: a disconnected afternoon where you still
+want output. Two examples of the size of job it is for:
+
+- feeding a few datasheets into your own rig (the corpus RAG) to get a simple SoC/IC wiring plan; or
+- a small Unity3D prototype built from a one-page game design document.
+
+Do not expect it to carry a large build unattended; that ceiling is the reason cloud and hybrid are primary.
 
 ---
 
 ## Contributing
 
 The one firm rule: **every fix ships with a test that would have caught it.** That is how the gate stays
-meaningful. See [CONTRIBUTING.md](CONTRIBUTING.md). Run reports - "here is my transcript, here is where it
-went wrong" - are the most valuable contribution right now; there is an issue template for them.
+meaningful. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Run reports are the evidence base this project runs on: "here is my transcript, here is where the model went
+wrong (or the gate did)". Every gate here exists because of one, and a report from a different model, stack
+or harness is worth more than a patch. There is an issue template for them. If you maintain one of the
+sibling projects above, or build something with the same shape, comparing notes is welcome.
 
 ---
 
@@ -182,10 +243,12 @@ Claude Code at a non-Anthropic backend is your responsibility to reconcile with 
 ## Credits
 
 DrDad was **designed and directed by Kristen Overmyer** - the thesis ("never accept an assertion a script
-can settle"), every design decision, and the real local-model runs each gate was earned from. The
-**implementation was done with Claude Code** (Anthropic); per-change attribution is in the `Co-Authored-By`
-commit trailers. That a project about honest engineering under AI assistance was itself AI-assisted is the
-point, not a caveat.
+can settle"), every design decision, and the real runs each gate was earned from. The **implementation was
+done with Claude Code** (Anthropic); per-change attribution is in the `Co-Authored-By` commit trailers. That
+a project about honest engineering under AI assistance was itself AI-assisted is the point, not a caveat.
+
+The loop shape it implements is not original to it: see "Where this sits" for the credit to Karpathy's
+autoresearch, claude-gates, claude-code-audit-gate and BMAD.
 
 ---
 

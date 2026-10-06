@@ -2,6 +2,38 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.58.0 - 2026-10-06
+
+### Changed - Goal, R34: the mission is restated; Local is a resilience mode, not the headline
+The README no longer frames "one clean local end-to-end run" as the goal, "offline-first is the default and the
+thesis", or the kit as built for the developer who wants everything on their own machine. Local-only was the
+naive starting point. The kit is now described as a working implementation of the loop-engineering shape (a
+spec before code, a verifier that checks real correctness, persistent context across sessions) enforced by
+deterministic gates, with Cloud and Hybrid as the primary modes and Local kept for one real case: a
+disconnected afternoon where output is still wanted (datasheets in, a simple SoC/IC wiring plan out; a small
+Unity3D prototype from a one-page design doc). The thesis, "never accept an assertion a script can settle", is
+unchanged. No code changed; `install.ps1` with no flag still installs Local, and whether that default should
+flip to `-Cloud` is an open design question.
+
+### Added - credit and verification of the field
+A "Where this sits" section credits Karpathy's autoresearch loop (the label "loop engineering" is a 2026 term
+from write-ups of it; no source found has Karpathy using the phrase himself), the independent projects
+claude-gates and claude-code-audit-gate, and treats BMAD as the planning layer DrDad sits under. The one real
+disagreement is stated: claude-gates ships a `no-coauthor` gate that blocks AI attribution trailers by
+default; DrDad requires attribution. Each claim was checked against the project's own repository page before
+it was written; what could not be confirmed was softened or cut.
+
+### Added - overview/: the Field Manual and the video production bible live in the repo
+`overview/field-manual.html` and `overview/video-series.html` were claude.ai artifacts; GitHub is now the source
+of truth. (Not under `docs/`: that folder has a regression test against stray HTML.) Both are reconciled with
+the README, and their figures are recomputed (v0.58.0, 267 checks, 17 commands, 18 agents, 8 MCP tools plus
+`local_generate` in hybrid, 39 requirements R1-R40). GitHub Copilot CLI is labelled a pilot and unverified.
+The cms3 run figures in them come from the author's run log and are not reproduced in this repository.
+
+### Added - Story S28: reconcile docs/DESIGN.md with the new mission
+`docs/DESIGN.md` is LOCKED and was not edited. S28 (TODO) lists the passages whose wording now contradicts the
+mission, for a later `/design` pass.
+
 ## 0.57.1 - 2026-10-04
 
 ### Fixed - R24: doc-stats NEXT follows Build order and dependencies
