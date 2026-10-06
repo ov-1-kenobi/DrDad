@@ -331,3 +331,17 @@
 {"v":1,"ts":"2026-10-03T17:02:38.270Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
 {"v":1,"ts":"2026-10-03T17:51:22.275Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
 {"v":1,"ts":"2026-10-03T18:15:11.031Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"b19817a8-2ead-4a29-82fb-c1884216bbfb"}
+{"v":1,"ts":"2026-10-05T00:21:21.502Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"a82ccaca-71f8-4b93-b336-89588d5ce900"}
+{"v":1,"ts":"2026-10-05T00:30:06.231Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"a82ccaca-71f8-4b93-b336-89588d5ce900"}
+{"v":1,"ts":"2026-10-05T00:37:19.546Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"a82ccaca-71f8-4b93-b336-89588d5ce900"}
+{"v":1,"ts":"2026-10-05T01:42:12.199Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"a82ccaca-71f8-4b93-b336-89588d5ce900"}
+{"v":1,"ts":"2026-10-05T02:03:41.305Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"bb510389-1c92-4d78-b709-d11d17de2efe"}
+{"v":1,"ts":"2026-10-05T02:04:09.430Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"bb510389-1c92-4d78-b709-d11d17de2efe"}
+{"v":1,"ts":"2026-10-06T15:18:39.657Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
+{"v":1,"ts":"2026-10-06T15:18:51.095Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
+{"v":1,"ts":"2026-10-06T15:31:30.682Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
+{"v":1,"ts":"2026-10-06T15:39:04.516Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
+{"v":1,"ts":"2026-10-06T15:46:46.406Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
+{"v":1,"ts":"2026-10-06T15:54:12.441Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
+{"v":1,"ts":"2026-10-06T15:54:26.132Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 27, tasks 82)","session":""}
+{"v":1,"ts":"2026-10-06T15:54:33.207Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T24.5","session":""}

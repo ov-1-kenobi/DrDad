@@ -88,6 +88,9 @@ function Write-HarnessReport {
 # settings.json / use-model state / any security setting is never touched.
 # Test hook: env DAD_SMOKE_LOCALMODEL = pass | fail | skip forces the outcome (stubs in tests).
 # Test hook: env DAD_SMOKE_OLLAMA = up | down forces Ollama reachability (no request is made).
+# Test hook: env DAD_SMOKE_OLLAMA_SHOW = down | <path to a JSON file> stands in for /api/show in the WARN's
+# context lookup (Get-OllamaServedContext): down = unreachable, a path = that file is the reply (no request).
+# Unset = the real call. DAD_SMOKE_OLLAMA = down also makes the lookup 'unknown'.
 function Test-LocalModelResolves {
   param([string]$ModelsJson = "")
   $res = { param($r, $ok, $why) [pscustomobject]@{ Result = $r; Ok = $ok; Reason = $why } }
@@ -125,7 +128,7 @@ function Test-LocalModelResolves {
     $code = $LASTEXITCODE
     $errText = ""
     if (Test-Path $errFile) { $errText = "$(Get-Content $errFile -Raw)" }
-    if ($errText -match 'unrecognized_model') { Write-Host "[harness] local model ${model}: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves unknown)" -ForegroundColor Yellow }
+    if ($errText -match 'unrecognized_model') { $ctx = Get-OllamaServedContext $model; Write-Host "[harness] local model ${model}: WARN unrecognized_model (Claude Code assumes a 200000 context window; Ollama serves $ctx)" -ForegroundColor Yellow }
     if ($code -ne 0) { return (& $res "FAIL" $false "claude exited $code for model $model") }
     $j = $null
     try { $j = $raw | ConvertFrom-Json } catch { }
@@ -141,6 +144,30 @@ function Test-LocalModelResolves {
     $env:ANTHROPIC_BASE_URL = $saveUrl; $env:ANTHROPIC_AUTH_TOKEN = $saveTok
     if ($errFile) { Remove-Item $errFile -Force -ErrorAction SilentlyContinue }
   }
+}
+
+# C4a OPEN-4(b), decided 2026-10-03: the context Ollama serves = min(num_ctx in /api/show parameters,
+# model_info <general.architecture>.context_length). Returns digits, or 'unknown' on ANY failure; prints nothing.
+function Get-OllamaServedContext {
+  param([string]$Model)
+  $ErrorActionPreference = 'Stop'
+  try {
+    if ("$env:DAD_SMOKE_OLLAMA" -eq "down") { return "unknown" }
+    $seam = "$env:DAD_SMOKE_OLLAMA_SHOW"
+    if ($seam -eq "down") { return "unknown" }
+    if ($seam) { $j = Get-Content -LiteralPath $seam -Raw | ConvertFrom-Json }
+    else { $j = Invoke-RestMethod -Uri "http://localhost:11434/api/show" -Method Post -Body (@{ model = $Model } | ConvertTo-Json -Compress) -ContentType "application/json" -TimeoutSec 3 }
+    if (-not $j -or $j -is [string] -or -not $j.model_info) { return "unknown" }
+    $n = [regex]::Match("$($j.parameters)", '(?m)^[ \t]*num_ctx[ \t]+(\d+)[ \t]*\r?$')
+    if (-not $n.Success) { return "unknown" }
+    $arch = "$($j.model_info.'general.architecture')"
+    if (-not $arch) { return "unknown" }
+    $p = $j.model_info.PSObject.Properties[$arch + ".context_length"]
+    if (-not $p -or ("$($p.Value)" -notmatch '^\d+$')) { return "unknown" }
+    $a = [long]$n.Groups[1].Value; $b = [long]"$($p.Value)"
+    if ($a -le 0 -or $b -le 0) { return "unknown" }
+    return "$([Math]::Min($a, $b))"
+  } catch { return "unknown" }
 }
 
 # Runs `dad gates-smoke` (dad-gates-smoke.ps1) and, for claude-code, Test-LocalModelResolves.
