@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>DrDad Video Series</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#EAEDF0; --surface:#FFFFFF; --surface-2:#F4F6F8; --ink:#191C20; --muted:#565E66;
+    --faint:#828B94; --border:#D6DADF; --hair:#E2E6EA;
+    --accent:#8C2F2A; --accent-soft:rgba(140,47,42,.09); --accent-line:rgba(140,47,42,.28);
+    --ok:#2C7A55; --ok-soft:rgba(44,122,85,.11); --warn:#9C5E12; --warn-soft:rgba(156,94,18,.11);
+    --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --measure:44rem;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#121519; --surface:#1A1E23; --surface-2:#212730; --ink:#E7E9EC; --muted:#9BA3AB;
+    --faint:#6C757E; --border:#2B313A; --hair:#232A32;
+    --accent:#E0736B; --accent-soft:rgba(224,115,107,.13); --accent-line:rgba(224,115,107,.34);
+    --ok:#5FB98B; --ok-soft:rgba(95,185,139,.14); --warn:#D69B4A; --warn-soft:rgba(214,155,74,.14);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#121519; --surface:#1A1E23; --surface-2:#212730; --ink:#E7E9EC; --muted:#9BA3AB;
+    --faint:#6C757E; --border:#2B313A; --hair:#232A32;
+    --accent:#E0736B; --accent-soft:rgba(224,115,107,.13); --accent-line:rgba(224,115,107,.34);
+    --ok:#5FB98B; --ok-soft:rgba(95,185,139,.14); --warn:#D69B4A; --warn-soft:rgba(214,155,74,.14);
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;font-size:16px;
+    -webkit-font-smoothing:antialiased;padding:0 20px}
+  .wrap{max-width:var(--measure);margin:0 auto;padding-block:clamp(2.5rem,6vw,5rem)}
+  h1{font-family:var(--mono);font-weight:700;letter-spacing:-.02em;line-height:1.05;
+    font-size:clamp(2.1rem,6.5vw,3.2rem);margin:0;text-wrap:balance}
+  h2{font-family:var(--mono);font-weight:600;letter-spacing:-.01em;line-height:1.15;
+    font-size:clamp(1.35rem,3.4vw,1.75rem);margin:0 0 .2em;text-wrap:balance}
+  h3{font-family:var(--mono);font-weight:600;font-size:1rem;margin:0 0 .35em;letter-spacing:-.01em}
+  p{margin:0 0 1rem;max-width:var(--measure)}
+  strong{font-weight:600;color:var(--ink)}
+  .lede{font-size:clamp(1.02rem,2.3vw,1.16rem);color:var(--muted);max-width:39rem}
+  code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1px solid var(--hair);
+    border-radius:4px;padding:.06em .34em;color:var(--ink)}
+  .kicker{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 .9rem}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
+
+  header{padding-bottom:2rem;border-bottom:1px solid var(--border)}
+  .stamp{display:inline-flex;align-items:center;gap:.5rem;border:1.5px solid var(--accent-line);color:var(--accent);
+    font-family:var(--mono);font-weight:600;font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;
+    padding:.34rem .6rem;border-radius:5px;transform:rotate(-1.1deg);background:var(--accent-soft)}
+  .titlerow{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;margin:1.2rem 0 1rem}
+  .subtitle{font-family:var(--mono);color:var(--muted);font-size:.9rem;margin:.1rem 0 1.3rem}
+
+  section{padding-top:2.6rem;margin-top:2.6rem;border-top:1px solid var(--hair)}
+  section:first-of-type{border-top:0}
+
+  /* principles */
+  .principles{display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:1.2rem}
+  .principle{display:grid;grid-template-columns:2.2rem 1fr;gap:.9rem;padding:.85rem 1.1rem;background:var(--surface);border-top:1px solid var(--hair)}
+  .principle:first-child{border-top:0}
+  .principle .i{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:1rem;font-variant-numeric:tabular-nums}
+  .principle b{font-family:var(--mono);font-size:.9rem;color:var(--ink);font-weight:600}
+  .principle p{margin:.15rem 0 0;font-size:.88rem;color:var(--muted)}
+
+  /* anchor-line bank */
+  .anchors{display:flex;flex-direction:column;gap:.6rem;margin-top:1.2rem}
+  .anchor{display:flex;gap:.75rem;align-items:baseline;background:var(--accent-soft);border-left:3px solid var(--accent);
+    border-radius:0 7px 7px 0;padding:.7rem .95rem}
+  .anchor .mk{font-family:var(--mono);color:var(--accent);font-weight:700;font-size:.9rem;flex:0 0 auto}
+  .anchor q{font-family:var(--mono);font-size:.92rem;color:var(--ink);font-weight:500;quotes:none}
+  .anchor .use{display:block;font-family:var(--sans);font-size:.78rem;color:var(--muted);margin-top:.2rem;font-weight:400}
+
+  /* track label */
+  .track-h{display:flex;align-items:baseline;gap:.7rem;flex-wrap:wrap;margin-bottom:.3rem}
+  .track-tag{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;font-weight:600;
+    padding:.2rem .5rem;border-radius:5px}
+  .track-tag.ever{background:var(--ok-soft);color:var(--ok)}
+  .track-tag.week{background:var(--warn-soft);color:var(--warn)}
+
+  /* episode cards */
+  .eps{display:flex;flex-direction:column;gap:.8rem;margin-top:1.3rem}
+  .ep{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem}
+  .ep-h{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.5rem;flex-wrap:wrap}
+  .ep-n{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:.82rem;font-variant-numeric:tabular-nums}
+  .ep-t{font-family:var(--mono);font-weight:600;color:var(--ink);font-size:.98rem;flex:1;min-width:12rem}
+  .ep-len{font-family:var(--mono);font-size:.66rem;color:var(--faint);border:1px solid var(--hair);border-radius:4px;padding:.15rem .4rem;white-space:nowrap}
+  .ep dl{margin:0;display:grid;grid-template-columns:6.5rem 1fr;gap:.35rem .9rem}
+  .ep dt{font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding-top:.1rem}
+  .ep dd{margin:0;font-size:.88rem;color:var(--muted)}
+  .ep dd.shot{color:var(--ink)}
+  .ep dd.line{font-family:var(--mono);font-size:.82rem;color:var(--accent)}
+
+  /* weekly skeleton */
+  .skeleton{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:1.3rem}
+  .beat{display:grid;grid-template-columns:2.6rem 1fr;gap:.9rem;padding:.85rem 1.1rem;background:var(--surface);border-top:1px solid var(--hair)}
+  .beat:first-child{border-top:0}
+  .beat .t{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:.72rem}
+  .beat b{font-family:var(--mono);font-size:.88rem;color:var(--ink)}
+  .beat p{margin:.15rem 0 0;font-size:.86rem;color:var(--muted)}
+
+  /* teleprompter script */
+  .script{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.25rem;margin-top:1rem}
+  .script .lbl{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:.6rem}
+  .script p{font-family:var(--mono);font-size:.92rem;line-height:1.75;color:var(--ink);margin:0 0 .7rem;max-width:38rem}
+  .script p:last-child{margin-bottom:0}
+  .cue{color:var(--accent);font-weight:600}
+  .beatnote{color:var(--faint);font-style:normal}
+
+  .callout{border-left:3px solid var(--ok);background:var(--ok-soft);padding:.95rem 1.2rem;border-radius:0 8px 8px 0;margin-top:1.2rem}
+  .callout p{margin:0;font-size:.93rem}
+
+  .footnote{margin-top:3rem;padding-top:1.4rem;border-top:1px solid var(--border);
+    font-family:var(--mono);font-size:.74rem;color:var(--faint);line-height:1.7}
+
+  @media (max-width:760px){
+    .ep dl{grid-template-columns:1fr;gap:.15rem}
+    .ep dt{margin-top:.4rem}
+    .principle,.beat{grid-template-columns:1.6rem 1fr;gap:.6rem}
+    .titlerow{flex-direction:column}
+  }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+<header>
+  <span class="stamp">&#9654; Production bible</span>
+  <div class="titlerow">
+    <h1>DrDad on Video</h1>
+    <span class="eyebrow">Series plan<br>&amp; teleprompter</span>
+  </div>
+  <p class="subtitle">Document it once, point at the link.</p>
+  <p class="lede">Two shows, not one. A short evergreen course that explains DrDad one concept at a time, and a
+  loose weekly devlog that shows the sausage being made. Both lean on the same move: don't tell people the tool
+  is honest &mdash; show a gate catching a model in the act.</p>
+</header>
+
+<section>
+  <p class="kicker">Before you hit record</p>
+  <h2>Five production principles</h2>
+  <div class="principles">
+    <div class="principle"><div class="i">1</div><div><b>Lead with the payoff, not the setup.</b><p>Open on the money shot &mdash; a gate catching a fabricated "done" &mdash; then explain. Never spend the first five minutes on install.</p></div></div>
+    <div class="principle"><div class="i">2</div><div><b>One concept per basics episode.</b><p>Short and modular (6&ndash;12 min) so each is linkable. The whole point is to say "watch the gates video," not re-explain it.</p></div></div>
+    <div class="principle"><div class="i">3</div><div><b>Show the failures.</b><p>A real spiral, a gate firing, a frontier model graded an A on broken code &mdash; that footage is the differentiator. Capture real runs; keep the good disasters.</p></div></div>
+    <div class="principle"><div class="i">4</div><div><b>Keep the weekly skeleton fixed.</b><p>Same five beats every week. A repeatable template is what keeps a devlog alive past month one; improvise the content, never the structure.</p></div></div>
+    <div class="principle"><div class="i">5</div><div><b>Repeat the anchor lines.</b><p>Say the same few framings in most episodes. Repetition across videos is what makes a concept stick; a line you say once is a line nobody remembers.</p></div></div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">The baked-in concepts</p>
+  <h2>Anchor lines</h2>
+  <p>Say these verbatim &mdash; they are the load-bearing ideas. Scatter them across episodes so the series
+  compounds. This is the one place to be word-for-word; everything else stays loose.</p>
+  <div class="anchors">
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>Never accept an assertion a script can settle.</q><span class="use">The thesis. Say it in every single video, at least once.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>Prompts telling a model to behave don't hold. Scripts that check do.</q><span class="use">The one-line "why." Pair it with the thesis.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>Show me it builds. Show me the test ran. Show me the row is gone.</q><span class="use">What the gates demand. Use it whenever a gate fires on camera.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>The model doesn't get a vote.</q><span class="use">For the gates episode and any close-unit / ratchet moment.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>The CHANGELOG is a field log &mdash; every gate is a scar with a test.</q><span class="use">The "how we got here" line. Use it opening the devlog's "what shipped."</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>Retrieve the one passage the step needs &mdash; not the kitchen sink.</q><span class="use">The RAG episode.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>Cloud is the brain; the GPU is senses and drudge-work.</q><span class="use">The cloud / hybrid episode.</span></div></div>
+    <div class="anchor"><span class="mk">&#9646;</span><div><q>And no &mdash; not a medical doctor. It just makes you prove your work.</q><span class="use">The recurring sign-off. Your wink; keep it.</span></div></div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Track A</p>
+  <div class="track-h"><h2>DrDad Basics</h2><span class="track-tag ever">evergreen &middot; scripted-loose</span></div>
+  <p>A short course. Film once, keep forever, link constantly. Start with the 90-second trailer, then one
+  concept per episode. Every episode: cold-open on a money shot, teach the one idea, close on an anchor line.</p>
+  <div class="eps">
+    <div class="ep">
+      <div class="ep-h"><span class="ep-n">E0</span><span class="ep-t">Trailer</span><span class="ep-len">60&ndash;90 s</span></div>
+      <dl>
+        <dt>Goal</dt><dd>Make someone want the tool in 90 seconds.</dd>
+        <dt>Money shot</dt><dd class="shot">A frontier model grades its own broken code an A; a script overrules it.</dd>
+        <dt>Anchor</dt><dd class="line">Never accept an assertion a script can settle.</dd>
+      </dl>
+    </div>
+    <div class="ep">
+      <div class="ep-h"><span class="ep-n">E1</span><span class="ep-t">Why DrDad exists</span><span class="ep-len">6&ndash;8 min</span></div>
+      <dl>
+        <dt>Cover</dt><dd>The problem (local models cheat, spiral, fabricate "done"); the thesis; the origin &mdash; a note-to-self backronym that stuck because it's also what the tool acts like.</dd>
+        <dt>Money shot</dt><dd class="shot">A real transcript: 1023 identical searches, or a suite that went green after 15 of 16 tests vanished.</dd>
+        <dt>Anchor</dt><dd class="line">Prompts don't hold; scripts that check do.</dd>
+      </dl>
+    </div>
+    <div class="ep">
+      <div class="ep-h"><span class="ep-n">E2</span><span class="ep-t">Install &amp; first run</span><span class="ep-len">8&ndash;10 min</span></div>
+      <dl>
+        <dt>Cover</dt><dd>The three modes in one breath; <code>install.cmd</code>; <code>dad doctor</code>; scaffold a project.</dd>
+        <dt>Money shot</dt><dd class="shot"><code>dad doctor</code> going green, then a real project scaffolded and committed in two minutes.</dd>
+        <dt>Anchor</dt><dd class="line">If a script can check it, a script checks it &mdash; even your setup.</dd>
+      </dl>
+    </div>
+    <div class="ep">
+      <div class="ep-h"><span class="ep-n">E3</span><span class="ep-t">The design doc is the contract</span><span class="ep-len">7&ndash;9 min</span></div>
+      <dl>
+        <dt>Cover</dt><dd><code>/design</code>, the <code>LOCKED</code> status, why design-first; the doc drives every mode.</dd>
+        <dt>Money shot</dt><dd class="shot"><code>/build</code> refusing to run against a <code>DRAFT</code> design instead of quietly improvising.</dd>
+        <dt>Anchor</dt><dd class="line">The design doc is the contract; every mode aligns to it.</dd>
+      </dl>
+    </div>
+    <div class="ep">
+      <div class="ep-h"><span class="ep-n">E4</span><span class="ep-t">The build loop</span><span class="ep-len">9&ndash;11 min</span></div>
+      <dl>
+        <dt>Cover</dt><dd><code>/stories</code> &rarr; <code>/taskmap</code> &rarr; <code>/build</code>; dev &rarr; qa &rarr; <code>close-unit</code>.</dd>
+        <dt>Money shot</dt><dd class="shot"><code>close-unit</code> building, running tests, confirming they ran, ticking the box &mdash; then refusing a unit whose tests ran zero.</dd>
+        <dt>Anchor</dt><dd class="line">Show me it builds. Show me the test ran.</dd>
+      </dl>
+    </div>
+    <div class="ep">
+      <div class="ep-h"><span class="ep-n">E5</span><span class="ep-t">The gates</span><span class="ep-len">9&ndash;11 min</span></div>
+      <dl>
+        <dt>Cover</dt><dd>close-unit, the ratchet, the loop guard, dad-guard &mdash; each with the real incident that earned it.</dd>
+        <dt>Money shot</dt><dd class="shot">The ratchet blocking a close that has fewer tests than before; the loop guard breaking a spiral live.</dd>
+        <dt>Anchor</dt><dd class="line">The model doesn't get a vote.</dd>
+      </dl>
+    </div>
+    <div class="ep">
+      <div class="ep-h"><span class="ep-n">E6</span><span class="ep-t">Precise-context RAG</span><span class="ep-len">7&ndash;9 min</span></div>
+      <dl>
+        <dt>Cover</dt><dd><code>search_datasheets</code>, API-SURFACE, corpora; how the window stays clean instead of re-pasting whole docs.</dd>
+        <dt>Money shot</dt><dd class="shot">Pulling one exact method signature out of the index instead of loading the whole file into context.</dd>
+        <dt>Anchor</dt><dd class="line">Retrieve the one passage the step needs, not the kitchen sink.</dd>
+      </dl>
+    </div>
+    <div class="ep">
+      <div class="ep-h"><span class="ep-n">E7</span><span class="ep-t">Cloud, and the hybrid GPU</span><span class="ep-len">7&ndash;9 min</span></div>
+      <dl>
+        <dt>Cover</dt><dd>The three modes in depth; <code>local_generate</code>; the GPU as a drudge co-processor; the gates are identical across all three.</dd>
+        <dt>Money shot</dt><dd class="shot">The same gates on a cloud model catching an A-graded Delete button that returns 405 &mdash; live curl.</dd>
+        <dt>Anchor</dt><dd class="line">Cloud is the brain; the GPU is senses and drudge-work.</dd>
+      </dl>
+    </div>
+  </div>
+  <p style="margin-top:1rem;font-size:.88rem;color:var(--muted)">Later add-ons, same format, when you feel like
+  it: <strong>Brownfield</strong> (<code>/assess</code> + <code>/document</code> on someone else's codebase),
+  <strong>Corpora &amp; skins</strong> (cited knowledge banks; a UI stack the agent "wears"), and
+  <strong>dad watch</strong> (the no-progress alarm). Each is a self-contained 6&ndash;8 min drop.</p>
+</section>
+
+<section>
+  <p class="kicker">Track B</p>
+  <div class="track-h"><h2>DrDad Devlog</h2><span class="track-tag week">weekly &middot; loose</span></div>
+  <p>Same five beats every week &mdash; that fixed shape is what keeps it alive. Improvise the content, never
+  the structure. 10&ndash;20 minutes; a webcam, a screen, and a real session.</p>
+  <div class="skeleton">
+    <div class="beat"><div class="t">00:00</div><div><b>Cold open &mdash; the one thing</b><p>The single most interesting thing that happened this week, in 30&ndash;60 s, before any hello. A catch, a ship, a failure.</p></div></div>
+    <div class="beat"><div class="t">01:00</div><div><b>What shipped &amp; why it was earned</b><p>The version bump(s), and for each one the FAILURE that earned it. Open the CHANGELOG on screen &mdash; it reads as a field log.</p></div></div>
+    <div class="beat"><div class="t">04:00</div><div><b>In the chair</b><p>A real work session, screen shared. Pick one where a gate fires or something goes sideways &mdash; that's the content. Don't edit out the mess; narrate it.</p></div></div>
+    <div class="beat"><div class="t">14:00</div><div><b>Next &amp; open questions</b><p>What's next and what you haven't solved &mdash; roadmap in the open. Invite run reports; the honest ask is the community hook.</p></div></div>
+    <div class="beat"><div class="t">16:00</div><div><b>Sign-off</b><p>The recurring anchor line. Same close every week so people know the show landed.</p></div></div>
+  </div>
+  <div class="callout">
+    <p><strong>Your first devlog writes itself.</strong> This week: <code>0.47</code> (corpus ingest was
+    landing in the wrong project &mdash; the fix), <code>0.48</code> (hybrid mode &mdash; the GPU as a co-processor),
+    and the cms3 run where a full <code>/audit</code> caught three bugs a frontier model had graded an A
+    (Delete-405, an upload wired to an API that doesn't exist, a modal that crashes before it renders). Cold
+    open on the Delete-405 curl, and you're off.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Teleprompter</p>
+  <h2>Two cold opens, written out</h2>
+  <p>The only fully-scripted parts. Read these; keep everything after loose. <span class="cue">Red</span> is a
+  camera or action cue, not spoken.</p>
+
+  <div class="script">
+    <div class="lbl">Cold open &mdash; Trailer / E1</div>
+    <p><span class="beatnote">[straight to camera, no intro]</span></p>
+    <p>A top-tier AI model just built me a feature. Wrote the tests. Ran them. Graded its own work an A.</p>
+    <p><span class="cue">[cut to screen: the Delete button / the 405 in the terminal]</span></p>
+    <p>The feature was a delete button that returns a 405 and never deletes anything. The tests were green. The
+    model was sure.</p>
+    <p>This is DrDad. It's a harness for agentic coding, and it runs on one stubborn rule:
+    <span class="cue">never accept an assertion a script can settle.</span></p>
+    <p>Models &mdash; even the best ones &mdash; will tell you the work is done. DrDad makes them prove it. And
+    when they can't, it says so. <span class="beatnote">[beat]</span> Let me show you how.</p>
+  </div>
+
+  <div class="script">
+    <div class="lbl">Cold open &mdash; a Devlog week</div>
+    <p><span class="beatnote">[straight to camera]</span></p>
+    <p>This week DrDad caught three bugs a frontier model swore were done &mdash; on a real app, 68 of 70 tasks
+    in, all graded an A.</p>
+    <p><span class="cue">[cut to screen: the grade card, A crossed out to C]</span></p>
+    <p>An upload wired to an editor API that doesn't exist. A dialog that crashes before it renders. And a
+    delete button that never deletes. Green tests on all three.</p>
+    <p>That's the whole idea: <span class="cue">prompts telling a model to behave don't hold; scripts that check
+    do.</span> Let's get into what shipped, and then I'll run a session live and we'll see what breaks.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Practical</p>
+  <h2>Cadence &amp; notes</h2>
+  <div class="principles">
+    <div class="principle"><div class="i">&#9646;</div><div><b>Order of filming.</b><p>Trailer + E1 first (they set the frame), then the gates episode (E5) &mdash; it's the strongest, and if only one basics video ever gets watched, that's the one.</p></div></div>
+    <div class="principle"><div class="i">&#9646;</div><div><b>Source material is already on disk.</b><p>Your run transcripts (run15Sept26 and the earlier spirals), the grade cards, the CHANGELOG. The disasters are documented &mdash; you're editing, not staging.</p></div></div>
+    <div class="principle"><div class="i">&#9646;</div><div><b>Keep it cheap to make.</b><p>Screen + webcam + the anchor lines. No intro animation budget. The candor is the production value; polish would fight the brand.</p></div></div>
+    <div class="principle"><div class="i">&#9646;</div><div><b>Point everything at the two links.</b><p>Repo in every description; the Field Manual as the "read the overview" link. The videos exist so you stop re-explaining &mdash; so always hand people the next step.</p></div></div>
+    <div class="principle"><div class="i">&#9646;</div><div><b>Miss a week without guilt.</b><p>The devlog is "when there's something worth showing," not a contract. A shipped gate or a good failure is the bar; a quiet week just waits.</p></div></div>
+  </div>
+</section>
+
+<p class="footnote">
+  DrDad on Video &mdash; production bible, companion to the DrDad Field Manual. Keep the anchor lines verbatim;
+  keep everything else loose. The show is the same promise as the tool: show the work, prove the claim.<br>
+  Not a curriculum to obey &mdash; a frame to riff on.
+</p>
+</div>
+
+</body>
+</html>
