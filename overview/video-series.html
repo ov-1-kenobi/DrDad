@@ -137,7 +137,7 @@
   loose weekly devlog that shows the sausage being made. Both lean on the same move: don't tell people the tool
   is honest &mdash; show a gate catching a model in the act.</p>
   <p class="lede">The posture is show-and-tell, not a pitch: "I built this to understand how agent loops work and
-  it turned out useful." Cloud and Hybrid are the primary modes; Local is a resilience mode for a disconnected
+  it turned out useful." Cloud is the default; Local is a resilience mode for a disconnected
   afternoon. Never frame local-only as the goal.</p>
 </header>
 
@@ -198,7 +198,7 @@
     <div class="ep">
       <div class="ep-h"><span class="ep-n">E2</span><span class="ep-t">Install &amp; first run</span><span class="ep-len">8&ndash;10 min</span></div>
       <dl>
-        <dt>Cover</dt><dd>The three modes in one breath (Cloud and Hybrid first, Local as the resilience mode); <code>install.cmd</code> (note: the no-flag install is still Local today); <code>dad doctor</code>; scaffold a project.</dd>
+        <dt>Cover</dt><dd>The three modes in one breath (Cloud the default, Local the resilience mode, Hybrid cloud plus the GPU); <code>install.cmd -Cloud</code> (note: the no-flag install is still Local until story S29 lands); <code>dad doctor</code>; scaffold a project.</dd>
         <dt>Money shot</dt><dd class="shot"><code>dad doctor</code> going green, then a real project scaffolded and committed in two minutes.</dd>
         <dt>Anchor</dt><dd class="line">If a script can check it, a script checks it &mdash; even your setup.</dd>
       </dl>
@@ -238,7 +238,7 @@
     <div class="ep">
       <div class="ep-h"><span class="ep-n">E7</span><span class="ep-t">Cloud, hybrid, and local as the fallback</span><span class="ep-len">7&ndash;9 min</span></div>
       <dl>
-        <dt>Cover</dt><dd>The three modes in depth, primary first; <code>local_generate</code>; the GPU as a drudge co-processor; local as the disconnected-afternoon mode (datasheets in, a simple SoC/IC wiring plan out; or a small Unity3D prototype from a one-page design doc); the gates are identical across all three.</dd>
+        <dt>Cover</dt><dd>The three modes in depth, in the order Cloud (default), Local, Hybrid; <code>local_generate</code>; the GPU as a drudge co-processor; local as the disconnected-afternoon mode (datasheets in, a simple SoC/IC wiring plan out; or a small Unity3D prototype from a one-page design doc); the gates are identical across all three.</dd>
         <dt>Money shot</dt><dd class="shot">The same gates on a cloud model catching an A-graded Delete button that returns 405 &mdash; live curl.</dd>
         <dt>Anchor</dt><dd class="line">Cloud is the brain; the GPU is senses and drudge-work.</dd>
       </dl>

@@ -9,11 +9,12 @@ The README no longer frames "one clean local end-to-end run" as the goal, "offli
 thesis", or the kit as built for the developer who wants everything on their own machine. Local-only was the
 naive starting point. The kit is now described as a working implementation of the loop-engineering shape (a
 spec before code, a verifier that checks real correctness, persistent context across sessions) enforced by
-deterministic gates, with Cloud and Hybrid as the primary modes and Local kept for one real case: a
-disconnected afternoon where output is still wanted (datasheets in, a simple SoC/IC wiring plan out; a small
-Unity3D prototype from a one-page design doc). The thesis, "never accept an assertion a script can settle", is
-unchanged. No code changed; `install.ps1` with no flag still installs Local, and whether that default should
-flip to `-Cloud` is an open design question.
+deterministic gates, with Cloud the default, Local kept as a resilience mode for one real case (a
+disconnected afternoon where output is still wanted: datasheets in, a simple SoC/IC wiring plan out; a small
+Unity3D prototype from a one-page design doc), and Hybrid as the cloud loop plus the GPU. The thesis, "never
+accept an assertion a script can settle", is unchanged. No code changed. The human DECIDED 2026-10-06 that
+Cloud is the default and that a Local install needs its own explicit option, but `install.ps1` with no flag
+still installs Local until story S29 lands; the README says so and tells readers to pass `-Cloud`.
 
 ### Added - credit and verification of the field
 A "Where this sits" section credits Karpathy's autoresearch loop (the label "loop engineering" is a 2026 term
@@ -30,9 +31,11 @@ the README, and their figures are recomputed (v0.58.0, 267 checks, 17 commands, 
 `local_generate` in hybrid, 39 requirements R1-R40). GitHub Copilot CLI is labelled a pilot and unverified.
 The cms3 run figures in them come from the author's run log and are not reproduced in this repository.
 
-### Added - Story S28: reconcile docs/DESIGN.md with the new mission
+### Added - Stories S28 and S29: the work this restatement leaves behind
 `docs/DESIGN.md` is LOCKED and was not edited. S28 (TODO) lists the passages whose wording now contradicts the
-mission, for a later `/design` pass.
+mission, for a later `/design` pass. S29 (TODO) is the finding that follows from the Cloud-default decision:
+flip `install.ps1`'s no-flag default to Cloud and add an explicit option for a Local install. Both have no tasks
+yet on purpose; `doc-stats` will keep listing them until `/taskmap` shards them.
 
 ## 0.57.1 - 2026-10-04
 

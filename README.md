@@ -5,8 +5,8 @@ correctness, and context that persists across sessions, enforced by deterministi
 
 DrDad is a working implementation of the loop-engineering idea (see "Where this sits" below). It wraps the
 real Claude Code agent loop in scripts the model cannot skip, so that "done" has to be demonstrated rather
-than asserted. The design document is the contract; every mode aligns to it. Cloud and Hybrid are the primary
-ways to run it; Local (your own GPU, no network) is kept as a resilience mode.
+than asserted. The design document is the contract; every mode aligns to it. Cloud is the default way to run
+it; Local (your own GPU, no network) is kept as a resilience mode, and Hybrid adds your GPU to the cloud loop.
 
 I built this to understand how agent loops work, and it turned out to be useful. It is a show-and-tell, not
 a pitch: pre-1.0, one author, Windows-only, and the CHANGELOG is the honest record of how it got here.
@@ -126,7 +126,7 @@ needing pixel-level visual judgement (there is no exit code for taste).
   reads or stores it)
 - [Ollama](https://ollama.com) - required for **Local** and **Hybrid**, and optional but recommended in
   **Cloud** (semantic search and screenshot review run on it; without it search falls back to a literal
-  scan and the install says so)
+  scan and the install says so). Local needs a model Ollama can serve to Claude Code.
 - .NET 8+ SDK (builds the one C# MCP server)
 - A GPU with enough VRAM for your chosen local model, if you use Ollama (16 GB runs the recommended set;
   the kit reports fit)
@@ -139,17 +139,18 @@ needing pixel-level visual judgement (there is no exit code for taste).
 git clone <your-fork-url> drdad
 cd drdad
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud
+# ...Local mode, the same loop against Ollama on your own GPU, no network needed:
+#    powershell -ExecutionPolicy Bypass -File .\install.ps1
 # ...or -Hybrid: the cloud loop PLUS your GPU as a drudge co-processor (the local_generate tool):
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Hybrid
-# ...or no flag, for Local mode: the same loop against Ollama on your own GPU, no network needed:
-#    powershell -ExecutionPolicy Bypass -File .\install.ps1
 # ...and -CopilotCli ADDS GitHub Copilot CLI as a second harness (combine with any of the above):
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -CopilotCli
 ```
 
-Note: today `install.ps1` with **no flag installs Local mode**. Cloud and Hybrid are what I recommend and
-use, but they are still opt-in switches; whether the no-flag default should change is an open design
-question, not something this README decides.
+Note: **Cloud is the decided default, but the installer has not caught up yet.** Today `install.ps1` with
+**no flag still installs Local mode**, so pass `-Cloud` explicitly. The planned change - Cloud as the no-flag
+default and an explicit option for a Local install - is recorded as story S29 in `docs/STORIES.md`; the
+design wording it depends on is S28.
 
 `-CopilotCli` is a HARNESS switch, not a backend mode: `-Cloud`/`-Hybrid` change where the model runs,
 this changes which agent CLI enforces the gates. It is a **pilot and unverified**: the contracts were
@@ -191,31 +192,32 @@ Full manual: **[docs/GUIDE.md](docs/GUIDE.md)**. Every subcommand: run `dad` wit
 The commands, agents, and every gate are identical in all three modes. Only where the agent loop runs
 changes.
 
-**Cloud (`install.ps1 -Cloud`):** the primary mode. The base-URL redirect is dropped, so Claude Code uses
+**Cloud (`install.ps1 -Cloud`):** the default mode (the installer's no-flag behaviour will follow, see S29).
+The base-URL redirect is dropped, so Claude Code uses
 its normal Anthropic auth. Aliases map to Anthropic models (`fast` -> Haiku 4.5, `dev`/`coder`/`oss`/`gemma`
 -> Sonnet 5, `quality` -> Opus 5); switch tiers with `dad use-model <alias>`. Your GPU is **not** idle
 here: the `local-tools` RAG (semantic search, corpus, `describe_image` UI review) still runs on Ollama if it
 is up, so cloud mode VERIFIES the embed/vision models are pulled (otherwise search quietly degrades to a
 literal scan).
 
-**Hybrid (`install.ps1 -Hybrid`):** also primary. The cloud agent loop of `-Cloud`, **plus** your GPU
-offered to the cloud model as a drudge co-processor. It sets `LOCALTOOLS_HYBRID=1`, which turns on one extra
-MCP tool, `local_generate`: the cloud model delegates BOUNDED, low-stakes generation to the local model - a
-first-pass implementation guess it will review, synthetic test data, boilerplate - and keeps that work off
-the cloud budget. The output is always a DRAFT the cloud model verifies; it is never banked or shipped raw.
-Division of labor: cloud = the brain, the local GPU = senses (embeddings, vision) and drudge-work. `dad
-doctor` reports the mode and confirms `local_generate` is actually exposed.
-
-**Local (`install.ps1`, no flag today):** a resilience mode, not the goal. There is no proxy:
-`settings.json` sets `ANTHROPIC_BASE_URL` to Ollama's local port and Claude Code talks to it directly, so
-this depends on your Ollama version serving an Anthropic-compatible endpoint. Telemetry, error reporting,
-and the auto-updater are disabled. It exists for one real case: a disconnected afternoon where you still
-want output. Two examples of the size of job it is for:
+**Local (`install.ps1`, no flag today; an explicit option is planned, see S29):** a resilience mode, not
+the goal. There is no proxy: `settings.json` sets `ANTHROPIC_BASE_URL` to Ollama's local port and Claude
+Code talks to it directly, so this depends on your Ollama version serving an Anthropic-compatible endpoint.
+Telemetry, error reporting, and the auto-updater are disabled. It exists for one real case: a disconnected
+afternoon where you still want output. Two examples of the size of job it is for:
 
 - feeding a few datasheets into your own rig (the corpus RAG) to get a simple SoC/IC wiring plan; or
 - a small Unity3D prototype built from a one-page game design document.
 
-Do not expect it to carry a large build unattended; that ceiling is the reason cloud and hybrid are primary.
+Do not expect it to carry a large build unattended; that ceiling is the reason Cloud is the default.
+
+**Hybrid (`install.ps1 -Hybrid`):** the cloud agent loop of `-Cloud`, **plus** your GPU offered to the cloud
+model as a drudge co-processor. It sets `LOCALTOOLS_HYBRID=1`, which turns on one extra MCP tool,
+`local_generate`: the cloud model delegates BOUNDED, low-stakes generation to the local model - a first-pass
+implementation guess it will review, synthetic test data, boilerplate - and keeps that work off the cloud
+budget. The output is always a DRAFT the cloud model verifies; it is never banked or shipped raw. Division of
+labor: cloud = the brain, the local GPU = senses (embeddings, vision) and drudge-work. `dad doctor` reports
+the mode and confirms `local_generate` is actually exposed.
 
 ---
 

@@ -198,7 +198,7 @@
   <p class="lede">A guard layer for agentic coding: a spec before code, a verifier that checks real
   correctness, and context that persists across sessions &mdash; enforced by deterministic gates the model
   cannot skip. A working implementation of the loop-engineering idea, built to understand how agent loops
-  work, and it turned out useful. Cloud and Hybrid are the primary modes; Local is a resilience mode.</p>
+  work, and it turned out useful. Cloud is the default; Local is a resilience mode; Hybrid adds the GPU to the cloud loop.</p>
 
   <div class="spec">
     <div><div class="n">3</div><div class="l">backend modes</div></div>
@@ -229,22 +229,15 @@
 <section>
   <p class="kicker">02 &middot; How it reaches the model</p>
   <h2>Three backends, one loop</h2>
-  <p>Cloud and Hybrid are the primary modes; Local is a resilience mode. All three share every command,
-  agent, and gate &mdash; only where the <em>agent loop</em> runs changes. Local-only was the naive starting
-  point; it is not a pursuit any more.</p>
+  <p>Cloud is the default; Local is a resilience mode; Hybrid adds the GPU to the cloud loop. All three share
+  every command, agent, and gate &mdash; only where the <em>agent loop</em> runs changes. Local-only was the
+  naive starting point; it is not a pursuit any more.</p>
   <div class="modes">
     <div class="mode">
-      <h3>Cloud <span class="tag def">primary</span></h3>
+      <h3>Cloud <span class="tag def">default</span></h3>
       <p>The Ollama redirect is dropped; the loop runs on Anthropic (Sonnet / Opus / Haiku by alias).</p>
       <div class="gpu">GPU: RAG + vision, verified</div>
       <div class="cmd">install.cmd -Cloud</div>
-    </div>
-    <div class="mode">
-      <h3>Hybrid <span class="tag def">primary</span></h3>
-      <p>The cloud loop <em>plus</em> the GPU offered to the cloud model as a drudge co-processor via the
-      <code>local_generate</code> tool.</p>
-      <div class="gpu">GPU: RAG + vision + drudge</div>
-      <div class="cmd">install.cmd -Hybrid</div>
     </div>
     <div class="mode">
       <h3>Local <span class="tag opt">resilience</span></h3>
@@ -254,9 +247,17 @@
       <div class="gpu">GPU: the entire agent</div>
       <div class="cmd">install.cmd (no flag, today)</div>
     </div>
+    <div class="mode">
+      <h3>Hybrid <span class="tag opt">opt-in</span></h3>
+      <p>The cloud loop <em>plus</em> the GPU offered to the cloud model as a drudge co-processor via the
+      <code>local_generate</code> tool.</p>
+      <div class="gpu">GPU: RAG + vision + drudge</div>
+      <div class="cmd">install.cmd -Hybrid</div>
+    </div>
   </div>
-  <p class="flow-note">Today the installer's no-flag default is still Local. Whether it should flip to Cloud
-  is an open design decision, not settled here.</p>
+  <p class="flow-note">Cloud is the decided default, but the installer has not caught up: today a no-flag
+  install still gives Local, so pass <code>-Cloud</code>. Flipping the default and adding an explicit option
+  for a Local install is queued as story S29 in the repository.</p>
   <p class="flow-note"><strong>Division of labor in hybrid:</strong> cloud is the brain; the local GPU is
   senses (embeddings, vision) and drudge-work (implementation guesses, test data). <code>local_generate</code>
   is a separate tool registered <em>only</em> when the mode flag is set &mdash; in local/cloud it does not
@@ -419,7 +420,7 @@
       <ul>
         <li>A full <code>/design &rarr; /build &rarr; close</code> has not completed on a <em>local</em> model without human repair. That is why Local is a resilience mode, not the headline.</li>
         <li>Pixel-level visual taste. There is no exit code for taste; the UI loop reviews behavior and screenshots, not beauty.</li>
-        <li>Hard reasoning at the local tier &mdash; the local model is the ceiling; cloud / hybrid are the primary modes for that reason.</li>
+        <li>Hard reasoning at the local tier &mdash; the local model is the ceiling; Cloud is the default for that reason.</li>
         <li>GitHub Copilot CLI as a second harness is a pilot, measured once against one version &mdash; unverified, not a supported target.</li>
         <li>Windows-only by design (PowerShell + <code>.cmd</code>); cross-platform is a deliberate post-1.0 question.</li>
       </ul>
@@ -483,14 +484,14 @@
         <div class="when">Where it is (v0.58)</div>
         <ul>
           <li>Integrity-aware state, exact API surfaces, domain grounding, research provenance, corpora, brownfield <code>/assess</code>.</li>
-          <li>Cloud and hybrid are the primary modes; local is kept as a resilience mode. 267 checks in the kit's own suite, 0 failed.</li>
+          <li>Cloud is the default; local is kept as a resilience mode; hybrid adds the GPU to the cloud loop. 267 checks in the kit's own suite, 0 failed.</li>
           <li>GitHub Copilot CLI as a second harness: a pilot, unverified.</li>
         </ul>
       </div>
       <div class="stage next">
         <div class="when">Where it can go</div>
         <ul>
-          <li>Open question: should the installer's no-flag default flip to Cloud? A design decision, not made yet.</li>
+          <li>Decided, not yet built (S29): the installer's no-flag default flips to Cloud, with an explicit option for a Local install.</li>
           <li>Reconcile the locked design doc's wording with the cloud-first mission (queued as a story for a <code>/design</code> pass).</li>
           <li>A library of authoritative UI "skins" as corpora; wider stack templates; cross-platform after 1.0.</li>
           <li>Autonomous routines &mdash; the loop that grounds and re-grounds itself unattended.</li>
