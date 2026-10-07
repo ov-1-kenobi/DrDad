@@ -1,20 +1,27 @@
 # Technical Design Document - DrDad (Design Research Document, Agentic Development)
 
 Status: LOCKED
-Security review: NOT-REQUIRED (FOUNDATIONAL and permanent, not a per-release waiver - the kit handles NO security: it authenticates no one and stores, reads or brokers no credential; at most it passes a harness's or tool's own auth through untouched. See ## Out of scope "Handling security". Local-only dev CLI; no user data stored, no exposed service; the kit stores and reads no credentials - a harness's login is its own, including R34's cloud/hybrid Anthropic key, and R37's supported path is BYOK to local Ollama, so no route through this kit requires an account. Re-confirmed 2026-09-29 against doc-stats' auth-keyword WARN: the hits are LLM token counts - R38c/C4a, harness session ids - C3b/C4b, the harness's own login and dummy local-Ollama auth token, and the secret scanner's detection patterns; none is this kit authenticating anyone)
+Security review: NOT-REQUIRED (FOUNDATIONAL and permanent, not a per-release waiver - the kit handles NO security: it authenticates no one and stores, reads or brokers no credential; at most it passes a harness's or tool's own auth through untouched. See ## Out of scope "Handling security". A dev CLI that runs on the user's own machine in every mode; no user data stored, no exposed service; the kit stores and reads no credentials - a harness's login is its own, including R34's cloud/hybrid Anthropic key, and the Local path (R1; R37's BYOK to local Ollama) needs no account at all, so the kit itself never asks for one. Re-confirmed 2026-09-29 against doc-stats' auth-keyword WARN: the hits are LLM token counts - R38c/C4a, harness session ids - C3b/C4b, the harness's own login and dummy local-Ollama auth token, and the secret scanner's detection patterns; none is this kit authenticating anyone)
 Security waiver confirmed: 2026-10-01 (human; auth-keyword hits: 145)
 <!-- This describes the kit AS IT SHOULD WORK; implement/maintain it via /spec or /build.
      Flip to DRAFT (and use /design or /proto) only to change the design itself. -->
 
 ## Goal
-Run the real Claude Code agentic loop **fully offline** on Windows + an NVIDIA GPU, driven by local
-Ollama models, with a single C# MCP server for document RAG, per-project corpora, a design/proto/spec/build
-mode system, and one-command model switching. No Anthropic account; offline after first setup. Offline is the
-DEFAULT and the thesis; the same loop can opt into a cloud or hybrid backend (R34) for delivery or to clear a
-local-model ceiling, but every command, agent, and gate is identical across all three.
+A working implementation of the loop-engineering shape - a spec before code, a verifier that checks real
+correctness, and context that persists across sessions - enforced by DETERMINISTIC gates the model cannot skip.
+The thesis is "never accept an assertion a script can settle". It runs the real Claude Code agentic loop on
+Windows, with a single C# MCP server for document RAG, per-project corpora, a design/proto/spec/build mode
+system, and one-command model switching. **Cloud is the DEFAULT backend** (R34); **Local** (Ollama on the user's
+own NVIDIA GPU, no network) is kept as a RESILIENCE mode for one real case - a disconnected afternoon where
+output is still wanted, e.g. feeding datasheets to the local corpus RAG for a simple SoC/IC wiring plan, or a
+small Unity3D prototype from a one-page game design document; **Hybrid** is the cloud loop plus the GPU as a
+drudge co-processor. Every command, agent, and gate is identical across all three. Local-only was the naive
+starting point and is not a pursuit. *(Reworded 2026-10-06, Story S28: this section used to say the loop runs
+"fully offline" and that offline is "the DEFAULT and the thesis".)*
 
 ## Requirements
-- [x] R1: Point Claude Code at local Ollama via `settings.json` `env` (`ANTHROPIC_BASE_URL=http://localhost:11434`,
+- [x] R1: (**Local mode**, the resilience backend - R34b; Cloud is the default, R34a, amended 2026-10-06.)
+      Point Claude Code at local Ollama via `settings.json` `env` (`ANTHROPIC_BASE_URL=http://localhost:11434`,
       dummy `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`) to skip the login screen, plus offline flags
       (telemetry/autoupdater off). apiKeyHelper is deliberately NOT set - having both caused a per-session
       Claude Code auth warning; the token alone suffices (apikey.cmd kept only as a fallback).
@@ -23,18 +30,24 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       the USER `settings.json` `env.ANTHROPIC_MODEL` OVERRIDES a process-level `ANTHROPIC_MODEL` (and a project
       `.claude/settings.json` env beats the user one), so a kit probe that must reach a specific local model
       passes `--model <-cc name>` and never relies on the process env var. Detail and the probe rule: C4a.
-- [x] R34: **Three backend modes, one loop - and the GPU is never idle.** Offline-first (R1) is the DEFAULT
-      and the thesis; two opt-in alternate backends share every command, agent, and gate - only where the
-      AGENT LOOP runs changes:
-      (a) **Local** (`install.ps1`): R1 - Claude Code -> Ollama; the whole loop on the GPU.
-      (b) **Cloud** (`install.ps1 -Cloud`): the `ANTHROPIC_BASE_URL` redirect is DROPPED, so Claude Code uses
-          its normal Anthropic auth; aliases resolve to each model's `cloud` id in `models.json`
+- [x] R34: **Three backend modes, one loop - and the GPU is never idle.** Amended 2026-10-06 (Stories S28/S29,
+      human decision): **Cloud is the DEFAULT**, and the modes are ordered Cloud, Local, Hybrid. They share every
+      command, agent, and gate - only where the AGENT LOOP runs changes. The installer's mode rules (which flag
+      selects which mode, what a no-flag run does, what a re-run keeps) are pinned in contract C6; C6 is
+      DECIDED, and the installer catches up in Story S29 (until then a no-flag install still gives Local).
+      (a) **Cloud** (`install.ps1 -Cloud`, and no flag per C6): the `ANTHROPIC_BASE_URL` redirect is DROPPED, so
+          Claude Code uses its normal Anthropic auth; aliases resolve to each model's `cloud` id in `models.json`
           (dev/coder/oss/gemma -> Sonnet, fast -> Haiku, quality -> Opus). The ABSENCE of the base-URL is the
           mode tell - `use-model` and `dad-doctor` read it back; no marker file. **The GPU is NOT idle in cloud
           mode:** `local-tools` reaches Ollama independent of the agent loop, so semantic RAG and
           `describe_image` still run on it - and cloud install VERIFIES the embed/vision models are pulled, so a
           literal-scan degrade is LOUD, not silent.
-      (c) **Hybrid** (`install.ps1 -Hybrid`): the cloud agent loop of (b) PLUS the GPU offered to the cloud
+      (b) **Local** (`install.ps1 -Local` per C6; today a no-flag run): R1 - Claude Code -> Ollama; the whole
+          loop on the GPU, no network. A RESILIENCE mode, not the goal: it exists for a disconnected afternoon
+          where output is still wanted (datasheets in, a simple SoC/IC wiring plan out; a small Unity3D
+          prototype from a one-page design doc), and it is the weakest backend - a full `/design -> /build ->
+          close` has not completed on a local model without human repair.
+      (c) **Hybrid** (`install.ps1 -Hybrid`): the cloud agent loop of (a) PLUS the GPU offered to the cloud
           model as a drudge co-processor. `install` sets `LOCALTOOLS_HYBRID=1` in `settings.json` env (the
           single mode tell; cleared on a cloud/local re-install), which registers ONE extra MCP tool,
           `local_generate`: the cloud model delegates BOUNDED, low-stakes generation to the local model (an
@@ -45,7 +58,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       The fence is DETERMINISTIC, not prose (the R-thesis): `local_generate` is a SEPARATE tool type
       (`HybridTools`) registered ONLY when `Rag.HybridEnabled` is true - `Program.cs` uses explicit
       `WithTools<T>()`, not assembly scanning - so in local/cloud mode the tool does not exist in the advertised
-      list at all, and the weak local model cannot be handed a job the mode exists to keep on the cloud brain.
+      list at all, and a model cannot be handed a job the mode exists to keep on the cloud brain.
       `dad-doctor` reports the mode, and in hybrid it sets the flag and PROBES the running server to confirm
       `local_generate` is actually exposed (not merely that the marker is set), warning if it leaks into a
       non-hybrid install. Draft model defaults to `models.json`'s default (`devstral`); override with
@@ -414,12 +427,14 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       confined to (i) a hooks file in that harness's own format and (ii) a thin ADAPTER where - and only
       where - the harness's block contract differs. Forking a guard per harness is forbidden: two copies of
       a gate drift, and the drifted one fails silently, which is the exact failure R22 exists to prevent.
-      (b) **The offline thesis survives, or the harness is out of scope.** Copilot CLI defaults to a GitHub
-      account billed in AI Credits, which would break R1's "no Anthropic account; offline after first setup"
-      thesis outright. It is in scope ONLY because it has a first-class BYOK escape - `COPILOT_PROVIDER_BASE_URL`
-      pointed at Ollama's OpenAI-compatible endpoint, where GitHub authentication is documented as not
-      required - verified against this kit's own local models with the hooks still firing. A candidate harness
-      with no offline path fails the thesis (Goal, R1) and is rejected on that ground, not on preference.
+      (b) **Copilot CLI is a PILOT, and the Local resilience mode must stay reachable under it.** Copilot CLI
+      defaults to a GitHub account billed in AI Credits. It stays in scope as an UNVERIFIED pilot (measured once,
+      against one version - C2f), not a supported target, and because it has a first-class BYOK escape -
+      `COPILOT_PROVIDER_BASE_URL` pointed at Ollama's OpenAI-compatible endpoint, where GitHub authentication is
+      documented as not required - verified against this kit's own local models with the hooks still firing, so
+      the Local resilience mode (R34b) still works under it. A candidate harness with no such path is not
+      rejected on the old offline thesis (retired 2026-10-06, S28); it is judged on whether its hooks can be
+      MEASURED (R37c).
       (c) **Harness contracts are MEASURED, never assumed - because a mismatch fails SILENTLY.** A hook that is
       misnamed, wrongly cased, in the wrong location, or that signals a block in a shape the harness does not
       honor produces NO error: the gate simply never fires and the run looks clean. That is R22's original
@@ -492,8 +507,8 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       (d) **An honest boundary.** Anything the measurement shows Copilot cannot do (for example, no
           equivalent of an orchestrating slash command) is recorded in `## Out of scope` with the evidence,
           not papered over. Partial parity that says so beats claimed parity that fails silently.
-      (e) **Same offline thesis (R37b).** Nothing here may require a GitHub account beyond what R37b already
-          accepts: the BYOK-to-Ollama path stays the supported route.
+      (e) **Same pilot posture (R37b).** Nothing here may require a GitHub account beyond what R37b already
+          accepts: the BYOK-to-Ollama path stays the route that needs none.
 
 - [ ] R40: **Every install run REPORTS the harness versions against the latest release and ASKS before it
       moves them - a newer harness is a MEASURED-AGAINST-drift event, never a silent one.** Today
@@ -503,7 +518,7 @@ local-model ceiling, but every command, agent, and gate is identical across all 
       already been bitten: on Claude Code 2.1.285 a headless local run failed and was first read as that
       version rejecting the kit's `-cc` model ids ("isn't described by this version's model catalog").
       CORRECTED 2026-10-01 by S16 / T16.1: that text is only a WARNING; the failure was settings precedence
-      (R1, C4a). Either way, "latest" changed how the offline path (R1) behaves - this project's thesis -
+      (R1, C4a). Either way, "latest" changed how the Local path (R1) behaves - the resilience mode -
       while every gate still reported green. The user's aim is the
       opposite of stale - access to the latest models and features on each run - so the rule is: latest is
       the DEFAULT OFFER, and it is taken knowingly.
@@ -765,11 +780,12 @@ local-model ceiling, but every command, agent, and gate is identical across all 
 - **Also measured:** the built-in `general-purpose` agent emits NO subagent lifecycle events - a NAMED
   CUSTOM agent is required. Interception still held at nested subagent depth 2.
 
-#### C2e: Offline / BYOK path - the R37(b) thesis check
+#### C2e: Offline / BYOK path - keeps the Local resilience mode reachable under Copilot CLI (R37(b))
 - **Measured:** `COPILOT_PROVIDER_BASE_URL` activates BYOK, and GitHub authentication is then not
   required; `COPILOT_PROVIDER_TYPE=openai` covers Ollama's OpenAI-compatible endpoint. Verified working
-  against this kit's local Ollama with the C2a/C2b/C2c hooks still firing. This is the only reason
-  Copilot CLI is in scope at all (R37b): without it the harness would break R1's offline thesis outright.
+  against this kit's local Ollama with the C2a/C2b/C2c hooks still firing. Under the 2026-10-06 mission
+  (S28) this is no longer what puts Copilot CLI in scope - it is a pilot (R37b) - but it is what lets the
+  Local resilience mode (R34b) run under it with no GitHub account.
 
 #### C2f: Version drift policy - LOUD at setup, fail-open at runtime
 - **APPROVED 2026-09-29.** Everything in C2a-C2e is true of Copilot CLI 1.0.89 and of nothing else. A harness
@@ -1552,6 +1568,49 @@ story that needs one must first get it measured and amended into C5 via `/design
   `--additional-mcp-config`; other Copilot surfaces (see `## Out of scope`); any Copilot version other than
   1.0.89.
 
+### C6: R34 installer mode selection - Cloud is the default, `-Local` is explicit, a no-flag re-run keeps Local/Hybrid
+- **Status: DECIDED 2026-10-06 (human; Stories S28/S29).** Not yet implemented: until Story S29 lands,
+  `install.ps1` still treats a no-flag run as Local and has no `-Local` switch. This contract is what S29's tasks
+  are written against; nothing below is open except the exact banner wording.
+- **Switches:** `-Cloud`, `-Local`, `-Hybrid` (plus the unchanged `-CopilotCli` and `-Yes`). `-Cloud` with
+  `-Hybrid` behaves as today (the cloud loop plus the GPU tools; Hybrid wins the label). `-Local` combined with
+  `-Cloud` or `-Hybrid` is a CONFLICT: the installer prints which two switches conflict and exits non-zero
+  BEFORE it writes or copies anything.
+- **Resolution, in this order:**
+  1. An explicit flag wins: `-Hybrid` -> Hybrid, `-Cloud` -> Cloud, `-Local` -> Local.
+  2. No flag: read the existing `%USERPROFILE%\.claude\settings.json` `env` block, BEFORE step 1 changes
+     anything. `ANTHROPIC_BASE_URL` present -> **Local** (keep). Else `LOCALTOOLS_HYBRID` equal to `1` ->
+     **Hybrid** (keep). Anything else - no file, an empty `env`, a Cloud install - -> **Cloud**.
+  3. A `settings.json` that cannot be parsed counts as "nothing to keep": Cloud, with a WARN naming the file
+     (the existing `settings.json.bak` step still runs).
+  These are the SAME tells R34 already uses (the base-URL's presence, `LOCALTOOLS_HYBRID`); no marker file is
+  added, so `dad-doctor`, `use-model` and `uninstall` need no new reader.
+- **The banner says why.** Step 7's `MODE` line names the mode AND its reason, one of: `default (no flag, nothing
+  installed to keep)`, `kept from the existing install (pass -Cloud to switch)`, `explicit flag`.
+- **Prerequisites follow the RESOLVED mode:** Ollama, a pulled model and the step-8 GPU tuning are required for
+  Local and Hybrid exactly as today; Cloud keeps Ollama optional, with the loud embed/vision verification (R34a).
+- **Worked examples** (every row's `settings.json` is the machine's state BEFORE the run):
+
+  | # | Machine state | Command | Result |
+  |---|---|---|---|
+  | 1 | no `settings.json` | `install.cmd` | **Cloud**, reason `default` |
+  | 2 | `ANTHROPIC_BASE_URL=http://localhost:11434` | `install.cmd` | **Local**, reason `kept` |
+  | 3 | no base-URL, `LOCALTOOLS_HYBRID=1` | `install.cmd` | **Hybrid**, reason `kept` |
+  | 4 | Local (as row 2) | `install.cmd -Cloud` | **Cloud**; base-URL dropped; old file saved as `.bak` |
+  | 5 | no `settings.json` | `install.cmd -Local` | **Local**, reason `explicit flag` |
+  | 6 | any | `install.cmd -Local -Hybrid` | exit non-zero, message names `-Local` and `-Hybrid`, NOTHING written |
+  | 7 | Cloud (no base-URL, no hybrid flag) | `install.cmd` | **Cloud**, reason `default` |
+
+  Counter-example that MUST NOT ship: row 1 installing Local (today's behavior), or row 2 silently becoming
+  Cloud because the user re-ran `install.cmd` without a flag.
+- **Invariant(s):** (i) an explicit flag always wins; (ii) a no-flag run never changes an installed Local or
+  Hybrid mode; (iii) the conflict check runs before any write; (iv) every reader of the mode uses R34's existing
+  tells; (v) tests exercise a SANDBOX profile and never the real `%USERPROFILE%\.claude` (R35b);
+  (vi) `dad-doctor` fix hints that say "re-run install.cmd (or install.cmd -Cloud)" name the intended switch
+  (`-Local`, `-Cloud` or `-Hybrid`) instead.
+- **Out of scope:** removing Local, renaming models or aliases, changing `-CopilotCli`, a separate `dad mode`
+  command, and any change to the gates.
+
 ## Components
 ### local-tools (C# MCP server)
 - Behavior: R2. `net8.0`, `RollForward=LatestMajor`. Config via env: `LOCALTOOLS_DOCS_DIR`, `OLLAMA_HOST`,
@@ -1591,8 +1650,9 @@ This design doc previously embedded the story backlog inline; it now lives in th
 
 ## Out of scope
 - WSL2 / Linux / macOS ports (Windows-native by design).
-- Cloud models as the DEFAULT. Offline-first is the default and the thesis; cloud and hybrid are opt-in
-  alternate backends (R34), used for delivery or to clear a local-model ceiling, never the out-of-the-box path.
+- Local-only as the goal. It was the naive starting point; Cloud is the default and Local is a resilience mode
+  for a disconnected afternoon (R34, C6). (This bullet used to say "Cloud models as the DEFAULT" was out of
+  scope - reversed 2026-10-06, Story S28.)
 - Additional Node/Python MCP servers (the single C# server is the design).
 - **Handling security - FOUNDATIONAL, permanently out of scope (confirmed by the human 2026-10-01).** The kit
   never authenticates, authorizes, stores, reads, brokers or rotates a credential or a user identity. Auth

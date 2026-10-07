@@ -1159,7 +1159,7 @@
   writes); follow-up cleanup tasks T27.4 (line-ending rule) and T27.5 (no glued append), both
   human-approved, added it on 2026-10-03 without reopening S27 (it stays DONE). Refs: DESIGN R15.
 
-### Story S28: DESIGN's Goal, R34, R37(b) and Out of scope are reconciled with the cloud-first mission   (Goal, R1, R34, R37)   <!-- Status: TODO -->
+### Story S28: DESIGN's Goal, R34, R37(b) and Out of scope are reconciled with the cloud-first mission   (Goal, R1, R34, R37)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `docs/DESIGN.md` no longer says offline-first is "the DEFAULT and the thesis". It states the
   restated mission: a working implementation of the loop-engineering shape (spec before code, a verifier that
   checks real correctness, persistent context across sessions) enforced by deterministic gates, with Cloud the default,
@@ -1191,13 +1191,13 @@
   Not changed: any code, `install.ps1`, `models.json`, tests, README.
 - **Dependencies:** none. Needs the human's `/design` unlock; DESIGN returns to LOCKED on their confirmation.
 - **Acceptance (testable):**
-  - [ ] AC1: `docs/DESIGN.md` `## Goal` states the restated mission and names Local as a resilience mode.
-  - [ ] AC2: grep for `Offline is the DEFAULT` and `Offline-first .* is the default and the thesis` over
+  - [x] AC1: `docs/DESIGN.md` `## Goal` states the restated mission and names Local as a resilience mode.
+  - [x] AC2: grep for `Offline is the DEFAULT` and `Offline-first .* is the default and the thesis` over
     `docs/DESIGN.md` finds no hit.
-  - [ ] AC3: R34 orders the modes Cloud (default), Local, Hybrid and describes Local as the resilience mode with its use case.
-  - [ ] AC4: R34 or its contract records the 2026-10-06 decision: Cloud is the default, the mode order is
+  - [x] AC3: R34 orders the modes Cloud (default), Local, Hybrid and describes Local as the resilience mode with its use case.
+  - [x] AC4: R34 or its contract records the 2026-10-06 decision: Cloud is the default, the mode order is
     Cloud, Local, Hybrid.
-  - [ ] AC5: `dad doc-stats -Findings` reports no new finding, and the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC5: `dad doc-stats -Findings` reports no new finding beyond the expected no-tasks entry for S29, and the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** DESIGN edits go through `/design` (architect-agent) with the unlock/relock flow; never hand-edit
   while LOCKED. R1 itself (the Local wiring) stays valid as the description of Local mode. Keep ASCII. If the
   default flips, that is a code change (`install.ps1`, `dad-doctor.ps1`, tests) and needs its own tasks.
@@ -1211,18 +1211,17 @@
   option of its own once the no-flag path is Cloud. It changes behavior, so it needs its design wording first
   (S28 / a `/design` pass on R34) and then tasks via `/taskmap`; it is not worked from this card alone.
 - **Behavior:**
-  - No flag -> Cloud (the ANTHROPIC_BASE_URL redirect dropped, aliases resolve to each model's `cloud` id).
-  - A new explicit switch (name to be fixed in `/design`; `-Local` is the obvious candidate) -> today's Local.
+  - No flag on a machine with nothing to keep -> Cloud (the ANTHROPIC_BASE_URL redirect dropped, aliases resolve to each model's `cloud` id).
+  - `-Local` (the switch name, decided in C6) -> today's Local; `-Local` with `-Cloud` or `-Hybrid` is a conflict that exits non-zero before writing anything.
   - `-Hybrid` is unchanged. `-CopilotCli` still combines with any of them.
   - The consent text, the end-of-install "MODE" banners, `dad doctor` and `use-model` read the mode back
     from the same single tell as today (the absence or presence of the base-URL), and still agree.
-  - A re-install over an existing machine must not silently flip its mode: decide in `/design` whether the
-    absence of a flag means "keep what is installed" or "Cloud".
+  - A no-flag re-run keeps an installed Local or Hybrid mode (C6): it never silently flips an existing setup.
   - Local-only prerequisites (Ollama, a pulled model) are required only when Local or Hybrid is asked for.
 - **Data / interfaces:** `install.ps1` (parameters, mode selection, banners), `dad-doctor.ps1`, `uninstall.ps1`
   if it names the modes, `README.md` and `overview/*.html` (remove the "no flag is still Local" notes), tests in
   `test-kit.ps1`. Not changed: `models.json` aliases, the gates.
-- **Dependencies:** S28 (the DESIGN wording for R34 and the decision on re-install semantics).
+- **Dependencies:** S28 (done: the DESIGN wording). The behavior is PINNED in DESIGN contract C6 (decided 2026-10-06): the switch is `-Local`, a no-flag re-run keeps an installed Local or Hybrid mode, and `-Local` with `-Cloud`/`-Hybrid` is a conflict that writes nothing. Write the tasks against C6's worked-example table.
 - **Acceptance (testable):**
   - [ ] AC1: a sandbox install with no flag produces Cloud settings (no `ANTHROPIC_BASE_URL`), and `dad doctor`
     reports Cloud.
@@ -1232,4 +1231,4 @@
   - [ ] AC5: README and `overview/` no longer say the no-flag install is Local; the full `test-kit.ps1` prints
     `0 failed`.
 - **Dev notes:** installs only into a sandbox profile in tests (R35b: never touch the real `%USERPROFILE%\.claude`).
-  Keep ASCII. Open question for `/design`: switch name, and re-install semantics.
+  Keep ASCII. No open design questions remain: switch name and re-install semantics are decided in C6.

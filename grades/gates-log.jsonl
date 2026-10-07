@@ -357,3 +357,8 @@
 {"v":1,"ts":"2026-10-06T18:30:37.799Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
 {"v":1,"ts":"2026-10-06T19:39:57.897Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
 {"v":1,"ts":"2026-10-06T19:53:17.740Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"83564d83-fb4a-4719-bcfb-d95f52308106"}
+{"v":1,"ts":"2026-10-07T02:08:31.364Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-07T02:18:17.342Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-07T02:19:16.287Z","gate":"dad-guard-stop","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-07T03:08:25.060Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 82)","session":""}
+{"v":1,"ts":"2026-10-07T03:08:32.364Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S28","session":""}
