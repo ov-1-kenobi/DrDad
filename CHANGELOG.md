@@ -2,6 +2,20 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.58.1 - 2026-10-06
+
+### Changed - Goal, R1, R34, R37b/e, R40, C2e, Out of scope: DESIGN reconciled with the mission (Story S28)
+`docs/DESIGN.md` no longer says offline is "the DEFAULT and the thesis". The Goal states the loop-engineering
+mission; R34 orders the modes Cloud (default), Local (resilience), Hybrid; the old offline thesis behind R37b
+is retired and Copilot CLI is a pilot; Out of scope now rules out Local-only as the goal. DESIGN was unlocked
+for the edit and relocked.
+
+### Added - C6: the installer mode contract (decided 2026-10-06, built by Story S29)
+New contract C6 pins how `install.ps1` will pick a mode: `-Local` is a new explicit switch, `-Local` with
+`-Cloud` or `-Hybrid` is a conflict that writes nothing, a no-flag run keeps an installed Local or Hybrid mode
+and gives Cloud everywhere else, and the banner says which rule applied. No code changed: until S29 is built a
+no-flag install still gives Local, and the README says so.
+
 ## 0.58.0 - 2026-10-06
 
 ### Changed - Goal, R34: the mission is restated; Local is a resilience mode, not the headline
