@@ -200,7 +200,7 @@ Test-Case "a MISTYPED parameter is an error, not a silent default" {
   $missing = @()
   foreach ($f in (Get-KitFiles @("*.ps1"))) {
     $t = Get-Content $f.FullName -Raw
-    if ($f.Name -eq "harness-versions.ps1") { continue }   # dot-sourced library: only FUNCTION param blocks, no script params
+    if ($f.Name -in @("harness-versions.ps1","install-mode.ps1")) { continue }   # dot-sourced libraries: only FUNCTION param blocks, no script params
     if ($t -notmatch '(?m)^\s*param\s*\(') { continue }
     # [Parameter(...)] on any parameter also makes a script advanced, which is equally sufficient
     if ($t -match '(?m)^\s*\[CmdletBinding' -or $t -match '\[Parameter\(') { continue }
@@ -1122,6 +1122,7 @@ Test-Case "every .ps1 has a .cmd wrapper" {
   foreach ($f in Get-ChildItem $kit -Filter *.ps1 -File) {
     if ($f.Name -eq "docs-dir.ps1") { continue }   # dot-sourced library (S19), not a runnable command
     if ($f.Name -eq "harness-versions.ps1") { continue }   # dot-sourced library (S17), not a runnable command
+    if ($f.Name -eq "install-mode.ps1") { continue }   # dot-sourced library (S29), not a runnable command
     Assert (Test-Path (Join-Path $kit "$($f.BaseName).cmd")) "$($f.Name) has no .cmd wrapper"
   }
 }

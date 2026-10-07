@@ -2682,7 +2682,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
   - This task does NOT reopen Story S27 (see the Build order note): S27 stays `DONE`, and when T27.6 is ticked close-unit finds S27 already DONE and changes nothing in STORIES.md. QA runs upgrade-project ONLY on sandboxes under %TEMP% - never against the kit repo (D:\projects\DrDad) or D:\Tools.
   - Test pattern: `Test-Case "name" { ... Assert <bool> "message" }`. `Test-Case` itself sets `$ErrorActionPreference = "Continue"`; `Assert` throws at the first failure. ASCII only, PowerShell 5.1, no network.
 
-### [ ] T29.1 - install-mode.ps1: Resolve-InstallMode, the pure C6 mode resolver   (Story S29)
+### [x] T29.1 - install-mode.ps1: Resolve-InstallMode, the pure C6 mode resolver   (Story S29)
 - **Goal:** a new dot-sourceable `install-mode.ps1` holds `Resolve-InstallMode`, which turns the three flags plus the existing `settings.json` into one mode, one reason and an optional conflict or warning. It writes nothing and prints nothing.
 - **Touches:** `install-mode.ps1` (new, repo root). Nothing else.
 - **Do:**
@@ -2760,7 +2760,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Touches:** `test-kit.ps1` only - one new `Test-Case` directly after T29.5's case (anchor by name).
 - **Do:**
   1. Case `"S29 AC1/AC2: dad-doctor reads Cloud and Local back from settings.json, and its hints name the switch"`.
-  2. `$sb = New-Sandbox`; `$h = Join-Path $sb "home"`; `New-Item -ItemType Directory -Force "$h\.claude" | Out-Null`; save/restore `$env:USERPROFILE` in `try/finally` like the existing use-model case.
+  2. `$sb = New-Sandbox`; `$h = Join-Path $sb "home"`; `New-Item -ItemType Directory -Force "$h\.claude" | Out-Null`; save/restore `$env:USERPROFILE` in `try/finally` like the existing cloud-mode test that exercises use-model.
   3. For each of two settings.json fixtures (Cloud `{ "env": { "ANTHROPIC_MODEL": "claude-sonnet-5" } }`, Local `{ "env": { "ANTHROPIC_BASE_URL": "http://localhost:11434", "ANTHROPIC_MODEL": "devstral-cc" } }`) write it to `$h\.claude\settings.json` (UTF-8 no BOM), run `& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") 2>&1 | Out-String` from `$sb` (so no project is auto-detected), and assert the output matches `mode: CLOUD` for the first and does NOT match `mode: CLOUD|mode: HYBRID` for the second. Do not assert the doctor's overall exit code or other lines (the sandbox has no hooks/commands and will FAIL/WARN elsewhere).
   4. Source checks on `dad-doctor.ps1`: no `(or install.cmd -Cloud)` string; contains `install.cmd -Local`.
   5. Mutation checks (temporary, restore with `git checkout -- <file>`): (i) make `dad-doctor.ps1` compute `$cloudMode = $true` regardless: the Local half must FAIL; (ii) reinstate `(or install.cmd -Cloud)` in the ~234 hint: the source check must FAIL.
