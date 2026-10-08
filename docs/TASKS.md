@@ -2711,7 +2711,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Refs:** Story S29 Behavior bullets 1-2 and 5-6, AC1/AC2/AC3; `docs/DESIGN.md` C6 "Switches", "Resolution", invariants (i)-(iii); R34. Code: install.ps1 lines `param`, `$cloudLoop`, `$claude`, the `== Prerequisites ==` block; test-kit.ps1 cases `"cloud mode: -Cloud drops the Ollama redirect, ..."` and the hybrid case asserting `\$cloudLoop\s*=\s*\$Cloud\s*-or\s*\$Hybrid`.
 - **Context:** the conflict check must run before ANY write; today's first writes start at step 4/5/6, but keep the check above even the Prerequisites output so nothing is half-done. `-CopilotCli` is untouched and combines with any mode. `$cloudLoop` drives step 1 (models), step 7 env edit; `$Hybrid` drives `LOCALTOOLS_HYBRID`; after the rebind a no-flag run on a machine with an Ollama base-URL stays Local (row 2) and a no-flag run on a clean machine is Cloud (rows 1, 7). The settings.json is read here, before step 7 backs it up or rewrites it (C6 "BEFORE step 1 changes anything"). ASCII only, PowerShell 5.1.
 
-### [ ] T29.3 - install.ps1: banners with the reason, step-8 tuning and prerequisite hints follow the resolved mode   (Story S29)
+### [x] T29.3 - install.ps1: banners with the reason, step-8 tuning and prerequisite hints follow the resolved mode   (Story S29)
 - **Goal:** step 7's `MODE` line and the end-of-install banner say the resolved mode AND why; Ollama tuning (step 8) runs for Local and Hybrid only; the header comment and hints name `-Local`/`-Cloud`/`-Hybrid` correctly (Cloud, Local, Hybrid order).
 - **Touches:** `install.ps1` only.
 - **Do:**

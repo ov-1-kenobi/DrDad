@@ -2,9 +2,12 @@
 # Copy this whole folder anywhere on a Windows machine, then run from inside it:
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1
 # Safe to re-run. It detects its own location, so the folder can live anywhere.
-#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud    CLOUD mode (Anthropic API), not Ollama.
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1           CLOUD mode (Anthropic API), the default (no flag).
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Local    LOCAL mode: Ollama redirect + offline flags.
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Hybrid   HYBRID: cloud agent + local 5080 tools.
-# -Cloud: same commands, agents, and gates, on Anthropic's frontier models. Each alias resolves to its
+# A no-flag re-run KEEPS an already-installed Local or Hybrid mode (contract C6); -Cloud forces Cloud explicitly.
+# -Local combined with -Cloud or -Hybrid exits non-zero before anything is written.
+# Cloud (default; -Cloud forces it): same commands, agents, and gates, on Anthropic's frontier models. Each alias resolves to its
 # models.json 'cloud' id (dev/coder/oss/gemma -> Sonnet 5, fast -> Haiku 4.5, quality -> Opus 5). The Ollama
 # base-URL redirect is dropped - and its ABSENCE is what use-model and dad-doctor read back as "cloud" mode
 # (no separate marker file). The local-tools RAG still uses Ollama on the GPU if present, so cloud mode
@@ -102,7 +105,10 @@ if ($cloudLoop) {
 } elseif ($haveOllama) {
   try { & (Join-Path $root "sync-models.ps1") }
   catch { Write-Host "  (sync-models failed: $($_.Exception.Message) - run sync-models.cmd manually)" -ForegroundColor Yellow }
-} else { Write-Host "  skipped (need ollama)" -ForegroundColor Yellow }
+} else {
+  Write-Host "  [warn] -Local needs Ollama, which was not found: install it (winget install Ollama.Ollama), then re-run install.cmd -Local." -ForegroundColor Yellow
+  Write-Host "  skipped (need ollama)" -ForegroundColor Yellow
+}
 
 Write-Host "`n== 3) Claude Code engine + VS Code extension ==" -ForegroundColor Cyan
 if (-not $haveNode) { Write-Host "  [warn] node missing - install Claude Code manually" -ForegroundColor Yellow }
@@ -175,8 +181,9 @@ Get-ChildItem (Join-Path $root "global\agents") -File | ForEach-Object {
 }
 Write-Host "  commands: /scaffold /research /document /design /taskmap /proto /spec /build /assets /tidy /stories /diagram /audit /grade /retro /corpus /assess   agents: requirements/architect/taskmap/dev/ui/ux/playtest/grade/scribe/hygiene/qa/doc-researcher/research/survey/security/librarian/corpus/codebase-analyst"
 
-$mode7 = if ($Hybrid) { "HYBRID: Anthropic API + local 5080 tools" } elseif ($Cloud) { "CLOUD: Anthropic API" } else { "Ollama redirect + offline flags" }
+$mode7 = switch ($mode) { 'Hybrid' { "HYBRID: Anthropic API + local 5080 tools" } 'Cloud' { "CLOUD: Anthropic API" } default { "LOCAL: Ollama redirect + offline flags" } }
 Write-Host "`n== 7) Install settings.json ($mode7) ==" -ForegroundColor Cyan
+Write-Host "  MODE: $mode - $modeReason" -ForegroundColor Cyan
 $dst = Join-Path $claude "settings.json"
 if (Test-Path $dst) { Copy-Item $dst "$dst.bak" -Force; Write-Host "  existing settings.json -> settings.json.bak (MERGE if you had custom settings)" -ForegroundColor Yellow }
 $s = Get-Content (Join-Path $root "settings.json") -Raw | ConvertFrom-Json
@@ -288,8 +295,9 @@ try {
   Write-Host "  updated $bashrc (DAD-kit block: exports DAD_HOME + adds it to PATH for interactive Git Bash)" -ForegroundColor Green
 } catch { Write-Host "  could not update ~/.bashrc (Git Bash): $($_.Exception.Message) - not fatal; the Windows PATH already covers the Bash tool" -ForegroundColor Yellow }
 
-if (-not $Cloud) {
+if ($mode -ne 'Cloud') {
   Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
+  Write-Host "  This step sets user-scope OLLAMA_FLASH_ATTENTION, OLLAMA_KV_CACHE_TYPE and OLLAMA_KEEP_ALIVE and restarts Ollama." -ForegroundColor Yellow
   & (Join-Path $root "ollama-tuning.ps1")
 }
 
@@ -373,7 +381,7 @@ if ($CopilotCli) {
 
 Write-Host "`n== DONE ==" -ForegroundColor Green
 if ($Hybrid) {
-  Write-Host "MODE = HYBRID (Anthropic API agent loop + local 5080 tools). DEFAULT = claude-sonnet-5 (alias 'dev')." -ForegroundColor Green
+  Write-Host "MODE = HYBRID (Anthropic API agent loop + local 5080 tools) [$modeReason]. DEFAULT = claude-sonnet-5 (alias 'dev')." -ForegroundColor Green
   Write-Host "The 5080 runs: semantic RAG (search/corpus), describe_image (UI review), AND local_generate - the" -ForegroundColor Green
   Write-Host "cloud model's drudge co-processor for implementation guesses + test data (LOCALTOOLS_HYBRID=1)." -ForegroundColor Green
   Write-Host "Switch cloud tiers with use-model: fast -> Haiku 4.5 | dev|coder|oss|gemma -> Sonnet 5 | quality -> Opus 5." -ForegroundColor Green
@@ -381,18 +389,21 @@ if ($Hybrid) {
   Write-Host "      2) RESTART Claude Code - hooks load at startup, and the MCP server picks up LOCALTOOLS_HYBRID." -ForegroundColor Green
   Write-Host "      3) Open a project in VS Code; the cloud model can now call local_generate for drafts + test data." -ForegroundColor Green
   Write-Host "      Verify with 'dad doctor' - it reports the local co-processor and lists local_generate." -ForegroundColor Cyan
-} elseif ($Cloud) {
-  Write-Host "MODE = CLOUD (Anthropic API). DEFAULT = claude-sonnet-5 (alias 'dev')." -ForegroundColor Green
+} elseif ($mode -eq 'Cloud') {
+  Write-Host "MODE = CLOUD (Anthropic API) [$modeReason]. DEFAULT = claude-sonnet-5 (alias 'dev')." -ForegroundColor Green
   Write-Host "Switch tiers with use-model:  fast -> Haiku 4.5 (cheap/bulk) | dev|coder|oss|gemma -> Sonnet 5 | quality -> Opus 5 (hard)." -ForegroundColor Green
   Write-Host "Cost: run bulk on a cheaper alias, 'use-model quality' for the hard parts; prompt caching is automatic." -ForegroundColor Cyan
   Write-Host "Your GPU is still used: local-tools RAG (search/corpus/describe_image) runs on Ollama if present." -ForegroundColor Cyan
   Write-Host "Next: 1) make sure Claude Code is logged in - it uses your normal Anthropic auth (run 'claude' once if unsure)." -ForegroundColor Green
   Write-Host "      2) RESTART Claude Code - hooks (the dad-guard stop guard) load at startup." -ForegroundColor Green
   Write-Host "      3) Open a project in VS Code, run /scaffold then index_datasheets (RAG uses Ollama if present, else a literal scan)." -ForegroundColor Green
+  Write-Host "Local resilience mode: install.cmd -Local" -ForegroundColor Cyan
 } else {
+  Write-Host "MODE = LOCAL (Ollama redirect + offline flags) [$modeReason]" -ForegroundColor Green
   Write-Host "DEFAULT model = devstral-cc (Devstral). Switch with use-model.cmd: dev / coder / oss / fast / quality." -ForegroundColor Green
   Write-Host "Next: 1) RESTART Ollama (quit from tray, reopen) so tuning + the new models are live." -ForegroundColor Green
   Write-Host "      2) RESTART Claude Code - hooks (the dad-guard stop guard) load at startup." -ForegroundColor Green
   Write-Host "      3) Open a project folder in VS Code, run /scaffold then index_datasheets." -ForegroundColor Green
   Write-Host "      Optional pulls, then re-run: 'ollama pull gemma4' (optional dense generalist), 'ollama pull qwen3-coder-next:q4_K_M' (escalation)." -ForegroundColor Cyan
+  Write-Host "Switch to the cloud with: install.cmd -Cloud" -ForegroundColor Cyan
 }
