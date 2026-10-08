@@ -370,3 +370,7 @@
 {"v":1,"ts":"2026-10-07T13:22:36.392Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
 {"v":1,"ts":"2026-10-07T13:23:11.158Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 91)","session":""}
 {"v":1,"ts":"2026-10-07T13:23:18.666Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T29.1","session":""}
+{"v":1,"ts":"2026-10-08T18:50:59.669Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-08T18:59:09.233Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-08T18:59:26.712Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 91)","session":""}
+{"v":1,"ts":"2026-10-08T18:59:34.160Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T29.2","session":""}

@@ -2697,7 +2697,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Refs:** Story S29 Behavior + AC1/AC2; `docs/DESIGN.md` C6 "Switches", "Resolution, in this order" (steps 1-3), "The banner says why", worked examples rows 1-7, invariants (i)-(iv); R34. Style to copy: `harness-versions.ps1` (a dot-sourced functions-only file).
 - **Context:** C6 pins this (rows: 1 no file -> Cloud/default; 2 base-URL -> Local/kept; 3 no base-URL + `LOCALTOOLS_HYBRID=1` -> Hybrid/kept; 4 Local state + `-Cloud` -> Cloud (explicit); 5 no file + `-Local` -> Local/explicit; 6 `-Local -Hybrid` -> conflict; 7 Cloud state (no base-URL, no hybrid flag) -> Cloud/default). The tells are the SAME ones R34 already uses (base-URL presence, `LOCALTOOLS_HYBRID`); no marker file. `-Cloud` with `-Hybrid` behaves as today (Hybrid wins the label). Counter-example that must not ship: row 1 giving Local, or row 2 giving Cloud. Pure function so tests can call it with a sandbox `$SettingsPath` and never touch the real `%USERPROFILE%\.claude` (R35b). No edit to `install.ps1` here (T29.2).
 
-### [ ] T29.2 - install.ps1: -Local switch, conflict exit before any write, resolved mode drives the install   (Story S29)
+### [x] T29.2 - install.ps1: -Local switch, conflict exit before any write, resolved mode drives the install   (Story S29)
 - **Goal:** `install.ps1` accepts `-Local`, exits non-zero on a conflict before writing anything, and runs the rest of the install in the RESOLVED mode (no flag -> Cloud; an installed Local/Hybrid is kept).
 - **Touches:** `install.ps1` only: the `param(...)` line, the `$cloudLoop` line and the lines right after `$claude = ...`.
 - **Do:**

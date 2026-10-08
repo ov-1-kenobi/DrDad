@@ -17,14 +17,24 @@
 # writes %USERPROFILE%\.copilot\hooks\dad.json so the SAME two guard scripts run under GitHub Copilot CLI.
 # Combine it with -Cloud/-Hybrid or use it on its own.
 [CmdletBinding()]
-param([switch]$Cloud, [switch]$Hybrid, [switch]$CopilotCli, [switch]$Yes)
+param([switch]$Cloud, [switch]$Hybrid, [switch]$Local, [switch]$CopilotCli, [switch]$Yes)
 $ErrorActionPreference = "Stop"
+$root  = $PSScriptRoot
+$old    = 'C:\Projects\Claude\MCP\DAD-kit'            # dev-path placeholder baked into the markdown command files
+$claude = Join-Path $env:USERPROFILE ".claude"
+# S29/C6: resolve the install mode BEFORE anything is written. A flag conflict exits here, with nothing touched.
+. (Join-Path $root "install-mode.ps1")
+$resolved = Resolve-InstallMode ([bool]$Local) ([bool]$Cloud) ([bool]$Hybrid) (Join-Path $claude "settings.json")
+if ($resolved.Conflict) { Write-Host "ERROR: $($resolved.Conflict)" -ForegroundColor Red; exit 1 }
+if ($resolved.Warn) { Write-Host "  [warn] $($resolved.Warn)" -ForegroundColor Yellow }
+$mode = $resolved.Mode
+$modeReason = $resolved.ReasonText
+# Rebind so every downstream test of $Cloud/$Hybrid follows the RESOLVED mode.
+$Hybrid = [switch]($mode -eq 'Hybrid')
+$Cloud  = [switch]($mode -ne 'Local')
 # -Hybrid runs the cloud AGENT LOOP (base-URL dropped) like -Cloud, and additionally lights up the local GPU
 # tools. $cloudLoop = "the agent talks to Anthropic, not Ollama" and drives the settings.json edit + labels.
 $cloudLoop = $Cloud -or $Hybrid
-$root   = $PSScriptRoot
-$old    = 'C:\Projects\Claude\MCP\DAD-kit'            # dev-path placeholder baked into the markdown command files
-$claude = Join-Path $env:USERPROFILE ".claude"
 # The Copilot CLI version DESIGN.md's C2 contract was MEASURED against. Contract C2f makes this the ONE
 # source of truth for that number, and test-kit.ps1 asserts it equals the version stamped in C2 - so the doc
 # and the code cannot drift apart silently, which is the precise failure the contract exists to prevent.
