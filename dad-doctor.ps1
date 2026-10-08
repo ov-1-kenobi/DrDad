@@ -41,7 +41,7 @@ Write-Host ""
 Write-Host "== DrDad doctor ==" -ForegroundColor Cyan
 Write-Host "kit: $kit  (version $kitVersion)"
 
-# Mode: a cloud install (install.ps1 -Cloud) drops the Ollama base-URL. Read it back from the installed
+# Mode: a cloud install (the no-flag default of install.ps1; Local is -Local) drops the Ollama base-URL. Read it back from the installed
 # settings so a cloud user is not told their (correctly) missing Ollama + local models are failures.
 $cloudMode = $false
 $hybridMode = $false
@@ -208,7 +208,7 @@ if (Test-Path $exe) {
     if ($tools -contains 'local_generate') { Say "OK" "local co-processor" "local_generate exposed - the 5080 is a drudge tool for the cloud model" }
     else { Say "FAIL" "local co-processor" "hybrid is set but local_generate is not exposed" "rebuild local-tools, then RESTART Claude Code" }
   } elseif ($tools -contains 'local_generate') {
-    Say "WARN" "local co-processor" "local_generate is exposed but mode is not hybrid" "re-run install.cmd (or install.cmd -Cloud) to clear LOCALTOOLS_HYBRID"
+    Say "WARN" "local co-processor" "local_generate is exposed but mode is not hybrid" "re-run install.cmd -Cloud (or -Local) to clear LOCALTOOLS_HYBRID"
   }
 } else {
   Say "FAIL" "local-tools.exe" "not built" "run install.cmd (or: dotnet build local-tools\local-tools.csproj -c Release)"
@@ -231,7 +231,7 @@ if (-not (Test-Path $settings)) {
     if ($hybridMode) { Say "OK" "backend" "HYBRID - Anthropic agent loop (LOCALTOOLS_HYBRID=1 lights up local_generate on the 5080)" }
     elseif ($cloudMode) { Say "OK" "backend" "CLOUD - no base-URL redirect (Claude Code uses your Anthropic login)" }
     elseif ($s.env.ANTHROPIC_BASE_URL -match '11434') { Say "OK" "ANTHROPIC_BASE_URL" $s.env.ANTHROPIC_BASE_URL }
-    else { Say "FAIL" "ANTHROPIC_BASE_URL" "not pointing at Ollama ('$($s.env.ANTHROPIC_BASE_URL)')" "re-run install.cmd (or install.cmd -Cloud)" }
+    else { Say "FAIL" "ANTHROPIC_BASE_URL" "not pointing at Ollama ('$($s.env.ANTHROPIC_BASE_URL)')" "re-run install.cmd -Local (to switch to the Local mode) or install.cmd (Cloud) if Cloud is what you want" }
 
     $model = $s.env.ANTHROPIC_MODEL
     if ($cloudMode) {

@@ -7,7 +7,7 @@
 #   .\use-model.ps1 <name|id>   -> any Ollama tag, or any Anthropic model id, passes through
 #
 # LOCAL vs CLOUD is DERIVED from settings.json (an Ollama base-URL = local, its absence = cloud - exactly
-# how install.ps1 vs install.ps1 -Cloud leave it). An alias then resolves to its Ollama tag OR its Anthropic
+# how install.ps1 (Cloud, the default) vs install.ps1 -Local leave it). An alias then resolves to its Ollama tag OR its Anthropic
 # 'cloud' id to match how the kit was installed. See what exists (local): sync-models.cmd -Report
 
 param([Parameter(Mandatory)][string]$which)

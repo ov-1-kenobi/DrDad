@@ -2726,7 +2726,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Refs:** Story S29 Behavior bullets 3, 5, 6 (banners, no-flag re-run, Local-only prerequisites); `docs/DESIGN.md` C6 "The banner says why", "Prerequisites follow the RESOLVED mode", worked examples rows 1-5; R34. Code: install.ps1 `$mode7`, step 1 branches, step 8 `if (-not $Cloud)`, the `== DONE ==` banners.
 - **Context:** C6 banner reasons are exactly `default (no flag, nothing installed to keep)`, `kept from the existing install (pass -Cloud to switch)`, `explicit flag` (they come from `$resolved.ReasonText`); exact banner wording beyond that is free. Behavior note (human decision 2026-10-07, KEEP): today `-Cloud -Hybrid` skipped step 8 because `$Cloud` was set; under C6 Hybrid wins and always tunes Ollama, so the banner line in step 6 tells the user what the step changes. The `-CopilotCli` section is unchanged. QA parses and runs the sandboxed suite only - never a real install (writes the real USER PATH/`DAD_HOME`). ASCII only.
 
-### [ ] T29.4 - dad-doctor and use-model name the right install switch   (Story S29)
+### [x] T29.4 - dad-doctor and use-model name the right install switch   (Story S29)
 - **Goal:** every `dad-doctor` fix hint that says "re-run install.cmd (or install.cmd -Cloud)" names the intended switch, and the `use-model.ps1` comment describes the new default. The mode read-back stays on the base-URL / `LOCALTOOLS_HYBRID` tells.
 - **Touches:** `dad-doctor.ps1`, `use-model.ps1` (comment only).
 - **Do:**
