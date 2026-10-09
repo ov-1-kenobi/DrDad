@@ -311,9 +311,9 @@ T30.5 is the only task that touches `D:\projects\GalacticDataNetwork\gdn1`, and 
 T30.5 -> T31.1 -> T31.2 (needs T31.1) -> T31.3 (needs T31.1, T31.2) -> T31.4 (needs T31.1, T31.3) -> T31.5 (needs T31.1, T31.4) -> T31.6 (needs T31.1, T31.5) -> T31.7 (needs T31.1, T31.6) -> T31.8 (needs T31.1, T31.7) -> T31.9 (needs T31.1, T31.2, T31.3, T31.4, T31.5, T31.6, T31.7, T31.8; final checks + CHANGELOG)
 
 (added 2026-10-09; Story S31, DESIGN R28/R29/R37. Queued after the last T30 entry. EVERY S31 task edits `test-kit.ps1`
-(T31.2 also `recover-lost.ps1`; T31.3..T31.8 may also edit one product script where triage proves a defect), so they run
+(T31.2 also `recover-lost.ps1`; T31.3 to T31.8 may also edit one product script where triage proves a defect), so they run
 STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Case "S31 triage pending: <id>"` on each of the
-7 failing cases; each of T31.2..T31.8 removes exactly its own.)
+7 failing cases; each of T31.2 to T31.8 removes exactly its own.)
 
 ## Tasks
 
