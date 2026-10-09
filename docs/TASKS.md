@@ -2959,7 +2959,7 @@ STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Ca
 - **Refs:** Story S31 AC3, AC4; S30 AC6 (same fixture family); DESIGN R28.
 - **Context:** the exact first message was "Could not find any evidence tests ran ... No test count in the output". Neighbouring S30 cases show how a passing count is produced. Assertions are never deleted or weakened without a recorded human decision. ASCII only, PowerShell 5.1.
 
-### [ ] T31.5 - triage case (4): "a visible surface passes through ux-agent -> ui-agent, and close-unit records it (-UxReviewed)"   (Story S31)
+### [x] T31.5 - triage case (4): "a visible surface passes through ux-agent -> ui-agent, and close-unit records it (-UxReviewed)"   (Story S31)
 - **Goal:** the case runs for real and passes; verdict decided and reported.
 - **Touches:** `test-kit.ps1` (the case at ~3619; remove its temporary skip), and ONLY for a PRODUCT verdict `close-unit.ps1`.
 - **Do:**

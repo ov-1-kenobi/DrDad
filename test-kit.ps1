@@ -3713,7 +3713,6 @@ Test-Case "publish-run secret-scans, records provenance, commits locally, never 
 }
 
 Test-Case "a visible surface passes through ux-agent -> ui-agent, and close-unit records it (-UxReviewed)" {
-  Skip-Case "S31 triage pending: T31.5"   # S31 TEMPORARY - remove with T31.5
   # cms3: ui-agent was routed 0 times in 39 dev spawns, so no design pass ever happened - the routing is
   # prose, and prose routing is what this kit stops trusting. ux-agent is the build-time reviewer (it
   # suggests; ui-agent applies), and the backstop is a commit trailer: close-unit stamps "UX-reviewed:" only
@@ -3746,6 +3745,8 @@ Test-Case "a visible surface passes through ux-agent -> ui-agent, and close-unit
      "### [ ] T1.2 - about  (Story S1)`n- **Goal:** about`n`n" +
      "### [ ] T1.3 - contact (Story S1)`n- **Goal:** contact") | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
     "<h1>Home</h1>" | Set-Content "$p\src\Pages\Home.cshtml" -Encoding UTF8
+    # close-unit refuses a close with no Build command in CLAUDE.md (it never reaches the UX check)
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
     Push-Location $p
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     git init -q; git config core.autocrlf false
