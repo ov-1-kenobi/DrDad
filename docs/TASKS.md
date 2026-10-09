@@ -2933,7 +2933,7 @@ STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Ca
 - **Refs:** Story S31 Context ("CONFIRMED PRODUCT DEFECT"), Behavior bullet 3, AC4; DESIGN R29.
 - **Context:** `Get-Units` in `recover-lost.ps1` applies every `$unitPatterns` regex with `[regex]::Matches` over the whole file text and records group 1 (the name); a name present in the base file and absent everywhere now is reported GONE. Keyword names (`if|for|foreach|while|switch|catch|using|lock|return|new|get|set|do|else|try`) are filtered. The clean message is `nothing named has vanished`. The S30 AC7 fixture uses bodies containing `;` on purpose (it passes under the bug); this task's fixture must not. ASCII only, PowerShell 5.1.
 
-### [ ] T31.3 - triage case (1): "dad-guard BLOCKS unverified code and clears after close-unit"   (Story S31)
+### [x] T31.3 - triage case (1): "dad-guard BLOCKS unverified code and clears after close-unit"   (Story S31)
 - **Goal:** the case runs for real and passes; a verdict (FIXTURE or PRODUCT) is decided and reported.
 - **Touches:** `test-kit.ps1` (the case at ~2194; remove its temporary skip), and ONLY if the verdict is PRODUCT the one script proven wrong (`close-unit.ps1` or `dad-guard.ps1`).
 - **Do:**

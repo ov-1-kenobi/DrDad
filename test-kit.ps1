@@ -2259,7 +2259,6 @@ Test-Case "the guard counts WEB source as code (.cshtml, appsettings.json)" {
 }
 
 Test-Case "dad-guard BLOCKS unverified code and clears after close-unit" {
-  Skip-Case "S31 triage pending: T31.3"   # S31 TEMPORARY - remove with T31.3
   # The run002 failure: 7,115 lines, 106 edits, zero shell calls, 47 dirty files at exit, and nobody
   # knew until the transcript was read. This is the one gate the model does not get to skip.
   if (-not $haveGit) { Skip-Case "git is not installed" }
@@ -2271,7 +2270,7 @@ Test-Case "dad-guard BLOCKS unverified code and clears after close-unit" {
     "# Task map`n`n## Tasks`n`n### [ ] T1.1 - thing   (Story S1)`n- **Goal:** x" |
       Set-Content "$p\docs\TASKS.md" -Encoding UTF8
     "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
-    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``exit 0``" |
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" |
       Set-Content "$p\CLAUDE.md" -Encoding UTF8
     Push-Location $p
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
