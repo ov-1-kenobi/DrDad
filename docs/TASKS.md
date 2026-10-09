@@ -2755,7 +2755,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Refs:** Story S29 AC1, AC2, AC3, AC4 and Dev notes (sandbox profile, R35b); `docs/DESIGN.md` C6 worked-example table rows 1-7 and invariants (i)-(iii), (v); R34. Test style: `Test-Case "name" { ... Assert <bool> "message" }`, `New-Sandbox`/`Remove-Sandbox`, and the USERPROFILE-override pattern of the case `"cloud mode: -Cloud drops the Ollama redirect, ..."`.
 - **Context:** `Test-Case` sets `$ErrorActionPreference = "Continue"`; `Assert` throws at the first failure. Never run `install.ps1` in a path that gets past the conflict check: a full install writes the real USER PATH, `DAD_HOME` and `~/.bashrc` (`$env:HOME`). That is why, in this task, rows 1-5 and 7 test the pure resolver and only row 6 runs the script; the end-to-end install run for those rows comes later through the `DAD_INSTALL_SANDBOX` seam (T29.8, T29.9). Row 4's "base-URL dropped; old file saved as .bak" is unchanged existing step-7 behavior, not re-tested here. ASCII only, PowerShell 5.1, no network.
 
-### [ ] T29.6 - test-kit: dad-doctor reads Cloud/Local back in a sandbox profile and its hints name the switch (AC1, AC2)   (Story S29)
+### [x] T29.6 - test-kit: dad-doctor reads Cloud/Local back in a sandbox profile and its hints name the switch (AC1, AC2)   (Story S29)
 - **Goal:** `test-kit.ps1` proves `dad doctor` reports Cloud for a no-base-URL settings.json and Local for the Ollama one (the read-back for AC1/AC2), and that its fix hints name the intended switch.
 - **Touches:** `test-kit.ps1` only - one new `Test-Case` directly after T29.5's case (anchor by name).
 - **Do:**

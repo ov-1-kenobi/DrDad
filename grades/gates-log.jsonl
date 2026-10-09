@@ -392,3 +392,12 @@
 {"v":1,"ts":"2026-10-09T01:56:05.920Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
 {"v":1,"ts":"2026-10-09T01:56:21.584Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 91)","session":""}
 {"v":1,"ts":"2026-10-09T01:56:29.009Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T29.5","session":""}
+{"v":1,"ts":"2026-10-09T03:12:01.398Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T03:17:47.382Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T03:19:20.537Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T03:27:18.258Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T03:39:14.318Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T03:47:28.701Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T03:55:10.932Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T03:55:26.785Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 91)","session":""}
+{"v":1,"ts":"2026-10-09T03:55:34.251Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T29.6","session":""}

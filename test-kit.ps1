@@ -1289,6 +1289,36 @@ Test-Case "S29 AC1-AC4: install mode resolution follows C6 (Cloud default, -Loca
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S29 AC1/AC2: dad-doctor reads Cloud and Local back from settings.json, and its hints name the switch" {
+  # dad-doctor.ps1 is read-only (it diagnoses, never writes). It reads settings.json through $env:USERPROFILE, so a
+  # sandbox profile isolates it. PATH is narrowed for the child so no real claude/copilot/npm/ollama is reached (no network).
+  $sb = New-Sandbox
+  $doctor = Join-Path $kit "dad-doctor.ps1"
+  try {
+    $h = Join-Path $sb "home"; New-Item -ItemType Directory -Force "$h\.claude" | Out-Null
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    $cloudJson = '{ "env": { "ANTHROPIC_MODEL": "claude-sonnet-5" } }'
+    $localJson = '{ "env": { "ANTHROPIC_BASE_URL": "http://localhost:11434", "ANTHROPIC_MODEL": "devstral-cc" } }'
+    $outs = @{}
+    $origU = $env:USERPROFILE; $origH = $env:HOME; $origP = $env:PATH
+    Push-Location $sb
+    try {
+      $env:USERPROFILE = $h; $env:HOME = $h; $env:PATH = "$env:SystemRoot\System32;$PSHOME"
+      foreach ($c in @(@{ n = "cloud"; j = $cloudJson }, @{ n = "local"; j = $localJson })) {
+        [System.IO.File]::WriteAllText("$h\.claude\settings.json", $c.j, $enc)
+        $outs[$c.n] = (& (Join-Path $PSHOME "powershell.exe") -NoProfile -ExecutionPolicy Bypass -File $doctor 2>&1 | Out-String)
+      }
+    } finally { Pop-Location; $env:USERPROFILE = $origU; $env:HOME = $origH; $env:PATH = $origP }
+    Assert ($outs["cloud"] -match 'mode: CLOUD') "Cloud fixture (no base-URL): dad-doctor did not print 'mode: CLOUD'"
+    Assert ($outs["local"] -notmatch 'mode: CLOUD|mode: HYBRID') "Local fixture (Ollama base-URL): dad-doctor printed a CLOUD/HYBRID mode line"
+    Assert ($outs["local"] -match '== DrDad doctor ==') "Local fixture: dad-doctor printed no banner (crashed or empty output): $($outs['local'])"
+    Assert ($outs["local"] -match 'ANTHROPIC_BASE_URL\s+http://localhost:11434') "Local fixture: dad-doctor did not read the Ollama base-URL back from settings.json"
+    $src = Get-Content $doctor -Raw
+    Assert (-not $src.Contains('(or install.cmd -Cloud)')) "dad-doctor.ps1 still carries the '(or install.cmd -Cloud)' hint"
+    Assert ($src.Contains('install.cmd -Local')) "dad-doctor.ps1 has no 'install.cmd -Local' hint"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "install/uninstall drive models from the manifest" {
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match 'sync-models\.ps1') "install.ps1 does not call sync-models.ps1"
