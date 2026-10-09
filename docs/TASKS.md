@@ -2946,7 +2946,7 @@ STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Ca
 - **Refs:** Story S31 Behavior bullet 3, AC3, AC4; S31 Context: likely common cause with cases 3, 4, 5, 7 (fixture predates "the Test command must print a parseable test count").
 - **Context:** `close-unit.ps1` refuses to close when the project's CLAUDE.md Test command exists but its output has no parseable test count ("No test count in the output"); a case may be weakened only with a recorded human decision. Fixtures are built under `New-Sandbox` (never touch a real project). ASCII only, PowerShell 5.1.
 
-### [ ] T31.4 - triage case (3): "close-unit REFUSES to close over a shrink, and only ratchets on success"   (Story S31)
+### [x] T31.4 - triage case (3): "close-unit REFUSES to close over a shrink, and only ratchets on success"   (Story S31)
 - **Goal:** the case runs for real and passes; verdict decided and reported.
 - **Touches:** `test-kit.ps1` (the case at ~2971; remove its temporary skip), and ONLY for a PRODUCT verdict the one script proven wrong.
 - **Do:**

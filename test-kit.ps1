@@ -3065,7 +3065,6 @@ Test-Case "the ratchet refuses a SHRINKING verification surface" {
 }
 
 Test-Case "close-unit REFUSES to close over a shrink, and only ratchets on success" {
-  Skip-Case "S31 triage pending: T31.4"   # S31 TEMPORARY - remove with T31.4
   if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
@@ -3073,7 +3072,7 @@ Test-Case "close-unit REFUSES to close over a shrink, and only ratchets on succe
     "# Task map`n`n## Tasks`n`n### [ ] T1.1 - a   (Story S1)`n- **Goal:** x`n`n### [ ] T1.2 - b   (Story S1)`n- **Goal:** y" |
       Set-Content "$p\docs\TASKS.md" -Encoding UTF8
     "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
-    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
     $tests = (1..10 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
     "public class T {`r`n$tests`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
     Push-Location $p
