@@ -769,7 +769,8 @@ if ($Findings) {
         if ($candidateIds.Count -eq 0) { continue }
         $diff = (git show --unified=0 --format= $fullSha -- docs/TASKS.md docs/STORIES.md 2>$null | Out-String)
         foreach ($id in $candidateIds) {
-          $tickPattern = '(?m)^\+.*\b' + [regex]::Escape($id) + '\b.*(\[x\]|Status:\s*DONE\b)'
+          # the task heading is `### [x] <id> - ...` (checkbox BEFORE the id), a Status marker comes AFTER it
+          $tickPattern = '(?m)^\+.*(\[x\].*\b' + [regex]::Escape($id) + '\b|\b' + [regex]::Escape($id) + '\b.*Status:\s*DONE\b)'
           if ($diff -match $tickPattern) { [void]$handCommitted.Add("$id (commit $sha`: '$subject')") }
         }
       }

@@ -4186,7 +4186,6 @@ Test-Case "only close-unit may close a story: it stamps, a hand-tick is flagged,
 }
 
 Test-Case "doc-stats flags a hand-ticked task committed WITHOUT close-unit (doc-only commit, wrong shape)" {
-  Skip-Case "S31 triage pending: T31.7"   # S31 TEMPORARY - remove with T31.7
   # A.3: haiku's real repo (ModelTest bake-off) never marked its story DONE (so the story hand-tick check
   # above never fires) and EVERY hand-ticked task WAS mentioned by some commit (so the "no commit mentions
   # it" [integrity] check stays silent too) - it just hand-committed docs\TASKS.md ALONE with messages like

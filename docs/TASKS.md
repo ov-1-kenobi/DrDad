@@ -2985,7 +2985,7 @@ STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Ca
 - **Refs:** Story S31 AC3, AC4; the `Playtested:` trailer in `close-unit.ps1`.
 - **Context:** same likely common cause as T31.5. ASCII only, PowerShell 5.1.
 
-### [ ] T31.7 - triage case (6): "doc-stats flags a hand-ticked task committed WITHOUT close-unit (doc-only commit, wrong shape)"   (Story S31)
+### [x] T31.7 - triage case (6): "doc-stats flags a hand-ticked task committed WITHOUT close-unit (doc-only commit, wrong shape)"   (Story S31)
 - **Goal:** the case runs for real and passes; verdict decided and reported. This one may be a real defect in `doc-stats.ps1`.
 - **Touches:** `test-kit.ps1` (the case at ~4088; remove its temporary skip), and ONLY for a PRODUCT verdict `doc-stats.ps1`.
 - **Do:**
