@@ -1223,12 +1223,12 @@
   `test-kit.ps1`. Not changed: `models.json` aliases, the gates.
 - **Dependencies:** S28 (done: the DESIGN wording). The behavior is PINNED in DESIGN contract C6 (decided 2026-10-06): the switch is `-Local`, a no-flag re-run keeps an installed Local or Hybrid mode, and `-Local` with `-Cloud`/`-Hybrid` is a conflict that writes nothing. Write the tasks against C6's worked-example table.
 - **Acceptance (testable):**
-  - [ ] AC1: a sandbox install with no flag produces Cloud settings (no `ANTHROPIC_BASE_URL`), and `dad doctor`
+  - [x] AC1: a sandbox install with no flag produces Cloud settings (no `ANTHROPIC_BASE_URL`), and `dad doctor`
     reports Cloud.
-  - [ ] AC2: the explicit Local switch produces today's Local settings and `dad doctor` reports Local.
-  - [ ] AC3: `-Hybrid` and `-CopilotCli` behave as before.
-  - [ ] AC4: a test pins the no-flag default so it cannot drift silently.
-  - [ ] AC5: README and `overview/` no longer say the no-flag install is Local; the full `test-kit.ps1` prints
+  - [x] AC2: the explicit Local switch produces today's Local settings and `dad doctor` reports Local.
+  - [ ] AC3: `-Hybrid` and `-CopilotCli` behave as before. (partly verified: -Hybrid yes, -CopilotCli combined with the other modes not exercised - see grades/S29_GRADE.md)
+  - [x] AC4: a test pins the no-flag default so it cannot drift silently.
+  - [x] AC5: README and `overview/` no longer say the no-flag install is Local; the full `test-kit.ps1` prints
     `0 failed`.
 - **Dev notes:** installs only into a sandbox profile in tests (R35b: never touch the real `%USERPROFILE%\.claude`).
   Keep ASCII. No open design questions remain: switch name and re-install semantics are decided in C6.
@@ -1246,15 +1246,15 @@
 - **Data / interfaces:** `ratchet.ps1` (marker discovery, `Find-ShrunkFiles`), `close-unit.ps1` (`-Reason`, trailer, warning), `test-kit.ps1` (fixture cases). Not changed: `docs/DESIGN.md` (R28 and R29 do not pin the marker list), `recover-lost.ps1` logic, the baseline file format.
 - **Dependencies:** none.
 - **Acceptance (testable):**
-  - [ ] AC1: fixture project with `class RealIpfsFactAttribute : FactAttribute` and 10 tests -> converting them from `[Fact]` to `[RealIpfsFact]` leaves the ratchet's tests count unchanged and `close-unit` does not refuse.
-  - [ ] AC2: `[RealIpfsFact(Skip="x")]`, `[RealIpfsFactAttribute]`, `[Trait("a","b"), RealIpfsFact]`, an attribute derived from a derived attribute (`class Z : RealIpfsFactAttribute`), a `TheoryAttribute`-derived one, and a namespace-qualified base (`: Xunit.FactAttribute`) are all counted; a class that merely mentions `FactAttribute` in a comment or string is not.
-  - [ ] AC3: `Find-ShrunkFiles` reports no shrunk file for the conversion in AC1.
-  - [ ] AC4: a real removal of 3 tests with the derived attribute present still trips the ratchet (the fix does not blind it).
-  - [ ] AC5: a scan error falls back to the base markers with a note and exit code unchanged.
-  - [ ] AC6: `close-unit -AcceptShrink -Reason "..."` puts the `Shrink-accepted:` trailer in the commit; `-AcceptShrink` alone still passes with the warning.
-  - [ ] AC7: a `recover-lost` fixture where an attribute is converted but every method name stays reports nothing lost.
-  - [ ] AC8: run read-only on `D:\projects\GalacticDataNetwork\gdn1` (no `-Update`, its baseline file untouched) the ratchet counts the baseline plus every derived-attribute test line (observed 2026-10-09: baseline 227, current 239 = 227 + 11 `[RealIpfsFact]` + 1 `[RealIpfsEnvFact]`; the report's 228/219 came from an earlier snapshot of that repo).
-  - [ ] AC9: the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC1: fixture project with `class RealIpfsFactAttribute : FactAttribute` and 10 tests -> converting them from `[Fact]` to `[RealIpfsFact]` leaves the ratchet's tests count unchanged and `close-unit` does not refuse.
+  - [x] AC2: `[RealIpfsFact(Skip="x")]`, `[RealIpfsFactAttribute]`, `[Trait("a","b"), RealIpfsFact]`, an attribute derived from a derived attribute (`class Z : RealIpfsFactAttribute`), a `TheoryAttribute`-derived one, and a namespace-qualified base (`: Xunit.FactAttribute`) are all counted; a class that merely mentions `FactAttribute` in a comment or string is not.
+  - [x] AC3: `Find-ShrunkFiles` reports no shrunk file for the conversion in AC1.
+  - [x] AC4: a real removal of 3 tests with the derived attribute present still trips the ratchet (the fix does not blind it).
+  - [x] AC5: a scan error falls back to the base markers with a note and exit code unchanged.
+  - [x] AC6: `close-unit -AcceptShrink -Reason "..."` puts the `Shrink-accepted:` trailer in the commit; `-AcceptShrink` alone still passes with the warning.
+  - [x] AC7: a `recover-lost` fixture where an attribute is converted but every method name stays reports nothing lost.
+  - [x] AC8: run read-only on `D:\projects\GalacticDataNetwork\gdn1` (no `-Update`, its baseline file untouched) the ratchet counts the baseline plus every derived-attribute test line (observed 2026-10-09: baseline 227, current 239 = 227 + 11 `[RealIpfsFact]` + 1 `[RealIpfsEnvFact]`; the report's 228/219 came from an earlier snapshot of that repo).
+  - [x] AC9: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** one new test-kit case per behavior, with a mutation check each (e.g. drop the transitive loop -> AC2 derived-of-derived fails; drop the fallback -> AC5 fails). `Write-GateLog` appends a line to the target project's `grades/gates-log.jsonl`, so AC8 adds one line to gdn1's log; say so in the report and do not edit anything else in gdn1. gdn1's own baseline stays 219 until its owner re-runs `ratchet.ps1 -Update` or a clean `close-unit` there. Keep ASCII. Refs: DESIGN R28, R29.
 
 ### Story S31: Every git-dependent test-kit case really runs, and the failures that were hiding behind the broken guard are fixed   (R28, R29, R37)   <!-- Status: DONE closed:close-unit -->
@@ -1269,9 +1269,10 @@
 - **Data / interfaces:** `test-kit.ps1` (guards, the guard test, fixtures of the seven cases); possibly `close-unit.ps1`, `recover-lost.ps1`, `doc-stats.ps1`, `dad-guard.ps1` ONLY where triage proves a product defect. Not changed: `docs/DESIGN.md` unless triage finds a contract wrong (then stop and ask for a `/design` pass).
 - **Dependencies:** S30 (T30.3 and T30.4 add cases in the same file and must not use the broken guard).
 - **Acceptance (testable):**
-  - [ ] AC1: no `Test-Case` body reads `$haveGit` before it is assigned; a static test enforces it and FAILS on a seeded violation (mutation check).
-  - [ ] AC2: with git absent from PATH the 17 formerly vacuous cases report SKIP, not PASS (a fixture run with a PATH that has no git, output shows SKIP lines).
-  - [ ] AC3: all 17 cases run and pass on this machine; the 7 formerly failing ones each have a recorded verdict (FIXTURE or PRODUCT) in the story's Dev notes, with the fix.
-  - [ ] AC4: every PRODUCT fix has its own regression Test-Case and a mutation check, including: a deleted method with an EMPTY body (`public void Case3() { }`) is reported GONE by `recover-lost`.
-  - [ ] AC5: the full `test-kit.ps1` prints `0 failed`, `0 skipped` on a machine with git, and its passed count is at least the pre-fix count plus the added cases.
+  - [x] AC1: no `Test-Case` body reads `$haveGit` before it is assigned; a static test enforces it and FAILS on a seeded violation (mutation check).
+  - [x] AC2: with git absent from PATH the 17 formerly vacuous cases report SKIP, not PASS (a fixture run with a PATH that has no git, output shows SKIP lines).
+  - [x] AC3: all 17 cases run and pass on this machine; the 7 formerly failing ones each have a recorded verdict (FIXTURE or PRODUCT) in the story's Dev notes, with the fix.
+  - [x] AC4: every PRODUCT fix has its own regression Test-Case and a mutation check, including: a deleted method with an EMPTY body (`public void Case3() { }`) is reported GONE by `recover-lost`.
+  - [x] AC5: the full `test-kit.ps1` prints `0 failed`, `0 skipped` on a machine with git, and its passed count is at least the pre-fix count plus the added cases.
 - **Dev notes:** run the 17 cases for real first (`$haveGit = $true; & .\test-kit.ps1` in a child shell, output to %TEMP%) to get the current failure list before touching anything; the suite takes ~8 min. Fixtures live under `New-Sandbox`; never touch a real project. Do the tasks strictly sequentially (all edit `test-kit.ps1`). Refs: S21 (skip-aware summary, T21.x), S30 (T30.2 finding), DESIGN R28/R29/R37 where the cases belong.
+  VERDICTS recorded 2026-10-09 (T31.2-T31.8): case (1) dad-guard BLOCKS unverified code - FIXTURE, the Test command printed no test count; case (2) recover-lost finds what vanished - PRODUCT, the method pattern `\([^;]*\)` spanned lines (fixed to `[^;{}]*`; accepted loss: a default parameter containing braces such as `new T { }`); case (3) close-unit REFUSES a shrink - FIXTURE, no test count; case (4) ux-agent / -UxReviewed - FIXTURE, the sandbox had no CLAUDE.md so close-unit stopped before the UX check; case (5) playtest / -Playtested - FIXTURE, same missing CLAUDE.md; case (6) doc-stats hand-ticked task - PRODUCT, the detector required the checkbox AFTER the task id (headings put it before); case (7) already-closed id - FIXTURE, no test count. Known limits left open: recover-lost still misses generic methods (`Foo<T>(...)`), and the static guard check (Find-EarlyGuardViolations) only inspects guards that are top-level statements of a Test-Case body. Result: 0 failed, 0 skipped, 278 passed on a machine with git (v0.59.2).

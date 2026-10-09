@@ -2837,7 +2837,7 @@ Test-Case "a shrink comes with a RUNNABLE recovery, not just a complaint" {
 
 Test-Case "S30 AC1/AC3/AC4: converting [Fact] to a derived attribute keeps the ratchet count, Find-ShrunkFiles stays silent, a real removal still trips" {
   # gdn1 field report: [Fact] -> [RealIpfsFact] (class RealIpfsFactAttribute : FactAttribute) read as 228 -> 219.
-  if (-not [bool](Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git is not installed" }   # not $haveGit: it is assigned far below this case, so here it is $null
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\tests" | Out-Null
