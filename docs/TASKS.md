@@ -308,6 +308,13 @@ T29.7 -> T30.1 -> T30.2 (needs T30.1) -> T30.3 (needs T30.2; edits `close-unit.p
 and MUST run strictly one after the other in that order; T30.1 edits `ratchet.ps1` only and T30.3 edits `close-unit.ps1`.
 T30.5 is the only task that touches `D:\projects\GalacticDataNetwork\gdn1`, and only through one read-only `ratchet.ps1` run.)
 
+T30.5 -> T31.1 -> T31.2 (needs T31.1) -> T31.3 (needs T31.1, T31.2) -> T31.4 (needs T31.1, T31.3) -> T31.5 (needs T31.1, T31.4) -> T31.6 (needs T31.1, T31.5) -> T31.7 (needs T31.1, T31.6) -> T31.8 (needs T31.1, T31.7) -> T31.9 (needs T31.1, T31.2, T31.3, T31.4, T31.5, T31.6, T31.7, T31.8; final checks + CHANGELOG)
+
+(added 2026-10-09; Story S31, DESIGN R28/R29/R37. Queued after the last T30 entry. EVERY S31 task edits `test-kit.ps1`
+(T31.2 also `recover-lost.ps1`; T31.3..T31.8 may also edit one product script where triage proves a defect), so they run
+STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Case "S31 triage pending: <id>"` on each of the
+7 failing cases; each of T31.2..T31.8 removes exactly its own.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -2894,6 +2901,128 @@ T30.5 is the only task that touches `D:\projects\GalacticDataNetwork\gdn1`, and 
 - **Depends on:** T30.1, T30.2, T30.3, T30.4
 - **Refs:** Story S30 AC8, AC9 and Dev notes (the gates-log line must be mentioned in the report); CHANGELOG 0.59.0 for style.
 - **Context:** gdn1's own baseline stays 219 until its owner re-runs `ratchet.ps1 -Update` or does a clean `close-unit` there; that is expected and not a failure. Running ratchet.ps1 without `-Update` and without a baseline mismatch exits 0 or 1 by comparison with 219 (228 > 219 is fine, exit 0). This is a build task, not a test-kit case: the suite must never touch gdn1. ASCII only.
+
+### [ ] T31.1 - test-kit: hoist `$haveGit`, convert the 17 vacuous guards to Skip-Case, add the static guard test, park the 7 failing cases behind visible temporary skips   (Story S31)
+- **Goal:** `$haveGit` exists before any case runs, a missing git is counted SKIP (not PASS), a static test forbids reading a variable in a Test-Case guard above its first assignment, and the suite is green while the 7 formerly hidden failures wait for triage.
+- **Touches:** `test-kit.ps1` only.
+- **Do:**
+  1. FIRST, before editing anything, get the real failure list: from a child shell run `powershell -NoProfile -Command '$haveGit = $true; & D:\projects\DrDad\test-kit.ps1' > "$env:TEMP\s31-before.txt" 2>&1` (output under %TEMP%, NEVER under the repo; takes ~8 min). Record in this task's Context (a short "Observed" line, edit TASKS.md in place) the FAIL lines and the pass/fail/skip totals. Expected: the 7 cases named below fail, 266 passed.
+  2. Move the line `$haveGit = [bool](Get-Command git -ErrorAction SilentlyContinue)` (currently ~6111, under `Write-Host "-- scripts --"`) to the top of the file, right after `$kit = $PSScriptRoot` / the `$script:` counters (before `function Test-Case`), with a one-line comment: assigned here because 17 cases above the old position read it and saw `$null`. Delete the old assignment line.
+  3. The 17 early guards are the lines `  if (-not $haveGit) { return }` that sat ABOVE the old assignment (~225, 2162, 2197, 2545, 2602, 2660, 2972, 3571, 3641, 3703, 3804, 3846, 4033, 4093, 5202, 5341, 5913; line numbers drift - find them by the text and by being above the old position). Replace each with `  if (-not $haveGit) { Skip-Case "git is not installed" }`. Do not change anything else in those cases. The ~2706 case already has an inline Get-Command check: leave it. Guards below the old position that already say `Skip-Case "git not available"` stay; the other `return` guards below it (~6236, 6425 ... 7820) are NOT part of this task (they worked) - but converting those too is allowed only if it is the identical one-line change; if unsure leave them.
+  4. Temporary parking: as the FIRST statement in each of the 7 failing cases (names in Context), add `Skip-Case "S31 triage pending: <T-id>"` with the owning task id: recover-lost -> T31.2; dad-guard -> T31.3; close-unit shrink -> T31.4; ux-agent -> T31.5; playtest -> T31.6; doc-stats hand-ticked -> T31.7; bank new work -> T31.8. Add a comment `# S31 TEMPORARY - remove with <T-id>` on the same line.
+  5. New static case `"no Test-Case guard reads a variable before it is first assigned (S31)"` placed with the other static cases (after `"all .ps1 parse"`'s neighbours, before `-- scripts --`): parse `test-kit.ps1` with `[System.Management.Automation.Language.Parser]::ParseFile`; collect every top-level `AssignmentStatementAst` to a plain `$name` (script scope, not inside a Test-Case scriptblock) with its `StartLineNumber`; for every `IfStatementAst` that is a direct statement of a Test-Case body whose condition is `-not $name` (or `!$name`) and whose body is a bare `return`, FAIL when `$name` has no top-level assignment on a line `<=` the guard's line (or none at all), naming the case, variable and lines. The check must also be runnable on a text so the mutation can be tested: put the logic in a function `Find-EarlyGuardViolations([string]$text)` returning the list, and have the case call it on the real file and assert the list is empty.
+  6. In the SAME case, mutation check on a seeded violation: call `Find-EarlyGuardViolations` on a small inline string `Test-Case "x" { if (-not $zzz) { return } }` followed on a later line by `$zzz = 1`, and Assert it reports exactly one violation; call it on the same text with the assignment first and Assert zero.
+  7. Re-run the full suite (child shell, output to %TEMP%). Expected: `0 failed`, skipped = 7 (the temporary parks), the 17 converted cases show PASS (they now really run) or, if one of them FAILS and is not one of the 7, STOP and record it as a new open question rather than weakening it.
+- **Acceptance:** with git installed the full `.\test-kit.ps1` prints `0 failed` and 7 SKIP lines each reading `S31 triage pending: T31.<n>`; the new static case PASSes on the real file and its seeded-violation check proves it can fail; `Select-String -Path test-kit.ps1 -Pattern '^\$haveGit ='` finds exactly one assignment and it is above `function Test-Case`.
+- **Depends on:** T30.5 (S30 is closed; T30.3/T30.4 add cases in the same file)
+- **Refs:** Story S31 Behavior bullets 1-3 and AC1, AC2 (partly), AC3 (list); S21 (skip-aware summary, `Skip-Case`).
+- **Context:** the 7 failing cases, each with its first failing message (from QA's `$haveGit = $true` run): (1) `"dad-guard BLOCKS unverified code and clears after close-unit"` ~2194 - close-unit failed in the fixture; (2) `"recover-lost finds what vanished, and knows MOVED from LOST"` ~2596 - loss not detected; (3) `"close-unit REFUSES to close over a shrink, and only ratchets on success"` ~2971 - "Could not find any evidence tests ran ... No test count in the output"; (4) `"a visible surface passes through ux-agent -> ui-agent, and close-unit records it (-UxReviewed)"` ~3619 - no WARN on a surface change with no UX pass; (5) `"an experience unit is playtested (playtest-agent -> human), and close-unit records it (-Playtested)"` ~3683 - no WARN on experience code with no playtest; (6) `"doc-stats flags a hand-ticked task committed WITHOUT close-unit (doc-only commit, wrong shape)"` ~4088 - not flagged; (7) `"close-unit REFUSES to bank new work under an already-closed id"` ~5197 - the correct id was refused too. `Skip-Case` throws `__DAD_SKIP__:<reason>`; call it BEFORE any try/catch of the case (see the helper's comment). `Test-Case` counts a bare `return` as PASS - that is the bug. `Assert` takes a condition and a message. Never run the suite with output inside the repo. ASCII only, PowerShell 5.1. Observed (fill in at step 1): <not yet run>.
+
+### [ ] T31.2 - recover-lost: a method signature must not span lines past a complete `)`; regression with empty-bodied methods; un-park case (2)   (Story S31)
+- **Goal:** `recover-lost.ps1` reports a deleted method whose body is empty (`public void Case3() { }`), and the case "recover-lost finds what vanished, and knows MOVED from LOST" runs and passes again. Verdict for this case: PRODUCT.
+- **Touches:** `recover-lost.ps1` (the first entry of `$unitPatterns`, the "C#/Java/TS method" pattern, ~line 68), then `test-kit.ps1` (remove the temporary skip in the case at ~2596; add one new `Test-Case` directly after it, anchored by name).
+- **Do:**
+  1. Read first (defect confirmed by reading): the method pattern ends `\s*\([^;]*\)\s*(?:where[^{]*)?\{`. `[^;]` also matches newlines, so in a file of `[Fact] public void CaseN() { }` methods with no `;` between them the first match runs from the `(` of `Case1` to the LAST `)` in the file and only `Case1` is recorded as a unit. Deleting `Case3` printed "nothing named has vanished." and exit 0.
+  2. Change ONLY the parameter-list part of that pattern so the list cannot contain `{`, `}` or `;`: `\([^;{}]*\)`. A signature whose parameters span several lines (no braces or semicolons inside) must still match; a `)` followed by `{` on the same signature still ends it. Keep the leading attribute/modifier/return-type parts and the other 7 patterns untouched. If a default-value parameter with braces (e.g. `new T { }`) would no longer match, accept that and note it as a one-line comment on the pattern.
+  3. Remove the `Skip-Case "S31 triage pending: T31.2"` line from case (2). If the case still fails after the product fix, work out why from its fixture before touching it and record a FIXTURE verdict in the report; do not weaken an assertion.
+  4. New case `"S31 AC4: recover-lost reports a deleted method with an EMPTY body as GONE"`: `if (-not $haveGit) { Skip-Case "git is not installed" }`; sandbox project (git init, user.name/user.email set locally, as the neighbours do); `tests\A.cs` with `public class T {` then six lines `    [Fact] public void Case1() { }` ... `Case6() { }` (NO `;` anywhere in the file) then `}`; commit `base`, record `$sha`; delete the `Case3` line and `git add -A`/commit or leave unstaged exactly as the neighbour case does; run `recover-lost.ps1 -ProjectDir $p -Since $sha`. Assert exit 1 and the output names `Case3` in a GONE block and does not say `nothing named has vanished`.
+  5. Mutation check (inside the case or by hand, report which): temporarily restore the old `[^;]*` in `recover-lost.ps1`, run the new case, confirm it FAILs on the `Case3` assertion, then `git checkout -- recover-lost.ps1`-style restore the fix (the fix is uncommitted at that point, so save a copy of the fixed pattern first or re-apply it) and confirm `git diff` shows only the intended pattern change.
+  6. Run the full `.\test-kit.ps1` (output to %TEMP%): every existing recover-lost case (including the S30 AC7 case) still passes.
+- **Acceptance:** the new case PASSes and FAILs under the old pattern (mutation); the formerly parked case (2) PASSes; full suite `0 failed`, one fewer temporary skip (6 SKIP remain, all `S31 triage pending`).
+- **Depends on:** T31.1
+- **Refs:** Story S31 Context ("CONFIRMED PRODUCT DEFECT"), Behavior bullet 3, AC4; DESIGN R29.
+- **Context:** `Get-Units` in `recover-lost.ps1` applies every `$unitPatterns` regex with `[regex]::Matches` over the whole file text and records group 1 (the name); a name present in the base file and absent everywhere now is reported GONE. Keyword names (`if|for|foreach|while|switch|catch|using|lock|return|new|get|set|do|else|try`) are filtered. The clean message is `nothing named has vanished`. The S30 AC7 fixture uses bodies containing `;` on purpose (it passes under the bug); this task's fixture must not. ASCII only, PowerShell 5.1.
+
+### [ ] T31.3 - triage case (1): "dad-guard BLOCKS unverified code and clears after close-unit"   (Story S31)
+- **Goal:** the case runs for real and passes; a verdict (FIXTURE or PRODUCT) is decided and reported.
+- **Touches:** `test-kit.ps1` (the case at ~2194; remove its temporary skip), and ONLY if the verdict is PRODUCT the one script proven wrong (`close-unit.ps1` or `dad-guard.ps1`).
+- **Do:**
+  1. Remove the `Skip-Case "S31 triage pending: T31.3"` line. Run just this case's logic (copy it to a scratch script under `_tmp\` or run the full suite to %TEMP%) and read the exact failing message ("close-unit failed in the fixture"): re-run the fixture's close-unit call by hand in a sandbox and capture its output.
+  2. Decide the verdict. Expected FIXTURE: close-unit now requires the Test command in the project's CLAUDE.md to print a parseable test count; give the fixture a Test command that prints one (for example `echo 5 passed`-style output in the format the runner parser accepts - read how the S30/S28-era neighbours such as `"close-unit REFUSES to close over a shrink, ..."` build theirs) and keep the case's intent and assertions (dad-guard blocks unverified code; clears after close-unit) unchanged. PRODUCT only if close-unit/dad-guard misbehave on a CORRECT fixture; then fix the script, keep the assertion, and add a regression `Test-Case` plus a mutation check.
+  3. Mutation check for the case: revert the fix (or break the guard-clearing path) and confirm the case FAILs, then restore.
+  4. Run the full `.\test-kit.ps1` (output to %TEMP%).
+- **Acceptance:** this case PASSes (not SKIP); full suite `0 failed`; skipped count one lower than after T31.2; the report states `case (1): FIXTURE|PRODUCT - <one line why>`.
+- **Depends on:** T31.1, T31.2
+- **Refs:** Story S31 Behavior bullet 3, AC3, AC4; S31 Context: likely common cause with cases 3, 4, 5, 7 (fixture predates "the Test command must print a parseable test count").
+- **Context:** `close-unit.ps1` refuses to close when the project's CLAUDE.md Test command exists but its output has no parseable test count ("No test count in the output"); a case may be weakened only with a recorded human decision. Fixtures are built under `New-Sandbox` (never touch a real project). ASCII only, PowerShell 5.1.
+
+### [ ] T31.4 - triage case (3): "close-unit REFUSES to close over a shrink, and only ratchets on success"   (Story S31)
+- **Goal:** the case runs for real and passes; verdict decided and reported.
+- **Touches:** `test-kit.ps1` (the case at ~2971; remove its temporary skip), and ONLY for a PRODUCT verdict the one script proven wrong.
+- **Do:**
+  1. Remove the `Skip-Case "S31 triage pending: T31.4"` line. Reproduce: the observed failure is close-unit saying "Could not find any evidence tests ran ... No test count in the output" - the fixture's Test command prints no count.
+  2. Decide the verdict. Expected FIXTURE: make the fixture's Test command print a count the parser accepts, consistent with the number of `[Fact]` lines in the fixture so the ratchet baseline and shrink logic still operate as the case asserts; keep every assertion (refuses over a shrink; baseline only moves on success; `-AcceptShrink` lowers it). PRODUCT only if a correct fixture still misbehaves: fix the script and add its own regression case + mutation check.
+  3. Mutation check: disable the shrink refusal in `close-unit.ps1` (or break the ratchet update) and confirm the case FAILs, restore with `git checkout -- close-unit.ps1`, confirm `git diff --quiet -- close-unit.ps1`.
+  4. Make sure the S30 AC6 case (copies this case's fixture per its task text) still passes, then the full `.\test-kit.ps1` (output to %TEMP%).
+- **Acceptance:** this case PASSes (not SKIP); full suite `0 failed`; one fewer temporary skip; report line `case (3): FIXTURE|PRODUCT - <why>`.
+- **Depends on:** T31.1, T31.3
+- **Refs:** Story S31 AC3, AC4; S30 AC6 (same fixture family); DESIGN R28.
+- **Context:** the exact first message was "Could not find any evidence tests ran ... No test count in the output". Neighbouring S30 cases show how a passing count is produced. Assertions are never deleted or weakened without a recorded human decision. ASCII only, PowerShell 5.1.
+
+### [ ] T31.5 - triage case (4): "a visible surface passes through ux-agent -> ui-agent, and close-unit records it (-UxReviewed)"   (Story S31)
+- **Goal:** the case runs for real and passes; verdict decided and reported.
+- **Touches:** `test-kit.ps1` (the case at ~3619; remove its temporary skip), and ONLY for a PRODUCT verdict `close-unit.ps1`.
+- **Do:**
+  1. Remove the `Skip-Case "S31 triage pending: T31.5"` line. Observed failure: no WARN on a surface change with no UX pass. First check whether close-unit aborted earlier (for example on "No test count in the output") before it ever reached the UX check - if so the verdict is FIXTURE (give the fixture a parseable test count, same fix as T31.3/T31.4).
+  2. If close-unit does run to the UX check and still prints no WARN for a changed visible surface (a UI file under the paths close-unit treats as a surface) with no `-UxReviewed`, read the surface-detection code in `close-unit.ps1`, decide PRODUCT or FIXTURE (stale file name / extension in the fixture), fix, keep the assertions (WARN without `-UxReviewed`; `UX-reviewed:` trailer recorded with it).
+  3. Mutation check: drop the surface WARN (or the trailer) in `close-unit.ps1`, confirm the case FAILs, restore with `git checkout --` and `git diff --quiet`.
+  4. Run the full `.\test-kit.ps1` (output to %TEMP%).
+- **Acceptance:** this case PASSes (not SKIP); full suite `0 failed`; one fewer temporary skip; report line `case (4): FIXTURE|PRODUCT - <why>`; a PRODUCT verdict comes with its own regression case.
+- **Depends on:** T31.1, T31.4
+- **Refs:** Story S31 AC3, AC4; style of the `UX-reviewed:` trailer in `close-unit.ps1`.
+- **Context:** the story's likely cause for cases 1, 3, 4, 5, 7 is a fixture that predates close-unit's rule that the Test command must print a parseable test count. ASCII only, PowerShell 5.1.
+
+### [ ] T31.6 - triage case (5): "an experience unit is playtested (playtest-agent -> human), and close-unit records it (-Playtested)"   (Story S31)
+- **Goal:** the case runs for real and passes; verdict decided and reported.
+- **Touches:** `test-kit.ps1` (the case at ~3683; remove its temporary skip), and ONLY for a PRODUCT verdict `close-unit.ps1`.
+- **Do:**
+  1. Remove the `Skip-Case "S31 triage pending: T31.6"` line. Observed failure: no WARN on experience code with no playtest. Same procedure as T31.5: first check whether close-unit stopped earlier on the missing test count (FIXTURE, same fixture fix), else read the experience-code detection in `close-unit.ps1` and decide.
+  2. Keep the assertions (WARN when an experience unit closes without `-Playtested`; the `Playtested:` trailer is recorded with it).
+  3. Mutation check: drop the playtest WARN or trailer, confirm the case FAILs, restore with `git checkout --` and `git diff --quiet`.
+  4. Run the full `.\test-kit.ps1` (output to %TEMP%).
+- **Acceptance:** this case PASSes (not SKIP); full suite `0 failed`; one fewer temporary skip; report line `case (5): FIXTURE|PRODUCT - <why>`; a PRODUCT verdict comes with its own regression case.
+- **Depends on:** T31.1, T31.5
+- **Refs:** Story S31 AC3, AC4; the `Playtested:` trailer in `close-unit.ps1`.
+- **Context:** same likely common cause as T31.5. ASCII only, PowerShell 5.1.
+
+### [ ] T31.7 - triage case (6): "doc-stats flags a hand-ticked task committed WITHOUT close-unit (doc-only commit, wrong shape)"   (Story S31)
+- **Goal:** the case runs for real and passes; verdict decided and reported. This one may be a real defect in `doc-stats.ps1`.
+- **Touches:** `test-kit.ps1` (the case at ~4088; remove its temporary skip), and ONLY for a PRODUCT verdict `doc-stats.ps1`.
+- **Do:**
+  1. Remove the `Skip-Case "S31 triage pending: T31.7"` line. Observed failure: the hand-ticked task is not flagged. Build the fixture by hand in a sandbox (git project, TASKS.md with a task, commit it, hand-tick `[x]`, commit a doc-only change with a message that does not match close-unit's `T<n>.<n>: ...` shape) and run `doc-stats.ps1` on it; find in `doc-stats.ps1` the check that compares a ticked task against its closing commit and see why it stays silent (commit-message shape, id matching, how far back it looks, an ordering of git log).
+  2. Decide: FIXTURE (the case does not create the condition the check looks for - correct the fixture, assertion unchanged) or PRODUCT (the check misses a genuine hand-tick - fix `doc-stats.ps1`, keep the assertion, add a regression case if the existing case cannot serve as one, plus a mutation check).
+  3. Mutation check: disable the hand-tick check in `doc-stats.ps1` (or alter the commit shape in the fixture to a valid close-unit one), confirm the case FAILs, restore with `git checkout --` and `git diff --quiet`.
+  4. Run the full `.\test-kit.ps1` (output to %TEMP%); other doc-stats cases still pass.
+- **Acceptance:** this case PASSes (not SKIP); full suite `0 failed`; one fewer temporary skip; report line `case (6): FIXTURE|PRODUCT - <why>`.
+- **Depends on:** T31.1, T31.6
+- **Refs:** Story S31 Context (cases 2 and 6 "may be real defects"), AC3, AC4.
+- **Context:** the case name states the expected condition: a task ticked by hand, committed in a doc-only commit that did NOT go through close-unit, "wrong shape" -> doc-stats must flag it. ASCII only, PowerShell 5.1.
+
+### [ ] T31.8 - triage case (7): "close-unit REFUSES to bank new work under an already-closed id"   (Story S31)
+- **Goal:** the case runs for real and passes; verdict decided and reported.
+- **Touches:** `test-kit.ps1` (the case at ~5197; remove its temporary skip), and ONLY for a PRODUCT verdict `close-unit.ps1`.
+- **Do:**
+  1. Remove the `Skip-Case "S31 triage pending: T31.8" ` line. Observed failure: the correct id was refused too, i.e. the positive half of the case (a close under a fresh, correct id) did not succeed. Run that half by hand and read close-unit's output: if it is "No test count in the output" the verdict is FIXTURE (same fix as T31.3/T31.4); otherwise read the already-closed-id check in `close-unit.ps1` and decide.
+  2. Keep both assertions: refuse under the already-closed id; accept under the correct id.
+  3. Mutation check: remove the already-closed-id refusal in `close-unit.ps1`, confirm the case FAILs, restore with `git checkout --` and `git diff --quiet`.
+  4. Run the full `.\test-kit.ps1` (output to %TEMP%); the suite should now show NO `S31 triage pending` skip.
+- **Acceptance:** this case PASSes (not SKIP); full suite `0 failed` and `0 skipped` on a machine with git; report line `case (7): FIXTURE|PRODUCT - <why>`.
+- **Depends on:** T31.1, T31.7
+- **Refs:** Story S31 AC3, AC4, AC5.
+- **Context:** likely common cause per the story: the fixture predates the parseable-test-count rule. ASCII only, PowerShell 5.1.
+
+### [ ] T31.9 - S31 final checks: a PATH without git yields SKIP not PASS (AC2), totals (AC5), CHANGELOG entry, verdict summary   (Story S31)
+- **Goal:** prove the guards now skip honestly, the totals meet AC5, and the change is recorded.
+- **Touches:** `CHANGELOG.md` (edit), `test-kit.ps1` only if the AC2 check becomes a case (see Do 1).
+- **Do:**
+  1. AC2: add (or run once by hand and report) a check that with git absent from PATH the 17 formerly vacuous cases report SKIP. Preferred as a case `"S31 AC2: with no git on PATH the formerly vacuous cases report SKIP, not PASS"`: run `powershell -NoProfile -Command` with `$env:Path` reduced to `$env:SystemRoot\System32;$env:SystemRoot` (verify with `Get-Command git` returning nothing in that child), a SMALL extract is enough - do not run the 8-minute suite recursively: in the child dot-source nothing; instead assert statically that the 17 guard lines now read `Skip-Case "git is not installed"` (count of that text >= 17) and run one converted case's logic in the child to show a `SKIP` line. If a recursive run would exceed a minute, do the full run by hand once with the stripped PATH (output to %TEMP%) and record the SKIP count in the report instead of adding a case.
+  2. AC5: run the full `.\test-kit.ps1` on this machine (output to %TEMP%): `0 failed`, `0 skipped`, passed count >= pre-fix count (the T31.1 Observed line) plus the cases added in T31.1 (1), T31.2 (1) and any added by PRODUCT fixes. Record the numbers.
+  3. `CHANGELOG.md`: add at the top, in the file's style, `## 0.59.2 - 2026-10-09` (the next patch above the current `VERSION` 0.59.1; do NOT edit `VERSION` - the orchestrator releases): Fixed - 17 test-kit cases whose `$haveGit` guard ran before the variable existed (passed without running) now run, a missing git is counted SKIP; a static test prevents a recurrence; `recover-lost` no longer misses deleted methods with empty bodies (method pattern no longer spans lines); the fixture/product verdicts of the 7 formerly hidden failures (one line each, from T31.2..T31.8). Mention S31.
+  4. In the task report list the 7 verdicts exactly as `case (n): FIXTURE|PRODUCT - why` so the orchestrator can paste them into the story's Dev notes (this task does NOT edit STORIES.md).
+- **Acceptance:** `CHANGELOG.md` contains `0.59.2` and `S31`; the full `.\test-kit.ps1` prints `0 failed`, `0 skipped`; the no-git evidence shows SKIP lines (not PASS) for converted cases; the 7 verdicts are listed in the report.
+- **Depends on:** T31.1, T31.2, T31.3, T31.4, T31.5, T31.6, T31.7, T31.8
+- **Refs:** Story S31 AC2, AC3, AC5 and Dev notes.
+- **Context:** `VERSION` is 0.59.1 and `CHANGELOG.md` already has a 0.59.1 section (S30). The skip-aware summary counts `Skip-Case` outcomes as SKIP (S21). Keep the run's output out of the repo. ASCII only, PowerShell 5.1.
 
 ## Open questions
 - **[design] S30 follow-up (recorded, not changed):** `[Fact(Skip="...")]` and `[Fact, Trait(...)]` are not counted by the base markers (exact `[Fact]`); widening them would raise counts everywhere and re-baseline every project. Decide separately whether to widen.

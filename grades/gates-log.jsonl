@@ -473,3 +473,4 @@
 {"v":1,"ts":"2026-10-09T19:28:46.482Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
 {"v":1,"ts":"2026-10-09T19:37:03.140Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 31, tasks 96)","session":""}
 {"v":1,"ts":"2026-10-09T19:37:11.173Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S30","session":""}
+{"v":1,"ts":"2026-10-09T19:37:19.781Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
