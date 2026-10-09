@@ -74,6 +74,51 @@ try {
     Where-Object { $p = $_.FullName.Split([char]92); ($p -notcontains 'bin') -and ($p -notcontains 'obj') -and
                    ($p -notcontains 'node_modules') -and ($p -notcontains '.git') -and ($p -notcontains '.claude') }
 } catch { }
+
+# Test attributes derived from FactAttribute/TheoryAttribute (e.g. [RealIpfsFact]) are tests too. Discover
+# them (transitively) from the .cs/.fs/.vb files and widen the pattern; fail open to the base markers.
+$baseMarkers = $testMarkers
+$discoveryNote = ""
+try {
+  if ($env:DAD_RATCHET_FAIL_DISCOVERY -eq '1') { throw "DAD_RATCHET_FAIL_DISCOVERY=1" }
+  $norm = { param([string]$n) $n = $n.Trim(); $i = $n.LastIndexOf('.'); if ($i -ge 0) { $n = $n.Substring($i + 1) }
+            $n = $n.Trim(); if ($n.EndsWith('Attribute') -and $n.Length -gt 9) { $n = $n.Substring(0, $n.Length - 9) }; $n }
+  $blankRx = New-Object System.Text.RegularExpressions.Regex('//[^\r\n]*|/\*[\s\S]*?\*/|@"(?:""|[^"])*"|"(?:\\.|[^"\\\r\n])*"')
+  $classRx = New-Object System.Text.RegularExpressions.Regex('\bclass\s+(\w+)\s*(?:<[^>]*>)?\s*:\s*([^{]+?)\s*(?:where\b|\{|$)', [System.Text.RegularExpressions.RegexOptions]::Multiline)
+  $decls = @()   # one entry per declared class with a base list: @(name, @(bases))
+  foreach ($f in @($srcFiles | Where-Object { @('.cs','.fs','.vb') -contains $_.Extension.ToLower() })) {
+    $text = $blankRx.Replace((Get-Content -LiteralPath $f.FullName -Raw), ' ')
+    if (-not $text) { continue }
+    foreach ($m in $classRx.Matches($text)) {
+      $bases = @($m.Groups[2].Value -split ',' | ForEach-Object { & $norm $_ } | Where-Object { $_ })
+      $decls += ,@((& $norm $m.Groups[1].Value), $bases)
+    }
+  }
+  $derived = New-Object System.Collections.Generic.HashSet[string]
+  $known = New-Object System.Collections.Generic.HashSet[string]
+  [void]$known.Add('Fact'); [void]$known.Add('Theory')
+  do {
+    $added = $false
+    foreach ($d in $decls) {
+      if ($known.Contains($d[0])) { continue }
+      foreach ($b in $d[1]) {
+        if ($known.Contains($b)) { [void]$known.Add($d[0]); [void]$derived.Add($d[0]); $added = $true; break }
+      }
+    }
+  } while ($added)
+  if ($derived.Count -gt 0) {
+    $alts = @(foreach ($x in ($derived | Sort-Object)) {
+      $e = [regex]::Escape($x)
+      '(?<=\[|,)\s*(?:' + $e + '|' + $e + 'Attribute)\s*(?:\([^\]]*\))?\s*(?=\]|,)'
+    })
+    $testMarkers = $baseMarkers + '|' + ($alts -join '|')
+  }
+} catch {
+  $discoveryNote = "ratchet: attribute discovery failed ($($_.Exception.Message)) - counting the base markers only"
+  $testMarkers = $baseMarkers
+  Write-Host $discoveryNote
+}
+
 foreach ($f in $srcFiles) {
   $testCount += @(Select-String -Path $f.FullName -Pattern $testMarkers).Count
 }
@@ -140,10 +185,10 @@ function Find-ShrunkFiles([string]$sha) {
       if (@(".cs",".fs",".vb",".py",".ts",".tsx",".js",".jsx",".go",".rs",".java",".kt") -notcontains $ext) { continue }
       $old = (git show "$sha`:$rel" 2>$null | Out-String)
       if (-not $old) { continue }
-      $oldN = @([regex]::Matches($old, $testMarkers)).Count
+      $oldN = @(($old -split "`r?`n") | Where-Object { $_ -match $testMarkers }).Count
       $full = Join-Path $proj $rel
       $newN = 0
-      if (Test-Path -LiteralPath $full) { $newN = @([regex]::Matches((Get-Content $full -Raw), $testMarkers)).Count }
+      if (Test-Path -LiteralPath $full) { $newN = @(((Get-Content $full -Raw) -split "`r?`n") | Where-Object { $_ -match $testMarkers }).Count }
       if ($newN -lt $oldN) { $hits += [pscustomobject]@{ Path = $rel; Was = $oldN; Now = $newN } }
     }
   } catch { } finally { Pop-Location; $ErrorActionPreference = $prevEap }

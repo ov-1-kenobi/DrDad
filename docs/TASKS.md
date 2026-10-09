@@ -2819,7 +2819,7 @@ T30.5 is the only task that touches `D:\projects\GalacticDataNetwork\gdn1`, and 
 - **Refs:** Story S29 AC5 and Data/interfaces (`README.md`, `overview/*.html`); `docs/DESIGN.md` C6 (Switches, worked examples) and R34; CHANGELOG 0.58.0 and the entry above it (the notes saying the no-flag install is Local until S29).
 - **Context:** current text to remove: README line ~151 ("no flag still installs Local mode, so pass `-Cloud` explicitly. The planned change - Cloud as the no-flag ..."), ~195 ("the installer's no-flag behaviour will follow, see S29"), ~203 ("no flag today; an explicit option is planned, see S29"); field-manual ~248 and ~259; video-series ~201. `-CopilotCli` combines with any mode (unchanged). Mode order everywhere: Cloud, Local, Hybrid. Do not edit `docs/DESIGN.md` or `docs/STORIES.md`.
 
-### [ ] T30.1 - ratchet.ps1: derive the test-marker set from FactAttribute/TheoryAttribute subclasses (transitive, fail-open) and use it in Find-ShrunkFiles   (Story S30)
+### [x] T30.1 - ratchet.ps1: derive the test-marker set from FactAttribute/TheoryAttribute subclasses (transitive, fail-open) and use it in Find-ShrunkFiles   (Story S30)
 - **Goal:** `[RealIpfsFact]`-style attributes declared anywhere in the project count as tests, in the total and in the per-file shrink report, and a discovery error falls back to the base markers with a note.
 - **Touches:** `ratchet.ps1` only.
 - **Do:**
