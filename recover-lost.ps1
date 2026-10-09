@@ -65,7 +65,7 @@ if (-not $Since) { $Since = "HEAD" }
 # A "named unit" is anything a person would notice the absence of. Language-agnostic by construction:
 # these patterns capture the NAME, and a name that was there and is now nowhere is the signal.
 $unitPatterns = @(
-  '(?m)^\s*(?:\[[^\]]+\]\s*)*(?:public|private|protected|internal)?\s*(?:static\s+|async\s+|virtual\s+|override\s+|sealed\s+|partial\s+)*(?:[\w<>\[\],\.\?]+\s+)?([A-Za-z_]\w*)\s*\([^;]*\)\s*(?:where[^{]*)?\{',  # C#/Java/TS method
+  '(?m)^\s*(?:\[[^\]]+\]\s*)*(?:public|private|protected|internal)?\s*(?:static\s+|async\s+|virtual\s+|override\s+|sealed\s+|partial\s+)*(?:[\w<>\[\],\.\?]+\s+)?([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:where[^{]*)?\{',  # C#/Java/TS method; params exclude braces (default "new T { }" = accepted loss)
   '(?m)^\s*(?:public|internal|private)?\s*(?:abstract\s+|sealed\s+|static\s+|partial\s+)*(?:class|interface|struct|record|enum)\s+([A-Za-z_]\w*)',                                                            # type
   '(?m)^\s*def\s+([A-Za-z_]\w*)\s*\(',                                                                                                                                                                        # python
   '(?m)^\s*func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)\s*\(',                                                                                                                                                      # go

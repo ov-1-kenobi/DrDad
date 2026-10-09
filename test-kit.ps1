@@ -2662,7 +2662,6 @@ Test-Case "RECIPES ships pre-loaded with the traps, instead of one delete-me exa
 }
 
 Test-Case "recover-lost finds what vanished, and knows MOVED from LOST" {
-  Skip-Case "S31 triage pending: T31.2"   # S31 TEMPORARY - remove with T31.2
   # The generic shape: a change removed far more than it added, the result still compiles, nothing looks
   # broken. Recovery has to work at the level of NAMED UNITS - a whole-file revert would also discard
   # everything the change ADDED (on the real incident: a test fixture and two correct fixes).
@@ -2719,6 +2718,35 @@ Test-Case "recover-lost finds what vanished, and knows MOVED from LOST" {
     Assert ((Get-Content (Join-Path $kit "ratchet.ps1") -Raw) -match 'recover-lost') "ratchet does not point at the recovery tool"
     Assert ((Get-Content (Join-Path $kit "close-unit.ps1") -Raw) -match 'recover-lost') "close-unit does not point at it"
     Assert ((Get-Content (Join-Path $kit "global\commands\build.md") -Raw) -match 'recover-lost') "/build does not route to it"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S31 AC4: recover-lost reports a deleted method with an EMPTY body as GONE" {
+  # The method pattern's parameter list used [^;]*, which spans newlines: in a file of `{ }` methods with
+  # no `;` it ran from the first `(` to the LAST `)`, so only Case1 was recorded and a deleted Case3 was
+  # never reported. Deliberately NO `;` anywhere in this fixture (the S30 AC7 neighbour has them).
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\tests" | Out-Null
+    $lines = (1..6 | ForEach-Object { "    [Fact] public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$lines`r`n}" | Set-Content "$p\tests\A.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $sha = (git rev-parse HEAD | Out-String).Trim()
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $lines5 = (1..6 | Where-Object { $_ -ne 3 } | ForEach-Object { "    [Fact] public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$lines5`r`n}" | Set-Content "$p\tests\A.cs" -Encoding UTF8
+
+    $rl = Join-Path $kit "recover-lost.ps1"
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $rl -ProjectDir $p -Since $sha 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "the deleted empty-bodied method was not detected (exit $LASTEXITCODE):`n$out"
+    $goneBlock = [regex]::Match($out, '(?s)GONE.*').Value
+    Assert ($goneBlock -match 'Case3') "Case3 was not named in a GONE block:`n$out"
+    Assert ($out -notmatch 'nothing named has vanished') "it said nothing vanished though Case3 was deleted:`n$out"
   } finally { Remove-Sandbox $sb }
 }
 
