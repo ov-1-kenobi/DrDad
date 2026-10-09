@@ -1228,6 +1228,67 @@ Test-Case "cloud mode: -Cloud drops the Ollama redirect, and use-model resolves 
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S29 AC1-AC4: install mode resolution follows C6 (Cloud default, -Local explicit, a no-flag re-run keeps Local/Hybrid)" {
+  . (Join-Path $kit "install-mode.ps1")
+  $sb = New-Sandbox
+  try {
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    $mk = { param($name, $json) $p = Join-Path $sb $name; [System.IO.File]::WriteAllText($p, $json, $enc); $p }
+    $missing = Join-Path $sb "no-such-settings.json"
+    $localFile  = & $mk "local.json"  '{ "env": { "ANTHROPIC_BASE_URL": "http://localhost:11434" } }'
+    $hybridFile = & $mk "hybrid.json" '{ "env": { "LOCALTOOLS_HYBRID": "1" } }'
+    $modelFile  = & $mk "model.json"  '{ "env": { "ANTHROPIC_MODEL": "claude-sonnet-5" } }'
+    $badFile    = & $mk "bad.json"    '{ not json'
+
+    $r = Resolve-InstallMode $false $false $false $missing
+    Assert ($r.Mode -eq 'Cloud' -and $r.Reason -eq 'default') "row 1: missing file, no flags -> Cloud/default, got $($r.Mode)/$($r.Reason)"
+    $r = Resolve-InstallMode $false $false $false $localFile
+    Assert ($r.Mode -eq 'Local' -and $r.Reason -eq 'kept') "row 2: base-URL file, no flags -> Local/kept, got $($r.Mode)/$($r.Reason)"
+    $r = Resolve-InstallMode $false $false $false $hybridFile
+    Assert ($r.Mode -eq 'Hybrid' -and $r.Reason -eq 'kept') "row 3: LOCALTOOLS_HYBRID file, no flags -> Hybrid/kept, got $($r.Mode)/$($r.Reason)"
+    $r = Resolve-InstallMode $false $true $false $localFile
+    Assert ($r.Mode -eq 'Cloud' -and $r.Reason -eq 'explicit') "row 4: base-URL file with -Cloud -> Cloud/explicit, got $($r.Mode)/$($r.Reason)"
+    $r = Resolve-InstallMode $true $false $false $missing
+    Assert ($r.Mode -eq 'Local' -and $r.Reason -eq 'explicit') "row 5: missing file with -Local -> Local/explicit, got $($r.Mode)/$($r.Reason)"
+    $r = Resolve-InstallMode $true $false $true $missing
+    Assert ($null -eq $r.Mode -and $r.Conflict -match '-Local' -and $r.Conflict -match '-Hybrid') "row 6a: -Local -Hybrid -> conflict naming both, got '$($r.Conflict)'"
+    $r = Resolve-InstallMode $true $true $false $missing
+    Assert ($null -eq $r.Mode -and $r.Conflict -match '-Local' -and $r.Conflict -match '-Cloud') "row 6b: -Local -Cloud -> conflict naming both, got '$($r.Conflict)'"
+    $r = Resolve-InstallMode $false $false $false $modelFile
+    Assert ($r.Mode -eq 'Cloud' -and $r.Reason -eq 'default') "row 7: ANTHROPIC_MODEL-only file, no flags -> Cloud/default, got $($r.Mode)/$($r.Reason)"
+    $r = Resolve-InstallMode $false $false $false $badFile
+    Assert ($r.Mode -eq 'Cloud' -and $r.Reason -eq 'default' -and $r.Warn -match 'bad\.json') "row 8: non-JSON file -> Cloud/default with Warn naming the file, got $($r.Mode)/$($r.Reason)/'$($r.Warn)'"
+    $r = Resolve-InstallMode $false $true $true $missing
+    Assert ($r.Mode -eq 'Hybrid') "row 9: -Cloud -Hybrid -> Hybrid, got $($r.Mode)"
+
+    # wiring: source checks on install.ps1
+    $instPath = Join-Path $kit "install.ps1"
+    $inst = Get-Content $instPath -Raw
+    Assert ($inst -match '\[switch\]\$Local') "wiring: install.ps1 has no [switch]`$Local"
+    Assert ($inst -match 'install-mode\.ps1') "wiring: install.ps1 does not dot-source install-mode.ps1"
+    Assert ($inst -match 'Resolve-InstallMode') "wiring: install.ps1 does not call Resolve-InstallMode"
+    Assert (-not $inst.Contains('if (-not $Cloud) {')) "wiring: install.ps1 still contains 'if (-not `$Cloud) {'"
+    $mExit = [regex]::Match($inst, 'Conflict\)[^\r\n]*exit 1')
+    $banner = $inst.IndexOf('== Prerequisites ==')
+    Assert ($mExit.Success) "wiring: conflict exit 1 not found in install.ps1"
+    Assert ($banner -ge 0) "wiring: '== Prerequisites ==' not found in install.ps1"
+    Assert ($mExit.Index -lt $banner) "wiring: conflict exit 1 (offset $($mExit.Index)) is not before '== Prerequisites ==' (offset $banner)"
+
+    # conflict end-to-end (only reached when the order assertion above passed): -Local -Hybrid exits non-zero, writes nothing
+    $h = Join-Path $sb "home"; New-Item -ItemType Directory -Force $h | Out-Null
+    $orig = $env:USERPROFILE; $origHome = $env:HOME
+    try {
+      $env:USERPROFILE = $h; $env:HOME = $h
+      $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $instPath -Local -Hybrid -Yes 2>&1 | Out-String); $code = $LASTEXITCODE
+    } finally { $env:USERPROFILE = $orig; $env:HOME = $origHome }
+    Assert ($code -ne 0) "conflict run: -Local -Hybrid exited $code, expected non-zero"
+    Assert ($o -match '-Local' -and $o -match '-Hybrid') "conflict run: output does not name -Local and -Hybrid: $o"
+    # the powershell.exe host itself creates an empty AppData\Roaming under a fresh USERPROFILE; that is not an install write
+    $written = @(Get-ChildItem $h -Force -Recurse | Where-Object { $_.FullName -ne (Join-Path $h "AppData") -and $_.FullName -notlike (Join-Path $h "AppData\*") })
+    Assert ($written.Count -eq 0) "conflict run: the sandbox profile was written to: $(($written | ForEach-Object { $_.FullName }) -join ', ')"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "install/uninstall drive models from the manifest" {
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match 'sync-models\.ps1') "install.ps1 does not call sync-models.ps1"

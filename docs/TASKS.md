@@ -2740,7 +2740,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Refs:** Story S29 Behavior bullet 3 and Data/interfaces (`dad-doctor.ps1`); `docs/DESIGN.md` C6 invariants (iv) and (vi); R34. Code: dad-doctor.ps1 mode read (~44-56), hints (~99, ~211, ~234); use-model.ps1 header comment; test-kit case `"dad-doctor's fix hints name commands that actually fix the thing"` (must keep passing).
 - **Context:** C6 invariant (vi): hints that say "re-run install.cmd (or install.cmd -Cloud)" name the intended switch (`-Local`, `-Cloud` or `-Hybrid`). Do not add a new reader of the mode - `dad-doctor` and `use-model` already use the base-URL presence / `LOCALTOOLS_HYBRID` tells. `uninstall.ps1` does not name the modes (no change). Keep ASCII.
 
-### [ ] T29.5 - test-kit: pin the C6 resolver (7 rows), the default and the conflict-writes-nothing case   (Story S29)
+### [x] T29.5 - test-kit: pin the C6 resolver (7 rows), the default and the conflict-writes-nothing case   (Story S29)
 - **Goal:** `test-kit.ps1` pins C6's worked examples against `Resolve-InstallMode`, pins the no-flag Cloud default so it cannot drift (AC4), and proves a `-Local -Hybrid` install exits non-zero without writing, all in a SANDBOX profile.
 - **Touches:** `test-kit.ps1` only - one new `Test-Case` directly AFTER the case `"cloud mode: -Cloud drops the Ollama redirect, and use-model resolves an alias to its cloud id"` (anchor by name). Do not edit existing cases.
 - **Do:**
