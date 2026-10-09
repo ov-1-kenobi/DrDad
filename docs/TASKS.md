@@ -2868,7 +2868,7 @@ T30.5 is the only task that touches `D:\projects\GalacticDataNetwork\gdn1`, and 
 - **Refs:** Story S30 Behavior (bullet 5) and AC6; DESIGN R28/R29; style of the trailers `UX-reviewed:` / `Playtested:` in `close-unit.ps1`.
 - **Context:** trailer format is exact: `Shrink-accepted: <reason> (human)`. `-m` arguments are separate array elements appended after `-m $msg` (PS 5.1 mangles `-m @'...'@`). `$warns` and `$notes` are the existing lists printed at the end of the run. `Write-GateLog` in close-unit runs before `git add -A`, so the line lands in the unit's own commit. ASCII only, PowerShell 5.1.
 
-### [ ] T30.4 - test-kit: a converted attribute with every method name kept reports nothing lost in recover-lost (AC7)   (Story S30)
+### [x] T30.4 - test-kit: a converted attribute with every method name kept reports nothing lost in recover-lost (AC7)   (Story S30)
 - **Goal:** a regression test pins that `recover-lost.ps1` (unchanged) reports nothing lost when only the test attribute changes.
 - **Touches:** `test-kit.ps1` only - one new `Test-Case` directly after T30.3's case (anchor by name). Strictly after T30.3 (third sequential `test-kit.ps1` edit). Do not edit `recover-lost.ps1`.
 - **Do:**

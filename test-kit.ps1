@@ -2883,6 +2883,45 @@ Test-Case "S30 AC6: close-unit -AcceptShrink -Reason puts a Shrink-accepted trai
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S30 AC7: recover-lost reports nothing lost when an attribute is converted but every method name stays" {
+  if (-not [bool](Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\tests" | Out-Null
+    # Method bodies carry a ';' on purpose: Get-Units' method pattern uses [^;]* inside the parens, so
+    # empty bodies like "{ }" let one match swallow the following methods and only Case1 would be seen.
+    function Write-Cases([string]$attr, [int]$count) {
+      $m = (1..$count | ForEach-Object { "    [$attr]`r`n    public void Case$_()`r`n    {`r`n        var x = $_;`r`n    }" }) -join "`r`n"
+      "public class T {`r`n$m`r`n}" | Set-Content "$p\tests\A.cs" -Encoding UTF8
+    }
+    Write-Cases "Fact" 6
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $sha = (git rev-parse HEAD | Out-String).Trim()
+    $ErrorActionPreference = $prev; Pop-Location
+    Assert ($sha -match '^[0-9a-f]{40}$') "the base commit was not made: $sha"
+
+    # convert: same six names, new attribute, plus the attribute class in a new file
+    Write-Cases "RealIpfsFact" 6
+    "public class RealIpfsFactAttribute : FactAttribute { }" | Set-Content "$p\tests\Attr.cs" -Encoding UTF8
+    $rl = Join-Path $kit "recover-lost.ps1"
+    $o1 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $rl -ProjectDir $p -Since $sha 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "recover-lost flagged a pure attribute conversion (exit $LASTEXITCODE):`n$o1"
+    Assert ($o1 -match 'nothing named has vanished') "no 'nothing named has vanished' line:`n$o1"
+    Assert ($o1 -notmatch 'GONE') "a GONE block appeared for a pure attribute conversion:`n$o1"
+    foreach ($n in 1..6) { Assert ($o1 -notmatch "Case$n\b") "Case$n was named in the output of a pure conversion:`n$o1" }
+
+    # control: drop Case6 and the same call must fail and name it (proves the case can fail)
+    Write-Cases "RealIpfsFact" 5
+    $o2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $rl -ProjectDir $p -Since $sha 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "recover-lost did not exit 1 after Case6 was removed (exit $LASTEXITCODE):`n$o2"
+    Assert ($o2 -match 'GONE' -and $o2 -match '-\s+Case6\b') "Case6 was not reported as GONE:`n$o2"
+    Assert ($o2 -notmatch 'nothing named has vanished') "the clean line printed although Case6 vanished:`n$o2"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "the ratchet refuses a SHRINKING verification surface" {
   # The trap every other gate left open: they ask "is X OK now?", which is satisfied by DELETING X.
   # A run rewrote ImageApiControllerTests.cs to add a fixture; 15 of 16 tests did not survive. Every gate
