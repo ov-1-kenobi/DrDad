@@ -2998,7 +2998,7 @@ STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Ca
 - **Refs:** Story S31 Context (cases 2 and 6 "may be real defects"), AC3, AC4.
 - **Context:** the case name states the expected condition: a task ticked by hand, committed in a doc-only commit that did NOT go through close-unit, "wrong shape" -> doc-stats must flag it. ASCII only, PowerShell 5.1.
 
-### [ ] T31.8 - triage case (7): "close-unit REFUSES to bank new work under an already-closed id"   (Story S31)
+### [x] T31.8 - triage case (7): "close-unit REFUSES to bank new work under an already-closed id"   (Story S31)
 - **Goal:** the case runs for real and passes; verdict decided and reported.
 - **Touches:** `test-kit.ps1` (the case at ~5197; remove its temporary skip), and ONLY for a PRODUCT verdict `close-unit.ps1`.
 - **Do:**

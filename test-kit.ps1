@@ -5295,7 +5295,6 @@ Test-Case "/research is wired, online, and owns only the corpus" {
 }
 
 Test-Case "close-unit REFUSES to bank new work under an already-closed id" {
-  Skip-Case "S31 triage pending: T31.8"   # S31 TEMPORARY - remove with T31.8
   # A real run produced a commit titled "T8.1: Implement ObjectStore" whose diff was VariantProcessor.cs
   # (T7.1's work), because close-unit does `git add -A` and banks whatever is dirty under whatever id it
   # is given. Then `t8.1` matched the already-ticked `T8.1`, took the idempotent path, and committed
@@ -5308,7 +5307,7 @@ Test-Case "close-unit REFUSES to bank new work under an already-closed id" {
     "# Task map`n`n## Tasks`n`n### [x] T8.1 - done thing   (Story S8)`n- **Goal:** x`n`n### [ ] T8.2 - other thing   (Story S8)`n- **Goal:** y" |
       Set-Content "$p\docs\TASKS.md" -Encoding UTF8
     "# Stories`n`n### Story S8: Eight   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
-    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``exit 0``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
     Push-Location $p
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     git init -q; git config core.autocrlf false
