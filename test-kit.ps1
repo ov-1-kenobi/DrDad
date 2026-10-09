@@ -3779,7 +3779,6 @@ Test-Case "a visible surface passes through ux-agent -> ui-agent, and close-unit
 }
 
 Test-Case "an experience unit is playtested (playtest-agent -> human), and close-unit records it (-Playtested)" {
-  Skip-Case "S31 triage pending: T31.6"   # S31 TEMPORARY - remove with T31.6
   # A game/sim is mostly FEEL, which no test can score. The kit routed feel to the human in prose ("hand me a
   # checklist") and it got skipped. playtest-agent structures the human playtest - it cannot score fun - and
   # close-unit stamps "Playtested:" so an experience cannot claim done with no one having played it. The
@@ -3810,6 +3809,8 @@ Test-Case "an experience unit is playtested (playtest-agent -> human), and close
      "### [ ] T1.2 - enemy    (Story S1)`n- **Goal:** chase`n`n" +
      "### [ ] T1.3 - score    (Story S1)`n- **Goal:** points") | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
     "public class Player {}" | Set-Content "$p\src\Player.cs" -Encoding UTF8
+    # close-unit refuses a close with no Build command in CLAUDE.md (it never reaches the playtest check)
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
     Push-Location $p
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     git init -q; git config core.autocrlf false

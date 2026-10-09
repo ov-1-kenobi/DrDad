@@ -2972,7 +2972,7 @@ STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Ca
 - **Refs:** Story S31 AC3, AC4; style of the `UX-reviewed:` trailer in `close-unit.ps1`.
 - **Context:** the story's likely cause for cases 1, 3, 4, 5, 7 is a fixture that predates close-unit's rule that the Test command must print a parseable test count. ASCII only, PowerShell 5.1.
 
-### [ ] T31.6 - triage case (5): "an experience unit is playtested (playtest-agent -> human), and close-unit records it (-Playtested)"   (Story S31)
+### [x] T31.6 - triage case (5): "an experience unit is playtested (playtest-agent -> human), and close-unit records it (-Playtested)"   (Story S31)
 - **Goal:** the case runs for real and passes; verdict decided and reported.
 - **Touches:** `test-kit.ps1` (the case at ~3683; remove its temporary skip), and ONLY for a PRODUCT verdict `close-unit.ps1`.
 - **Do:**
