@@ -38,6 +38,14 @@ $Cloud  = [switch]($mode -ne 'Local')
 # -Hybrid runs the cloud AGENT LOOP (base-URL dropped) like -Cloud, and additionally lights up the local GPU
 # tools. $cloudLoop = "the agent talks to Anthropic, not Ollama" and drives the settings.json edit + labels.
 $cloudLoop = $Cloud -or $Hybrid
+# S29/C6 invariant (v) test seam (R35b): env-var ONLY (no parameter, no switch). Inert unless non-empty. When set, every
+# machine-wide write below (USER Path, DAD_HOME, ~/.bashrc, Ollama tuning/pulls/builds, npm, VS Code extension) is
+# redirected under this directory or skipped, so a full run touches only the sandbox profile + this directory.
+$sandbox = $env:DAD_INSTALL_SANDBOX
+if ($sandbox) {
+  New-Item -ItemType Directory -Force $sandbox | Out-Null
+  Write-Host "  [sandbox] DAD_INSTALL_SANDBOX=$sandbox - machine-wide writes redirected or skipped" -ForegroundColor Yellow
+}
 # The Copilot CLI version DESIGN.md's C2 contract was MEASURED against. Contract C2f makes this the ONE
 # source of truth for that number, and test-kit.ps1 asserts it equals the version stamped in C2 - so the doc
 # and the code cannot drift apart silently, which is the precise failure the contract exists to prevent.
@@ -63,9 +71,13 @@ function Write-NoBom($path, $content) {
 function Ensure-OllamaModel($tag, $why) {
   if (-not $tag) { return }
   if ($script:models -match [regex]::Escape($tag)) { Write-Host "  [ok]  $tag present ($why)" -ForegroundColor Green; return }
+  if ($sandbox) {
+    Write-Host "  SKIP (sandbox): ollama pull $tag ($why)" -ForegroundColor Yellow
+  } else {
   Write-Host "  pulling $tag ($why)..." -ForegroundColor Cyan
   try { ollama pull $tag; Write-Host "  [ok]  $tag pulled" -ForegroundColor Green }
   catch { Write-Host "  [warn] could not pull $tag ($($_.Exception.Message)) - '$why' will not work until it is pulled" -ForegroundColor Yellow }
+  }
 }
 
 Write-Host "== Prerequisites ==" -ForegroundColor Cyan
@@ -103,8 +115,12 @@ if ($cloudLoop) {
     if ($Hybrid) { Write-Host "  [warn] hybrid needs Ollama for local_generate; install Ollama.Ollama, then re-run install.cmd -Hybrid." -ForegroundColor Yellow }
   }
 } elseif ($haveOllama) {
+  if ($sandbox) {
+    Write-Host "  SKIP (sandbox): sync-models.ps1 (ollama pull / ollama create write the machine-wide Ollama model store)" -ForegroundColor Yellow
+  } else {
   try { & (Join-Path $root "sync-models.ps1") }
   catch { Write-Host "  (sync-models failed: $($_.Exception.Message) - run sync-models.cmd manually)" -ForegroundColor Yellow }
+  }
 } else {
   Write-Host "  [warn] -Local needs Ollama, which was not found: install it (winget install Ollama.Ollama), then re-run install.cmd -Local." -ForegroundColor Yellow
   Write-Host "  skipped (need ollama)" -ForegroundColor Yellow
@@ -120,10 +136,16 @@ else {
   $ccUpdated = $false
   $ccPrevious = $ccInstalled   # captured BEFORE any npm install (T17.4: the way-back version)
   if (-not $ccInstalled) {
+    if ($sandbox) { Write-Host "  SKIP (sandbox): npm install -g @anthropic-ai/claude-code" -ForegroundColor Yellow }
+    else {
     if (Read-Consent "  install Claude Code now? [Y/n]" $true) { npm install -g @anthropic-ai/claude-code; $ccUpdated = $true }
+    }
   } elseif ($ccLatest -and ((Compare-HarnessVersion $ccInstalled $ccLatest) -lt 0)) {
     Write-Host "  [harness] update available: $ccInstalled -> $ccLatest"
+    if ($sandbox) { Write-Host "  SKIP (sandbox): npm install -g @anthropic-ai/claude-code" -ForegroundColor Yellow }
+    else {
     if (Read-Consent "  update now? [y/N]" $false) { npm install -g @anthropic-ai/claude-code; $ccUpdated = $true }
+    }
   }
   if ($ccUpdated) {
     $ccNow = Get-HarnessVersion claude
@@ -132,16 +154,20 @@ else {
     if (Get-Command Invoke-PostUpdateSmoke -ErrorAction SilentlyContinue) { $null = Invoke-PostUpdateSmoke -Name "claude-code" -Previous $ccPrevious -Package "@anthropic-ai/claude-code" }
   }
 }
-if ($haveCode) { code --install-extension anthropic.claude-code } else { Write-Host "  [warn] 'code' CLI missing - install the Claude Code extension from the VS Code marketplace" -ForegroundColor Yellow }
+if ($haveCode) { if ($sandbox) { Write-Host "  SKIP (sandbox): code --install-extension anthropic.claude-code" -ForegroundColor Yellow } else { code --install-extension anthropic.claude-code } } else { Write-Host "  [warn] 'code' CLI missing - install the Claude Code extension from the VS Code marketplace" -ForegroundColor Yellow }
 
 Write-Host "`n== 4) Build the C# local-tools server ==" -ForegroundColor Cyan
-if ($haveDotnet) { dotnet build (Join-Path $root "local-tools\local-tools.csproj") -c Release }
+if ($sandbox) { Write-Host "  SKIP (sandbox): dotnet build" -ForegroundColor Yellow }
+elseif ($haveDotnet) { dotnet build (Join-Path $root "local-tools\local-tools.csproj") -c Release }
 else { Write-Host "  skipped (need .NET SDK)" -ForegroundColor Yellow }
 
 Write-Host "`n== 5) Point .mcp.json files at this folder ==" -ForegroundColor Cyan
 # Edit JSON via parse/serialize (NOT string-replace): JSON doubles backslashes, and this sets the
 # path deterministically, so it is correct, idempotent, and works even if the folder was moved.
 $exe = Join-Path $root "local-tools\bin\Release\net8.0\local-tools.exe"
+if ($sandbox) {
+  Write-Host "  SKIP (sandbox): .mcp.json rewrite" -ForegroundColor Yellow
+} else {
 foreach ($rel in @(".mcp.json","templates\_common\.mcp.json","templates\unity\.mcp.json")) {
   $p = Join-Path $root $rel
   if (-not (Test-Path $p)) { continue }
@@ -153,6 +179,7 @@ foreach ($rel in @(".mcp.json","templates\_common\.mcp.json","templates\unity\.m
   }
   Write-NoBom $p ($j | ConvertTo-Json -Depth 10)
   Write-Host "  fixed $rel"
+}
 }
 
 Write-Host "`n== 6) Install global commands + agents to $claude ==" -ForegroundColor Cyan
@@ -253,7 +280,13 @@ try {
   $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
   if (-not $userPath) { $userPath = "" }
   $already = ($userPath -split ';' | Where-Object { $_ -and ((($_.TrimEnd('\')) -ieq $root.TrimEnd('\'))) })
-  if ($already) {
+  if ($sandbox) {
+    # Seam: record the USER Path value this step WOULD have written (NAME=value) instead of touching the registry.
+    $sepS = if ($userPath -and -not $userPath.EndsWith(';')) { ';' } else { '' }
+    $pathS = if ($already) { $userPath } else { "$userPath$sepS$root" }
+    Write-NoBom (Join-Path $sandbox "machine-env.txt") "Path=$pathS`n"
+    Write-Host "  [sandbox] USER Path recorded to $(Join-Path $sandbox 'machine-env.txt') (registry untouched)" -ForegroundColor Yellow
+  } elseif ($already) {
     Write-Host "  already on PATH: $root" -ForegroundColor Green
   } else {
     $sep = if ($userPath -and -not $userPath.EndsWith(';')) { ';' } else { '' }
@@ -271,7 +304,12 @@ try {
 # cmd, PowerShell, AND Git Bash (which inherits the Windows environment) - sees it. Projects and scripts
 # can reference it without hard-coding the install path.
 try {
+  if ($sandbox) {
+    [System.IO.File]::AppendAllText((Join-Path $sandbox "machine-env.txt"), "DAD_HOME=$root`n", (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "  [sandbox] DAD_HOME=$root recorded to $(Join-Path $sandbox 'machine-env.txt') (registry untouched)" -ForegroundColor Yellow
+  } else {
   [Environment]::SetEnvironmentVariable("DAD_HOME", $root, "User")
+  }
   $env:DAD_HOME = $root
   Write-Host "  set DAD_HOME=$root (User; inherited by cmd, PowerShell, and Git Bash)" -ForegroundColor Green
 } catch { Write-Host "  could not set DAD_HOME: $($_.Exception.Message)" -ForegroundColor Yellow }
@@ -281,7 +319,11 @@ try {
 # lose it - so drop an idempotent, clearly-marked, removable block there too. Bash form of the path
 # (D:\x -> /d/x); written LF (a CRLF .bashrc breaks bash).
 try {
+  if ($sandbox) {
+    $bashHome = $sandbox     # seam: the .bashrc lives under the sandbox dir, never $env:HOME
+  } else {
   $bashHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+  }
   $bashrc = Join-Path $bashHome ".bashrc"
   $bashRoot = '/' + $root.Substring(0,1).ToLower() + ($root.Substring(2) -replace '\\','/')
   $begin = "# >>> DAD-kit >>>"; $end = "# <<< DAD-kit <<<"
@@ -298,7 +340,11 @@ try {
 if ($mode -ne 'Cloud') {
   Write-Host "`n== 8) Tune Ollama for the GPU ==" -ForegroundColor Cyan
   Write-Host "  This step sets user-scope OLLAMA_FLASH_ATTENTION, OLLAMA_KV_CACHE_TYPE and OLLAMA_KEEP_ALIVE and restarts Ollama." -ForegroundColor Yellow
+  if ($sandbox) {
+    Write-Host "  SKIP (sandbox): ollama-tuning.ps1 (user-scope OLLAMA_FLASH_ATTENTION / OLLAMA_KV_CACHE_TYPE / OLLAMA_KEEP_ALIVE and the Ollama restart)" -ForegroundColor Yellow
+  } else {
   & (Join-Path $root "ollama-tuning.ps1")
+  }
 }
 
 # GitHub Copilot CLI is a SECOND harness that runs the same two guard scripts. Opt-in, additive: the
@@ -310,7 +356,10 @@ if ((Have copilot) -or $CopilotCli) {
   Write-HarnessReport -Name "copilot-cli" -Installed $cpInstalled -Latest $cpLatest -Measured $CopilotMeasuredVersion
   if ($cpInstalled -and $cpLatest -and ((Compare-HarnessVersion $cpInstalled $cpLatest) -lt 0)) {
     Write-Host "  [harness] update available: $cpInstalled -> $cpLatest"
+    if ($sandbox) { Write-Host "  SKIP (sandbox): npm install -g @github/copilot" -ForegroundColor Yellow }
+    else {
     if (Read-Consent "  update Copilot CLI now? [y/N]" $false) { npm install -g @github/copilot }
+    }
   }
 } else {
   Write-Host "[harness] copilot-cli   skipped (not installed; use -CopilotCli to opt in)"

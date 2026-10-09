@@ -2770,7 +2770,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Refs:** Story S29 AC1, AC2, AC3 and Dev notes (R35b); `docs/DESIGN.md` C6 invariants (iv), (v), (vi); R34. Code: dad-doctor.ps1 mode read (~44-58); test-kit.ps1 case `"cloud mode: -Cloud drops the Ollama redirect, ..."` (USERPROFILE override style).
 - **Context:** the doctor prints `mode: CLOUD (Anthropic API) - ...` for cloud, `mode: HYBRID ...` when `LOCALTOOLS_HYBRID` is also set, and no `mode:` CLOUD/HYBRID line for Local. It reads `%USERPROFILE%\.claude\settings.json` through `$env:USERPROFILE`, so a sandbox profile isolates it; it never needs the real profile. The doctor may print many FAIL lines in the sandbox - tolerate that. ASCII only, PowerShell 5.1.
 
-### [ ] T29.8 - install.ps1: DAD_INSTALL_SANDBOX test seam, every machine-wide write redirected or skipped   (Story S29)
+### [x] T29.8 - install.ps1: DAD_INSTALL_SANDBOX test seam, every machine-wide write redirected or skipped   (Story S29)
 - **Goal:** `install.ps1` gains an env-var-only hook `DAD_INSTALL_SANDBOX=<dir>` so a full run in a test touches only that directory; with the variable unset the script behaves byte-identically to today.
 - **Touches:** `install.ps1` only (edits strictly after T29.2 and T29.3).
 - **Do:**
