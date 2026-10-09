@@ -1216,7 +1216,11 @@ starting point and is not a pursuit. *(Reworded 2026-10-06, Story S28: this sect
   file and prints the WARN line while the result stays PASS; other stderr content does not change the
   outcome; an unreachable Ollama gives SKIP, and a skipped local-model check is named in the final smoke line
   (`[harness] <name> smoke check passed (local-model check SKIPPED: <reason>)`), never a bare pass. The S24
-  code still prints `unknown` for `<ctx>`; applying the 2026-10-03 source rule above is not yet implemented.
+  code first printed `unknown` for `<ctx>`. **The 2026-10-03 source rule above is DONE via S24 / T24.5 and
+  T24.6 (commits 5980965 and 1a90092):** `Get-OllamaServedContext` reads the lower of `num_ctx` and
+  `<arch>.context_length` from `/api/show`, and the WARN prints it, with `unknown` only on the failure cases
+  above; the `DAD_SMOKE_OLLAMA_SHOW` seam keeps every test free of network calls. (Corrected 2026-10-08: this
+  paragraph used to say the rule was "not yet implemented".)
   **Worked example:** row (e) above (`fast` = `qwen3-14b-cc` in `models.json`), whose stderr carries
   `[claude-code:unrecognized_model]` -> exit 0, `result` `"pong"`, `modelUsage` key `"qwen3-14b-cc"`. The
   `<ctx>` lookup (measured on this machine 2026-10-03, Ollama 0.35.0): `/api/show` for `qwen3-14b-cc` returns
