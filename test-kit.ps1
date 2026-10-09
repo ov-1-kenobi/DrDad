@@ -156,6 +156,44 @@ Test-Case "no Test-Case guard reads a variable before it is first assigned (S31)
   Assert (@(Find-EarlyGuardViolations $good).Count -eq 0) "assignment-first text was reported as a violation"
 }
 
+Test-Case "S31 AC2: with no git on PATH the formerly vacuous cases report SKIP, not PASS" {
+  # Static: the converted guards read Skip-Case. Built from pieces so this case does not count itself.
+  $needle = "Skip-Case " + [char]34 + "git is not installed" + [char]34
+  $src = [System.IO.File]::ReadAllText((Join-Path $kit "test-kit.ps1"))
+  $n = ([regex]::Matches($src, [regex]::Escape($needle))).Count
+  Assert ($n -ge 17) "expected >= 17 converted git guards, found $n"
+  # Dynamic: the REAL Test-Case/Skip-Case helpers (extracted by AST) in a child whose PATH has no git.
+  $tp = $null; $ps5 = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$tp, [ref]$null)
+  $fns = $ps5.FindAll({ param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and ($a.Name -eq "Test-Case" -or $a.Name -eq "Skip-Case") }, $false)
+  Assert ($fns.Count -eq 2) "could not extract Test-Case and Skip-Case"
+  $helpers = ($fns | ForEach-Object { $_.Extent.Text }) -join "`n"
+  $mk = {
+    param([string]$guardLine)
+    $s = "`$ErrorActionPreference = 'Stop'; `$SkipBuild = `$true; `$script:pass = 0; `$script:fail = 0; `$script:skip = 0`n" +
+         "`$script:failures = New-Object System.Collections.Generic.List[string]`n" + $helpers + "`n" +
+         "function Assert(`$c, [string]`$m) { if (-not `$c) { throw `$m } }`n" +
+         "`$haveGit = [bool](Get-Command git -ErrorAction SilentlyContinue)`n" +
+         "Write-Output ('HAVEGIT=' + `$haveGit)`n" +
+         "Test-Case 'standin' {`n  " + $guardLine + "`n  Assert `$false 'body ran'`n}`n" +
+         "Write-Output ('COUNTS pass=' + `$script:pass + ' fail=' + `$script:fail + ' skip=' + `$script:skip)`n"
+    $f = Join-Path $env:TEMP ("dadkit_ac2_" + [guid]::NewGuid().ToString("N").Substring(0,8) + ".ps1")
+    [System.IO.File]::WriteAllText($f, $s)
+    $oldPath = $env:Path
+    try {
+      $env:Path = "$env:SystemRoot\System32;$env:SystemRoot"
+      $o = & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File $f 2>&1 | Out-String
+    } finally { $env:Path = $oldPath; Remove-Item $f -Force -ErrorAction SilentlyContinue }
+    return $o
+  }
+  $good = & $mk ("if (-not `$haveGit) { " + $needle + " }")
+  Assert ($good -match "HAVEGIT=False") "child still found git on the reduced PATH: $good"
+  Assert ($good -match "SKIP\s+standin") "converted guard did not report SKIP: $good"
+  Assert ($good -match "pass=0 fail=0 skip=1") "child counts wrong for converted guard: $good"
+  # Mutation: the old guard shape (return) is a vacuous PASS - the check must see that difference.
+  $old = & $mk "if (-not `$haveGit) { return }"
+  Assert ($old -match "pass=1 fail=0 skip=0") "mutation (guard back to return) was not a PASS: $old"
+}
+
 Test-Case "no multi-line if-EXPRESSION assignments (they parse, then fail at runtime)" {
   # `$x = if (c) { a }` <newline> `elseif (d) { b }` is VALID SYNTAX - PowerShell ends the assignment at
   # the closing brace and reads the next line as a command - so it sails past "all .ps1 parse" and dies

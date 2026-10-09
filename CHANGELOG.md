@@ -2,6 +2,32 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.59.2 - 2026-10-09
+
+### Fixed - 17 test-kit cases passed without running (Story S31)
+The 17 cases whose `$haveGit` guard ran before the variable existed (it was assigned near the end of the file, so
+the guard saw `$null` and returned early) passed without running. They now run, and a missing git is counted SKIP,
+not PASS. A static test (`Find-EarlyGuardViolations`) stops it recurring, and a second case runs the real
+`Test-Case`/`Skip-Case` helpers in a child whose PATH has no git to prove the guard reports SKIP.
+- `recover-lost` no longer misses a deleted method with an empty body: its method pattern no longer spans lines
+  (`[^;{}]*`). Accepted loss: a default parameter containing braces such as `new T { }`.
+- doc-stats' hand-tick detector now matches a task heading with the checkbox BEFORE the id (`### [x] T1.1 - ...`),
+  so a hand-ticked task committed outside close-unit is flagged again.
+
+The hidden failures came to light via S30. Verdicts of the 7 that failed once forced to run:
+- case (1) dad-guard BLOCKS unverified code: FIXTURE - Test command printed no test count.
+- case (2) recover-lost finds what vanished: PRODUCT - method pattern spanned lines.
+- case (3) close-unit REFUSES a shrink: FIXTURE - Test command printed no test count.
+- case (4) ux-agent / -UxReviewed: FIXTURE - sandbox had no CLAUDE.md so close-unit stopped before the UX check.
+- case (5) playtest / -Playtested: FIXTURE - same missing CLAUDE.md.
+- case (6) doc-stats hand-ticked task: PRODUCT - detector pattern required the checkbox after the id.
+- case (7) already-closed id: FIXTURE - Test command printed no test count.
+
+### Known limits found
+`recover-lost` still does not detect generic methods (`Foo<T>(...)`: the name group cannot precede `<T>`). The static
+guard check only inspects guards that are top-level statements of a Test-Case body (a guard nested in a block, or a
+variable assigned inside a top-level `if`, is not understood).
+
 ## 0.59.1 - 2026-10-09
 
 ### Fixed - the ratchet counts tests marked by derived attributes (Story S30)

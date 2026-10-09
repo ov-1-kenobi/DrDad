@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.59.1** - a guard layer for agentic coding: a spec before code, a verifier that checks real
+**Version 0.59.2** - a guard layer for agentic coding: a spec before code, a verifier that checks real
 correctness, and context that persists across sessions, enforced by deterministic gates.
 
 DrDad is a working implementation of the loop-engineering idea (see "Where this sits" below). It wraps the

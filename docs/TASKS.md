@@ -3011,7 +3011,7 @@ STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Ca
 - **Refs:** Story S31 AC3, AC4, AC5.
 - **Context:** likely common cause per the story: the fixture predates the parseable-test-count rule. ASCII only, PowerShell 5.1.
 
-### [ ] T31.9 - S31 final checks: a PATH without git yields SKIP not PASS (AC2), totals (AC5), CHANGELOG entry, verdict summary   (Story S31)
+### [x] T31.9 - S31 final checks: a PATH without git yields SKIP not PASS (AC2), totals (AC5), CHANGELOG entry, verdict summary   (Story S31)
 - **Goal:** prove the guards now skip honestly, the totals meet AC5, and the change is recorded.
 - **Touches:** `CHANGELOG.md` (edit), `test-kit.ps1` only if the AC2 check becomes a case (see Do 1).
 - **Do:**
