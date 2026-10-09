@@ -2,6 +2,27 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.59.0 - 2026-10-09
+
+### Changed - R34, C6: the no-flag install is Cloud; `-Local` is the explicit Local switch (Story S29)
+`install.ps1` now behaves per contract C6. With no flag it installs Cloud on a machine with nothing to keep
+(it no longer gives Local). `-Local` is the explicit switch for the Local resilience mode. `-Local` together
+with `-Cloud` or `-Hybrid` is a conflict: the installer exits before writing anything. A no-flag re-run keeps
+an installed Local or Hybrid mode instead of switching it to Cloud. The step-7 MODE banner names the reason
+(explicit switch, kept mode, or default). Hybrid always runs the Ollama tuning step. Mode order everywhere:
+Cloud (default), Local (resilience), Hybrid. The README and both overview pages drop the "no flag is still
+Local" notes.
+
+### Changed - dad doctor and use-model hints name the switch (C6)
+`dad doctor` and `dad use-model` hints now name the install switch that gives the mode (`-Local`, `-Hybrid`, or
+no flag for Cloud) instead of describing the old no-flag behaviour.
+
+### Added - DAD_INSTALL_SANDBOX: an env-only test seam for install.ps1
+When the environment variable `DAD_INSTALL_SANDBOX` is set, every machine-wide write of `install.ps1` (USER
+PATH, `DAD_HOME`, the Ollama user variables, `~/.bashrc`) is redirected into the sandbox or recorded there, and
+network, winget, npm and Ollama work is skipped. `test-kit.ps1` uses it to run a real `install.ps1` end to end
+(C6 worked examples rows 1-5 and 7) with the real machine untouched. It is not a user-facing switch.
+
 ## 0.58.1 - 2026-10-06
 
 ### Changed - Goal, R1, R34, R37b/e, R40, C2e, Out of scope: DESIGN reconciled with the mission (Story S28)

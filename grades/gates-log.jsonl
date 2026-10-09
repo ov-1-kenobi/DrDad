@@ -418,3 +418,12 @@
 {"v":1,"ts":"2026-10-09T14:28:47.587Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
 {"v":1,"ts":"2026-10-09T14:35:17.591Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 91)","session":""}
 {"v":1,"ts":"2026-10-09T14:35:25.098Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T29.9","session":""}
+{"v":1,"ts":"2026-10-09T14:43:07.709Z","gate":"dad-guard-stop","decision":"block","tool":"","reason":"DAD-kit stop guard: this session changed 2 code file(s) and nothing has verified them - overview\\field-manual.html, overview\\video-series.html Do not end the turn here. Do ONE of these now: 1. Close the unit properly (builds, runs tests, commits, verifies): powershell -ExecutionPolicy Bypass -File \u0027","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:43:22.640Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:44:43.950Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:46:35.915Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:48:33.573Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T15:00:38.265Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T15:08:49.410Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T15:17:15.865Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 91)","session":""}
+{"v":1,"ts":"2026-10-09T15:17:23.516Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T29.7","session":""}

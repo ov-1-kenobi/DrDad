@@ -2799,7 +2799,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Refs:** Story S29 AC1, AC2, AC3 and Dev notes (R35b); `docs/DESIGN.md` C6 worked examples rows 1-5 and 7, invariants (i), (ii), (v); R34. Test style: `Test-Case`, `New-Sandbox`/`Remove-Sandbox`, the USERPROFILE-override pattern of the case `"cloud mode: -Cloud drops the Ollama redirect, ..."`.
 - **Context:** the C6 worked examples are the expected results (rows 1, 7 Cloud/default; 2 Local/kept; 3 Hybrid/kept; 4 Cloud with `.bak`; 5 Local/explicit). `$env:HOME` and `$env:USERPROFILE` must both be set to the sandbox home, and `DAD_INSTALL_SANDBOX` must be set, or the run would reach the real machine - assert it is set inside `Run-Install` before launching. The run skips network/winget/npm/Ollama work through the seam, so it needs no network and no Ollama. `Test-Case` sets `$ErrorActionPreference = "Continue"`. ASCII only, PowerShell 5.1.
 
-### [ ] T29.7 - docs: README and both overview pages drop the "no flag is still Local" notes; CHANGELOG entry   (Story S29)
+### [x] T29.7 - docs: README and both overview pages drop the "no flag is still Local" notes; CHANGELOG entry   (Story S29)
 - **Goal:** README, `overview/field-manual.html` and `overview/video-series.html` state that the no-flag install is Cloud and that Local is `-Local`; CHANGELOG records the change (AC5).
 - **Touches:** `README.md`, `overview/field-manual.html`, `overview/video-series.html`, `CHANGELOG.md`.
 - **Do:**

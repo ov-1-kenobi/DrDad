@@ -1202,7 +1202,7 @@
   while LOCKED. R1 itself (the Local wiring) stays valid as the description of Local mode. Keep ASCII. If the
   default flips, that is a code change (`install.ps1`, `dad-doctor.ps1`, tests) and needs its own tasks.
 
-### Story S29: install.ps1 defaults to Cloud, and a Local install becomes an explicit option   (R34, R1)   <!-- Status: TODO -->
+### Story S29: install.ps1 defaults to Cloud, and a Local install becomes an explicit option   (R34, R1)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** `install.ps1` with no flag installs Cloud mode, and a Local install is requested explicitly. Mode order
   everywhere is Cloud, Local, Hybrid.
 - **Context:** the human DECIDED 2026-10-06 that Cloud is the default (see S28 and CHANGELOG 0.58.0). Today the

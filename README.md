@@ -1,6 +1,6 @@
 # DrDad - Design Research Document, Agentic Development
 
-**Version 0.58.1** - a guard layer for agentic coding: a spec before code, a verifier that checks real
+**Version 0.59.0** - a guard layer for agentic coding: a spec before code, a verifier that checks real
 correctness, and context that persists across sessions, enforced by deterministic gates.
 
 DrDad is a working implementation of the loop-engineering idea (see "Where this sits" below). It wraps the
@@ -17,7 +17,7 @@ a pitch: pre-1.0, one author, Windows-only, and the CHANGELOG is the honest reco
 
 This is **pre-1.0 and candid about it.**
 
-- The gates are real, tested (the kit's own suite, `test-kit.ps1`, runs 267 checks and must print
+- The gates are real, tested (the kit's own suite, `test-kit.ps1`, runs 270 checks and must print
   `0 failed`), and each one was earned from a **measured failure** on a real run - see
   [CHANGELOG.md](CHANGELOG.md), which reads as a field log of every way a model sabotaged itself and the
   deterministic check that stopped it. Most of those failures came from small local models driven hard;
@@ -138,19 +138,19 @@ needing pixel-level visual judgement (there is no exit code for taste).
 ```
 git clone <your-fork-url> drdad
 cd drdad
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -Cloud
-# ...Local mode, the same loop against Ollama on your own GPU, no network needed:
-#    powershell -ExecutionPolicy Bypass -File .\install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+# ...no flag is the Cloud install (`-Cloud` also works). Explicit options:
+# ...-Local, the resilience mode: the same loop against Ollama on your own GPU, no network needed:
+#    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Local
 # ...or -Hybrid: the cloud loop PLUS your GPU as a drudge co-processor (the local_generate tool):
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Hybrid
 # ...and -CopilotCli ADDS GitHub Copilot CLI as a second harness (combine with any of the above):
 #    powershell -ExecutionPolicy Bypass -File .\install.ps1 -CopilotCli
 ```
 
-Note: **Cloud is the decided default, but the installer has not caught up yet.** Today `install.ps1` with
-**no flag still installs Local mode**, so pass `-Cloud` explicitly. The planned change - Cloud as the no-flag
-default and an explicit option for a Local install - is recorded as story S29 in `docs/STORIES.md`; the
-design wording it depends on is S28.
+A no-flag re-run keeps an installed Local or Hybrid mode instead of switching you to Cloud; the first install
+on a machine with nothing to keep gives Cloud, and the banner says which rule applied. `-Local` together with
+`-Cloud` or `-Hybrid` is a conflict: the installer exits before writing anything (`docs/DESIGN.md` C6).
 
 `-CopilotCli` is a HARNESS switch, not a backend mode: `-Cloud`/`-Hybrid` change where the model runs,
 this changes which agent CLI enforces the gates. It is a **pilot and unverified**: the contracts were
@@ -192,7 +192,7 @@ Full manual: **[docs/GUIDE.md](docs/GUIDE.md)**. Every subcommand: run `dad` wit
 The commands, agents, and every gate are identical in all three modes. Only where the agent loop runs
 changes.
 
-**Cloud (`install.ps1 -Cloud`):** the default mode (the installer's no-flag behaviour will follow, see S29).
+**Cloud (`install.ps1`, no flag; `-Cloud` also works):** the default mode.
 The base-URL redirect is dropped, so Claude Code uses
 its normal Anthropic auth. Aliases map to Anthropic models (`fast` -> Haiku 4.5, `dev`/`coder`/`oss`/`gemma`
 -> Sonnet 5, `quality` -> Opus 5); switch tiers with `dad use-model <alias>`. Your GPU is **not** idle
@@ -200,7 +200,7 @@ here: the `local-tools` RAG (semantic search, corpus, `describe_image` UI review
 is up, so cloud mode VERIFIES the embed/vision models are pulled (otherwise search quietly degrades to a
 literal scan).
 
-**Local (`install.ps1`, no flag today; an explicit option is planned, see S29):** a resilience mode, not
+**Local (`install.ps1 -Local`):** a resilience mode, not
 the goal. There is no proxy: `settings.json` sets `ANTHROPIC_BASE_URL` to Ollama's local port and Claude
 Code talks to it directly, so this depends on your Ollama version serving an Anthropic-compatible endpoint.
 Telemetry, error reporting, and the auto-updater are disabled. It exists for one real case: a disconnected
