@@ -20,6 +20,7 @@ param(
   [switch]$SkipVerify,
   [switch]$RequireGrade,
   [switch]$AcceptShrink,
+  [string]$Reason = "",
   # A visible-surface unit that went through the ux-agent -> ui-agent design pass sets this, and the close
   # stamps "UX-reviewed:" into the commit body. That token is the deterministic proof the pass happened -
   # doc-stats -Findings flags a project with visible surfaces but no such commit, the same way it flags a
@@ -462,6 +463,9 @@ if ($alreadyClosed -and -not $NoCommit -and (Get-Command git -ErrorAction Silent
 # file to add a fixture, 15 of 16 tests did not survive, and every gate went green: build passed, tests
 # RAN (11 > 0), tests PASSED (8), tree clean. Deleting a red test is the shortest path to "make the
 # tests pass" and nothing forbade it. So: counts may not fall silently.
+$script:shrinkAccepted = $false
+$reasonText = (("$Reason") -replace '\s+', ' ').Trim()
+$allowText = "clean close: $Id"
 if (-not $SkipVerify) {
   $ratchet = Join-Path $kit "ratchet.ps1"
   if (Test-Path $ratchet) {
@@ -485,9 +489,16 @@ if (-not $SkipVerify) {
       # No log call here: ratchet.ps1 (the subprocess above) already logged its own block for this event.
       exit 1
     }
-    if ($rCode -ne 0 -and $AcceptShrink) { $warns.Add("shrink ACCEPTED by -AcceptShrink - baseline lowered") }
+    if ($rCode -ne 0 -and $AcceptShrink) {
+      $script:shrinkAccepted = $true
+      $warns.Add("shrink ACCEPTED by -AcceptShrink - baseline lowered")
+      if (-not $reasonText) { $warns.Add("shrink accepted with no -Reason - nothing recorded about WHY; re-run with -Reason `"<text>`" next time") }
+    }
   }
 }
+if ($reasonText -and -not $script:shrinkAccepted) { $notes.Add("-Reason ignored: nothing shrank, so there was no shrink to accept") }
+# Suffix only when a reason was given: the T9.3 case pins the reason-less -AcceptShrink line to exactly "clean close: <Id>".
+if ($script:shrinkAccepted -and $reasonText) { $allowText = "clean close: $Id - shrink accepted: $reasonText" }
 
 # --- 1) tick the unit ---
 $closedTask = $false
@@ -566,7 +577,7 @@ if (-not $NoCommit) {
       # Log the clean-close allow BEFORE staging so the tracked grades\gates-log.jsonl line lands in this
       # unit's own commit. Written only while nothing has failed so far; if the commit/verify then fails,
       # the aggregate refusal below logs a block after it (honest sequence).
-      if ($problems.Count -eq 0) { Write-GateLog "allow" "clean close: $Id"; $script:allowLogged = $true }
+      if ($problems.Count -eq 0) { Write-GateLog "allow" $allowText; $script:allowLogged = $true }
       git add -A | Out-Null
       $stagedFiles = @(git diff --cached --name-only)
       $staged = ($stagedFiles -join "`n").Trim()
@@ -605,6 +616,7 @@ if (-not $NoCommit) {
         $pnote = if ($PlaytestNote) { $PlaytestNote } else { "human playtest via playtest-agent protocol" }
         $trailers += @('-m', "Playtested: $pnote (human sign-off)")
       }
+      if ($script:shrinkAccepted -and $reasonText) { $trailers += @('-m', "Shrink-accepted: $reasonText (human)") }
 
       if (-not $staged) { $notes.Add("nothing to commit (working tree already clean)") ; $committed = $true }
       else {
@@ -616,6 +628,7 @@ if (-not $NoCommit) {
           $notes.Add("committed: $last")
           if ($UxReviewed) { $notes.Add("UX pass recorded in the commit (UX-reviewed:)") }
           if ($Playtested) { $notes.Add("playtest recorded in the commit (Playtested:)") }
+          if ($script:shrinkAccepted -and $reasonText) { $notes.Add("shrink acceptance recorded in the commit (Shrink-accepted:)") }
           $committed = $true
         }
         else { $problems.Add("commit did not land or does not mention $Id (last: $last)") }
@@ -685,7 +698,7 @@ if ($problems.Count -gt 0) {
   exit 1
 }
 # -NoCommit closes (no commit to land in) log here; committed closes already logged before staging.
-if (-not $script:allowLogged) { Write-GateLog "allow" "clean close: $Id"; $script:allowLogged = $true }
+if (-not $script:allowLogged) { Write-GateLog "allow" $allowText; $script:allowLogged = $true }
 # The close verified: build (and tests at a story close), bookkeeping landed, commit landed. THIS is the
 # state worth ratcheting to - never on a failed close, or a bad run would raise the bar it just failed.
 try {

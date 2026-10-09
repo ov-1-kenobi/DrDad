@@ -2824,6 +2824,65 @@ Test-Case "S30 AC5: a discovery error falls back to the base markers with a note
   }
 }
 
+Test-Case "S30 AC6: close-unit -AcceptShrink -Reason puts a Shrink-accepted trailer in the commit; -AcceptShrink alone warns; -Reason without a shrink is ignored with a note" {
+  if (-not [bool](Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\tests" | Out-Null
+    # T1.5 stays open so the story never closes (a story close would demand more evidence than this case needs)
+    $tl = @("# Task map","","## Tasks","")
+    foreach ($n in 1..5) { $tl += @("### [ ] T1.$n - u$n   (Story S1)","- **Goal:** x","") }
+    $tl | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: One   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    $tests = (1..10 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$tests`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $cu = Join-Path $kit "close-unit.ps1"
+    # clean close records the baseline (10)
+    $o1 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -Title "u1" -ProjectDir $p -NoReindex 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "the first clean close failed:`n$o1"
+    Assert (Test-Path "$p\.claude\.dad-ratchet.json") "no baseline recorded:`n$o1"
+    Assert ($o1 -notmatch '-Reason ignored') "a plain close printed the ignored-Reason note:`n$o1"
+
+    # (a) shrink to 5, accepted WITH a reason (extra spaces get flattened)
+    $five = (1..5 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$five`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $o2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.2 -Title "u2" -ProjectDir $p -NoReindex -AcceptShrink -Reason "obsolete suite   removed by decision" 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "-AcceptShrink -Reason did not close:`n$o2"
+    Assert (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.2' -Quiet) "T1.2 was not ticked:`n$o2"
+    $body2 = (git -C $p log -1 --format=%B | Out-String)
+    Assert ($body2 -match 'Shrink-accepted: obsolete suite removed by decision \(human\)') "no Shrink-accepted trailer in the commit body:`n$body2`n$o2"
+    Assert ($o2 -notmatch 'no -Reason') "the no-reason warning fired although a reason was given:`n$o2"
+    $glog = @(Get-Content "$p\grades\gates-log.jsonl" -Encoding UTF8)
+    Assert ($glog.Count -gt 0 -and $glog[-1] -match 'shrink accepted' -and $glog[-1] -match 'obsolete suite removed by decision') "gate-log last line does not carry the accepted shrink and reason:`n$($glog[-1])"
+
+    # (b) shrink to 2, accepted WITHOUT a reason: still exit 0, warns, no trailer
+    "public class T {`r`n    [Fact]`r`n    public void A() { }`r`n    [Fact]`r`n    public void B() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $o3 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.3 -Title "u3" -ProjectDir $p -NoReindex -AcceptShrink 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "-AcceptShrink alone no longer closes:`n$o3"
+    Assert ($o3 -match 'no -Reason') "no warning about the missing -Reason:`n$o3"
+    $body3 = (git -C $p log -1 --format=%B | Out-String)
+    Assert ($body3 -match 'T1\.3') "the T1.3 commit did not land:`n$body3"
+    Assert ($body3 -notmatch 'Shrink-accepted:') "a trailer was written without a reason:`n$body3"
+    $base = Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json
+    Assert ($base.tests -eq 2) "the baseline was not lowered by the reason-less acceptance ($($base.tests))"
+
+    # (c) nothing shrank, -Reason given: ignored with a note, no trailer
+    $o4 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.4 -Title "u4" -ProjectDir $p -NoReindex -Reason "x" 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "a close with an unused -Reason failed:`n$o4"
+    Assert ($o4 -match '-Reason ignored') "no note that -Reason was ignored:`n$o4"
+    $body4 = (git -C $p log -1 --format=%B | Out-String)
+    Assert ($body4 -match 'T1\.4') "the T1.4 commit did not land:`n$body4"
+    Assert ($body4 -notmatch 'Shrink-accepted:') "a trailer was written although nothing shrank:`n$body4"
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "the ratchet refuses a SHRINKING verification surface" {
   # The trap every other gate left open: they ask "is X OK now?", which is satisfied by DELETING X.
   # A run rewrote ImageApiControllerTests.cs to add a fixture; 15 of 16 tests did not survive. Every gate
