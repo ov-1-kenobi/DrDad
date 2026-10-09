@@ -1233,7 +1233,7 @@
 - **Dev notes:** installs only into a sandbox profile in tests (R35b: never touch the real `%USERPROFILE%\.claude`).
   Keep ASCII. No open design questions remain: switch name and re-install semantics are decided in C6.
 
-### Story S30: The ratchet counts tests marked by an attribute derived from FactAttribute/TheoryAttribute, and -AcceptShrink records its reason   (R28, R29)   <!-- Status: TODO -->
+### Story S30: The ratchet counts tests marked by an attribute derived from FactAttribute/TheoryAttribute, and -AcceptShrink records its reason   (R28, R29)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** converting `[Fact]` to a project-defined attribute that derives from `FactAttribute` (or `TheoryAttribute`) no longer lowers the ratchet's test count, and a deliberate `-AcceptShrink` records WHY in the commit.
 - **Context:** field report from `D:\projects\GalacticDataNetwork\gdn1` (2026-10-09). Converting 10 real-ipfs tests to `[RealIpfsFact]` (`RealIpfsFactAttribute : FactAttribute`, which sets `Skip` when an env var is unset) moved the ratchet's tests count from 228 to 219 and made `close-unit` refuse with "VERIFICATION SURFACE SHRANK". `recover-lost` correctly reported nothing named had vanished. Cause: `ratchet.ps1` counts the literal markers `[Fact]`, `[Theory]`, `[Test]`, `[TestMethod]` (line 69, `$testMarkers`), so `[RealIpfsFact]` is invisible. `gdn1` also defines `RealIpfsEnvFactAttribute : FactAttribute` (internal, in a test file), so discovery must find attributes declared anywhere in the project, not only in a shared file. `recover-lost.ps1`'s `Get-Units` matches NAMES and already accepts any attribute prefix, so it needs a regression test, not new logic. Pre-existing, NOT in scope: `[Fact(Skip="...")]` and `[Fact, Trait(...)]` are not counted either (the markers are exact `[Fact]`); widening that would raise counts everywhere, so it is recorded as a follow-up question, not changed here.
 - **Behavior:**
@@ -1253,7 +1253,7 @@
   - [ ] AC5: a scan error falls back to the base markers with a note and exit code unchanged.
   - [ ] AC6: `close-unit -AcceptShrink -Reason "..."` puts the `Shrink-accepted:` trailer in the commit; `-AcceptShrink` alone still passes with the warning.
   - [ ] AC7: a `recover-lost` fixture where an attribute is converted but every method name stays reports nothing lost.
-  - [ ] AC8: run read-only on `D:\projects\GalacticDataNetwork\gdn1` (no `-Update`, its baseline file untouched) the ratchet counts 228 tests again.
+  - [ ] AC8: run read-only on `D:\projects\GalacticDataNetwork\gdn1` (no `-Update`, its baseline file untouched) the ratchet counts the baseline plus every derived-attribute test line (observed 2026-10-09: baseline 227, current 239 = 227 + 11 `[RealIpfsFact]` + 1 `[RealIpfsEnvFact]`; the report's 228/219 came from an earlier snapshot of that repo).
   - [ ] AC9: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** one new test-kit case per behavior, with a mutation check each (e.g. drop the transitive loop -> AC2 derived-of-derived fails; drop the fallback -> AC5 fails). `Write-GateLog` appends a line to the target project's `grades/gates-log.jsonl`, so AC8 adds one line to gdn1's log; say so in the report and do not edit anything else in gdn1. gdn1's own baseline stays 219 until its owner re-runs `ratchet.ps1 -Update` or a clean `close-unit` there. Keep ASCII. Refs: DESIGN R28, R29.
 

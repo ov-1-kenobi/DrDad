@@ -2,6 +2,31 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.59.1 - 2026-10-09
+
+### Fixed - the ratchet counts tests marked by derived attributes (Story S30)
+Field report from gdn1: converting 10 `[Fact]` tests to a project attribute `[RealIpfsFact]` made the test count
+fall, and close-unit refused the close. The ratchet now counts tests marked by any attribute derived from
+`FactAttribute` or `TheoryAttribute`: transitive bases, namespace-qualified bases, the `Attribute` suffix, and
+attributes inside attribute lists. If it cannot discover the derived set it fails open with a one-line note.
+`Find-ShrunkFiles` counts per line with the same pattern set for the working tree and for the baseline commit,
+so both sides of the comparison are measured the same way. On gdn1's current HEAD the ratchet now reads 239
+against a baseline of 227; the difference is exactly the 12 derived-attribute tests (11 `[RealIpfsFact]` and 1
+internal `[RealIpfsEnvFact]`).
+
+### Added - close-unit -Reason with -AcceptShrink
+`close-unit -Reason "<text>"` together with `-AcceptShrink` stamps a `Shrink-accepted: <reason> (human)` trailer
+on the commit. `-AcceptShrink` with no reason warns; `-Reason` given with nothing to accept is noted.
+
+### Not changed / known limits
+`[Fact(Skip=...)]` and `[Fact, Trait(...)]` are still not counted by the base markers. Attributes with a generic
+base (`class H<T,U> : G<int>`), a closing bracket inside attribute arguments, and derived attributes in F# or VB
+are not discovered. `recover-lost.ps1` itself is unchanged.
+
+### Found - not fixed here (tracked as Story S31)
+17 test-kit cases passed without running because `$haveGit` is assigned at about line 6013, after their guards;
+7 of them fail when forced to run. `recover-lost` also misses a deleted method whose body is empty (reproduced).
+
 ## 0.59.0 - 2026-10-09
 
 ### Changed - R34, C6: the no-flag install is Cloud; `-Local` is the explicit Local switch (Story S29)
