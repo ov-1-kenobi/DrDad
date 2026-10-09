@@ -1319,6 +1319,88 @@ Test-Case "S29 AC1/AC2: dad-doctor reads Cloud and Local back from settings.json
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S29 AC1/AC2: a real install.ps1 run in a sandbox profile honors C6 (Cloud default, -Local, a no-flag re-run keeps Local, -Hybrid)" {
+  # First end-to-end execution of install.ps1 (T29.8 seam). USERPROFILE and HOME point at a sandbox home, and
+  # DAD_INSTALL_SANDBOX redirects/skips every machine-wide write; Run-Install ASSERTS all three are set under
+  # %TEMP% before it launches. PATH is narrowed for the child (as in the dad-doctor case) so no real
+  # ollama/node/npm/claude/code is reached: no network, no real tool is called.
+  $sb = New-Sandbox
+  try {
+    $h = Join-Path $sb "home"; $m = Join-Path $sb "machine"
+    New-Item -ItemType Directory -Force $h | Out-Null; New-Item -ItemType Directory -Force $m | Out-Null
+    $fileHash = { param($p) if (Test-Path -LiteralPath $p -PathType Leaf) { (Get-FileHash -LiteralPath $p -Algorithm SHA1).Hash } else { "ABSENT" } }
+    $realSettings = Join-Path $env:USERPROFILE ".claude\settings.json"
+    $realBashrc = Join-Path $(if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }) ".bashrc"
+    $snap = {
+      $r = [ordered]@{}
+      foreach ($n in 'Path','DAD_HOME','OLLAMA_FLASH_ATTENTION','OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE') { $r[$n] = [Environment]::GetEnvironmentVariable($n, 'User') }
+      $r['settings.json'] = & $fileHash $realSettings
+      $r['.bashrc'] = & $fileHash $realBashrc
+      $r
+    }
+    $before = & $snap
+    $tmpRoot = $env:TEMP
+    $runInstall = {
+      param([string[]]$flags)
+      foreach ($p in @($h, $m)) { Assert ($p -and $p.StartsWith($tmpRoot, [StringComparison]::OrdinalIgnoreCase)) "Run-Install: sandbox path is not under TEMP: $p" }
+      $sU = $env:USERPROFILE; $sH = $env:HOME; $sS = $env:DAD_INSTALL_SANDBOX; $sP = $env:PATH
+      try {
+        $env:USERPROFILE = $h; $env:HOME = $h; $env:DAD_INSTALL_SANDBOX = $m; $env:PATH = "$env:SystemRoot\System32;$PSHOME"
+        Assert ($env:USERPROFILE -eq $h -and $env:HOME -eq $h -and $env:DAD_INSTALL_SANDBOX -eq $m) "Run-Install: sandbox env vars not set, refusing to launch"
+        $o = (& (Join-Path $PSHOME "powershell.exe") -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install.ps1") @flags -Yes 2>&1 | Out-String)
+      } finally { $env:USERPROFILE = $sU; $env:HOME = $sH; $env:DAD_INSTALL_SANDBOX = $sS; $env:PATH = $sP }
+      $o
+    }
+    $envNames = {
+      $f = Join-Path $h ".claude\settings.json"
+      Assert (Test-Path $f) "no settings.json written under the sandbox home"
+      $j = Get-Content $f -Raw | ConvertFrom-Json
+      @($j.env.PSObject.Properties.Name)
+    }
+    $envVal = { param($n) $j = Get-Content (Join-Path $h ".claude\settings.json") -Raw | ConvertFrom-Json; "$($j.env.$n)" }
+    $resetHome = { if (Test-Path (Join-Path $h ".claude")) { [System.IO.Directory]::Delete((Join-Path $h ".claude"), $true) } }
+
+    # row 1: empty profile, no flag -> Cloud, default
+    $o = & $runInstall @()
+    Assert ((& $envNames) -notcontains 'ANTHROPIC_BASE_URL') "row 1: no flag on an empty profile wrote ANTHROPIC_BASE_URL (should be Cloud)"
+    Assert ($o.Contains('default (no flag, nothing installed to keep)')) "row 1: output lacks 'default (no flag, nothing installed to keep)': $o"
+    # row 5: fresh profile, -Local -> Local, explicit
+    & $resetHome
+    $o = & $runInstall @('-Local')
+    Assert ((& $envNames) -contains 'ANTHROPIC_BASE_URL') "row 5: -Local on a fresh profile did not write ANTHROPIC_BASE_URL"
+    Assert ($o.Contains('explicit flag')) "row 5: output lacks 'explicit flag': $o"
+    # row 2: no flag over the Local profile -> Local kept
+    $o = & $runInstall @()
+    Assert ((& $envNames) -contains 'ANTHROPIC_BASE_URL') "row 2: a no-flag re-run over a Local profile dropped ANTHROPIC_BASE_URL"
+    Assert ($o.Contains('kept from the existing install')) "row 2: output lacks 'kept from the existing install': $o"
+    # row 4: -Cloud over the Local profile -> Cloud, .bak
+    $bak = Join-Path $h ".claude\settings.json.bak"
+    if (Test-Path $bak) { Remove-Item $bak -Force }
+    $o = & $runInstall @('-Cloud')
+    Assert ((& $envNames) -notcontains 'ANTHROPIC_BASE_URL') "row 4: -Cloud over a Local profile left ANTHROPIC_BASE_URL"
+    Assert (Test-Path $bak) "row 4: -Cloud over an existing settings.json made no settings.json.bak"
+    # row 7: no flag over the Cloud profile -> stays Cloud, default
+    $o = & $runInstall @()
+    Assert ((& $envNames) -notcontains 'ANTHROPIC_BASE_URL') "row 7: a no-flag re-run over a Cloud profile wrote ANTHROPIC_BASE_URL"
+    Assert ($o.Contains('default')) "row 7: output lacks 'default': $o"
+    # row 3: fresh profile, -Hybrid -> LOCALTOOLS_HYBRID=1; a no-flag re-run keeps it
+    & $resetHome
+    $o = & $runInstall @('-Hybrid')
+    Assert ((& $envVal 'LOCALTOOLS_HYBRID') -eq '1') "row 3: -Hybrid did not set env.LOCALTOOLS_HYBRID to 1"
+    $o = & $runInstall @()
+    Assert ($o.Contains('kept')) "row 3: a no-flag re-run over a Hybrid profile did not report 'kept': $o"
+    Assert ((& $envVal 'LOCALTOOLS_HYBRID') -eq '1') "row 3: a no-flag re-run over a Hybrid profile dropped LOCALTOOLS_HYBRID"
+
+    # the seam ran, and the real machine is untouched
+    $rec = Join-Path $m "machine-env.txt"
+    Assert (Test-Path $rec) "seam: $rec was not written (the sandbox branch did not run)"
+    $recText = Get-Content $rec -Raw
+    Assert ($recText -match '(?m)^Path=' -and $recText -match '(?m)^DAD_HOME=') "seam: machine-env.txt does not hold both Path= and DAD_HOME=: $recText"
+    $after = & $snap
+    foreach ($k in $before.Keys) { Assert ("$($before[$k])" -ceq "$($after[$k])") "untouched: real $k changed during the sandboxed installs" }
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "install/uninstall drive models from the manifest" {
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match 'sync-models\.ps1') "install.ps1 does not call sync-models.ps1"

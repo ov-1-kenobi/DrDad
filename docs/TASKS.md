@@ -2784,7 +2784,7 @@ cases against it (after T29.6, same file); only a run with that seam set may get
 - **Refs:** Story S29 AC1/AC2 and Dev notes (R35b); `docs/DESIGN.md` C6 invariant (v); the `DAD_SMOKE_*` env-var test-hook style (e.g. `DAD_SMOKE_OLLAMA_SHOW`, T24.5). Code: install.ps1 step 7b and the lines after it, step 8, step 1 pulls, the harness-install blocks.
 - **Context:** why: a real run writes the machine-wide USER PATH, `DAD_HOME` and `.bashrc` with no seam (R35b), so AC1/AC2 could only be tested through the pure resolver. The hook must be inert unless explicitly set, so a normal `install.cmd` is unaffected (the unset path is the acceptance). Do not touch the mode-resolution logic or banners. ASCII only, PowerShell 5.1. QA must run the behavior check only with all three env vars pointing under %TEMP%, never without `DAD_INSTALL_SANDBOX`.
 
-### [ ] T29.9 - test-kit: end-to-end install in a sandbox profile covers C6 rows 1-5 and 7, real machine untouched   (Story S29)
+### [x] T29.9 - test-kit: end-to-end install in a sandbox profile covers C6 rows 1-5 and 7, real machine untouched   (Story S29)
 - **Goal:** `test-kit.ps1` runs a real `install.ps1` against the `DAD_INSTALL_SANDBOX` seam and asserts the resulting `settings.json` for C6 rows 1-5 and 7, plus that the real profile, USER PATH and Ollama env vars are untouched.
 - **Touches:** `test-kit.ps1` only - one new `Test-Case` directly after T29.6's case (anchor by name). Do not edit existing cases.
 - **Do:**

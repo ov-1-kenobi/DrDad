@@ -407,3 +407,14 @@
 {"v":1,"ts":"2026-10-09T12:55:09.483Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
 {"v":1,"ts":"2026-10-09T12:55:45.760Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 91)","session":""}
 {"v":1,"ts":"2026-10-09T12:55:53.166Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T29.8","session":""}
+{"v":1,"ts":"2026-10-09T13:48:22.667Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T13:55:36.772Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T13:57:39.075Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:03:44.199Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:09:55.035Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:11:37.330Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:17:50.783Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:19:51.370Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:28:47.587Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-09T14:35:17.591Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 29, tasks 91)","session":""}
+{"v":1,"ts":"2026-10-09T14:35:25.098Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: T29.9","session":""}
