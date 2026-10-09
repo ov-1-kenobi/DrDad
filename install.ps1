@@ -33,6 +33,7 @@ if ($resolved.Warn) { Write-Host "  [warn] $($resolved.Warn)" -ForegroundColor Y
 $mode = $resolved.Mode
 $modeReason = $resolved.ReasonText
 # Rebind so every downstream test of $Cloud/$Hybrid follows the RESOLVED mode.
+# $Cloud is intentionally TRUE for Hybrid as well (Hybrid runs the cloud agent loop); only $Hybrid distinguishes them.
 $Hybrid = [switch]($mode -eq 'Hybrid')
 $Cloud  = [switch]($mode -ne 'Local')
 # -Hybrid runs the cloud AGENT LOOP (base-URL dropped) like -Cloud, and additionally lights up the local GPU
