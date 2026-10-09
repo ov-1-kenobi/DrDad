@@ -2836,7 +2836,7 @@ T30.5 is the only task that touches `D:\projects\GalacticDataNetwork\gdn1`, and 
 - **Refs:** Story S30 Behavior (bullets 1-4) and AC1-AC5; DESIGN R28 (fail open), R29. Code: `ratchet.ps1` `$testMarkers` (~69), the `$srcFiles` scan (~71-79), `Find-ShrunkFiles` (~131-151).
 - **Context:** field report from `gdn1` (2026-10-09): `RealIpfsFactAttribute : FactAttribute` (and an internal `RealIpfsEnvFactAttribute : FactAttribute` declared in a test file, so discovery must scan every source file, not a shared one) moved the count 228 -> 219. Not in scope and must stay unchanged: `[Fact(Skip="...")]` and `[Fact, Trait(...)]` are NOT counted today (base markers are exact `[Fact]`); do not widen the base pattern. Derived-attribute alternatives however DO match with arguments and inside lists, as the story says. PowerShell 5.1, ASCII only. `$testMarkers` is also used by the non-C# alternatives in the same pattern (`def test_`, `it(`, ...); keep them.
 
-### [ ] T30.2 - test-kit: pin the derived-attribute ratchet (AC1-AC5) with fixtures and a mutation check each   (Story S30)
+### [x] T30.2 - test-kit: pin the derived-attribute ratchet (AC1-AC5) with fixtures and a mutation check each   (Story S30)
 - **Goal:** `test-kit.ps1` proves the conversion no longer shrinks the count, the pattern variants are counted, `Find-ShrunkFiles` reports no shrink, a real removal still trips, and a scan error falls back with a note.
 - **Touches:** `test-kit.ps1` only - new `Test-Case`s placed directly after the case `"a shrink comes with a RUNNABLE recovery, not just a complaint"` (anchor by name). Do not edit existing cases. This is the FIRST of three sequential `test-kit.ps1` edits (T30.2 -> T30.3 -> T30.4).
 - **Do:**

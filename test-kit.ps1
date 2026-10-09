@@ -2701,6 +2701,129 @@ Test-Case "a shrink comes with a RUNNABLE recovery, not just a complaint" {
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "S30 AC1/AC3/AC4: converting [Fact] to a derived attribute keeps the ratchet count, Find-ShrunkFiles stays silent, a real removal still trips" {
+  # gdn1 field report: [Fact] -> [RealIpfsFact] (class RealIpfsFactAttribute : FactAttribute) read as 228 -> 219.
+  if (-not [bool](Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git is not installed" }   # not $haveGit: it is assigned far below this case, so here it is $null
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\tests" | Out-Null
+    "public class RealIpfsFactAttribute : FactAttribute { }" | Set-Content "$p\tests\Attr.cs" -Encoding UTF8
+    $mk = { param([string]$attr, [int]$n) "public class T {`r`n" + ((1..$n | ForEach-Object { "    [$attr]`r`n    public void Case$_() { }" }) -join "`r`n") + "`r`n}" }
+    (& $mk "Fact" 10) | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $r = Join-Path $kit "ratchet.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Update | Out-Null
+    $base = Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json
+    Assert ($base.tests -eq 10) "the baseline did not count the 10 [Fact] methods (got $($base.tests))"
+
+    # the conversion: same 10 methods, a derived attribute
+    (& $mk "RealIpfsFact" 10) | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "converting to a derived attribute was reported as a shrink:`n$out"
+    Assert ($out -notmatch 'WHAT WAS REMOVED') "Find-ShrunkFiles reported a removal for a pure attribute conversion:`n$out"
+    $js = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Json 2>&1 | Out-String)
+    $cur = ($js | ConvertFrom-Json).current
+    Assert ($cur.tests -eq 10) "the derived-attribute methods were not counted (current.tests = $($cur.tests), want 10)"
+
+    # a real removal still trips: 3 of the 10 gone, the rest still [RealIpfsFact]
+    (& $mk "RealIpfsFact" 7) | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $out2 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "removing 3 derived-attribute tests was not caught:`n$out2"
+    Assert ($out2 -match 'tests: 10 -> 7') "the drop was not reported with its numbers:`n$out2"
+    Assert ($out2 -match 'ApiTests\.cs') "the shrunk file was not named:`n$out2"
+    Assert ($out2 -match '\(10 -> 7 test') "the per-file count did not use the derived attribute (want 10 -> 7):`n$out2"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S30 AC2: derived attribute variants are counted, comment/string mentions are not" {
+  # Declared in REVERSE order (D before B before A) so a single discovery pass cannot resolve the chain.
+  if (-not [bool](Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\tests" | Out-Null
+    @("public class D : B { }",
+      "public class B : A { }",
+      "public class A : FactAttribute { }",
+      "public class C : Xunit.TheoryAttribute { }",
+      "public class Tests {",
+      "    [A(Skip=""x"")]",
+      "    public void M1() { }",
+      "    [BAttribute]",
+      "    public void M2() { }",
+      "    [Trait(""a"",""b""), C]",
+      "    public void M3() { }",
+      "    [D]",
+      "    public void M4() { }",
+      "    [Fact]",
+      "    public void M5() { }",
+      "    [A] [B] public void Two() { }",
+      "}") | Set-Content "$p\tests\Variants.cs" -Encoding UTF8
+    @("// class Fake : FactAttribute",
+      "public class Other {",
+      "    var s = ""class Fake2 : FactAttribute { }"";",
+      "    [Fake]",
+      "    public void F1() { }",
+      "    [Fake2]",
+      "    public void F2() { }",
+      "}") | Set-Content "$p\tests\Mentions.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $r = Join-Path $kit "ratchet.ps1"
+    $js = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Json 2>&1 | Out-String)
+    $cur = ($js | ConvertFrom-Json).current
+    # lines carrying a counted marker: [A(Skip)] [BAttribute] [Trait,C] [D] = 4 variants, [Fact] = 1,
+    # "[A] [B]" = 1 (one line, counted once); [Fake]/[Fake2] and the class declarations = 0.  Total 6.
+    Assert ($cur.tests -eq 6) "expected 6 counted test lines, got $($cur.tests)"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S30 AC5: a discovery error falls back to the base markers with a note and the same exit code" {
+  if (-not [bool](Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  $hadEnv = Test-Path Env:DAD_RATCHET_FAIL_DISCOVERY
+  $oldEnv = $env:DAD_RATCHET_FAIL_DISCOVERY
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\tests" | Out-Null
+    "public class RealIpfsFactAttribute : FactAttribute { }" | Set-Content "$p\tests\Attr.cs" -Encoding UTF8
+    $body = (1..5 | ForEach-Object { "    [RealIpfsFact]`r`n    public void Real$_() { }" }) -join "`r`n"
+    "public class T {`r`n$body`r`n    [Fact]`r`n    public void Plain() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    Push-Location $p
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+
+    $r = Join-Path $kit "ratchet.ps1"
+    $env:DAD_RATCHET_FAIL_DISCOVERY = "1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Update | Out-Null
+    $plain = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p 2>&1 | Out-String)
+    $plainCode = $LASTEXITCODE
+    Assert ($plainCode -eq 0) "an unchanged baseline taken with the failure flag was not exit 0:`n$plain"
+    $js = (& powershell -NoProfile -ExecutionPolicy Bypass -File $r -ProjectDir $p -Json 2>&1 | Out-String)
+    $jsCode = $LASTEXITCODE
+    # the note is printed by Write-Host BEFORE the JSON; parse from the first line that starts with '{'
+    Assert ($js -match 'attribute discovery failed') "no note about the failed discovery:`n$js"
+    $lines = @($js -split "`r?`n")
+    $first = 0; while ($first -lt $lines.Count -and $lines[$first] -notmatch '^\s*\{') { $first++ }
+    Assert ($first -lt $lines.Count) "no JSON in the output:`n$js"
+    $cur = (($lines[$first..($lines.Count - 1)] -join "`n") | ConvertFrom-Json).current
+    Assert ($cur.tests -eq 1) "the fallback did not count the base markers only (current.tests = $($cur.tests), want 1)"
+    Assert ($jsCode -eq $plainCode) "the exit code changed under the fallback ($jsCode vs $plainCode)"
+  } finally {
+    if ($hadEnv) { $env:DAD_RATCHET_FAIL_DISCOVERY = $oldEnv } else { Remove-Item Env:DAD_RATCHET_FAIL_DISCOVERY -ErrorAction SilentlyContinue }
+    Remove-Sandbox $sb
+  }
+}
+
 Test-Case "the ratchet refuses a SHRINKING verification surface" {
   # The trap every other gate left open: they ask "is X OK now?", which is satisfied by DELETING X.
   # A run rewrote ImageApiControllerTests.cs to add a fixture; 15 of 16 tests did not survive. Every gate
