@@ -1289,10 +1289,10 @@
 - **Data / interfaces:** `test-kit.ps1` only. Not changed: any script, `docs/DESIGN.md`.
 - **Dependencies:** S31.
 - **Acceptance (testable):**
-  - [ ] AC1: no `if (-not $haveGit) { return }` remains in `test-kit.ps1`.
-  - [ ] AC2: the static check fails on a seeded bare-return prerequisite guard (mutation) and passes on the real file.
-  - [ ] AC3: with git absent from PATH a stand-in for a converted guard reports SKIP (the S31 AC2 case, count raised).
-  - [ ] AC4: the full `test-kit.ps1` prints `0 failed`, `0 skipped` on a machine with git, and the passed count is unchanged apart from added cases.
+  - [x] AC1: no `if (-not $haveGit) { return }` remains in `test-kit.ps1`.
+  - [x] AC2: the static check fails on a seeded bare-return prerequisite guard (mutation) and passes on the real file.
+  - [x] AC3: with git absent from PATH a stand-in for a converted guard reports SKIP (the S31 AC2 case, count raised).
+  - [x] AC4: the full `test-kit.ps1` prints `0 failed`, `0 skipped` on a machine with git, and the passed count is unchanged apart from added cases.
 - **Dev notes:** one task is enough if the guards convert mechanically; then one for the detector extension. Both edit `test-kit.ps1`, so run sequentially. Refs: S21, S31 (T31.1, T31.9), `grades/S31_GRADE.md`.
 
 ### Story S33: install.ps1 -CopilotCli combined with each backend mode, and -Local with -Cloud through the real installer, are tested in a sandbox   (R34, R37)   <!-- Status: DONE closed:close-unit -->
@@ -1305,10 +1305,10 @@
 - **Data / interfaces:** `test-kit.ps1` only (cases and, if useful, a shared `Run-Install` helper factored out of the S29 case). Not changed: `install.ps1`, `install-mode.ps1`, `docs/DESIGN.md`.
 - **Dependencies:** S29 (seam and resolver), S32 optional (same file; run sequentially).
 - **Acceptance (testable):**
-  - [ ] AC1: three sandbox cases (`-Cloud`, `-Local`, `-Hybrid`, each with `-CopilotCli`) pass and each has a mutation check (e.g. force the Copilot wiring to rewrite the Claude settings, or skip writing `dad.json`).
-  - [ ] AC2: the real-installer `-Local -Cloud` case exits non-zero, names both switches and leaves the sandbox profile empty (the conflict `exit 1` stays before `== Prerequisites ==`).
-  - [ ] AC3: before/after snapshots of the real machine are identical for every case.
-  - [ ] AC4: the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC1: three sandbox cases (`-Cloud`, `-Local`, `-Hybrid`, each with `-CopilotCli`) pass and each has a mutation check (e.g. force the Copilot wiring to rewrite the Claude settings, or skip writing `dad.json`).
+  - [x] AC2: the real-installer `-Local -Cloud` case exits non-zero, names both switches and leaves the sandbox profile empty (the conflict `exit 1` stays before `== Prerequisites ==`).
+  - [x] AC3: before/after snapshots of the real machine are identical for every case.
+  - [x] AC4: the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** NEVER run `install.ps1` outside the seam with any flag; the first run of a new flag combination is done once by hand with the wide snapshot protocol used in T29.9 (record `git status`, USER Path, `DAD_HOME`, `.bashrc`, `settings.json`, global git config, `npm ls -g`, `~/.copilot` before and after) before the case is written. Under a narrowed PATH `Have copilot` is false, so `-CopilotCli` is the only thing that triggers the Copilot section. Refs: `grades/S29_GRADE.md`, DESIGN C2, C5, C6.
 
 ### Story S34: S28's three findings are closed - AC2 wording, a live-claim consistency test, and the place of the provenance notes   (R34)   <!-- Status: DONE closed:close-unit -->
@@ -1321,7 +1321,7 @@
 - **Data / interfaces:** `docs/STORIES.md` (S28 AC2 text), `test-kit.ps1` (one new case), `docs/DESIGN.md` only if item 3 chooses MOVE or SHORTEN. Not changed: any script.
 - **Dependencies:** S28 (done). Item 2's test should run after item 1 so the story and the test describe the same rule.
 - **Acceptance (testable):**
-  - [ ] AC1: S28's AC2 no longer asks for a literal grep that the provenance note defeats; it states the live-claim rule.
-  - [ ] AC2: the new Test-Case passes on the real `docs/DESIGN.md`, flags an inline seeded live claim, ignores an inline seeded provenance note, and has a mutation check; the full `test-kit.ps1` prints `0 failed`.
-  - [ ] AC3: the human's choice for the provenance notes is recorded (in the task report and in CHANGELOG) and applied, or the task is explicitly left waiting for it.
+  - [x] AC1: S28's AC2 no longer asks for a literal grep that the provenance note defeats; it states the live-claim rule.
+  - [x] AC2: the new Test-Case passes on the real `docs/DESIGN.md`, flags an inline seeded live claim, ignores an inline seeded provenance note, and has a mutation check; the full `test-kit.ps1` prints `0 failed`.
+  - [x] AC3: the human's choice for the provenance notes is recorded (in the task report and in CHANGELOG) and applied, or the task is explicitly left waiting for it.
 - **Dev notes:** three tasks, one per item, strictly in order T34.1 -> T34.2 -> T34.3 (T34.2 edits `test-kit.ps1`; T34.3 may edit DESIGN). Never edit DESIGN while it is LOCKED without the unlock flow. Refs: `grades/S28_GRADE.md` (suggestions 1-3), S28, DESIGN Goal and `## Out of scope`.
