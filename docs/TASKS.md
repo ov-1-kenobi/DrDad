@@ -315,6 +315,11 @@ T30.5 -> T31.1 -> T31.2 (needs T31.1) -> T31.3 (needs T31.1, T31.2) -> T31.4 (ne
 STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Case "S31 triage pending: <id>"` on each of the
 7 failing cases; each of T31.2 to T31.8 removes exactly its own.)
 
+T31.9 -> T32.1 (needs T31.9) -> T32.2 (needs T32.1)
+
+(added 2026-10-09; Story S32, DESIGN R24/R28. Queued after the last T31 entry. Both S32 tasks edit only `test-kit.ps1`, so they run
+STRICTLY one after the other: T32.1 converts the guards, T32.2 adds the static check that keeps them converted.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -3023,6 +3028,32 @@ STRICTLY one after the other in the order above. T31.1 puts a TEMPORARY `Skip-Ca
 - **Depends on:** T31.1, T31.2, T31.3, T31.4, T31.5, T31.6, T31.7, T31.8
 - **Refs:** Story S31 AC2, AC3, AC5 and Dev notes.
 - **Context:** `VERSION` is 0.59.1 and `CHANGELOG.md` already has a 0.59.1 section (S30). The skip-aware summary counts `Skip-Case` outcomes as SKIP (S21). Keep the run's output out of the repo. ASCII only, PowerShell 5.1.
+
+### [ ] T32.1 - test-kit: convert the 15 remaining bare `if (-not $haveGit) { return }` guards to `Skip-Case`, raise the S31 AC2 count   (Story S32)
+- **Goal:** a missing git makes every git-dependent case report SKIP instead of a silent PASS.
+- **Touches:** `test-kit.ps1` only.
+- **Do:**
+  1. Find the guards by text: `Select-String -Path test-kit.ps1 -Pattern 'if \(-not \$haveGit\) \{ return \}'`. Expect exactly 15 hits (near lines 6373, 6562, 6594, 6629, 6651, 6748, 6793, 6833, 6871, 6899, 6970, 7011, 7873, 7908, 7957; numbers drift).
+  2. Replace each, in place and on its own line, with `if (-not $haveGit) { Skip-Case "git is not installed" }`. Keep the indentation and any trailing comment. Change NOTHING else in those cases; remove no case and weaken no assertion.
+  3. In the case `"S31 AC2: with no git on PATH the formerly vacuous cases report SKIP, not PASS"` (near line 159) raise the threshold `Assert ($n -ge 17) "expected >= 17 converted git guards, found $n"` to the real new total and update the message text to match. Before this task the file holds 23 occurrences of `Skip-Case "git is not installed"`, so the new total should be 38 (23 + 15): count again after the edit (`([regex]::Matches($src, [regex]::Escape('Skip-Case "git is not installed"'))).Count`) and use the number you actually find. Leave the stand-in child run (git-free PATH reports SKIP, and the old `return` shape counts PASS) untouched.
+  4. Do NOT touch the guards that already read `Skip-Case "git not available"` (two cases, near lines 6465 and 6499) or the `if ($haveGit) {` blocks inside cases (near lines 6274 and 6716); they are not bare returns.
+- **Acceptance:** `Select-String -Path test-kit.ps1 -Pattern 'if \(-not \$haveGit\) \{ return \}'` finds nothing (S32 AC1); the S31 AC2 case asserts `-ge 38` (or the real recounted total) and PASSes, including its git-free-PATH stand-in (AC3); the full `.\test-kit.ps1` (output to %TEMP%) prints `0 failed`, `0 skipped` on a machine with git, and the passed count equals the pre-change count (no cases added or removed) (AC4). The report lists the 15 converted line numbers and states the new threshold.
+- **Depends on:** T31.9
+- **Refs:** Story S32 AC1, AC3, AC4; `grades/S31_GRADE.md` suggestion 1; S21 Behavior 4.
+- **Context:** `$haveGit` is assigned once at the top of `test-kit.ps1` (line ~28), so these guards read a real value; they were left as `return` by S31 T31.1, which converted only the 17 guards that sat above the assignment. `Skip-Case` is the suite's helper that counts a SKIP (S21). ASCII only, PowerShell 5.1. A case run without git must not return silently.
+
+### [ ] T32.2 - test-kit: static check fails a Test-Case whose guard is a bare `return` on a prerequisite flag (`$have*`)   (Story S32)
+- **Goal:** a future case cannot reintroduce a silent-PASS `if (-not $haveX) { return }` guard.
+- **Touches:** `test-kit.ps1` only (extend `Find-EarlyGuardViolations`, near line 97, or add a sibling function `Find-BareFlagReturnViolations([string]$text)` next to it; plus extend the case `"no Test-Case guard reads a variable before it is first assigned (S31)"`, near line 147, or add a case right after it).
+- **Do:**
+  1. The existing function already walks each top-level `Test-Case` script block and recognises a top-level statement `if (-not $v) { return }` (also `!$v`; body one bare `return`). Reuse that recognition. Add a second finding: when the variable name matches `^have[A-Z]` (that is `$haveGit`, and any similar `$have*` flag), report `"<case name> line <n>: bare return on prerequisite flag $<name>; use Skip-Case so a missing prerequisite counts SKIP"`. Report it whether or not the variable is assigned above (a plain `$haveGit` guard is exactly what this finds). Keep the existing "read before assigned" findings unchanged.
+  2. Decision already made from the file: `$haveGit` is the only script-level `$have*` flag assigned in `test-kit.ps1` (line ~28). `$haveCopilot` is assigned INSIDE one case (near line 1946) and its guard is a compound condition (`if (-not ((Test-Path $hookFile) -or $haveCopilot)) { return }`), not a bare `-not $flag`, so the check does not match it; leave that case as is and add a short comment at the new check saying so. The non-flag optional-tool guards (`Get-Command python|dotnet|ollama`, `$LASTEXITCODE`) are likewise out of this story; mention them in the same comment as deliberately not covered. After step 1, if the detector reports ANY real-file hit of the new kind (none is expected after T32.1), convert that guard to `Skip-Case "<reason>"` in this task (do not exempt silently) and list it in the report.
+  3. In the test case (extend the S31 one or add `"no Test-Case uses a bare return on a prerequisite flag (S32)"`): assert the real file has zero findings of the new kind, then run mutation checks on inline strings: (a) `"Test-Case `"x`" { if (-not `$haveGit) { return } }`n"` reports exactly 1 finding, (b) the `!` form `if (!`$haveGit) { return }` reports exactly 1, (c) `"Test-Case `"x`" { if (-not `$haveGit) { Skip-Case `"git is not installed`" } }`n"` reports 0, (d) a non-flag variable such as `if (-not `$zzz) { return }` assigned first (`"`$zzz = 1`nTest-Case ..."`) reports 0 of the new kind. Count only the new kind in these assertions (match on `bare return on prerequisite flag`) so the S31 findings do not interfere.
+  4. Do not remove or weaken the existing S31 assertions, and do not change the S31 AC2 count from T32.1.
+- **Acceptance:** the new/extended case PASSes on the real file (AC2) and its mutations (a) and (b) each report exactly one finding while (c) and (d) report none; temporarily reverting one converted guard in a scratch copy of the text makes the check fail (shown by mutation (a)); the full `.\test-kit.ps1` (output to %TEMP%) prints `0 failed`, `0 skipped`, and the passed count equals the T32.1 count plus 0 or 1 (1 only if a new case was added) (AC4).
+- **Depends on:** T32.1
+- **Refs:** Story S32 AC2, AC4; Behavior bullet 2; S31 T31.1 (`Find-EarlyGuardViolations`).
+- **Context:** per the story, a missing prerequisite must be a SKIP, never a return. The existing detector inspects only guards that are TOP-LEVEL statements of a `Test-Case` body (known limit recorded in S31 verdicts); keep it that way, do not widen to nested guards. The detector takes TEXT so a seeded violation can be tested. Build mutation strings from backtick-escaped pieces so this file does not contain a literal bare guard that the check would read as real (a here-string or double-quoted string is not an AST statement, so it is safe, but verify the real-file assertion is still zero). ASCII only, PowerShell 5.1.
 
 ## Open questions
 - **[design] S30 follow-up (recorded, not changed):** `[Fact(Skip="...")]` and `[Fact, Trait(...)]` are not counted by the base markers (exact `[Fact]`); widening them would raise counts everywhere and re-baseline every project. Decide separately whether to widen.
