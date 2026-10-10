@@ -103,6 +103,49 @@ gates.
 
 ---
 
+## What may be new here
+
+None of the pieces below is new on its own: hooks, ratchets, derived status, embeddings and design-first
+planning all exist elsewhere. I compared against the three projects named above and BMAD, nothing wider, so
+read "new" as "I did not see it there". What I think is distinctive is how the pieces are chosen and tied
+together, and each item names its evidence.
+
+- **Every gate is earned from a measured failure, and the record is kept.** The CHANGELOG reads as a field
+  log: a model deleted tests until the suite went green (15 of 16 tests gone), one search repeated 1,023
+  times, a shell probe looped 920 times. Each entry is a failure, a number, and the check that stops it.
+- **The verification surface may not shrink.** The ratchet counts tests, stories, tasks, contracts, sources,
+  the `Build:` line and grade-card bytes, and `close-unit` refuses a close if any fell. `recover-lost` then
+  works on named units (methods, tests, headings) and tells MOVED from LOST, so a relocated test is not
+  "restored" twice. The aim is to stop a model passing by deleting the thing being measured.
+- **State is computed, and closing is not the model's to claim.** `doc-stats` derives the project's real status
+  and `STATUS.md` is derived from it. `close-unit` is the only closer: it builds, runs the tests, confirms they
+  ran, commits, and writes trailers (`closed:close-unit`, `UX-reviewed:`, `Playtested:`, `Shrink-accepted:`)
+  that a hand-edit cannot produce. A task ticked by hand outside it is flagged.
+- **A gate has to show it fired.** `dad gates-smoke` provokes each gate and reports whether it actually
+  fired, and every decision lands in a committed log. Gates also fail open on their own bugs, on purpose: a
+  gate that fails closed on its own defects stops real work and gets switched off.
+- **A local RAG indexer shaped by watching runs.** The core is ordinary: per-project document corpora,
+  chunking, local embeddings, cosine search, one small C# MCP server. Three parts came from failures:
+  `API-SURFACE.md`, written by reflecting the exact public signatures out of the compiled assemblies, so a
+  model retrieves a real signature and does not invent a plausible one; a **shell door**
+  (`local-tools --search`, `docs-find`) because `search_datasheets` was called zero times across nine graded
+  runs while shell commands were called constantly; and **provenance**, where `/research` and `dad corpus`
+  build dated, cited banks and a stale source is flagged.
+- **Hybrid mode with a fence you can check.** Sending cheap work to a local model is not new. The part I
+  care about is that the fence is a mechanism and not a rule: `local_generate` is a separate tool that the
+  server registers only when the mode flag is set, so in Cloud or Local mode it does not exist to be called.
+  Its output is always labelled a draft that the cloud model must verify. Cloud is the brain; the GPU is senses
+  (embeddings, vision) and drudge-work.
+- **The kit is run on itself.** The same gates found two defects in the kit's own test suite: 17 tests that
+  passed without ever running because a variable was read before it was set, and a hand-tick detector that
+  could never match a real tick line. Both are fixed and recorded in the CHANGELOG (0.59.2).
+
+Limits worth stating: those same findings show the gates need gates of their own, and the suite was wrong
+until the kit's own checks caught it. The incident numbers come from my own runs and are in the CHANGELOG and
+the grade cards, not from an independent benchmark.
+
+---
+
 ## What it is / what it isn't
 
 **It is:** a set of global Claude Code commands, agents, hooks, and deterministic scripts, plus one small
