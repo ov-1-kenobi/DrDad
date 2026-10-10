@@ -327,6 +327,12 @@ STRICTLY one after the other. T33.1 is a by-hand wide-snapshot protocol and then
 `-CopilotCli` cases; T33.3 the `-Local -Cloud` real-installer conflict case plus the CHANGELOG entry. NEVER run `install.ps1` outside the
 `DAD_INSTALL_SANDBOX` seam, and never touch `D:\projects\GalacticDataNetwork\gdn1`.)
 
+T33.3 -> T34.1 (needs T33.3) -> T34.2 (needs T34.1, T33.3) -> T34.3 (needs T34.2) [T34.3 WAITS-FOR-HUMAN]
+
+(added 2026-10-09; Story S34, DESIGN Goal and Out of scope, grades/S28_GRADE.md suggestions 1-3. Queued after the last T33 entry.
+T34.1 is a STORIES text edit (no code); T34.2 edits `test-kit.ps1`, so it runs after T33.3's edits to the same file; T34.3 is a
+HUMAN decision - the build loop must STOP at it until the human has chosen, and it edits DESIGN only through `/design`'s unlock flow.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -3102,6 +3108,55 @@ STRICTLY one after the other. T33.1 is a by-hand wide-snapshot protocol and then
 - **Depends on:** T33.1, T33.2
 - **Refs:** Story S33 AC2, AC3, AC4 and Behavior bullet 2; `docs/DESIGN.md` C6 (Switches: `-Local` with `-Cloud` or `-Hybrid` is a conflict that writes nothing, exit before `== Prerequisites ==`); the S29 case `"S29 AC1-AC4: install mode resolution follows C6 ..."` (the `-Local -Hybrid` conflict run and offset assertion).
 - **Context:** the existing real-installer conflict run covers `-Local -Hybrid` only; `-Local -Cloud` is pinned today only through `Resolve-InstallMode` (row 6b). The powershell.exe host itself creates an empty `AppData\Roaming` under a fresh USERPROFILE, which is not an install write. NEVER run `install.ps1` outside the seam. Never touch `D:\projects\GalacticDataNetwork\gdn1`. ASCII only, PowerShell 5.1.
+
+### [ ] T34.1 - STORIES: reword S28's AC2 to the live-claim rule (provenance notes excluded)   (Story S34)
+- **Goal:** S28's AC2 stops asking for a literal grep that the quoted "used to say" provenance notes in `docs/DESIGN.md` defeat, and states the live-claim rule that T34.2's test implements.
+- **Touches:** `docs/STORIES.md` only (Story S28, the AC2 checkbox, lines ~1195-1196). This is a STORIES text edit owned by scribe-agent / the orchestrator, not code. STORIES stays editable while DESIGN is LOCKED. Do not touch any other line, story or checkbox.
+- **Do:** with a small in-place `Edit`, replace exactly these two lines (keep the box `[x]`, it stays ticked):
+  `  - [x] AC2: grep for `Offline is the DEFAULT` and `Offline-first .* is the default and the thesis` over`
+  `    `docs/DESIGN.md` finds no hit.`
+  with:
+  `  - [x] AC2: `docs/DESIGN.md` makes no LIVE claim that offline is the default or the thesis (patterns such as`
+  `    `Offline is the DEFAULT`, `Offline-first .* is the default`, `fully offline`); text inside backticks, inside double quotes, or inside a`
+  `    `*(Reworded ...)*` note is a quoted "used to say" provenance note and is excluded. Enforced by the S34 consistency Test-Case in `test-kit.ps1`.`
+  Then reindex (`index_datasheets`).
+- **Acceptance:** `Grep` for `AC2: grep for` in `docs/STORIES.md` finds nothing under S28; the S28 AC2 line still begins `- [x] AC2:`; `git diff --stat` shows only `docs/STORIES.md` changed, a few lines.
+- **Depends on:** T33.3
+- **Refs:** Story S34 Behavior (1) and AC1; `grades/S28_GRADE.md` suggestion 1.
+- **Context:** the defeating text is `docs/DESIGN.md` Goal lines ~19-20 (`*(Reworded 2026-10-06, Story S28: this section used to say the loop runs "fully offline" and that offline is "the DEFAULT and the thesis".)*`) and `## Out of scope` lines ~1660-1662 (`(This bullet used to say "Cloud models as the DEFAULT" was out of scope - reversed 2026-10-06, Story S28.)`). Keep ASCII (straight quotes, `-`). Do not edit DESIGN.
+
+### [ ] T34.2 - test-kit: a doc-consistency Test-Case that FAILS on a LIVE "offline is the default" claim in DESIGN.md and ignores quoted provenance notes   (Story S34)
+- **Goal:** the S28 reconciliation cannot silently regress: a later DESIGN edit that reintroduces a live "offline is the DEFAULT / the thesis" claim turns the suite red.
+- **Touches:** `test-kit.ps1` only - one new function `Get-OfflineDefaultClaims` and one new `Test-Case`, added directly after the S25 case `"S25: the Copilot stamp check covers EVERY MEASURED stamp, not just the first (AC1-AC3)"` (anchor by name), or after T33.3's last case if that is later; do not edit existing cases.
+- **Do:**
+  1. `function Get-OfflineDefaultClaims([string]$Text)` returns finding strings (empty = clean), same shape as `Get-CopilotStampProblems`. Pure text in, strings out, NO git, no filesystem (so no Skip-Case and no hoisted `$haveGit` are needed).
+  2. Blank out quoted text FIRST, preserving every newline so line numbers stay exact: (a) `*(Reworded ...)*` notes: `[regex]::Replace($Text, '\*\(Reworded[\s\S]*?\)\*', { param($m) $m.Value -replace '[^\r\n]', ' ' })` (a note may span lines); (b) backtick spans: `` `[^`\r\n]*` ``; (c) double-quoted spans: `"[^"\r\n]*"`. Apply (a), then (b), then (c), each blanking with spaces via the same MatchEvaluator idea. A "live claim" is a match that survives in the remaining text.
+  3. Flag each match (case-insensitive, per line, `[^\r\n]*` instead of a bare `.*` so a pattern never spans lines) of: `Offline is the DEFAULT`; `Offline-first[^\r\n]* is the default`; `fully offline`; `offline[^\r\n]* is the DEFAULT and the thesis`; `Cloud models as the DEFAULT`. Finding text: `DESIGN.md:<line> live claim '<matched text>'` (`<line>` = 1 + count of `` `n `` before the match).
+  4. `Test-Case "S34: DESIGN.md makes no LIVE claim that offline is the default or the thesis; quoted provenance notes are excluded (AC2)"`:
+     - Real file: `$d = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw`; `Assert (@(Get-OfflineDefaultClaims $d).Count -eq 0)` with the findings in the message. BEFORE finalizing, run the function on the real file once WITHOUT the exclusion step and confirm it hits only the notes at lines ~19-20 and ~1661 (proves the exclusion, not the patterns, is what makes it pass).
+     - Seeded live claim (inline, build with a here-string or backtick-escaped pieces so this file never carries a stray literal): `"# D`n## Goal`nOffline is the DEFAULT backend.`n"` must give exactly 1 finding naming line 3; likewise one for `The loop runs fully offline.` and one for `Cloud models as the DEFAULT are out of scope.` (3 more seeds, 1 finding each).
+     - Seeded provenance notes (inline) must give 0 findings: `` `n*(Reworded 2026-10-06, Story S28: this used to say the loop runs "fully offline" and that offline is "the DEFAULT and the thesis".)*`n `` , a note whose `*(Reworded` and `)*` are on DIFFERENT lines, `` The old claim was `Offline is the DEFAULT`. ``, and `` (This bullet used to say "Cloud models as the DEFAULT" was out of scope.) ``.
+     - Mixed seed: a provenance note on line 2 and a live claim on line 4 -> exactly 1 finding naming line 4.
+  5. Mutation check (temporary; restore with `git checkout -- test-kit.ps1` and confirm `git diff --quiet -- test-kit.ps1` ONLY if nothing else is uncommitted in it, otherwise undo by hand): (i) delete the double-quote blanking step: the real-file assertion FAILs (finding at ~line 20); (ii) delete the `fully offline` pattern: its seeded-live-claim assertion FAILs. Also, as a one-off by hand on a scratch copy under `%TEMP%` (never in the repo), append `Offline is the DEFAULT.` to a copy of `docs/DESIGN.md` and confirm the function reports it.
+  6. Run `dotnet build local-tools\local-tools.csproj -c Release`, then the full `.\test-kit.ps1` (output to `%TEMP%`).
+- **Acceptance:** the new case is on a PASS line; on the real `docs/DESIGN.md` it reports zero findings; the 3 seeded live claims give 1 finding each, the 4 seeded provenance notes give 0, the mixed seed gives 1 (line 4); mutations (i) and (ii) each FAIL the named assertion; the full `.\test-kit.ps1` prints `0 failed` and the passed count is the pre-change count plus 1 (AC2).
+- **Depends on:** T34.1, T33.3
+- **Refs:** Story S34 Behavior (2) and AC2; `grades/S28_GRADE.md` suggestion 2; the style of `Get-CopilotStampProblems` and its fixture case (S25) and of `Find-EarlyGuardViolations` (text-in, seeded violation).
+- **Context:** this restates T34.1's rule: quoted text (backticks, double quotes, `*(Reworded ...)*`) is provenance, anything else is live. The real DESIGN holds the old phrases ONLY in the two provenance notes (Goal ~19-20 and `## Out of scope` ~1661-1662), both inside double quotes. Read DESIGN with `-Raw` (the Copilot case does the same). Do not edit DESIGN or STORIES. ASCII only, PowerShell 5.1 (no `?.`, no ternary).
+
+### [ ] T34.3 - DESIGN provenance notes: present KEEP / MOVE / SHORTEN to the human, record the choice, apply via /design unlock   (Story S34)   [WAITS-FOR-HUMAN]
+- **Goal:** the "Reworded 2026-10-06" provenance notes in LOCKED design prose are either kept deliberately or relocated, by the human's decision, never by the dev's guess.
+- **Touches:** `docs/DESIGN.md` (Goal lines ~19-20 and `## Out of scope` lines ~1661-1662) ONLY if the human chooses MOVE or SHORTEN, and ONLY via `/design`'s unlock flow; `CHANGELOG.md` (record the choice, one entry, in the file's style). KEEP changes no DESIGN text.
+- **Do:**
+  1. This task NEEDS A HUMAN. The build loop must not pick it as a normal unit: dev/orchestrator reads this task, then PRESENTS the three options to the human and asks which: (KEEP) leave both notes in the locked prose as they are; (MOVE) delete both notes from `docs/DESIGN.md` and rely on `CHANGELOG.md` entries 0.58.0 and 0.58.1, which already record the rewording; (SHORTEN) replace each note with a pointer, `*(Reworded 2026-10-06, see CHANGELOG 0.58.1.)*` for the Goal and `(Reversed 2026-10-06, see CHANGELOG 0.58.1.)` for the Out of scope bullet.
+  2. If the human has NOT chosen: STOP. Change nothing (no DESIGN edit, no CHANGELOG edit, no tick), list the three options in the report, and leave the task unchecked and waiting.
+  3. If the human chose: record the choice in the task report and in a `CHANGELOG.md` entry (header `## <next patch above the current VERSION> - <today's date>`; do NOT edit the `VERSION` file). KEEP: nothing else. MOVE or SHORTEN: apply it ONLY through `/design`'s unlock flow - ask the human for the OK to unlock, flip DESIGN `Status:` LOCKED -> DRAFT, make the small in-place edit (never reprint the file), run `index_datasheets`, then relock to LOCKED on the human's confirmation. Never edit DESIGN prose while LOCKED.
+  4. After a MOVE or SHORTEN, re-run the full `.\test-kit.ps1`: T34.2's case must still report zero findings (a MOVE removes the notes entirely; a SHORTEN pointer contains none of the flagged phrases).
+  5. Tick the box only when the choice is recorded and applied (or KEEP recorded).
+- **Acceptance:** the human's choice is written in the report and in `CHANGELOG.md`; for MOVE the notes are gone from `docs/DESIGN.md`, for SHORTEN each is a one-line pointer to CHANGELOG 0.58.1, for KEEP DESIGN is byte-identical (`git diff --quiet -- docs/DESIGN.md` exits 0); DESIGN `Status:` is LOCKED again; `.\test-kit.ps1` prints `0 failed` (AC3). If no choice was given, the acceptance is "task reported waiting, nothing changed".
+- **Depends on:** T34.2
+- **Refs:** Story S34 Behavior (3) and AC3; `grades/S28_GRADE.md` suggestion 3; `/design` unlock/relock flow; CHANGELOG 0.58.0 and 0.58.1.
+- **Context:** this is a design decision, so it is the human's, not the dev model's (project rule: Never edit DESIGN prose when LOCKED). The notes today read: Goal `*(Reworded 2026-10-06, Story S28: this section used to say the loop runs "fully offline" and that offline is "the DEFAULT and the thesis".)*` and Out of scope `(This bullet used to say "Cloud models as the DEFAULT" was out of scope - reversed 2026-10-06, Story S28.)`. Do not decide on the human's behalf; do not guess a default. ASCII only.
 
 ## Open questions
 - **[design] S30 follow-up (recorded, not changed):** `[Fact(Skip="...")]` and `[Fact, Trait(...)]` are not counted by the base markers (exact `[Fact]`); widening them would raise counts everywhere and re-baseline every project. Decide separately whether to widen.
