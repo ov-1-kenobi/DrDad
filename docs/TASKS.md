@@ -3109,7 +3109,7 @@ HUMAN decision - the build loop must STOP at it until the human has chosen, and 
 - **Refs:** Story S33 AC2, AC3, AC4 and Behavior bullet 2; `docs/DESIGN.md` C6 (Switches: `-Local` with `-Cloud` or `-Hybrid` is a conflict that writes nothing, exit before `== Prerequisites ==`); the S29 case `"S29 AC1-AC4: install mode resolution follows C6 ..."` (the `-Local -Hybrid` conflict run and offset assertion).
 - **Context:** the existing real-installer conflict run covers `-Local -Hybrid` only; `-Local -Cloud` is pinned today only through `Resolve-InstallMode` (row 6b). The powershell.exe host itself creates an empty `AppData\Roaming` under a fresh USERPROFILE, which is not an install write. NEVER run `install.ps1` outside the seam. Never touch `D:\projects\GalacticDataNetwork\gdn1`. ASCII only, PowerShell 5.1.
 
-### [ ] T34.1 - STORIES: reword S28's AC2 to the live-claim rule (provenance notes excluded)   (Story S34)
+### [x] T34.1 - STORIES: reword S28's AC2 to the live-claim rule (provenance notes excluded)   (Story S34)
 - **Goal:** S28's AC2 stops asking for a literal grep that the quoted "used to say" provenance notes in `docs/DESIGN.md` defeat, and states the live-claim rule that T34.2's test implements.
 - **Touches:** `docs/STORIES.md` only (Story S28, the AC2 checkbox, lines ~1195-1196). This is a STORIES text edit owned by scribe-agent / the orchestrator, not code. STORIES stays editable while DESIGN is LOCKED. Do not touch any other line, story or checkbox.
 - **Do:** with a small in-place `Edit`, replace exactly these two lines (keep the box `[x]`, it stays ticked):

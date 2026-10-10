@@ -1192,8 +1192,9 @@
 - **Dependencies:** none. Needs the human's `/design` unlock; DESIGN returns to LOCKED on their confirmation.
 - **Acceptance (testable):**
   - [x] AC1: `docs/DESIGN.md` `## Goal` states the restated mission and names Local as a resilience mode.
-  - [x] AC2: grep for `Offline is the DEFAULT` and `Offline-first .* is the default and the thesis` over
-    `docs/DESIGN.md` finds no hit.
+  - [x] AC2: `docs/DESIGN.md` makes no LIVE claim that offline is the default or the thesis (patterns such as
+    `Offline is the DEFAULT`, `Offline-first .* is the default`, `fully offline`); text inside backticks, inside double quotes, or inside a
+    `*(Reworded ...)*` note is a quoted "used to say" provenance note and is excluded. Enforced by the S34 consistency Test-Case in `test-kit.ps1`.
   - [x] AC3: R34 orders the modes Cloud (default), Local, Hybrid and describes Local as the resilience mode with its use case.
   - [x] AC4: R34 or its contract records the 2026-10-06 decision: Cloud is the default, the mode order is
     Cloud, Local, Hybrid.
