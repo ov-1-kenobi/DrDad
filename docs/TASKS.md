@@ -3055,7 +3055,7 @@ HUMAN decision - the build loop must STOP at it until the human has chosen, and 
 - **Refs:** Story S32 AC1, AC3, AC4; `grades/S31_GRADE.md` suggestion 1; S21 Behavior 4.
 - **Context:** `$haveGit` is assigned once at the top of `test-kit.ps1` (line ~28), so these guards read a real value; they were left as `return` by S31 T31.1, which converted only the 17 guards that sat above the assignment. `Skip-Case` is the suite's helper that counts a SKIP (S21). ASCII only, PowerShell 5.1. A case run without git must not return silently.
 
-### [ ] T32.2 - test-kit: static check fails a Test-Case whose guard is a bare `return` on a prerequisite flag (`$have*`)   (Story S32)
+### [x] T32.2 - test-kit: static check fails a Test-Case whose guard is a bare `return` on a prerequisite flag (`$have*`)   (Story S32)
 - **Goal:** a future case cannot reintroduce a silent-PASS `if (-not $haveX) { return }` guard.
 - **Touches:** `test-kit.ps1` only (extend `Find-EarlyGuardViolations`, near line 97, or add a sibling function `Find-BareFlagReturnViolations([string]$text)` next to it; plus extend the case `"no Test-Case guard reads a variable before it is first assigned (S31)"`, near line 147, or add a case right after it).
 - **Do:**

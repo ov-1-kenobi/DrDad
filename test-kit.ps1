@@ -134,6 +134,12 @@ function Find-EarlyGuardViolations([string]$text) {
       if ($body.Count -ne 1 -or $body[0] -isnot [System.Management.Automation.Language.ReturnStatementAst] -or $body[0].Pipeline) { continue }
       $v = ($u.Child.VariablePath.UserPath -replace "^[A-Za-z]+:", "")
       $gl = $st.Extent.StartLineNumber
+      # S32: a bare return on a prerequisite flag ($haveGit, ...) is a silent PASS; it must be Skip-Case.
+      # Deliberately not covered: compound guards (the $haveCopilot case) and optional-tool guards
+      # (Get-Command python|dotnet|ollama, $LASTEXITCODE).
+      if ($v -cmatch "^have[A-Z]") {
+        $out.Add("$caseName line ${gl}: bare return on prerequisite flag `$$v; use Skip-Case so a missing prerequisite counts SKIP")
+      }
       if (-not $assigned.ContainsKey($v)) {
         $out.Add("$caseName line ${gl}: guard reads `$$v, which is never assigned at script level")
       } elseif ($assigned[$v] -gt $gl) {
@@ -156,6 +162,20 @@ Test-Case "no Test-Case guard reads a variable before it is first assigned (S31)
   Assert (@(Find-EarlyGuardViolations $good).Count -eq 0) "assignment-first text was reported as a violation"
 }
 
+Test-Case "no Test-Case uses a bare return on a prerequisite flag (S32)" {
+  $kind = "bare return on prerequisite flag"
+  $real = @(Find-EarlyGuardViolations ([System.IO.File]::ReadAllText((Join-Path $kit "test-kit.ps1"))) | Where-Object { $_ -like "*$kind*" })
+  Assert ($real.Count -eq 0) ("bare flag return(s): " + ($real -join "; "))
+  # Mutation checks: the detector must be able to FAIL (a, b) and must not over-report (c, d).
+  $a = "Test-Case `"x`" { if (-not `$haveGit) { return } }`n"
+  Assert (@(Find-EarlyGuardViolations $a | Where-Object { $_ -like "*$kind*" }).Count -eq 1) "mutation (a): -not form was not reported exactly once"
+  $b = "Test-Case `"x`" { if (!`$haveGit) { return } }`n"
+  Assert (@(Find-EarlyGuardViolations $b | Where-Object { $_ -like "*$kind*" }).Count -eq 1) "mutation (b): ! form was not reported exactly once"
+  $c = "Test-Case `"x`" { if (-not `$haveGit) { Skip-Case `"git is not installed`" } }`n"
+  Assert (@(Find-EarlyGuardViolations $c | Where-Object { $_ -like "*$kind*" }).Count -eq 0) "mutation (c): Skip-Case guard was reported"
+  $d = "`$zzz = 1`nTest-Case `"x`" { if (-not `$zzz) { return } }`n"
+  Assert (@(Find-EarlyGuardViolations $d | Where-Object { $_ -like "*$kind*" }).Count -eq 0) "mutation (d): non-flag variable was reported"
+}
 Test-Case "S31 AC2: with no git on PATH the formerly vacuous cases report SKIP, not PASS" {
   # Static: the converted guards read Skip-Case. Built from pieces so this case does not count itself.
   $needle = "Skip-Case " + [char]34 + "git is not installed" + [char]34
