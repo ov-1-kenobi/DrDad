@@ -34,7 +34,8 @@ starting point and is not a pursuit. *(Reworded 2026-10-06, Story S28: this sect
       human decision): **Cloud is the DEFAULT**, and the modes are ordered Cloud, Local, Hybrid. They share every
       command, agent, and gate - only where the AGENT LOOP runs changes. The installer's mode rules (which flag
       selects which mode, what a no-flag run does, what a re-run keeps) are pinned in contract C6; C6 is
-      DECIDED, and the installer catches up in Story S29 (until then a no-flag install still gives Local).
+      DECIDED and IMPLEMENTED (Story S29, v0.59.0: `install-mode.ps1` resolves the mode, a no-flag install is
+      Cloud on a machine with nothing to keep, and the end-to-end install test runs in a sandbox).
       (a) **Cloud** (`install.ps1 -Cloud`, and no flag per C6): the `ANTHROPIC_BASE_URL` redirect is DROPPED, so
           Claude Code uses its normal Anthropic auth; aliases resolve to each model's `cloud` id in `models.json`
           (dev/coder/oss/gemma -> Sonnet, fast -> Haiku, quality -> Opus). The ABSENCE of the base-URL is the
@@ -42,7 +43,7 @@ starting point and is not a pursuit. *(Reworded 2026-10-06, Story S28: this sect
           mode:** `local-tools` reaches Ollama independent of the agent loop, so semantic RAG and
           `describe_image` still run on it - and cloud install VERIFIES the embed/vision models are pulled, so a
           literal-scan degrade is LOUD, not silent.
-      (b) **Local** (`install.ps1 -Local` per C6; today a no-flag run): R1 - Claude Code -> Ollama; the whole
+      (b) **Local** (`install.ps1 -Local` per C6): R1 - Claude Code -> Ollama; the whole
           loop on the GPU, no network. A RESILIENCE mode, not the goal: it exists for a disconnected afternoon
           where output is still wanted (datasheets in, a simple SoC/IC wiring plan out; a small Unity3D
           prototype from a one-page design doc), and it is the weakest backend - a full `/design -> /build ->
@@ -1573,9 +1574,11 @@ story that needs one must first get it measured and amended into C5 via `/design
   1.0.89.
 
 ### C6: R34 installer mode selection - Cloud is the default, `-Local` is explicit, a no-flag re-run keeps Local/Hybrid
-- **Status: DECIDED 2026-10-06 (human; Stories S28/S29).** Not yet implemented: until Story S29 lands,
-  `install.ps1` still treats a no-flag run as Local and has no `-Local` switch. This contract is what S29's tasks
-  are written against; nothing below is open except the exact banner wording.
+- **Status: DECIDED 2026-10-06 (human; Stories S28/S29); IMPLEMENTED in Story S29 (v0.59.0, commits
+  T29.1-T29.9).** `install-mode.ps1` holds `Resolve-InstallMode` (this contract's resolution order, a pure
+  function), `install.ps1` calls it before any write, and the test seam `DAD_INSTALL_SANDBOX` lets the suite run
+  a real install end to end in a sandbox profile. Not covered by a test: `-CopilotCli` combined with each mode
+  (S29 AC3, partial). Nothing below is open except the exact banner wording.
 - **Switches:** `-Cloud`, `-Local`, `-Hybrid` (plus the unchanged `-CopilotCli` and `-Yes`). `-Cloud` with
   `-Hybrid` behaves as today (the cloud loop plus the GPU tools; Hybrid wins the label). `-Local` combined with
   `-Cloud` or `-Hybrid` is a CONFLICT: the installer prints which two switches conflict and exits non-zero
