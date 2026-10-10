@@ -327,7 +327,7 @@ STRICTLY one after the other. T33.1 is a by-hand wide-snapshot protocol and then
 `-CopilotCli` cases; T33.3 the `-Local -Cloud` real-installer conflict case plus the CHANGELOG entry. NEVER run `install.ps1` outside the
 `DAD_INSTALL_SANDBOX` seam, and never touch `D:\projects\GalacticDataNetwork\gdn1`.)
 
-T33.3 -> T34.1 (needs T33.3) -> T34.2 (needs T34.1, T33.3) -> T34.3 (needs T34.2) [T34.3 WAITS-FOR-HUMAN]
+T33.3 -> T34.1 (needs T33.3) -> T34.2 (needs T34.1, T33.3) -> T34.3 (needs T34.2) [T34.3 human decided KEEP 2026-10-09]
 
 (added 2026-10-09; Story S34, DESIGN Goal and Out of scope, grades/S28_GRADE.md suggestions 1-3. Queued after the last T33 entry.
 T34.1 is a STORIES text edit (no code); T34.2 edits `test-kit.ps1`, so it runs after T33.3's edits to the same file; T34.3 is a
@@ -3144,9 +3144,10 @@ HUMAN decision - the build loop must STOP at it until the human has chosen, and 
 - **Refs:** Story S34 Behavior (2) and AC2; `grades/S28_GRADE.md` suggestion 2; the style of `Get-CopilotStampProblems` and its fixture case (S25) and of `Find-EarlyGuardViolations` (text-in, seeded violation).
 - **Context:** this restates T34.1's rule: quoted text (backticks, double quotes, `*(Reworded ...)*`) is provenance, anything else is live. The real DESIGN holds the old phrases ONLY in the two provenance notes (Goal ~19-20 and `## Out of scope` ~1661-1662), both inside double quotes. Read DESIGN with `-Raw` (the Copilot case does the same). Do not edit DESIGN or STORIES. ASCII only, PowerShell 5.1 (no `?.`, no ternary).
 
-### [ ] T34.3 - DESIGN provenance notes: present KEEP / MOVE / SHORTEN to the human, record the choice, apply via /design unlock   (Story S34)   [WAITS-FOR-HUMAN]
+### [ ] T34.3 - DESIGN provenance notes: present KEEP / MOVE / SHORTEN to the human, record the choice, apply via /design unlock   (Story S34)   [HUMAN DECIDED: KEEP]
 - **Goal:** the "Reworded 2026-10-06" provenance notes in LOCKED design prose are either kept deliberately or relocated, by the human's decision, never by the dev's guess.
 - **Touches:** `docs/DESIGN.md` (Goal lines ~19-20 and `## Out of scope` lines ~1661-1662) ONLY if the human chooses MOVE or SHORTEN, and ONLY via `/design`'s unlock flow; `CHANGELOG.md` (record the choice, one entry, in the file's style). KEEP changes no DESIGN text.
+- **DECISION (human, 2026-10-09): KEEP the provenance notes in the locked prose.** No DESIGN edit and no unlock are needed. Reasons recorded: DESIGN already records changes in prose (line ~113 'reversed 2026-08-13', line ~1157 'Corrected ... used to say', the C4a note of 2026-10-08), so the S28 notes follow the existing convention and tell a reader why a passage changed at the point of reading; T34.2's consistency test ignores quoted notes. Do steps 3 and 5 for KEEP only: record the choice in the report and in a CHANGELOG entry, leave `docs/DESIGN.md` byte-identical, then tick. Steps 1 and 2 (asking the human) are already done.
 - **Do:**
   1. This task NEEDS A HUMAN. The build loop must not pick it as a normal unit: dev/orchestrator reads this task, then PRESENTS the three options to the human and asks which: (KEEP) leave both notes in the locked prose as they are; (MOVE) delete both notes from `docs/DESIGN.md` and rely on `CHANGELOG.md` entries 0.58.0 and 0.58.1, which already record the rewording; (SHORTEN) replace each note with a pointer, `*(Reworded 2026-10-06, see CHANGELOG 0.58.1.)*` for the Goal and `(Reversed 2026-10-06, see CHANGELOG 0.58.1.)` for the Out of scope bullet.
   2. If the human has NOT chosen: STOP. Change nothing (no DESIGN edit, no CHANGELOG edit, no tick), list the three options in the report, and leave the task unchecked and waiting.
