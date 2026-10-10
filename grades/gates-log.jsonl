@@ -512,3 +512,4 @@
 {"v":1,"ts":"2026-10-10T00:13:31.877Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
 {"v":1,"ts":"2026-10-10T00:23:25.331Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 31, tasks 105)","session":""}
 {"v":1,"ts":"2026-10-10T00:23:33.388Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S28","session":""}
+{"v":1,"ts":"2026-10-10T01:42:26.775Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
