@@ -3080,7 +3080,7 @@ HUMAN decision - the build loop must STOP at it until the human has chosen, and 
 - **Refs:** Story S33 Behavior bullet 1 and Dev notes; `grades/S29_GRADE.md` suggestion 2; T29.9 (the protocol and the case being refactored); `docs/DESIGN.md` C6 invariants (i), (ii), (v).
 - **Context:** `install.ps1` line ~354 `if ((Have copilot) -or $CopilotCli)` runs the Copilot section and line ~368 `if ($CopilotCli)` writes `<USERPROFILE>\.copilot\hooks\dad.json`; the `npm install -g @github/copilot` update path is skipped when `$sandbox` is set (the `DAD_INSTALL_SANDBOX` seam), and with a narrowed PATH `Have copilot` is false so `-CopilotCli` alone triggers the section. NEVER run `install.ps1` outside the seam with any flag. Never touch `D:\projects\GalacticDataNetwork\gdn1`. Do not mutate any branch so it reaches the real `SetEnvironmentVariable` (human decision 2026-10-07). `Test-Case` sets `$ErrorActionPreference = "Continue"`. ASCII only, PowerShell 5.1.
 
-### [ ] T33.2 - test-kit: three sandbox cases run the real `install.ps1` with `-Cloud`, `-Local`, `-Hybrid` each plus `-CopilotCli`   (Story S33)
+### [x] T33.2 - test-kit: three sandbox cases run the real `install.ps1` with `-Cloud`, `-Local`, `-Hybrid` each plus `-CopilotCli`   (Story S33)
 - **Goal:** `-CopilotCli` is proven additive for every backend mode: the Claude Code `settings.json` mode matches the same run without it, and the Copilot hooks file is written with the placeholder rewritten.
 - **Touches:** `test-kit.ps1` only - new `Test-Case`s directly after the S29 sandbox case (anchor by name). Do not edit existing cases.
 - **Do:**

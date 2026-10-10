@@ -1542,6 +1542,58 @@ Test-Case "S29 AC1/AC2: a real install.ps1 run in a sandbox profile honors C6 (C
   } finally { Remove-Sandbox $sb }
 }
 
+# S33 T33.2: -CopilotCli is ADDITIVE for every backend mode. Two sandbox profiles per mode: a baseline (-<Mode>) and
+# -<Mode> -CopilotCli; the Claude settings.json env names must match, and only the second gets .copilot\hooks\dad.json.
+# The real install.ps1 runs ONLY through Invoke-SandboxInstall (sandbox env asserted under %TEMP% before launch).
+function Test-CopilotWithMode([string]$Mode) {
+  $sb = New-Sandbox
+  try {
+    $h0 = Join-Path $sb "home0"; $m0 = Join-Path $sb "machine0"
+    $h1 = Join-Path $sb "home1"; $m1 = Join-Path $sb "machine1"
+    foreach ($d in @($h0, $m0, $h1, $m1)) { New-Item -ItemType Directory -Force $d | Out-Null }
+    $real = Get-RealMachineSnapshot
+    $o0 = Invoke-SandboxInstall $h0 $m0 @("-$Mode")
+    $exit0 = $script:LastInstallExit
+    $o1 = Invoke-SandboxInstall $h1 $m1 @("-$Mode", "-CopilotCli")
+    $exit1 = $script:LastInstallExit
+    $after = Get-RealMachineSnapshot
+    foreach ($k in $real.Keys) { Assert ("$($real[$k])" -ceq "$($after[$k])") "untouched: real $k changed during the sandboxed -$Mode installs" }
+
+    Assert ($exit0 -eq 0) "-$Mode baseline install exited $exit0 : $o0"
+    Assert ($exit1 -eq 0) "-$Mode -CopilotCli install exited $exit1 : $o1"
+    $s0 = Join-Path $h0 ".claude\settings.json"; $s1 = Join-Path $h1 ".claude\settings.json"
+    Assert (Test-Path $s0) "-$Mode baseline wrote no settings.json"
+    Assert (Test-Path $s1) "-$Mode -CopilotCli wrote no settings.json"
+    $j0 = Get-Content $s0 -Raw | ConvertFrom-Json
+    $j1 = Get-Content $s1 -Raw | ConvertFrom-Json
+    $n0 = @($j0.env.PSObject.Properties.Name | Sort-Object)
+    $n1 = @($j1.env.PSObject.Properties.Name | Sort-Object)
+    if ($Mode -eq "Cloud") { Assert ($n1 -notcontains 'ANTHROPIC_BASE_URL') "unchanged mode: -Cloud -CopilotCli wrote ANTHROPIC_BASE_URL" }
+    if ($Mode -eq "Local") { Assert ($n1 -contains 'ANTHROPIC_BASE_URL') "unchanged mode: -Local -CopilotCli lost ANTHROPIC_BASE_URL" }
+    if ($Mode -eq "Hybrid") { Assert ("$($j1.env.LOCALTOOLS_HYBRID)" -eq '1') "unchanged mode: -Hybrid -CopilotCli did not set env.LOCALTOOLS_HYBRID to 1" }
+    Assert (($n0 -join ",") -ceq ($n1 -join ",")) "unchanged mode: -$Mode -CopilotCli settings.json env names ($($n1 -join ',')) differ from the baseline ($($n0 -join ','))"
+    Assert (-not (Test-Path (Join-Path $h0 ".copilot"))) "-$Mode baseline (no -CopilotCli) created a .copilot directory"
+
+    $dj = Join-Path $h1 ".copilot\hooks\dad.json"
+    Assert (Test-Path $dj) "dad.json exists: $dj was not written by -$Mode -CopilotCli"
+    $txt = Get-Content $dj -Raw
+    Assert (-not $txt.Contains('Projects\\Claude\\MCP\\DAD-kit')) "placeholder: dad.json still holds the JSON-escaped dev-path placeholder"
+    Assert (-not $txt.Contains('C:\Projects\Claude\MCP\DAD-kit')) "placeholder: dad.json still holds the dev-path placeholder"
+    $cj = $txt | ConvertFrom-Json
+    $cmds = @($cj.hooks.PSObject.Properties.Name | ForEach-Object { $cj.hooks.$_ } | ForEach-Object { @($_.bash) + @($_.powershell) } | Where-Object { $_ })
+    Assert ($cmds.Count -gt 0) "dad.json holds no bash/powershell hook commands"
+    Assert (@($cmds | Where-Object { $_.Contains($kit) }).Count -gt 0) "placeholder: no dad.json hook command contains the real kit path $kit"
+    $all = $cmds -join " "
+    Assert ($all.Contains('dad-guard-copilot')) "dad.json commands do not name dad-guard-copilot"
+    Assert ($all.Contains('dad-loopguard')) "dad.json commands do not name dad-loopguard"
+    Assert ($o1.Contains('== 9) Install GitHub Copilot CLI hooks ==')) "-$Mode -CopilotCli output lacks the '== 9) Install GitHub Copilot CLI hooks ==' banner: $o1"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "S33 AC1: install.ps1 -Cloud -CopilotCli in a sandbox profile leaves the Claude settings mode unchanged and writes .copilot\hooks\dad.json" { Test-CopilotWithMode "Cloud" }
+Test-Case "S33 AC1: install.ps1 -Local -CopilotCli in a sandbox profile leaves the Claude settings mode unchanged and writes .copilot\hooks\dad.json" { Test-CopilotWithMode "Local" }
+Test-Case "S33 AC1: install.ps1 -Hybrid -CopilotCli in a sandbox profile leaves the Claude settings mode unchanged and writes .copilot\hooks\dad.json" { Test-CopilotWithMode "Hybrid" }
+
 Test-Case "install/uninstall drive models from the manifest" {
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match 'sync-models\.ps1') "install.ps1 does not call sync-models.ps1"
