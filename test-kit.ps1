@@ -2050,6 +2050,73 @@ Test-Case "S25: the Copilot stamp check covers EVERY MEASURED stamp, not just th
   Assert ($p5.Count -eq 0) ("a stamp ending a sentence ('... CLI 1.0.95.') must match constant 1.0.95, got: [" + ($p5 -join '; ') + "]")
 }
 
+# S34 / AC2: DESIGN must not make a LIVE claim that offline is the default or the thesis (the S28 reconciliation
+# reversed it). Quoted text is provenance ("this used to say ...") and is excluded: first *(Reworded ...)* notes
+# (they may span lines), then `backtick spans`, then "double-quoted spans". Blanking keeps every newline, so
+# line numbers stay exact. Pure text in, finding strings out (empty = clean); no git, no filesystem.
+function Get-OfflineDefaultClaims([string]$Text) {
+  $blank = [System.Text.RegularExpressions.MatchEvaluator]{ param($m) [regex]::Replace($m.Value, '[^\r\n]', ' ') }
+  $t = [regex]::Replace($Text, '\*\(Reworded[\s\S]*?\)\*', $blank)
+  $t = [regex]::Replace($t, '`[^`\r\n]*`', $blank)
+  $t = [regex]::Replace($t, '"[^"\r\n]*"', $blank)
+  $found = @()
+  $pats = @(
+    'Offline is the DEFAULT',
+    'Offline-first[^\r\n]* is the default',
+    'fully offline',
+    'offline[^\r\n]* is the DEFAULT and the thesis',
+    'Cloud models as the DEFAULT'
+  )
+  foreach ($p in $pats) {
+    foreach ($m in [regex]::Matches($t, $p, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+      $line = ([regex]::Matches($t.Substring(0, $m.Index), "`n")).Count + 1
+      $found += "DESIGN.md:$line live claim '$($m.Value)'"
+    }
+  }
+  return $found
+}
+
+Test-Case "S34: DESIGN.md makes no LIVE claim that offline is the default or the thesis; quoted provenance notes are excluded (AC2)" {
+  # Real file: the old phrases survive only inside the two quoted provenance notes, so zero findings.
+  $d = Get-Content (Join-Path $kit "docs\DESIGN.md") -Raw
+  $real = @(Get-OfflineDefaultClaims $d)
+  Assert ($real.Count -eq 0) ("DESIGN.md makes a live offline-is-the-default claim (S28 reversed it; quote it as provenance or remove it): " + ($real -join '; '))
+
+  # Seeded phrases are assembled from pieces so this file never carries them whole.
+  $offDef  = 'Offline is the ' + 'DEFAULT'
+  $fullOff = 'fully ' + 'offline'
+  $cloudDef = 'Cloud models as the ' + 'DEFAULT'
+  $q = '"'; $bt = '`'
+
+  # Seeded LIVE claims: exactly one finding each, naming line 3.
+  $live = @(
+    @{ n = 'Offline-is-the-default'; t = "# D`n## Goal`n$offDef backend.`n" },
+    @{ n = 'fully-offline';          t = "# D`n## Goal`nThe loop runs $fullOff.`n" },
+    @{ n = 'Cloud-models-default';   t = "# D`n## Goal`n$cloudDef are out of scope.`n" }
+  )
+  foreach ($s in $live) {
+    $r = @(Get-OfflineDefaultClaims $s.t)
+    Assert (($r.Count -eq 1) -and ($r[0] -like 'DESIGN.md:3 live claim *')) ("seeded live claim '$($s.n)' must give exactly 1 finding naming line 3, got: [" + ($r -join '; ') + "]")
+  }
+
+  # Seeded provenance notes: zero findings each.
+  $notes = @(
+    @{ n = 'single-line Reworded note'; t = "# D`n*(Reworded 2026-10-06, Story S28: this used to say the loop runs ${q}$fullOff${q} and that offline is ${q}the DEFAULT and the thesis${q}.)*`n" },
+    @{ n = 'Reworded note spanning lines'; t = "# D`n*(Reworded 2026-10-06, Story S28: this used to say the loop runs`n$fullOff and that offline is the DEFAULT and the thesis.)*`n" },
+    @{ n = 'backtick span'; t = "# D`nThe old claim was ${bt}$offDef${bt}.`n" },
+    @{ n = 'double-quoted span'; t = "# D`n(This bullet used to say ${q}$cloudDef${q} was out of scope.)`n" }
+  )
+  foreach ($s in $notes) {
+    $r = @(Get-OfflineDefaultClaims $s.t)
+    Assert ($r.Count -eq 0) ("seeded provenance note '$($s.n)' must give 0 findings, got: [" + ($r -join '; ') + "]")
+  }
+
+  # Mixed: a note on line 2 and a live claim on line 4 -> exactly 1 finding, naming line 4.
+  $mixed = "# D`n*(Reworded 2026-10-06, Story S28: this used to say ${q}$fullOff${q}.)*`n`n$offDef backend.`n"
+  $rm = @(Get-OfflineDefaultClaims $mixed)
+  Assert (($rm.Count -eq 1) -and ($rm[0] -like 'DESIGN.md:4 live claim *')) ("mixed seed must give exactly 1 finding naming line 4, got: [" + ($rm -join '; ') + "]")
+}
+
 Test-Case "dad-doctor's Copilot harness section renders without erroring" {
   # The R37 section was previously covered only by the parse check and C2f's static assertions - nothing
   # ever RAN it. Guarded so it never becomes environment-dependent (the trap the corpus shell-door case

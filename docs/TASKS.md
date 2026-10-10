@@ -3125,7 +3125,7 @@ HUMAN decision - the build loop must STOP at it until the human has chosen, and 
 - **Refs:** Story S34 Behavior (1) and AC1; `grades/S28_GRADE.md` suggestion 1.
 - **Context:** the defeating text is `docs/DESIGN.md` Goal lines ~19-20 (`*(Reworded 2026-10-06, Story S28: this section used to say the loop runs "fully offline" and that offline is "the DEFAULT and the thesis".)*`) and `## Out of scope` lines ~1660-1662 (`(This bullet used to say "Cloud models as the DEFAULT" was out of scope - reversed 2026-10-06, Story S28.)`). Keep ASCII (straight quotes, `-`). Do not edit DESIGN.
 
-### [ ] T34.2 - test-kit: a doc-consistency Test-Case that FAILS on a LIVE "offline is the default" claim in DESIGN.md and ignores quoted provenance notes   (Story S34)
+### [x] T34.2 - test-kit: a doc-consistency Test-Case that FAILS on a LIVE "offline is the default" claim in DESIGN.md and ignores quoted provenance notes   (Story S34)
 - **Goal:** the S28 reconciliation cannot silently regress: a later DESIGN edit that reintroduces a live "offline is the DEFAULT / the thesis" claim turns the suite red.
 - **Touches:** `test-kit.ps1` only - one new function `Get-OfflineDefaultClaims` and one new `Test-Case`, added directly after the S25 case `"S25: the Copilot stamp check covers EVERY MEASURED stamp, not just the first (AC1-AC3)"` (anchor by name), or after T33.3's last case if that is later; do not edit existing cases.
 - **Do:**
