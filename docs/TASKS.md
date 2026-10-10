@@ -3068,7 +3068,7 @@ HUMAN decision - the build loop must STOP at it until the human has chosen, and 
 - **Refs:** Story S32 AC2, AC4; Behavior bullet 2; S31 T31.1 (`Find-EarlyGuardViolations`).
 - **Context:** per the story, a missing prerequisite must be a SKIP, never a return. The existing detector inspects only guards that are TOP-LEVEL statements of a `Test-Case` body (known limit recorded in S31 verdicts); keep it that way, do not widen to nested guards. The detector takes TEXT so a seeded violation can be tested. Build mutation strings from backtick-escaped pieces so this file does not contain a literal bare guard that the check would read as real (a here-string or double-quoted string is not an AST statement, so it is safe, but verify the real-file assertion is still zero). ASCII only, PowerShell 5.1.
 
-### [ ] T33.1 - test-kit: wide-snapshot by-hand run of `install.ps1 -Cloud -CopilotCli`, then factor a shared `Run-Install` helper out of the S29 sandbox case   (Story S33)
+### [x] T33.1 - test-kit: wide-snapshot by-hand run of `install.ps1 -Cloud -CopilotCli`, then factor a shared `Run-Install` helper out of the S29 sandbox case   (Story S33)
 - **Goal:** the first run of the new flag combination is proven harmless to the real machine BY HAND, and only then does `test-kit.ps1` get a shared sandbox-install helper that T33.2 and T33.3 reuse.
 - **Touches:** `test-kit.ps1` only (step 2 below). Step 1 writes nothing in the repo; its scratch notes go under `%TEMP%` or `_tmp/`.
 - **Do:**

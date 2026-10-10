@@ -1444,6 +1444,39 @@ Test-Case "S29 AC1/AC2: dad-doctor reads Cloud and Local back from settings.json
   } finally { Remove-Sandbox $sb }
 }
 
+# Shared sandbox-install seam (S29 T29.8 seam; factored out by T33.1 so the S33 cases reuse it). Invoke-SandboxInstall
+# ASSERTS both paths are under %TEMP% and that all three sandbox env vars are set before it launches the real
+# install.ps1; PATH is narrowed for the child so no real ollama/node/npm/claude/copilot is reached. The child's exit
+# code is left in $script:LastInstallExit. (The first parameter is NOT named $Home: that is an automatic variable.)
+function Invoke-SandboxInstall([string]$SandboxHome, [string]$Machine, [string[]]$Flags) {
+  $tmpRoot = $env:TEMP
+  foreach ($p in @($SandboxHome, $Machine)) { Assert ($p -and $p.StartsWith($tmpRoot, [StringComparison]::OrdinalIgnoreCase)) "Run-Install: sandbox path is not under TEMP: $p" }
+  $sU = $env:USERPROFILE; $sH = $env:HOME; $sS = $env:DAD_INSTALL_SANDBOX; $sP = $env:PATH
+  try {
+    $env:USERPROFILE = $SandboxHome; $env:HOME = $SandboxHome; $env:DAD_INSTALL_SANDBOX = $Machine; $env:PATH = "$env:SystemRoot\System32;$PSHOME"
+    Assert ($env:USERPROFILE -eq $SandboxHome -and $env:HOME -eq $SandboxHome -and $env:DAD_INSTALL_SANDBOX -eq $Machine) "Run-Install: sandbox env vars not set, refusing to launch"
+    $o = (& (Join-Path $PSHOME "powershell.exe") -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install.ps1") @Flags -Yes 2>&1 | Out-String)
+    $script:LastInstallExit = $LASTEXITCODE
+  } finally { $env:USERPROFILE = $sU; $env:HOME = $sH; $env:DAD_INSTALL_SANDBOX = $sS; $env:PATH = $sP }
+  $o
+}
+
+# Snapshot of the REAL machine state a sandboxed install must never touch (ordered hashtable, compared key by key).
+function Get-RealMachineSnapshot() {
+  $fileHash = { param($p) if (Test-Path -LiteralPath $p -PathType Leaf) { (Get-FileHash -LiteralPath $p -Algorithm SHA1).Hash } else { "ABSENT" } }
+  $realSettings = Join-Path $env:USERPROFILE ".claude\settings.json"
+  $realBashrc = Join-Path $(if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }) ".bashrc"
+  $realCopilot = Join-Path $env:USERPROFILE ".copilot"
+  $r = [ordered]@{}
+  foreach ($n in 'Path','DAD_HOME','OLLAMA_FLASH_ATTENTION','OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE') { $r[$n] = [Environment]::GetEnvironmentVariable($n, 'User') }
+  $r['settings.json'] = & $fileHash $realSettings
+  $r['.bashrc'] = & $fileHash $realBashrc
+  $r['.copilot'] = if (Test-Path -LiteralPath $realCopilot) {
+    (@(Get-ChildItem -LiteralPath $realCopilot -Recurse -Force -ErrorAction SilentlyContinue | Sort-Object FullName | ForEach-Object { "$($_.FullName)|$($_.Length)" }) -join "`n")
+  } else { "ABSENT" }
+  $r
+}
+
 Test-Case "S29 AC1/AC2: a real install.ps1 run in a sandbox profile honors C6 (Cloud default, -Local, a no-flag re-run keeps Local, -Hybrid)" {
   # First end-to-end execution of install.ps1 (T29.8 seam). USERPROFILE and HOME point at a sandbox home, and
   # DAD_INSTALL_SANDBOX redirects/skips every machine-wide write; Run-Install ASSERTS all three are set under
@@ -1453,28 +1486,11 @@ Test-Case "S29 AC1/AC2: a real install.ps1 run in a sandbox profile honors C6 (C
   try {
     $h = Join-Path $sb "home"; $m = Join-Path $sb "machine"
     New-Item -ItemType Directory -Force $h | Out-Null; New-Item -ItemType Directory -Force $m | Out-Null
-    $fileHash = { param($p) if (Test-Path -LiteralPath $p -PathType Leaf) { (Get-FileHash -LiteralPath $p -Algorithm SHA1).Hash } else { "ABSENT" } }
-    $realSettings = Join-Path $env:USERPROFILE ".claude\settings.json"
-    $realBashrc = Join-Path $(if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }) ".bashrc"
-    $snap = {
-      $r = [ordered]@{}
-      foreach ($n in 'Path','DAD_HOME','OLLAMA_FLASH_ATTENTION','OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE') { $r[$n] = [Environment]::GetEnvironmentVariable($n, 'User') }
-      $r['settings.json'] = & $fileHash $realSettings
-      $r['.bashrc'] = & $fileHash $realBashrc
-      $r
-    }
+    $snap = { Get-RealMachineSnapshot }
     $before = & $snap
-    $tmpRoot = $env:TEMP
     $runInstall = {
       param([string[]]$flags)
-      foreach ($p in @($h, $m)) { Assert ($p -and $p.StartsWith($tmpRoot, [StringComparison]::OrdinalIgnoreCase)) "Run-Install: sandbox path is not under TEMP: $p" }
-      $sU = $env:USERPROFILE; $sH = $env:HOME; $sS = $env:DAD_INSTALL_SANDBOX; $sP = $env:PATH
-      try {
-        $env:USERPROFILE = $h; $env:HOME = $h; $env:DAD_INSTALL_SANDBOX = $m; $env:PATH = "$env:SystemRoot\System32;$PSHOME"
-        Assert ($env:USERPROFILE -eq $h -and $env:HOME -eq $h -and $env:DAD_INSTALL_SANDBOX -eq $m) "Run-Install: sandbox env vars not set, refusing to launch"
-        $o = (& (Join-Path $PSHOME "powershell.exe") -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install.ps1") @flags -Yes 2>&1 | Out-String)
-      } finally { $env:USERPROFILE = $sU; $env:HOME = $sH; $env:DAD_INSTALL_SANDBOX = $sS; $env:PATH = $sP }
-      $o
+      Invoke-SandboxInstall $h $m $flags
     }
     $envNames = {
       $f = Join-Path $h ".claude\settings.json"
