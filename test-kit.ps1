@@ -161,7 +161,7 @@ Test-Case "S31 AC2: with no git on PATH the formerly vacuous cases report SKIP, 
   $needle = "Skip-Case " + [char]34 + "git is not installed" + [char]34
   $src = [System.IO.File]::ReadAllText((Join-Path $kit "test-kit.ps1"))
   $n = ([regex]::Matches($src, [regex]::Escape($needle))).Count
-  Assert ($n -ge 17) "expected >= 17 converted git guards, found $n"
+  Assert ($n -ge 38) "expected >= 38 converted git guards, found $n"
   # Dynamic: the REAL Test-Case/Skip-Case helpers (extracted by AST) in a child whose PATH has no git.
   $tp = $null; $ps5 = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$tp, [ref]$null)
   $fns = $ps5.FindAll({ param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and ($a.Name -eq "Test-Case" -or $a.Name -eq "Skip-Case") }, $false)
@@ -6370,7 +6370,7 @@ Test-Case "dev-agent and qa-agent are ACTUALLY wired for hybrid, not just told a
 Test-Case "close-unit refuses a STORY close when tests run zero tests" {
   # The mediamotor failure: six test projects missing from the .sln, so `dotnet test` exited 0 having run
   # NOTHING while five stories were marked DONE. A green run of 0 tests must never close a story.
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6559,7 +6559,7 @@ Test-Case "upgrade-project migrates docs\COMMANDS.md -> RECIPES.md preserving en
 }
 
 Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6591,7 +6591,7 @@ Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
 }
 
 Test-Case "close-unit -RequireGrade AC1: a headings-only card with no citation is refused, a cited one is accepted" {
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6626,7 +6626,7 @@ Test-Case "close-unit -RequireGrade AC1: a headings-only card with no citation i
 }
 
 Test-Case "close-unit -RequireGrade AC1: a card citing an existing file:line is accepted" {
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6648,7 +6648,7 @@ Test-Case "close-unit -RequireGrade AC1: a card citing an existing file:line is 
 }
 
 Test-Case "close-unit -RequireGrade AC2: a card citing an out-of-range line or a missing file is refused" {
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6745,7 +6745,7 @@ Test-Case "an environment block is named as such, and security-tampering is forb
   # for this case, spent the session trying to STOP the Application Identity service, add Defender
   # exclusions, and disable AppLocker/WDAC. A build/test failure carrying that signature is ENVIRONMENTAL,
   # not a code failure, and the response must be STOP-and-report, never lower the machine's security.
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6790,7 +6790,7 @@ Test-Case "an environment block is named as such, and security-tampering is forb
 Test-Case "close-unit REFUSES to close a unit whose build fails" {
   # The failure this guards: 5 stories DONE, 6 tasks ticked, 4 checkpoint commits - over a build with 21
   # errors and zero tests ever run. Bookkeeping must never outrun verification.
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6830,7 +6830,7 @@ Test-Case "close-unit REFUSES to close when no Build command resolves (no -SkipV
   # -SkipVerify required. That is how haiku's close-out (ModelTest bake-off) proceeded unverified: CLAUDE.md
   # had no root package.json to build, Get-ClaudeCommand resolved to "", and close-unit ticked + committed
   # regardless. -SkipVerify must be the ONLY way past verification.
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6868,7 +6868,7 @@ Test-Case "Get-ClaudeCommand extracts a backtick-quoted Build command even with 
   # "- Build: `npm run build` (root workspace)" failed to match AT ALL and returned "" - verified against
   # both bake-off projects (haiku/CLAUDE.md, opus/CLAUDE.md), which both pin commands shaped exactly like
   # this. Prove the REAL close-unit.ps1 now extracts the bare command and ignores the trailing parenthetical.
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6896,7 +6896,7 @@ Test-Case "Get-ClaudeCommand extracts a backtick-quoted Build command even with 
 }
 
 Test-Case "close-unit: tick, roll-up timing, idempotent, commit, loud failure" {
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6967,7 +6967,7 @@ Test-Case "the KIT's OWN CLAUDE.md satisfies close-unit's Get-ClaudeCommand 'Bui
   # every unit closed against this repo (T4.1-T5.1, S4, S5) silently skipped build verification. Copy the
   # REAL file into a sandbox and assert Get-ClaudeCommand actually finds it - not a re-implementation of
   # the regex, the real close-unit.ps1 run against the kit's real CLAUDE.md text.
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -7008,7 +7008,7 @@ Test-Case "close-unit writes TASKS.md/STORIES.md back as LF, never CRLF" {
   # eol=lf clean filter normalizes CRLF away when computing the staged/committed blob, so the commit
   # looked fine while the WORKING TREE copy was silently re-CRLF'd on every tick. Found via self-hosting
   # (dogfooding /build against this kit's own docs/TASKS.md). Assert on raw bytes, not git's view.
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -7870,7 +7870,7 @@ Test-Case "T9.3 (a): ratchet logs one block line on a shrink and one allow line 
 }
 
 Test-Case "T9.3 (b): close-unit refusals (failing build, unknown id, quoted/newline id) log block; exit codes stay 1" {
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $cu = Join-Path $kit "close-unit.ps1"
   $sb = New-Sandbox
   try {
@@ -7905,7 +7905,7 @@ Test-Case "T9.3 (b): close-unit refusals (failing build, unknown id, quoted/newl
 }
 
 Test-Case "T9.3 (b): clean close logs allow INTO its own commit; ratchet logs once per close; -SkipVerify logs nothing; -AcceptShrink characterized" {
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $cu = Join-Path $kit "close-unit.ps1"
   $sb = New-Sandbox
   try {
@@ -7954,7 +7954,7 @@ Test-Case "T9.3 (b): clean close logs allow INTO its own commit; ratchet logs on
 }
 
 Test-Case "T9.3: gate-log failure never changes ratchet/close-unit exit codes (helper missing; grades is a file)" {
-  if (-not $haveGit) { return }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   # helper missing: run a COPY of the kit scripts without dad-gates-log.ps1
   $sb = New-Sandbox
   try {

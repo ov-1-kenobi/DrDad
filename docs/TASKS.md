@@ -3042,7 +3042,7 @@ HUMAN decision - the build loop must STOP at it until the human has chosen, and 
 - **Refs:** Story S31 AC2, AC3, AC5 and Dev notes.
 - **Context:** `VERSION` is 0.59.1 and `CHANGELOG.md` already has a 0.59.1 section (S30). The skip-aware summary counts `Skip-Case` outcomes as SKIP (S21). Keep the run's output out of the repo. ASCII only, PowerShell 5.1.
 
-### [ ] T32.1 - test-kit: convert the 15 remaining bare `if (-not $haveGit) { return }` guards to `Skip-Case`, raise the S31 AC2 count   (Story S32)
+### [x] T32.1 - test-kit: convert the 15 remaining bare `if (-not $haveGit) { return }` guards to `Skip-Case`, raise the S31 AC2 count   (Story S32)
 - **Goal:** a missing git makes every git-dependent case report SKIP instead of a silent PASS.
 - **Touches:** `test-kit.ps1` only.
 - **Do:**
