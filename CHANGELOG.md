@@ -2,6 +2,24 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.59.4 - 2026-10-10
+
+### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)
+- S28's AC2 in `docs/STORIES.md` now states the live-claim rule: a literal grep was defeated by the quoted
+  "used to say" provenance note, so the criterion now asks for no LIVE claim and excludes quoted provenance notes.
+- New consistency Test-Case "S34: DESIGN.md makes no LIVE claim that offline is the default or the thesis; quoted
+  provenance notes are excluded (AC2)" with `Get-OfflineDefaultClaims` (text in, findings out). It first blanks the
+  `*(Reworded ...)*` notes, backtick spans and double-quoted spans, then applies five patterns. Seeded live claims are
+  flagged, seeded provenance notes are ignored, and it was mutation-checked.
+- DECISION by the human on 2026-10-09 (T34.3): KEEP. The provenance notes (Reworded/reversed/retired 2026-10-06 in the
+  Goal, R34, R37b, C2e and Out of scope) STAY in the locked prose, because DESIGN already records changes in prose
+  (for example 'reversed 2026-08-13', 'Corrected ... used to say') and the test above ignores quoted notes. MOVE and
+  SHORTEN were the alternatives. `docs/DESIGN.md` is unchanged.
+
+### Known limits
+- Known gap: `docs/DESIGN.md` C6's status line still says `-CopilotCli` combined with each mode is 'Not covered by a
+  test', although S33 (0.59.3) covers it. That stale statement needs one more /design unlock, left for the human.
+
 ## 0.59.3 - 2026-10-10
 
 ### Changed - tests only, no installer behavior change (Stories S32, S33)
