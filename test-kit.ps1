@@ -1479,7 +1479,7 @@ function Get-RealMachineSnapshot() {
 
 Test-Case "S29 AC1/AC2: a real install.ps1 run in a sandbox profile honors C6 (Cloud default, -Local, a no-flag re-run keeps Local, -Hybrid)" {
   # First end-to-end execution of install.ps1 (T29.8 seam). USERPROFILE and HOME point at a sandbox home, and
-  # DAD_INSTALL_SANDBOX redirects/skips every machine-wide write; Run-Install ASSERTS all three are set under
+  # DAD_INSTALL_SANDBOX redirects/skips every machine-wide write; Invoke-SandboxInstall ASSERTS all three are set under
   # %TEMP% before it launches. PATH is narrowed for the child (as in the dad-doctor case) so no real
   # ollama/node/npm/claude/code is reached: no network, no real tool is called.
   $sb = New-Sandbox

@@ -1,0 +1,24 @@
+# Story S33 - install.ps1 -CopilotCli with each backend mode, and -Local -Cloud, tested in a sandbox : report card
+
+**Current grade: A-**  (as of 2026-10-10, iteration 1)
+
+## Grade history
+| Iter | Date (YYYY-MM-DD) | Grade | Delta (one line: what changed since last) |
+|------|-------------------|-------|--------------------------------------------|
+| 1    | 2026-10-10        | A-    | initial implementation; closes grades/S29_GRADE.md suggestion 2 (test-only story, 283 passed / 0 failed at close, not re-run) |
+
+## Assessment (this iteration)
+- Correctness: test-kit.ps1:1451-1462 `Invoke-SandboxInstall` runs the real install.ps1 under `DAD_INSTALL_SANDBOX` (seam at install.ps1:45-49); the S29 case (test-kit.ps1:1480-1543) was refactored onto it (test-kit.ps1:1493) with its row assertions kept. Acceptance: AC1 met in code, AC2 met, AC3 met with one ordering caveat, AC4 reported by the close gate (not re-run by me).
+- AC1 (test-kit.ps1:1593-1595, via `Test-CopilotWithMode` at 1548-1591): "S33 AC1: install.ps1 -Local -CopilotCli ..." and its Cloud and Hybrid siblings each run a baseline and a -CopilotCli profile. They assert both exit 0, identical sorted settings.json env names (1574), the per-mode markers ANTHROPIC_BASE_URL / LOCALTOOLS_HYBRID (1571-1573), no `.copilot` in the baseline (1575), `.copilot\hooks\dad.json` written (1578), the placeholder substituted with the real kit path (1580-1585), and the "== 9) Install GitHub Copilot CLI hooks ==" banner (1589). The mutation checks are NOT in the repo (by design they were by-hand runs described at docs/TASKS.md:3088-3093); I could not verify them from the files, so this is a task-report claim.
+- AC2 (test-kit.ps1:1597-1620): the "S33 AC2: install.ps1 -Local -Cloud exits non-zero before writing anything and names both switches" case first asserts that the conflict `exit 1` precedes `== Prerequisites ==` (1600-1604; install.ps1:31 vs install.ps1:84), then runs the real script and asserts non-zero exit (1613), both switches named (1614), the sandbox home empty apart from AppData (1615-1616), and no machine-env.txt (1617). Matches DESIGN C6 (docs/DESIGN.md:1584-1585) "exits non-zero BEFORE it writes".
+- AC3: Get-RealMachineSnapshot (test-kit.ps1:1465-1478) covers USER Path, DAD_HOME, the three OLLAMA vars, settings.json and .bashrc SHA1, and a .copilot tree listing (path+length). Compared in every case (1560, 1618, 1541). Gap: the compare happens after the run and, in `Test-CopilotWithMode` (1559-1560) and the AC2 case (1612-1618), a failing run still reaches the compare because the asserts on exit codes come later, which is good; but a throw inside `Invoke-SandboxInstall` skips the compare.
+- Design: only test-kit.ps1 changed (install.ps1 and install-mode.ps1 untouched), as docs/STORIES.md S33 Data requires. Safety design is sound: both paths asserted under %TEMP% (test-kit.ps1:1453), the three env vars asserted set before launch (1457), PATH narrowed to System32 + PSHOME (1456), env restored in `finally` (1460), `-Yes` always passed.
+- Quality: helper factored well (no copy-paste between cases); the comments say `Run-Install` while the function is `Invoke-SandboxInstall` (test-kit.ps1:1453, 1457, 1481-1483) - stale naming. Hygiene: CHANGELOG 0.59.3 entry present per T33.3; no manifest/dependency impact.
+- Verification mode: AC touches real machine state (USER Path, DAD_HOME, Ollama vars, ~/.claude, ~/.copilot). Verified live-sandboxed: the suite runs install.ps1 only inside the sandbox env, with real-machine snapshots before and after (test-kit.ps1:1554/1559). I did not re-run it; the 283/0 result is from the close gate. Mutation checks: by-hand, per task report only.
+
+## Suggestions (prioritized; tag each so the team knows who acts)
+1. [design] docs/DESIGN.md:1580-1581 (C6 status) still says "Not covered by a test: `-CopilotCli` combined with each mode (S29 AC3, partial)". S33 now covers it, and the story forbade DESIGN edits, so the contract is stale. Needs the unlock flow (DESIGN is LOCKED) to update; human decides when.
+2. [dev] Residual gap: under the narrowed PATH (test-kit.ps1:1456) npm/code/ollama are absent, so the seam's SKIP branches (for example install.ps1:75-76) are exercised only by absence, and -CopilotCli with a real `copilot` on PATH (version-compare path, docs/DESIGN.md:798) is untested. Add one case with a stub `copilot.cmd` in the sandbox PATH.
+3. [dev] Make the real-machine compare robust: wrap runs so the snapshot compare executes in a `finally` (test-kit.ps1:1555-1560, 1610-1618) so a throw inside the run cannot skip it; in the AC2 case move the compare before the other assertions so a leak is reported first.
+4. [mechanical] Rename the stale "Run-Install" mentions to `Invoke-SandboxInstall` (test-kit.ps1:1453, 1457, 1481-1483).
+5. [human] Decide whether by-hand mutation checks (AC1) are acceptable or should become in-suite mutation cases.
