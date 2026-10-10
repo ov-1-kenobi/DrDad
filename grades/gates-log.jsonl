@@ -553,3 +553,5 @@
 {"v":1,"ts":"2026-10-10T06:24:25.957Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
 {"v":1,"ts":"2026-10-10T06:34:22.958Z","gate":"ratchet","decision":"allow","tool":"","reason":"no shrink (tests 186, stories 34, tasks 113)","session":""}
 {"v":1,"ts":"2026-10-10T06:34:31.683Z","gate":"close-unit-refusal","decision":"allow","tool":"","reason":"clean close: S34","session":""}
+{"v":1,"ts":"2026-10-10T06:34:44.573Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}
+{"v":1,"ts":"2026-10-10T12:11:11.267Z","gate":"loop-guard","decision":"allow","tool":"","reason":"armed","session":"da50f634-0653-4ee5-82f3-0b31699efdb8"}

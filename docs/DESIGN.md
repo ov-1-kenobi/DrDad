@@ -1577,8 +1577,10 @@ story that needs one must first get it measured and amended into C5 via `/design
 - **Status: DECIDED 2026-10-06 (human; Stories S28/S29); IMPLEMENTED in Story S29 (v0.59.0, commits
   T29.1-T29.9).** `install-mode.ps1` holds `Resolve-InstallMode` (this contract's resolution order, a pure
   function), `install.ps1` calls it before any write, and the test seam `DAD_INSTALL_SANDBOX` lets the suite run
-  a real install end to end in a sandbox profile. Not covered by a test: `-CopilotCli` combined with each mode
-  (S29 AC3, partial). Nothing below is open except the exact banner wording.
+  a real install end to end in a sandbox profile. `-CopilotCli` combined with each mode, and the `-Local -Cloud`
+  conflict, are tested through the real installer in a sandbox (Story S33, v0.59.3; Copilot CLI itself remains a
+  pilot, so those cases test only what the installer writes). Nothing below is open except the exact banner
+  wording.
 - **Switches:** `-Cloud`, `-Local`, `-Hybrid` (plus the unchanged `-CopilotCli` and `-Yes`). `-Cloud` with
   `-Hybrid` behaves as today (the cloud loop plus the GPU tools; Hybrid wins the label). `-Local` combined with
   `-Cloud` or `-Hybrid` is a CONFLICT: the installer prints which two switches conflict and exits non-zero
