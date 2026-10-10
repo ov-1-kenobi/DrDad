@@ -181,7 +181,7 @@ Test-Case "S31 AC2: with no git on PATH the formerly vacuous cases report SKIP, 
   $needle = "Skip-Case " + [char]34 + "git is not installed" + [char]34
   $src = [System.IO.File]::ReadAllText((Join-Path $kit "test-kit.ps1"))
   $n = ([regex]::Matches($src, [regex]::Escape($needle))).Count
-  Assert ($n -ge 38) "expected >= 38 converted git guards, found $n"
+  Assert ($n -ge 40) "expected >= 40 converted git guards, found $n"
   # Dynamic: the REAL Test-Case/Skip-Case helpers (extracted by AST) in a child whose PATH has no git.
   $tp = $null; $ps5 = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$tp, [ref]$null)
   $fns = $ps5.FindAll({ param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and ($a.Name -eq "Test-Case" -or $a.Name -eq "Skip-Case") }, $false)
@@ -6482,7 +6482,7 @@ Test-Case 'S21 AC4: no $SkipBuild / missing-exe early return is left in test-kit
 }
 
 Test-Case "S21 AC5: close-unit reads the passed count from the skipped-aware summary; 0 passed refuses" {
-  if (-not $haveGit) { Skip-Case "git not available" }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
@@ -6516,7 +6516,7 @@ Test-Case "S21 AC5: close-unit reads the passed count from the skipped-aware sum
 Test-Case "S21 AC5: close-unit takes the LAST 'N passed' - a decoy '0 passed' line before the summary does not refuse" {
   # 2026-10-01: this suite's own case NAME ("...; 0 passed refuses") on a PASS line made first-match
   # Get-TestCount read 0 and refuse a green 243-test run. The echo fixtures above are single-line and missed it.
-  if (-not $haveGit) { Skip-Case "git not available" }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
     $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
