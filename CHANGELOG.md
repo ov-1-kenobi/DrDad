@@ -2,6 +2,21 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.59.3 - 2026-10-10
+
+### Changed - tests only, no installer behavior change (Stories S32, S33)
+- S32: the 15 remaining `if (-not $haveGit) { return }` guards now `Skip-Case "git is not installed"`, so a machine
+  without git reports SKIP for every git case (40 guards counted by the S31 AC2 case). The static check
+  (`Find-EarlyGuardViolations`) now also fails a bare return on a `$have*` prerequisite flag (15 findings on the
+  pre-fix text, 0 now).
+- S33: `-CopilotCli` combined with `-Cloud`, `-Local` and `-Hybrid`, and the `-Local -Cloud` conflict, are now tested
+  through the REAL installer in a sandbox profile (`DAD_INSTALL_SANDBOX`), with before/after snapshots of the real
+  machine. The cases share the new `Invoke-SandboxInstall` and `Get-RealMachineSnapshot` helpers in `test-kit.ps1`.
+
+### Known limits
+The `$haveCopilot` compound guard and the python/dotnet/ollama optional-tool guards still return silently when the
+tool is absent. Copilot CLI remains a pilot and unverified (the cases test only what the installer writes).
+
 ## 0.59.2 - 2026-10-09
 
 ### Fixed - 17 test-kit cases passed without running (Story S31)

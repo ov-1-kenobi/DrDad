@@ -1294,7 +1294,7 @@
   - [ ] AC4: the full `test-kit.ps1` prints `0 failed`, `0 skipped` on a machine with git, and the passed count is unchanged apart from added cases.
 - **Dev notes:** one task is enough if the guards convert mechanically; then one for the detector extension. Both edit `test-kit.ps1`, so run sequentially. Refs: S21, S31 (T31.1, T31.9), `grades/S31_GRADE.md`.
 
-### Story S33: install.ps1 -CopilotCli combined with each backend mode, and -Local with -Cloud through the real installer, are tested in a sandbox   (R34, R37)   <!-- Status: TODO -->
+### Story S33: install.ps1 -CopilotCli combined with each backend mode, and -Local with -Cloud through the real installer, are tested in a sandbox   (R34, R37)   <!-- Status: DONE closed:close-unit -->
 - **Goal:** the installer's C6 behavior is proven for `-CopilotCli` together with Cloud, Local and Hybrid, and for the `-Local -Cloud` conflict, by running the real `install.ps1` under the `DAD_INSTALL_SANDBOX` seam.
 - **Context:** `grades/S29_GRADE.md` (suggestion 2) and the S29 AC3 note: C6 says `-CopilotCli` combines with any mode and leaves the Claude Code wiring untouched, but no test runs the real installer with `-CopilotCli`. Also, the `-Local -Cloud` conflict is pinned only through the resolver (`S29 AC1-AC4`); the real-installer conflict run covers `-Local -Hybrid` only. GitHub Copilot CLI is a PILOT and unverified (R37b), so these cases test the kit's own wiring (what the installer writes into the sandbox profile), never a real Copilot binary.
 - **Behavior:**

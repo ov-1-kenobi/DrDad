@@ -1594,6 +1594,31 @@ Test-Case "S33 AC1: install.ps1 -Cloud -CopilotCli in a sandbox profile leaves t
 Test-Case "S33 AC1: install.ps1 -Local -CopilotCli in a sandbox profile leaves the Claude settings mode unchanged and writes .copilot\hooks\dad.json" { Test-CopilotWithMode "Local" }
 Test-Case "S33 AC1: install.ps1 -Hybrid -CopilotCli in a sandbox profile leaves the Claude settings mode unchanged and writes .copilot\hooks\dad.json" { Test-CopilotWithMode "Hybrid" }
 
+Test-Case "S33 AC2: install.ps1 -Local -Cloud exits non-zero before writing anything and names both switches" {
+  # Ordering first (as in the S29 -Local -Hybrid part): the real script runs ONLY after the conflict exit is proven to precede the banner.
+  $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
+  $mExit = [regex]::Match($inst, 'Conflict\)[^\r\n]*exit 1')
+  $banner = $inst.IndexOf('== Prerequisites ==')
+  Assert ($mExit.Success) "wiring: conflict exit 1 not found in install.ps1"
+  Assert ($banner -ge 0) "wiring: '== Prerequisites ==' not found in install.ps1"
+  Assert ($mExit.Index -lt $banner) "wiring: conflict exit 1 (offset $($mExit.Index)) is not before '== Prerequisites ==' (offset $banner)"
+  $sb = New-Sandbox
+  try {
+    $h = Join-Path $sb "home"; $m = Join-Path $sb "machine"
+    New-Item -ItemType Directory -Force $h | Out-Null; New-Item -ItemType Directory -Force $m | Out-Null
+    $real = Get-RealMachineSnapshot
+    $o = Invoke-SandboxInstall $h $m @('-Local','-Cloud')
+    $code = $script:LastInstallExit
+    $after = Get-RealMachineSnapshot
+    Assert ($code -ne 0) "conflict run: -Local -Cloud exited $code, expected non-zero: $o"
+    Assert ($o -match '-Local' -and $o -match '-Cloud') "conflict run: output does not name -Local and -Cloud: $o"
+    $written = @(Get-ChildItem $h -Force -Recurse | Where-Object { $_.FullName -ne (Join-Path $h "AppData") -and $_.FullName -notlike (Join-Path $h "AppData\*") })
+    Assert ($written.Count -eq 0) "conflict run: the sandbox profile was written to: $(($written | ForEach-Object { $_.FullName }) -join ', ')"
+    Assert (-not (Test-Path (Join-Path $m "machine-env.txt"))) "conflict run: machine-env.txt was written (the install got past the conflict)"
+    foreach ($k in $real.Keys) { Assert ("$($real[$k])" -ceq "$($after[$k])") "untouched: real $k changed during the sandboxed -Local -Cloud run" }
+  } finally { Remove-Sandbox $sb }
+}
+
 Test-Case "install/uninstall drive models from the manifest" {
   $inst = Get-Content (Join-Path $kit "install.ps1") -Raw
   Assert ($inst -match 'sync-models\.ps1') "install.ps1 does not call sync-models.ps1"

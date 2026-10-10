@@ -3095,7 +3095,7 @@ HUMAN decision - the build loop must STOP at it until the human has chosen, and 
 - **Refs:** Story S33 AC1, AC3, AC4 and Behavior bullets 1 and 3; `docs/DESIGN.md` C2 (Copilot hook wiring), C5, C6 (Switches: `-CopilotCli` combines with any mode and leaves the Claude Code wiring untouched).
 - **Context:** `copilot-hooks.json` holds the dev-path placeholder `C:\Projects\Claude\MCP\DAD-kit` in its `bash` and `powershell` command strings (stop and Hybrid events: `dad-guard-copilot.ps1`, `dad-loopguard.ps1`); `install.ps1` rewrites it on the PARSED object to `$root` (the kit directory) and writes the file with `Write-NoBom`. GitHub Copilot CLI is a PILOT and unverified (R37b): these cases test only what the installer writes into the sandbox profile, never a real Copilot binary. If a `.bak` of an existing `dad.json` is made it is only on a re-run, which these cases do not do. NEVER run `install.ps1` outside the seam. Never touch `D:\projects\GalacticDataNetwork\gdn1`. ASCII only, PowerShell 5.1.
 
-### [ ] T33.3 - test-kit: real-installer `-Local -Cloud` conflict case (non-zero, both switches named, empty profile); CHANGELOG entry   (Story S33)
+### [x] T33.3 - test-kit: real-installer `-Local -Cloud` conflict case (non-zero, both switches named, empty profile); CHANGELOG entry   (Story S33)
 - **Goal:** the `-Local -Cloud` conflict is proven through the real `install.ps1`, not only through the resolver, and the change is recorded.
 - **Touches:** `test-kit.ps1` (one new `Test-Case` directly after T33.2's last case), `CHANGELOG.md` (one entry).
 - **Do:**
