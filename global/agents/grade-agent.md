@@ -37,6 +37,17 @@ Inputs (the orchestrator gives you the unit id + MODE; the rest is in CLAUDE.md)
   `search_datasheets` for any spec detail rather than reading whole files (keeps context lean).
 - The current implementation - Read/Grep the files the unit touched.
 
+**THE CLOSE EVIDENCE COMES FIRST.** You have no shell, so you cannot see whether the suite was red.
+`close-unit` can, and when the story closed it wrote `grades/<id>_EVIDENCE.md`. `Read` it before anything
+else. If it exists:
+- Copy its line starting `Evidence (close-unit` into your Assessment section **exactly as written** - do
+  not reword it, round it or drop a field. `close-unit -RequireGrade` rejects a card that does not carry it.
+- Obey `grade cap:`. `grade cap: B` means closes of this story were refused for failing tests, or the story
+  has open findings: the grade may be B or lower, never higher, however clean the code reads today. Say in
+  the Delta column why (for example "capped at B: 2 closes blocked for failing tests").
+- Use the listed blocks and findings as leads: read the code they point at.
+If the file does not exist (a story closed by an older kit), say "no close evidence file" in the Assessment
+and do not claim the tests passed - you did not see them run.
 Grade on these axes, then a single overall grade (letter A-F):
 1. **Correctness vs intent** - does it do what the unit's Goal/Behavior say?
 2. **Acceptance coverage** - is each acceptance criterion actually implemented? (qa-agent proves it with

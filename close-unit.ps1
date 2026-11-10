@@ -241,7 +241,84 @@ function Test-GradeCard([string]$unitId) {
     }
   }
   if (-not $cites) { return 'grade card cites no test name, test-kit.ps1 line range or resolvable file:line (expected form: test-kit.ps1:<n>, or a backtick/double-quoted Test-Case name, or a full-relative-path file:line such as global/commands/build.md:150)' }
+  # 0.61.0 (issue 5 option A): the card must carry the machine-made close evidence, and obey its cap.
+  # The grader has no shell: it cannot see a red suite, and one project's cards read "code-review only" on
+  # stories whose closes had just failed their tests - 40 cards, nothing below B+. So close-unit writes the
+  # facts (grades\<id>_EVIDENCE.md) and the card has to QUOTE them. Only for a story that has such a file:
+  # stories closed by an older kit, and their cards, are not re-judged.
+  $evFile = Join-Path $proj "grades\$($unitId)_EVIDENCE.md"
+  # (An evidence file written by THIS very run postdates the card being checked - nothing could have quoted it yet.)
+  if ((Test-Path -LiteralPath $evFile) -and $script:evidenceFresh -ne $unitId) {
+    $evLine = @([System.IO.File]::ReadAllLines($evFile) | Where-Object { $_ -match '^Evidence \(close-unit' }) | Select-Object -First 1
+    if ($evLine) {
+      $norm = { param($t) ([regex]::Replace([string]$t, '\s+', ' ')).Trim() }
+      if (-not (& $norm $text).Contains((& $norm $evLine))) {
+        return "grade card does not quote the close evidence - copy this line from grades\$($unitId)_EVIDENCE.md into the card's Assessment, unchanged: $evLine"
+      }
+      $capM = [regex]::Match($evLine, 'grade cap:\s*([A-F][+-]?)')
+      if ($capM.Success) {
+        $rank = @{ "A+"=1;"A"=2;"A-"=3;"B+"=4;"B"=5;"B-"=6;"C+"=7;"C"=8;"C-"=9;"D+"=10;"D"=11;"D-"=12;"F"=13 }
+        $gm = [regex]::Match($text, '(?im)^\s*\**\s*Current grade:\s*\**\s*([A-F][+-]?)')
+        if ($gm.Success -and $rank.ContainsKey($gm.Groups[1].Value) -and $rank[$gm.Groups[1].Value] -lt $rank[$capM.Groups[1].Value]) {
+          return "grade $($gm.Groups[1].Value) is above the cap $($capM.Groups[1].Value) set by the close evidence ($evLine) - a story whose closes were blocked for failing tests, or that has open findings, is not an A"
+        }
+      }
+    }
+  }
   return $null
+}
+
+# --- the close EVIDENCE for a story that just rolled up (issue 5 option A) ----------------------
+# Facts only, computed here: what the story tests did at this close, how often closes of this story's
+# units were blocked for failing tests or a failing build (from the gate log), and which open doc-stats
+# findings name the story. A grade above B is not available to a story with test-failure blocks or open
+# findings. Written once, when the story turns DONE, so the card can quote a line that will not change.
+function Write-StoryEvidence([string]$storyId, [string]$testLine) {
+  $ids = @($storyId)
+  if (Test-Path $tasksFile) {
+    foreach ($ln in (Get-Content $tasksFile -Encoding UTF8)) {
+      if ($ln -match '^###\s*\[[ x]\]\s*([A-Za-z0-9._-]+)' -and $ln -match ('\(Story\s+' + [regex]::Escape($storyId) + '\)')) {
+        $ids += ([regex]::Match($ln, '^###\s*\[[ x]\]\s*([A-Za-z0-9._-]+)')).Groups[1].Value
+      }
+    }
+  }
+  $testBlocks = New-Object System.Collections.Generic.List[string]
+  $buildBlocks = 0
+  $glog = Join-Path $proj "grades\gates-log.jsonl"
+  if (Test-Path -LiteralPath $glog) {
+    foreach ($ln in [System.IO.File]::ReadAllLines($glog)) {
+      if ($ln -notmatch '"gate":"close-unit-refusal","decision":"block"') { continue }
+      $rm = [regex]::Match($ln, '"ts":"([^"]*)".*"reason":"((?:story )?([A-Za-z0-9._-]+) not closed: ([^"]*))"')
+      if (-not $rm.Success -or $ids -notcontains $rm.Groups[3].Value) { continue }
+      if ($rm.Groups[4].Value -match 'tests failed|tests ran zero|no evidence tests ran') { $testBlocks.Add("$($rm.Groups[1].Value)  $($rm.Groups[2].Value)") }
+      elseif ($rm.Groups[4].Value -match '^build failed') { $buildBlocks++ }
+    }
+  }
+  $found = New-Object System.Collections.Generic.List[string]
+  try {
+    $fo = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $proj -Findings 2>$null | Out-String)
+    $idRx = '\b(' + (($ids | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\b'
+    foreach ($fl in ($fo -split "`r?`n")) {
+      # Not counted: the missing grade card (it is what the grader is about to write) and "no commit
+      # mentions it" (true only because THIS close has not committed yet, and for the story until its
+      # story-level close - the open-story rule already enforces that one).
+      if ($fl -match '^\s*\[(?!grade\])[a-z-]+\]' -and $fl -match $idRx -and $fl -notmatch 'no commit mentions it') { $found.Add($fl.Trim()) }
+    }
+  } catch { }
+  $cap = if ($testBlocks.Count -gt 0 -or $found.Count -gt 0) { "B" } else { "none" }
+  $line = "Evidence (close-unit, $(Get-Date -Format 'yyyy-MM-dd')): $testLine; closes blocked for failing tests: $($testBlocks.Count); build-failure blocks: $buildBlocks; open findings naming $($storyId): $($found.Count); grade cap: $cap"
+  $out = @("# Story $storyId - close evidence (generated by close-unit - do not edit)", "",
+           "The grade card for $storyId must contain the next line UNCHANGED (close-unit -RequireGrade checks it):", "",
+           $line, "",
+           "A grade cap of B means: this story had closes refused for failing tests, or has open findings, so it",
+           "cannot be graded above B whatever the code looks like now. `"none`" means no cap.", "")
+  if ($testBlocks.Count) { $out += "## Closes blocked for failing tests"; $out += @($testBlocks | Select-Object -First 20 | ForEach-Object { "- $_" }); $out += "" }
+  if ($found.Count) { $out += "## Open findings naming this story"; $out += @($found | Select-Object -First 20 | ForEach-Object { "- $_" }); $out += "" }
+  $evPath = Join-Path $proj "grades\$($storyId)_EVIDENCE.md"
+  $gd = Split-Path $evPath -Parent
+  if (-not (Test-Path $gd)) { New-Item -ItemType Directory -Path $gd -Force | Out-Null }
+  [System.IO.File]::WriteAllText($evPath, (($out -join "`n").TrimEnd() + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  return $evPath
 }
 
 function Save-Text([string]$path, [string[]]$lines) {
@@ -303,6 +380,7 @@ function Set-StoryDone([string]$storyId) {
       }
       Save-Text $storiesFile $lines
       $notes.Add("story $storyId -> DONE (all its tasks are [x], stamped closed:close-unit)")
+      $script:storyFlipped = $storyId        # this run turned the story DONE (issue 5: write its evidence)
       return
     }
   }
@@ -712,6 +790,8 @@ if (Test-Path $storiesFile) { $origStories = [System.IO.File]::ReadAllText($stor
 if (Test-Path $statusFile)  { $origStatus = [System.IO.File]::ReadAllText($statusFile) }
 $commitFailed = $false
 $rolledBack = $false
+$script:storyFlipped = $null
+$script:evidenceFresh = $null
 $origRecipes = $null
 
 # --- 1) tick the unit ---
@@ -752,6 +832,18 @@ else {
   exit 1
 }
 
+# --- 2a) the story just turned DONE: write its close evidence for the grader (issue 5) ---
+$evidenceWritten = $null
+if ($script:storyFlipped) {
+  try {
+    $tl = if ($SkipVerify) { "tests NOT verified (-SkipVerify)" }
+          elseif ($tcmd -and $null -ne $count) { "tests exit 0, $count ran" }
+          else { "no Test command in CLAUDE.md - tests NOT run" }
+    $evidenceWritten = Write-StoryEvidence $script:storyFlipped $tl
+    $script:evidenceFresh = $script:storyFlipped
+    $notes.Add("close evidence written for the grader: grades\$($script:storyFlipped)_EVIDENCE.md (the card must quote its Evidence line)")
+  } catch { $warns.Add("could not write the close evidence for $($script:storyFlipped): $($_.Exception.Message)") }
+}
 # --- 2b) a DONE story needs a real grade card ---
 # Grading is the step that keeps getting skipped. At task level this only warns (the card is written AFTER
 # the story rolls up, per /build's order); pass -RequireGrade at the story-level close to make it binding.
@@ -949,6 +1041,7 @@ if (-not $NoCommit) {
           if ($null -ne $origStories -and [System.IO.File]::ReadAllText($storiesFile) -ne $origStories) { [System.IO.File]::WriteAllText($storiesFile, $origStories, $enc); $rolledBack = $true }
           if ($null -ne $origStatus -and (Test-Path $statusFile) -and [System.IO.File]::ReadAllText($statusFile) -ne $origStatus) { [System.IO.File]::WriteAllText($statusFile, $origStatus, $enc) }
           if ($null -ne $origRecipes) { $rp = Join-Path $docs "RECIPES.md"; if ((Test-Path $rp) -and [System.IO.File]::ReadAllText($rp) -ne $origRecipes) { [System.IO.File]::WriteAllText($rp, $origRecipes, $enc) } }
+          if ($evidenceWritten -and (Test-Path -LiteralPath $evidenceWritten)) { Remove-Item -LiteralPath $evidenceWritten -Force }
           git reset -q | Out-Null
           if ($rolledBack) { $problems.Add("bookkeeping ROLLED BACK: the TASKS.md tick and any STORIES.md DONE marker were restored, because the commit did not land - '$Id' is NOT closed") }
         } catch { $problems.Add("could not roll the bookkeeping back after the failed commit: $($_.Exception.Message) - check docs\TASKS.md and docs\STORIES.md by hand") }

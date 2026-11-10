@@ -6782,6 +6782,9 @@ Test-Case "close-unit -RequireGrade refuses a story with no real grade card" {
     # real card -> accept
     ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + ('detail. ' * 120) + " See docs/STORIES.md:1.`n## Suggestions`n1. none") |
       Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    # 0.61.0 (issue 5): an earlier refused run already rolled the story up and wrote its close evidence; a real
+    # card quotes that line, so this one does too.
+    if (Test-Path "$p\grades\S1_EVIDENCE.md") { Add-Content "$p\grades\S1_GRADE.md" -Encoding UTF8 -Value (@(Get-Content "$p\grades\S1_EVIDENCE.md" | Where-Object { $_ -match '^Evidence \(close-unit' })[0]) }
     & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
     Assert ($LASTEXITCODE -eq 0) "rejected a real grade card"
     Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE"
@@ -6817,6 +6820,9 @@ Test-Case "close-unit -RequireGrade AC1: a headings-only card with no citation i
     "Test-Case `"sandbox named case`" {`n  Assert `$true `"x`"`n}" | Set-Content "$p\test-kit.ps1" -Encoding UTF8
     ("# Grade - S1`n`n## Grade history`n| 1 | 2026-07-30 | A | initial |`n`n## Assessment`n" + $filler + " Verified by ``sandbox named case``.`n## Suggestions`n1. none") |
       Set-Content "$p\grades\S1_GRADE.md" -Encoding UTF8
+    # 0.61.0 (issue 5): an earlier refused run already rolled the story up and wrote its close evidence; a real
+    # card quotes that line, so this one does too.
+    if (Test-Path "$p\grades\S1_EVIDENCE.md") { Add-Content "$p\grades\S1_GRADE.md" -Encoding UTF8 -Value (@(Get-Content "$p\grades\S1_EVIDENCE.md" | Where-Object { $_ -match '^Evidence \(close-unit' })[0]) }
     & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
     Assert ($LASTEXITCODE -eq 0) "rejected a card citing an existing Test-Case name"
     Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "test-name variant did not mark the story DONE"
@@ -6839,6 +6845,9 @@ Test-Case "close-unit -RequireGrade AC1: a card citing an existing file:line is 
     git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
     $ErrorActionPreference = $prev; Pop-Location
     $cu = Join-Path $kit "close-unit.ps1"
+    # 0.61.0 (issue 5): an earlier refused run already rolled the story up and wrote its close evidence; a real
+    # card quotes that line, so this one does too.
+    if (Test-Path "$p\grades\S1_EVIDENCE.md") { Add-Content "$p\grades\S1_GRADE.md" -Encoding UTF8 -Value (@(Get-Content "$p\grades\S1_EVIDENCE.md" | Where-Object { $_ -match '^Evidence \(close-unit' })[0]) }
     & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "One" -ProjectDir $p -NoReindex -SkipVerify -RequireGrade | Out-Null
     Assert ($LASTEXITCODE -eq 0) "rejected a card citing close-unit.ps1:1"
     Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1.*Status: DONE' -Quiet) "did not mark the story DONE"
@@ -9617,6 +9626,81 @@ Test-Case "0.61.0 #7: over the project's human-gate WIP limit, close-unit will n
     Assert ($x.Code -eq 0) "a project with no limit line was blocked:`n$($x.Out)"
   } finally { Remove-Sandbox $sb }
   Assert ([System.IO.File]::ReadAllText((Join-Path $kit "templates\generic\CLAUDE.md")) -match '(?m)^- Human-gate WIP limit: 3\s*$') "the project template does not set the default limit of 3"
+}
+
+Test-Case "0.61.0 #5: a roll-up writes machine-made close evidence; the grade card must quote it and may not exceed its cap" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    # a card good enough for the existing checks (size, history, a resolvable citation), graded $g, with extra text $x
+    function Card([string]$g, [string]$x) {
+      $body = "# Story S1 - one : report card`n`n**Current grade: $g**  (as of 2026-11-10, iteration 1)`n`n## Grade history`n| Iter | Date (YYYY-MM-DD) | Grade | Delta |`n|---|---|---|---|`n| 1 | 2026-11-10 | $g | initial |`n`n## Assessment (this iteration)`n- Correctness: read tests/ApiTests.cs:1 and the ten cases in it. Acceptance: covered. Design: n/a.`n$x`n- Quality: fine. Hygiene: fine.`n`n## Suggestions (prioritized; tag each so the team knows who acts)`n1. [mechanical] nothing to do here beyond the usual tidy.`n" + ("padding so the card is not a stub. " * 20) + "`n"
+      New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+      [System.IO.File]::WriteAllText("$p\grades\S1_GRADE.md", $body, (New-Object System.Text.UTF8Encoding($false)))
+    }
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); Assert ($x.Code -eq 0) "T1.1:`n$($x.Out)"
+    # the story close fails its tests twice before it passes: that history must reach the grader
+    "x" | Set-Content "$p\fail.flag" -Encoding ASCII
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u"); $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 1) "setup: the red closes were not refused"
+    Assert (-not (Test-Path "$p\grades\S1_EVIDENCE.md")) "evidence was written for a close that did not happen"
+    Remove-Item "$p\fail.flag" -Force
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S1 -> DONE') "roll-up:`n$($x.Out)"
+    $ev = "$p\grades\S1_EVIDENCE.md"
+    Assert (Test-Path $ev) "no evidence file after the roll-up:`n$($x.Out)"
+    $line = @([System.IO.File]::ReadAllLines($ev) | Where-Object { $_ -match '^Evidence \(close-unit' })[0]
+    Assert ($line -match 'tests exit 0, 3 ran; closes blocked for failing tests: 2; build-failure blocks: 0; open findings naming S1: \d+; grade cap: B$') "the evidence line is wrong: $line"
+    Assert ((git -C $p show --stat --format= HEAD | Out-String) -match 'grades/S1_EVIDENCE\.md') "the evidence file is not in the roll-up commit"
+
+    # 1) a card that does not quote the evidence is rejected
+    Card "B" ""
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish","-RequireGrade")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'does not quote the close evidence') "a card without the evidence line was accepted:`n$($x.Out)"
+    # 2) quoting it but grading above the cap is rejected
+    Card "A-" "- $line"
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish","-RequireGrade")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'grade A- is above the cap B') "a grade above the cap was accepted:`n$($x.Out)"
+    # 3) quoting it at the cap passes
+    Card "B" "- $line"
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish","-RequireGrade")
+    Assert ($x.Code -eq 0) "a card that quotes the evidence and respects the cap was rejected:`n$($x.Out)"
+    Assert ([System.IO.File]::ReadAllText($ev).Contains($line)) "the evidence file changed after the roll-up (the card's quote would go stale)"
+  } finally { Remove-Sandbox $sb }
+
+  # a clean story: no cap; a story with NO evidence file (closed by an older kit) is judged as before
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    $line = @([System.IO.File]::ReadAllLines("$p\grades\S1_EVIDENCE.md") | Where-Object { $_ -match '^Evidence \(close-unit' })[0]
+    Assert ($line -match 'closes blocked for failing tests: 0; .*grade cap: none$') "a clean story got a cap: $line"
+    $body = "# Story S1 : report card`n`n**Current grade: A**`n`n## Grade history`n| 1 | 2026-11-10 | A | initial |`n`n## Assessment`n- read tests/ApiTests.cs:1`n- $line`n`n## Suggestions`n1. [mechanical] none`n" + ("padding so the card is not a stub. " * 24)
+    [System.IO.File]::WriteAllText("$p\grades\S1_GRADE.md", $body, (New-Object System.Text.UTF8Encoding($false)))
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish","-RequireGrade")
+    Assert ($x.Code -eq 0) "an uncapped A that quotes the evidence was rejected:`n$($x.Out)"
+  } finally { Remove-Sandbox $sb }
+  # a story that was already DONE before this kit (no evidence file) and its card are judged as before
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    $st = [System.IO.File]::ReadAllText("$p\docs\STORIES.md").Replace("### Story S1: One   <!-- Status: TODO -->", "### Story S1: One   <!-- Status: DONE closed:close-unit -->")
+    [System.IO.File]::WriteAllText("$p\docs\STORIES.md", $st, (New-Object System.Text.UTF8Encoding($false)))
+    $tk = [System.IO.File]::ReadAllText("$p\docs\TASKS.md").Replace("### [ ] T1.1", "### [x] T1.1").Replace("### [ ] T1.2", "### [x] T1.2")
+    [System.IO.File]::WriteAllText("$p\docs\TASKS.md", $tk, (New-Object System.Text.UTF8Encoding($false)))
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    $old = "# Story S1 : report card`n`n**Current grade: A**`n`n## Grade history`n| 1 | 2026-10-01 | A | initial |`n`n## Assessment`n- read tests/ApiTests.cs:1`n`n## Suggestions`n1. [mechanical] none`n" + ("padding so the card is not a stub. " * 24)
+    [System.IO.File]::WriteAllText("$p\grades\S1_GRADE.md", $old, (New-Object System.Text.UTF8Encoding($false)))
+    $env:DAD_ALLOW_STATUS_EDIT = '1'
+    try { git -C $p add -A 2>&1 | Out-Null; git -C $p -c user.name=t -c user.email=t@t commit -q -m "state from an older kit" 2>&1 | Out-Null }
+    finally { Remove-Item Env:\DAD_ALLOW_STATUS_EDIT -ErrorAction SilentlyContinue }
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish","-RequireGrade")
+    Assert ($x.Code -eq 0) "a story with no evidence file (closed by an older kit) was held to the evidence rule:`n$($x.Out)"
+    Assert (-not (Test-Path "$p\grades\S1_EVIDENCE.md")) "evidence was written for a story this run did not roll up"
+  } finally { Remove-Sandbox $sb }
+  $ga = [System.IO.File]::ReadAllText((Join-Path $kit "global\agents\grade-agent.md"))
+  Assert ($ga -match 'THE CLOSE EVIDENCE COMES FIRST' -and $ga -match 'grade cap: B') "grade-agent is not told to read and quote the close evidence"
 }
 
 # ---------------------------------------------------------------- summary

@@ -160,7 +160,10 @@ its dependencies satisfied, STOP and report the blocked tasks.
 its story commit, and close-unit refuses to close a task of any OTHER story until then (it tracks the
 stories that still owe their close). A real run left stories DONE with no grade card and no story commit
 and carried on for thirty tasks.
-5. **grade-agent** -> grade the completed STORY. It writes `grades/<story id>_GRADE.md` and returns the
+5. **grade-agent** -> grade the completed STORY. Point it at `grades/<story id>_EVIDENCE.md` (close-unit
+   wrote it when the story rolled up: test result, closes blocked for failing tests, open findings, and a
+   grade CAP). The card must quote that file's `Evidence (close-unit ...` line unchanged and may not exceed
+   the cap - `-RequireGrade` rejects it otherwise. It writes `grades/<story id>_GRADE.md` and returns the
    grade + prioritized, tagged suggestions. **Gate (run these checks - a stub card is NOT a grade):** the
    file must exist, be **at least 800 bytes**, and contain **`## Grade history`**, **`## Assessment`** and
    **`## Suggestions`**. A one-line card saying "all criteria met" FAILS the gate - send it back to write a

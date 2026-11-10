@@ -75,6 +75,19 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
 - UPGRADE PATH: Human-in-loop is a project-owned section, so `upgrade-project` does not add the line; it prints how
   to. An upgraded project is therefore not limited until its owner adds the line.
 
+### Added - issue 5 (option A): the grader gets facts it cannot fake, and a script-checked grade cap
+- When a story rolls up to DONE, `close-unit` writes `grades\<story>_EVIDENCE.md` into the same commit: one line
+  `Evidence (close-unit, <date>): tests exit 0, N ran; closes blocked for failing tests: K; build-failure blocks: B;
+  open findings naming <story>: F; grade cap: B|none`, followed by the blocked closes (from the gate log, for the
+  story and its tasks) and the findings. The cap is B when any close of the story was refused for failing tests or
+  a `doc-stats` finding names the story. It is written once, so the line a card quotes never changes.
+- `close-unit -RequireGrade` now also rejects a card that does not contain that Evidence line unchanged, and a card
+  whose `Current grade` is above the cap. grade-agent is told to read the file first, copy the line, and obey the
+  cap; `/build` step 5 points it at the file.
+- The reviewed project's 40 cards ranged only from B+ to A, 28 of them written without the build or tests being run,
+  including for stories whose closes had just failed their tests.
+- UPGRADE PATH: none needed. A story closed by an older kit has no evidence file, and its card is judged as before.
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).
