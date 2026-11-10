@@ -362,7 +362,9 @@ Test-Case "a MISTYPED parameter is an error, not a silent default" {
   # '.*?' between the two halves, not '\s+': when the kit sits in a LONG path the message wraps and PowerShell
   # prints its "At line / CategoryInfo" block between "cannot be found" and "that matches" - the case then
   # failed purely because of where the kit was unpacked (found from a release zip under %TEMP%).
-  Assert ($out -match '(?s)cannot\s+be\s+found.*?matches\s+parameter\s+name') "a bogus -Path was accepted instead of rejected"
+  # ...and the wrap can fall INSIDE either half, so the phrase is not reliable at all in a long path. The error
+  # id is: it sits on its own short line ("+ FullyQualifiedErrorId : NamedParameterNotFound,new-project.ps1").
+  Assert (($out -match 'NamedParameterNotFound') -or ($out -match '(?s)cannot\s+be\s+found.*?matches\s+parameter\s+name')) "a bogus -Path was accepted instead of rejected"
   Assert ($out -notmatch 'Scaffolding') "it started scaffolding despite a parameter it did not understand"
 }
 
