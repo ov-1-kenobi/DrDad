@@ -254,7 +254,7 @@ foreach ($hsid in ($tasks | Where-Object { $_.Story } | ForEach-Object { $_.Stor
   if ($storiesDone -contains $hsid) { continue }
   $hOpen = @($tasks | Where-Object { $_.Story -eq $hsid -and -not $_.Done })
   if ($hOpen.Count -eq 0) { continue }
-  $hHuman = @($hOpen | Where-Object { $_.Head -cmatch '(?i:\[human\])|\bHUMAN\b|\s-\s+Human\b' })
+  $hHuman = @($hOpen | Where-Object { $_.Head -cmatch '(?i:\[human\])|\bHUMAN\b|\s-\s+Human\s' })
   if ($hHuman.Count -eq $hOpen.Count) {
     $humanGateStories += $hsid
     foreach ($ht in $hHuman) { $humanGateTasks += ($ht.Head -replace '^###\s*\[[ x]\]\s*', '').Trim() }
@@ -456,7 +456,10 @@ if ($Findings) {
     $goalSec = [regex]::Match($designRaw, '(?ms)^##\s*Goal\b.*?(?=^##\s|\z)')
     $adopted = ($designRaw -match '(?m)^##\s*Deferred\b') -or ($epicSec.Success -and $epicSec.Value -match '(?m)^\s*-\s*Serves:')
     if ($epicSec.Success -and $adopted) {
-      $goalNorm = if ($goalSec.Success) { ([regex]::Replace($goalSec.Value, '\s+', ' ')).ToLowerInvariant() } else { "" }
+      # The Goal's own HTML comments (the template's guidance) are not the Goal: a quote must match the prose.
+      $goalNorm = ""
+      if ($goalSec.Success) { $goalNorm = ([regex]::Replace(([regex]::Replace($goalSec.Value, '(?s)<!--.*?-->', ' ')), '\s+', ' ')).ToLowerInvariant() }
+      else { $f.Add("[design] $designName has epics with 'Serves:' lines but NO '## Goal' section - there is nothing for an epic to serve. Add the Goal via /design.") }
       $blocks = [regex]::Matches($epicSec.Value, '(?ms)^###\s*(E\d+[A-Za-z0-9-]*)\s*:\s*([^\r\n]*)\r?\n(.*?)(?=^###\s|\z)')
       foreach ($b in $blocks) {
         $eid = $b.Groups[1].Value
@@ -467,7 +470,7 @@ if ($Findings) {
           $f.Add("[design] epic $eid has no 'Serves:' line - which clause of '## Goal' does it serve? Via /design: quote the clause (- Serves: `"...`"), or have the human amend the Goal with a dated line, or move the epic to '## Deferred'.")
           continue
         }
-        $q = [regex]::Match($val, '"([^"]{4,})"')
+        $q = [regex]::Match($val, '"([^"]{12,})"')      # a clause, not a word: four letters matched almost any Goal
         if (-not $q.Success) {
           $f.Add("[design] epic $eid 'Serves:' does not QUOTE the Goal - write the clause's exact words in double quotes so it can be checked.")
         } elseif ($goalNorm -and -not $goalNorm.Contains(([regex]::Replace($q.Groups[1].Value, '\s+', ' ')).ToLowerInvariant().Trim())) {
@@ -957,7 +960,7 @@ if ($Findings) {
 if ($HumanGates) {
   # ONE checklist of everything only the human can clear, so it can be worked through in a sitting.
   Write-Host "== human gates: $proj ==" -ForegroundColor Cyan
-  $allHuman = @($tasks | Where-Object { -not $_.Done -and $_.Head -cmatch '(?i:\[human\])|\bHUMAN\b|\s-\s+Human\b' })
+  $allHuman = @($tasks | Where-Object { -not $_.Done -and $_.Head -cmatch '(?i:\[human\])|\bHUMAN\b|\s-\s+Human\s' })
   if ($allHuman.Count -eq 0) { Write-Host "  none open." -ForegroundColor Green; exit 0 }
   foreach ($ht in $allHuman) {
     $mark = if ($humanGateStories -contains $ht.Story) { "*" } else { " " }
@@ -967,7 +970,8 @@ if ($HumanGates) {
   Write-Host ("  {0} open human task(s). * = the ONLY thing its story is waiting for ({1} stor(y/ies): {2})." -f $allHuman.Count, $humanGateStories.Count, ($humanGateStories -join ', '))
   if ($humanGateLimit -ge 0) { Write-Host "  limit (CLAUDE.md 'Human-gate WIP limit'): $humanGateLimit" } else { Write-Host "  no 'Human-gate WIP limit' line in CLAUDE.md - nothing is enforced." -ForegroundColor Yellow }
   exit 0
-}if ($Json) { $result | ConvertTo-Json -Depth 5; exit 0 }
+}
+if ($Json) { $result | ConvertTo-Json -Depth 5; exit 0 }
 if ($UpdateStatus) {
   # Take the counting away from the model entirely. Telling the librarian to run this script was not
   # enough - a real audit reported "STATUS.md has been refreshed with current progress metrics" having

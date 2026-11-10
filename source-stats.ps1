@@ -193,7 +193,17 @@ if ($legacyTier.Count -gt 0) {
 # CITED source that is unknown/missing-tier or tiered without a stamp. Legacy tiers only warn here, so a
 # project that predates stamping can still relock without re-judging hundreds of rows first.
 if ($LockCheck) {
-  $bad = @($rows.Keys | Where-Object { $cited.ContainsKey($_) -and ((-not $rows[$_].Tier) -or $rows[$_].Tier -match '^(unknown|<)' -or $unstamped.Contains($_)) } | Sort-Object { [int]($_ -replace '\D', '') })
+  # Blocked: a cited source with no tier, 'unknown', a tier that is not primary/secondary at all, or a
+  # tier nobody stamped - and a cited id that has NO ledger row (the normal run FAILS that; the lock check
+  # used to wave it through, and /design runs only the lock check before offering LOCKED).
+  $bad = @($rows.Keys | Where-Object { $cited.ContainsKey($_) -and ((-not $rows[$_].Tier) -or $rows[$_].Tier -notmatch '^(primary|secondary)$' -or $unstamped.Contains($_)) } | Sort-Object { [int]($_ -replace '\D', '') })
+  $noRow = @($cited.Keys | Where-Object { -not $rows.ContainsKey($_) } | Sort-Object { [int]($_ -replace '\D', '') })
+  if ($noRow.Count -gt 0) {
+    Write-Host "== source-stats -LockCheck: $proj ==" -ForegroundColor Cyan
+    Write-Host "  DO NOT LOCK: the design cites $($noRow.Count) source id(s) that have NO row in SOURCES.md: $(($noRow | Select-Object -First 20) -join ', ')" -ForegroundColor Red
+    Write-Host "  A claim resting on a source that is not in the ledger rests on nothing. Capture it (/research) or remove the citation." -ForegroundColor Yellow
+    exit 1
+  }
   $leg = @($legacyTier | Where-Object { $cited.ContainsKey($_) })
   Write-Host "== source-stats -LockCheck: $proj ==" -ForegroundColor Cyan
   if ($leg.Count) { Write-Host "  WARN $($leg.Count) cited source(s) carry a 'legacy' tier (set before human stamping) - allowed, but unconfirmed." -ForegroundColor Yellow }
@@ -225,7 +235,7 @@ foreach ($w in $warns) { Write-Host "  WARN $w" -ForegroundColor Yellow }
 foreach ($f in $fails) { Write-Host "  FAIL $f" -ForegroundColor Red }
 Write-Host ""
 if ($fails.Count) {
-  Write-Host "$($fails.Count) FAIL(s) - the design doc cites sources that are not there. Fix before locking." -ForegroundColor Red
+  Write-Host "$($fails.Count) FAIL(s) - a citation, a source file or a tier does not hold up (see each FAIL line). Fix before locking." -ForegroundColor Red
   exit 1
 }
 Write-Host "citations resolve." -ForegroundColor Green

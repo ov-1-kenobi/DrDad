@@ -8931,11 +8931,21 @@ Test-Case "0.60.0 #1 upgrade path: upgrade-project rewrites an absolute .mcp.jso
     # (c) a project MOVED from another machine: its absolute docs dir no longer exists -> it meant this project's docs
     $p3 = Join-Path $sb "moved"; New-Item -ItemType Directory -Force "$p3\docs" | Out-Null
     "# Project: t`n`n## Stack`n- x" | Set-Content "$p3\CLAUDE.md" -Encoding UTF8
-    $mcp3 = @{ mcpServers = @{ 'local-tools' = @{ command = 'Q:\gone\kit\local-tools.exe'; env = @{ LOCALTOOLS_DOCS_DIR = 'Q:\other-machine\proj\docs' } } } } | ConvertTo-Json -Depth 10
+    $mcp3 = @{ mcpServers = @{ 'local-tools' = @{ command = 'Q:\gone\kit\local-tools.exe'; env = @{ LOCALTOOLS_DOCS_DIR = 'Q:\other-machine\moved\docs' } } } } | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText("$p3\.mcp.json", $mcp3, (New-Object System.Text.UTF8Encoding($false)))
     & powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p3 2>&1 | Out-Null
     $j3 = [System.IO.File]::ReadAllText("$p3\.mcp.json") | ConvertFrom-Json
     Assert ($j3.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -eq "docs") "(c) a dead absolute docs dir was not repaired: $($j3.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR)"
+
+    # (d) a missing docs dir under ANOTHER name (an offline share holding a deliberate external corpus) is left alone, and named
+    $p4 = Join-Path $sb "offline"; New-Item -ItemType Directory -Force "$p4\docs" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p4\CLAUDE.md" -Encoding UTF8
+    $mcp4 = @{ mcpServers = @{ 'local-tools' = @{ command = $abs; env = @{ LOCALTOOLS_DOCS_DIR = 'Q:\shared-research\docs' } } } } | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText("$p4\.mcp.json", $mcp4, (New-Object System.Text.UTF8Encoding($false)))
+    $o4 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p4 2>&1 | Out-String)
+    $j4 = [System.IO.File]::ReadAllText("$p4\.mcp.json") | ConvertFrom-Json
+    Assert ($j4.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -eq 'Q:\shared-research\docs') "(d) an offline external docs dir was rewritten: $($j4.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR)"
+    Assert ($o4 -match 'NOT changed') "(d) the unresolvable docs dir was not called out:`n$o4"
   } finally { Remove-Sandbox $sb }
 }
 
@@ -9274,8 +9284,10 @@ Test-Case "0.60.0 #14: a title that already starts with the id is not doubled, a
     Assert ($n1 -eq $n0) "a re-run of a closed unit made a commit ($n0 -> $n1): $((git -C $p log -1 --format=%s | Out-String).Trim())"
     Assert (-not ((git -C $p diff --cached --name-only | Out-String).Trim())) "the re-run left files staged"
     # ...and the gate-log lines it wrote are picked up by the next real close, not lost
-    $x = Invoke-Pf $p @("-Id","T2.2","-Title","unit")
+    $x = Invoke-Pf $p @("-Id","T2.2","-Title","T2.2-compatible storage layer")
     Assert ($x.Code -eq 0) "next close failed:`n$($x.Out)"
+    # a title that merely STARTS with the id followed by a hyphen is a title, not a doubled prefix
+    Assert (((git -C $p log -1 --format=%s | Out-String).Trim()) -ceq "T2.2: T2.2-compatible storage layer") "a title beginning '<id>-' lost its first word: $((git -C $p log -1 --format=%s | Out-String).Trim())"
     Assert (-not ((git -C $p status --porcelain -- grades | Out-String).Trim())) "gate-log lines were left uncommitted after the next close"
   } finally { Remove-Sandbox $sb }
 }
@@ -9372,7 +9384,9 @@ Test-Case "0.60.0 #18: a STORY close sweeps old scratch out of _tmp\ (a task clo
     New-Item -ItemType Directory -Force "$p\_tmp\bak" | Out-Null
     "old" | Set-Content "$p\_tmp\old-log.txt"; "old" | Set-Content "$p\_tmp\bak\old.orig"; "new" | Set-Content "$p\_tmp\in-flight.txt"
     $then = (Get-Date).AddHours(-5)
-    (Get-Item "$p\_tmp\old-log.txt").LastWriteTime = $then; (Get-Item "$p\_tmp\bak\old.orig").LastWriteTime = $then
+    foreach ($of in "$p\_tmp\old-log.txt", "$p\_tmp\bak\old.orig") { (Get-Item $of).LastWriteTime = $then; (Get-Item $of).CreationTime = $then }
+    # a backup just COPIED from an old file: its write time is old, but it was created now - it must survive
+    "copied" | Set-Content "$p\_tmp\just-copied.bak"; (Get-Item "$p\_tmp\just-copied.bak").LastWriteTime = $then
     $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); Assert ($x.Code -eq 0) "T1.1:`n$($x.Out)"
     Assert ((Test-Path "$p\_tmp\old-log.txt") -and (Test-Path "$p\_tmp\bak\old.orig")) "a TASK close swept _tmp\ (only a story close should)"
     $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
@@ -9380,6 +9394,7 @@ Test-Case "0.60.0 #18: a STORY close sweeps old scratch out of _tmp\ (a task clo
     Assert (-not (Test-Path "$p\_tmp\old-log.txt")) "old scratch survived the story close"
     Assert (-not (Test-Path "$p\_tmp\bak")) "an emptied scratch sub-folder was left behind"
     Assert (Test-Path "$p\_tmp\in-flight.txt") "a file written minutes ago was swept (another agent may be using it)"
+    Assert (Test-Path "$p\_tmp\just-copied.bak") "a file created just now was swept because its WRITE time was old (a fresh copy of an old file)"
     Assert (Test-Path "$p\_tmp") "_tmp\ itself was removed"
     Assert ($x.Out -match '_tmp\\ swept at story close: 2 scratch file') "the sweep was not reported:`n$($x.Out)"
     Assert (-not ((git -C $p status --porcelain | Out-String).Trim())) "the sweep left the tree dirty"
@@ -9391,14 +9406,17 @@ Test-Case "0.60.0 #18: a STORY close sweeps old scratch out of _tmp\ (a task clo
     $td = Join-Path $kit "tidy.ps1"
     $p = Join-Path $sb "p"; New-Item -ItemType Directory -Force "$p\docs","$p\_tmp" | Out-Null
     "# Project: t" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
-    "a" | Set-Content "$p\_tmp\a.txt"; (Get-Item "$p\_tmp\a.txt").LastWriteTime = (Get-Date).AddHours(-9)
+    "a" | Set-Content "$p\_tmp\a.txt"; (Get-Item "$p\_tmp\a.txt").LastWriteTime = (Get-Date).AddHours(-9); (Get-Item "$p\_tmp\a.txt").CreationTime = (Get-Date).AddHours(-9)
     $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $td -ProjectDir $p -TmpOnly -OlderThanHours 1 | Out-String)
     Assert ((Test-Path "$p\_tmp\a.txt") -and $o -match 'dry run') "a dry run removed a file or did not say it was one:`n$o"
     Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     git init -q; git config core.autocrlf false; git add -A; git -c user.name=t -c user.email=t@t commit -q -m "tracks _tmp"
     $ErrorActionPreference = $prev; Pop-Location
+    # one tracked file must not switch the whole sweep off: the untracked old file beside it still goes
+    "b" | Set-Content "$p\_tmp\b.txt"; (Get-Item "$p\_tmp\b.txt").LastWriteTime = (Get-Date).AddHours(-9); (Get-Item "$p\_tmp\b.txt").CreationTime = (Get-Date).AddHours(-9)
     $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $td -ProjectDir $p -Fix -TmpOnly -OlderThanHours 1 | Out-String)
-    Assert ((Test-Path "$p\_tmp\a.txt") -and $o -match 'tracked by git') "a git-tracked file under _tmp\ was swept:`n$o"
+    Assert ((Test-Path "$p\_tmp\a.txt") -and $o -match 'tracked by git and were left alone') "a git-tracked file under _tmp\ was swept, or the skip was silent:`n$o"
+    Assert (-not (Test-Path "$p\_tmp\b.txt")) "an untracked old file was kept because another file in _tmp\ is tracked:`n$o"
   } finally { Remove-Sandbox $sb }
 }
 
@@ -9459,7 +9477,7 @@ Test-Case "0.61.0 index: a reindex reuses unchanged chunks, skips an unchanged c
     $total = [int]$Matches[1]
     Assert ($o1 -match "embedded $total new, reused 0") "a first index did not embed everything: $o1"
     Assert ((Test-Path "$ix\vectors.bin") -and (Test-Path "$ix\chunks.json")) "vectors.bin / chunks.json missing"
-    Assert ([System.IO.File]::ReadAllText("$ix\index.meta").Trim() -eq "test-hash-embedding") "index.meta does not name the embedding model"
+    Assert (@([System.IO.File]::ReadAllLines("$ix\index.meta"))[0].Trim() -eq "test-hash-embedding") "index.meta line 1 does not name the embedding model"
     Assert ([System.IO.File]::ReadAllText("$ix\chunks.json") -notmatch '"Vector"') "vectors are still written into chunks.json"
     $vb = [System.IO.File]::ReadAllBytes("$ix\vectors.bin")
     Assert ([BitConverter]::ToInt32($vb, 0) -eq $total) "vectors.bin header count is not the chunk count"
@@ -9469,6 +9487,15 @@ Test-Case "0.61.0 index: a reindex reuses unchanged chunks, skips an unchanged c
     # nothing changed -> no work at all
     $o2 = (& $exe --reindex $d | Out-String)
     Assert ($o2 -match 'Index up to date') "an unchanged corpus was reindexed: $o2"
+
+    # ...but a changed setting (here: audio transcription switched on) is NOT "nothing changed"
+    $env:LOCALTOOLS_TRANSCRIBE_AUDIO = "1"
+    try { $o2b = (& $exe --reindex $d | Out-String) } finally { Remove-Item Env:\LOCALTOOLS_TRANSCRIBE_AUDIO -ErrorAction SilentlyContinue }
+    Assert ($o2b -notmatch 'Index up to date' -and $o2b -match "embedded 0 new, reused $total") "a settings change was hidden by the up-to-date shortcut: $o2b"
+    $o2c = (& $exe --reindex $d | Out-String)      # back to the default settings: differs again from what was indexed
+    Assert ($o2c -notmatch 'Index up to date') "the settings recorded in index.meta are not compared: $o2c"
+    $o2d = (& $exe --reindex $d | Out-String)
+    Assert ($o2d -match 'Index up to date') "an unchanged corpus under unchanged settings was reindexed: $o2d"
 
     # one file edited -> only its chunk is embedded
     "alpha bravo charlie EDITED" | Set-Content "$d\note.txt" -Encoding ASCII
@@ -9497,6 +9524,17 @@ Test-Case "0.61.0 index: a reindex reuses unchanged chunks, skips an unchanged c
     $o4 = (& $exe --reindex $d | Out-String)
     Assert ($o4 -match "embedded 1 new, reused $total") "converting an old index re-embedded chunks it already had: $o4"
     Assert (Test-Path "$ix\vectors.bin") "the old index was not converted to the binary format"
+
+    # an UNLABELLED old index whose vectors come from a different model (another length), corpus unchanged:
+    # every chunk "matches" by text, so only a probe can tell - it must be re-embedded, not stamped as current
+    $cur = [System.IO.File]::ReadAllText("$ix\chunks.json") | ConvertFrom-Json
+    $foreign = @($cur | ForEach-Object { [pscustomobject]@{ Source = $_.Source; Page = $_.Page; Text = $_.Text; Vector = @(0.1, 0.2, 0.3, 0.4) } })
+    [System.IO.File]::WriteAllText("$ix\chunks.json", (ConvertTo-Json -InputObject @($foreign) -Depth 5 -Compress), (New-Object System.Text.UTF8Encoding($false)))
+    Remove-Item "$ix\vectors.bin","$ix\index.meta","$ix\manifest.sig" -Force
+    $o5 = (& $exe --reindex $d | Out-String)
+    Assert ($o5 -match "embedded $($cur.Count) new, reused 0") "an unlabelled index from another model was reused as if it were current: $o5"
+    $s3 = (& $exe --search "delta echo foxtrot" 1 | Out-String)
+    Assert ($s3 -match '\[other\.txt\] \(score 1\.00\)') "search fails after re-embedding a foreign index: $s3"
   } finally {
     $env:RAG_EMBED_MODEL = $keepModel
     Remove-Item Env:\LOCALTOOLS_DOCS_DIR -ErrorAction SilentlyContinue
@@ -9681,6 +9719,12 @@ Test-Case "0.61.0 #5: a roll-up writes machine-made close evidence; the grade ca
     Card "A-" "- $line"
     $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish","-RequireGrade")
     Assert ($x.Code -eq 1 -and $x.Out -match 'grade A- is above the cap B') "a grade above the cap was accepted:`n$($x.Out)"
+    # 2b) a card with no readable 'Current grade' line cannot slip under the cap
+    Card "B" "- $line"
+    $nc = [System.IO.File]::ReadAllText("$p\grades\S1_GRADE.md").Replace("**Current grade: B**", "Overall: fine")
+    [System.IO.File]::WriteAllText("$p\grades\S1_GRADE.md", $nc, (New-Object System.Text.UTF8Encoding($false)))
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish","-RequireGrade")
+    Assert ($x.Code -eq 1 -and $x.Out -match "no readable '\*\*Current grade") "a card with no Current grade line passed a capped story:`n$($x.Out)"
     # 3) quoting it at the cap passes
     Card "B" "- $line"
     $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish","-RequireGrade")
@@ -9864,6 +9908,18 @@ Test-Case "0.61.0 #17: only a human-stamped tier counts; an unstamped tier FAILS
     $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p -LockCheck 2>&1 | Out-String)
     Assert ($LASTEXITCODE -eq 1 -and $o -match 'DO NOT LOCK: 2 source' -and $o -match 'S001' -and $o -match 'S003' -and $o -notmatch '(?m)^\s+S004') "-LockCheck is wrong:`n$o"
 
+    # a citation with NO ledger row, and an invented tier, must both stop the lock
+    $des = [System.IO.File]::ReadAllText("$p\docs\DESIGN.md")
+    [System.IO.File]::WriteAllText("$p\docs\DESIGN.md", $des + "also [S099]`n", (New-Object System.Text.UTF8Encoding($false)))
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p -LockCheck 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1 -and $o -match 'NO row in SOURCES\.md: S099') "-LockCheck let a citation with no ledger row through:`n$o"
+    [System.IO.File]::WriteAllText("$p\docs\DESIGN.md", $des, (New-Object System.Text.UTF8Encoding($false)))
+    $led = [System.IO.File]::ReadAllText("$p\docs\SOURCES.md")
+    [System.IO.File]::WriteAllText("$p\docs\SOURCES.md", $led.Replace("| S002 | primary |", "| S002 | primary-ish |"), (New-Object System.Text.UTF8Encoding($false)))
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p -LockCheck 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1 -and $o -match '(?m)^\s+S002\s+primary-ish') "-LockCheck let an invented tier through:`n$o"
+    [System.IO.File]::WriteAllText("$p\docs\SOURCES.md", $led, (New-Object System.Text.UTF8Encoding($false)))
+
     # source-tier: lists what waits; refuses to stamp when no human is at a console; changes nothing
     $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $stp -ProjectDir $p -List 2>&1 | Out-String)
     Assert ($o -match 'S001\s+unknown' -and $o -match "S003\s+'primary' with no human stamp" -and $o -match "S004\s+'secondary' with no human stamp \(legacy\)" -and $o -notmatch '(?m)^\s+S002') "source-tier -List is wrong:`n$o"
@@ -9967,6 +10023,42 @@ Test-Case "0.61.0 #11: local-tools does not index docs\archive\ (the live docume
     Assert ($o -match 'DESIGN\.md' -and $o -match 'keep\.md') "live files are missing from the corpus:`n$o"
     Assert ($o -notmatch 'TASKS-S1\.md') "docs\archive\ is still indexed:`n$o"
   } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.61.0 hook: the v2 pre-commit hook really runs the kit DAD_HOME names, and says 'kit not found' when neither path resolves" {
+  # From the S38 grade card: the suite sets DAD_HOME to the kit under test, which is also the hook's fallback,
+  # so "finds the kit through DAD_HOME" was only ever asserted as text. Here DAD_HOME names a DIFFERENT folder
+  # whose scanner leaves a marker, and the fallback is the real kit - the marker proves which one ran.
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  $keep = $env:DAD_HOME
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force $p | Out-Null
+    Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    $ErrorActionPreference = $prev; Pop-Location
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install-hooks.ps1") -ProjectDir $p | Out-Null
+    $other = Join-Path $sb "other-kit"; New-Item -ItemType Directory -Force $other | Out-Null
+    $marker = Join-Path $sb "ran-from-dad-home.txt"
+    "param([switch]`$Staged, [switch]`$Quiet)`n'ran' | Set-Content -LiteralPath '$marker'`nexit 0" | Set-Content "$other\scan-secrets.ps1" -Encoding ASCII
+    $env:DAD_HOME = $other
+    "a" | Set-Content "$p\a.txt"; git -C $p add -A 2>&1 | Out-Null
+    git -C $p -c user.name=t -c user.email=t@t commit -q -m one 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the commit failed with DAD_HOME pointing at a working kit"
+    Assert (Test-Path $marker) "the hook did not run the scanner DAD_HOME names (it used its fallback path instead)"
+
+    # neither DAD_HOME nor the fallback resolves: a clear refusal, not a misleading 'secret scan failed'
+    $hookPath = "$p\.git\hooks\pre-commit"
+    $h = [System.IO.File]::ReadAllText($hookPath)
+    $h = [regex]::Replace($h, "(?m)^fallback='[^']*'", "fallback='" + ($sb -replace '\\', '/') + "/no-kit-here'")
+    [System.IO.File]::WriteAllText($hookPath, $h, (New-Object System.Text.UTF8Encoding($false)))
+    $env:DAD_HOME = Join-Path $sb "also-not-a-kit"
+    "b" | Set-Content "$p\a.txt"; git -C $p add -A 2>&1 | Out-Null
+    $o = (git -C $p -c user.name=t -c user.email=t@t commit -m two 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -ne 0) "a commit went through with no kit to run the scan"
+    Assert ($o -match 'DrDad kit not found') "the refusal does not say the kit was not found:`n$o"
+    Assert ($o -notmatch 'secret scan failed') "the refusal still blames the secret scan:`n$o"
+  } finally { $env:DAD_HOME = $keep; Remove-Sandbox $sb }
 }
 
 # ---------------------------------------------------------------- summary

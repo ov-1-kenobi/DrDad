@@ -72,17 +72,30 @@ while ($i -lt $lines.Count) {
   }
   # a ticked task of a DONE target story: collect its body (up to the next heading of level 1-3)
   $story = $sm.Groups[1].Value; $id = $hm.Groups[1].Value
-  $j = $i + 1; $body = New-Object System.Collections.Generic.List[string]
-  while ($j -lt $lines.Count -and $lines[$j] -notmatch '^#{1,3}\s') { $body.Add($lines[$j]); $j++ }
+  # The body runs to the next heading of level 1-3 - but a '# comment' line INSIDE a fenced code block is
+  # not a heading, and cutting there would split the task in two.
+  $j = $i + 1; $body = New-Object System.Collections.Generic.List[string]; $inFence = $false
+  while ($j -lt $lines.Count) {
+    if ($lines[$j] -match '^\s*(```|~~~)') { $inFence = -not $inFence }
+    elseif (-not $inFence -and $lines[$j] -match '^#{1,3}\s') { break }
+    $body.Add($lines[$j]); $j++
+  }
   $real = @($body | Where-Object { $_.Trim() })
   if ($real.Count -eq 0 -or ($real.Count -eq 1 -and $real[0] -match '^\s*-\s*archived:')) {
     $out.Add($ln); foreach ($b in $body) { $out.Add($b) }       # nothing to move (already a stub)
     $i = $j; continue
   }
   if (-not $archive.ContainsKey($story)) { $archive[$story] = New-Object System.Collections.Generic.List[string] }
-  $archive[$story].Add($ln)
-  foreach ($b in $body) { $archive[$story].Add($b) }
-  if ($body.Count -eq 0 -or $body[$body.Count - 1].Trim()) { $archive[$story].Add("") }
+  # The archive is appended BEFORE TASKS.md is rewritten (losing a body is worse than keeping two copies).
+  # If an earlier run died between the two writes, this task's body is already in the archive: do not
+  # append it a second time, just finish the job by stubbing TASKS.md.
+  $afPath = Join-Path (Join-Path $docs "archive") "TASKS-$story.md"
+  $alreadyArchived = (Test-Path -LiteralPath $afPath) -and ([System.IO.File]::ReadAllText($afPath) -replace "`r`n", "`n").Contains("`n" + $ln.TrimEnd() + "`n")
+  if (-not $alreadyArchived) {
+    $archive[$story].Add($ln)
+    foreach ($b in $body) { $archive[$story].Add($b) }
+    if ($body.Count -eq 0 -or $body[$body.Count - 1].Trim()) { $archive[$story].Add("") }
+  }
   $c = Get-TaskCommit $id
   $out.Add($ln)
   $out.Add("- archived: docs/archive/TASKS-$story.md" + $(if ($c) { " (commit $c)" } else { "" }))
@@ -100,6 +113,7 @@ $enc = New-Object System.Text.UTF8Encoding($false)
 $archDir = Join-Path $docs "archive"
 if (-not (Test-Path $archDir)) { New-Item -ItemType Directory -Path $archDir -Force | Out-Null }
 foreach ($s in $archive.Keys) {
+  if ($archive[$s].Count -eq 0) { continue }                  # everything for this story was already archived
   $af = Join-Path $archDir "TASKS-$s.md"
   $head = ""
   if (-not (Test-Path -LiteralPath $af)) {

@@ -147,6 +147,30 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
 - UPGRADE PATH: nothing is moved by an upgrade. Archiving starts with the next story-level close; run
   `dad archive-tasks -AllDone` when you want the backlog compacted. The archive is per story, not per epic.
 
+### Fixed - defects found by grading this release's own work (cards `grades/S38_GRADE.md` to `S45_GRADE.md`)
+The 0.60.0 / 0.61.0 work was written up as stories S38-S46 and graded, one grade-agent per story (all B). These
+findings were real and are fixed here, each with an assertion:
+- close-unit: only `<id>:` or `<id> - ` is stripped from a title (`-Title "S3-compatible storage"` lost its first word).
+- close-unit: the close-evidence check fails CLOSED - an evidence file without its line, or a card with no readable
+  `Current grade` under a cap, is rejected; if `doc-stats` cannot be asked, the line says "unknown" and the cap is B.
+- close-unit: the WIP-limit and retro gates WARN when they could not be evaluated instead of passing silently;
+  a failed `archive-tasks` run is reported.
+- `source-stats -LockCheck`: also blocks a citation that has no ledger row, and a tier that is neither `primary` nor
+  `secondary`.
+- `tidy -TmpOnly`: a file's age is the later of created and written (a fresh copy of an old file was swept); git-tracked
+  files under `_tmp\` are skipped one by one instead of switching the sweep off.
+- `upgrade-project`: a missing absolute docs dir is treated as the project's own only when it also carries the
+  project's folder name; otherwise it is left alone and named (it may be an offline share).
+- `archive-tasks`: a `# ` line inside a fenced code block no longer ends a task body; a body already in the archive
+  is not appended a second time after a half-done run.
+- `local-tools`: the "Index up to date" shortcut is not taken while an image or audio file is still waiting for its
+  caption or transcript, or after the caption / transcribe setting changed; an unlabelled old index whose vectors
+  have another length is re-embedded instead of being stamped as current.
+- `doc-stats`: a `Serves:` quote must be at least 12 characters and match the Goal's prose (not its HTML comments);
+  epics with `Serves:` lines and no `## Goal` section are reported; a title starting "Human-readable" is not a gate.
+- New case `0.61.0 hook: ...` proves the v2 hook runs the kit `DAD_HOME` names and says "kit not found" otherwise.
+- Still open from the cards: `docs/TASKS.md` T46.16 (agent work) and T46.17 (human decisions).
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).

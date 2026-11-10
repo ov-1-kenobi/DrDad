@@ -353,7 +353,7 @@ T36.2 -> T37.1 (needs T36.2) -> T37.2 (needs T37.1) -> T37.3 (needs T37.2) -> T3
 in-suite checks, T37.2 the blanking limits, T37.3 narrows `fully offline` and writes the CHANGELOG entry, T37.4 is the HUMAN decision on
 rephrased-claim patterns, like T34.3. `docs/DESIGN.md` is never edited.)
 
-T37.4 -> T46.7 (needs T37.4) -> T46.8 (needs T46.7) -> T46.9 (needs T46.8) -> T46.10 (needs T46.9) -> T46.11 (needs T46.10) -> T46.14 (needs T46.11) -> T46.15 (needs T46.14) -> T46.6 (needs T46.15) -> T46.5 (needs T46.6) -> T46.12 (needs T46.5) -> T46.13 (needs T46.12) [T46.6, T46.5, T46.12 and T46.13 WAIT FOR THE HUMAN]
+T37.4 -> T46.7 (needs T37.4) -> T46.8 (needs T46.7) -> T46.9 (needs T46.8) -> T46.10 (needs T46.9) -> T46.11 (needs T46.10) -> T46.14 (needs T46.11) -> T46.15 (needs T46.14) -> T46.16 (needs T46.15) -> T46.6 (needs T46.16) -> T46.5 (needs T46.6) -> T46.12 (needs T46.5) -> T46.13 (needs T46.12) -> T46.17 (needs T46.13) [T46.6, T46.5, T46.12, T46.13 and T46.17 WAIT FOR THE HUMAN]
 
 (added 2026-11-10; Stories S38-S46 - the 0.60.0 / 0.61.0 refactor work written up after it was built. T38.1-T45.1 and T46.1-T46.4 are already [x]:
 they were done directly from the review's issue list on branch drdad-fixes-2026-11 and are recorded here with their commits, so they are not
@@ -3584,7 +3584,31 @@ interactive MCP approval), T46.5 is a /design unlock that depends on it, and T46
 - **Depends on:** none
 - **Refs:** audit finding 5 of 2026-11-10.
 
-## Open questions
+### [ ] T46.16 - work through the [dev] and [mechanical] suggestions still open on the S38-S45 grade cards   (Story S46)
+- **Goal:** every suggestion on the eight cards is either fixed with a Test-Case or closed with a one-line reason.
+- **Touches:** as each suggestion names; mostly `test-kit.ps1` (missing assertions) and small edits in `close-unit.ps1`, `doc-stats.ps1`, `dad-status-guard.ps1`, `local-tools/ApiSurface.cs`, `local-tools/Rag.cs`.
+- **Do:** the cards were written on 2026-11-10 (all graded B). Fixed the same day, with tests: the title-prefix strip (`S3-compatible`), the evidence check failing open (missing line, unreadable grade, unknown findings), the WIP and retro gates saying when they could not be evaluated, `-LockCheck` passing a citation with no ledger row or an invented tier, the `_tmp` sweep judging age by write time only and switching off for one tracked file, `upgrade-project` repointing a missing external docs dir, `archive-tasks` cutting inside a code fence and double-appending after a half-done run, the index shortcut hiding a pending caption or a changed setting, an unlabelled index from another model being stamped as current, the v2 hook's `DAD_HOME` route and "kit not found" branch having no behavioral test, and three formatting slips. STILL OPEN, by card:
+  - S38: `docs-dir.ps1` uses only a RELATIVE first root of a `;` list (a rooted multi-root list falls back to `<proj>\docs` while the server honours it); the csproj-marker half of `IsTestProject` has no behavioral test; the name rule skips a product project named `*.Spec` / `*.Test`.
+  - S39: the roll-back test asserts the tick, the stamp and the index only (STATUS, RECIPES, evidence and archive restores are untested); `dad-status-guard` honours `DAD_CLOSE_UNIT_STORY` from any caller and lets a renamed STORIES.md through as "new"; `docs/API-SURFACE.md` is hard-coded in the re-run noise list; whether an accepted shrink whose commit fails leaves the ratchet baseline lowered is unchecked.
+  - S40: no positive test for the "template dashboard on a project with work done" finding; the ten-close threshold is tested at 14 only; the elevation warning is added near the end, so a refused close prints none; the Snapshot regex is not anchored to the `## Snapshot` block.
+  - S41: a fast test that exits 0 with no test count is accepted while the story path refuses the same (decide, document, test); the upgrade hint branch has no assertion.
+  - S42: a no-task-map story flips and is checked in the same run, so the quote and cap rules may not apply there; the findings-driven cap is never isolated in a test.
+  - S43: "exactly ONE" `[e2e]` task is enforced as "at least one"; the limit regex, the human-gate title regex and the exempt-file parser each exist twice (`close-unit.ps1`, `doc-stats.ps1`); the gate labels in `close-unit.ps1` run 0g, 0f, 0e, 0b.
+  - S44: the two size findings in `doc-stats` and the stamping writer in `source-tier.ps1` are executed by no test; a problem raised after archiving but before the commit attempt may leave the archive on disk.
+  - S45: the in-memory cache is never exercised (the test drives one-shot processes); no assertion that a changed model forces a full re-embed.
+- **Acceptance:** each line above is ticked off in this task's report with either a commit and Test-Case name or a recorded reason; the eight cards are re-graded once (iteration 2).
+- **Depends on:** T46.15
+- **Refs:** `grades/S38_GRADE.md` to `grades/S45_GRADE.md`.
+
+### [ ] T46.17 - [human] decisions raised by the S38-S45 grade cards   (Story S46)
+- **Goal:** a recorded yes or no for each judgement the graders handed back.
+- **Touches:** none until decided.
+- **Do:** (1) Are S38-S45 acceptable as closed by hand, or should each be re-closed through `close-unit` (about one full suite run per story)? (2) Is the recurring-suggestion rule too broad to gate on - it counts every card ever written, nothing marks a suggestion resolved, and themes such as "tests / coverage" recur on most projects, so the gate tends toward "a retro every five stories"? (3) Three routes around the refusals remain - `git commit --no-verify`, deleting `.claude\.dad-story-open`, and a hand commit whose subject starts `<story>:` - accept as residual risk or schedule a follow-up? (4) A roll-up made with `-SkipVerify` skips the retro gate and gets no grade cap: intended? (5) `local-tools` skips `archive\` under EVERY configured docs root, not only the project's: intended? (6) The source-tier gate is switched on by the ledger header, so removing the `tiered` column switches it off quietly: acceptable?
+- **Acceptance:** each item has a dated decision in `PROPOSALS.md` or in this task; any yes that needs code becomes its own task.
+- **Depends on:** T46.13
+- **Refs:** the `[human]` suggestions on `grades/S38_GRADE.md` to `grades/S45_GRADE.md`.
+
+## Open questions## Open questions
 - **[design] S30 follow-up (recorded, not changed):** `[Fact(Skip="...")]` and `[Fact, Trait(...)]` are not counted by the base markers (exact `[Fact]`); widening them would raise counts everywhere and re-baseline every project. Decide separately whether to widen.
 - **RESOLVED (decided 2026-10-07; tasked as T29.8 and T29.9) [design] S29 AC1/AC2 end-to-end coverage.** The seam and the end-to-end cases are now tasks; the original note follows for history. **[design] S29 AC1/AC2 were verified through the pure resolver plus `dad-doctor`, not a full sandbox `install.ps1` run.** A real run of `install.ps1` writes the machine-wide USER `Path`, the `DAD_HOME` user variable and `$env:HOME\.bashrc` (step 7b and the lines after it) with no seam to redirect them, so an end-to-end "no flag -> Cloud settings.json" test would touch the real machine (R35b). T29.1/T29.5 pin the decision (C6 rows 1-7) in `Resolve-InstallMode`, T29.6 pins the read-back, and only the conflict case (which exits before any write) runs the script. If the human wants a true end-to-end install test, `install.ps1` needs a test seam (for example an env var that skips steps 7b/7c) - that is new scope and is not tasked.
 - **RESOLVED (decided 2026-10-07: KEEP; T29.3 behavior and banner line) [design] S29 `-Cloud -Hybrid` and step 8.** Hybrid always runs the Ollama tuning. Original note: Today `-Cloud -Hybrid` skipped the Ollama tuning (`if (-not $Cloud)`); C6 says Hybrid wins the label and "Ollama ... and the step-8 GPU tuning are required for Local and Hybrid", so T29.3 tunes for Hybrid always. Amend T29.3 step 2 if the human wants the old behavior.

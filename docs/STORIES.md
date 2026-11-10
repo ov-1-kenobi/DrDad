@@ -1517,4 +1517,4 @@
   - [ ] AC3: DESIGN.md states the 0.60.0 / 0.61.0 behaviors as requirements and its three stale passages are corrected (T46.5).
   - [ ] AC4: `${DAD_HOME}` expansion is measured under Claude Code and Copilot CLI and recorded in DESIGN C5a (T46.6).
   - [ ] AC5: each remaining task T46.7-T46.15 is either done or closed by a recorded human decision.
-- **Dev notes:** commits 5888ff4 (T46.2), da3e35b (T46.1), 18fe0af (T46.3), d07166e (T46.4). T46.5, T46.6, T46.12 and T46.13 WAIT FOR THE HUMAN.
+- **Dev notes:** commits 5888ff4 (T46.2), da3e35b (T46.1), 18fe0af (T46.3), d07166e (T46.4). T46.5, T46.6, T46.12, T46.13 and T46.17 WAIT FOR THE HUMAN. S38-S45 were graded on 2026-11-10 (all B); the defects those cards found were fixed the same day, and what is left of their suggestions is T46.16 (agent work) and T46.17 (human decisions).

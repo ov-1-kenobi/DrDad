@@ -30,8 +30,8 @@ public static class DocsRootSource
 
 /// <summary>
 /// Local, offline RAG. Embeddings come from Ollama over HTTP (language-agnostic); vectors
-/// are stored in a single JSON file and searched with brute-force cosine (instant for
-/// thousands of chunks). Plus online helpers: ingest_url and web_search.
+/// are stored as float32 beside a JSON file of chunk text (see VecFile) and searched with brute-force
+/// cosine (instant for thousands of chunks). Plus online helpers: ingest_url and web_search.
 /// </summary>
 public static class Rag
 {
@@ -508,12 +508,21 @@ public static class Rag
         // Nothing changed since the last index (same files, sizes and write times; same model; current
         // format): there is nothing to do. close-unit reindexes on every close, and most closes used to
         // re-embed a corpus in which nothing but a ticked box had changed.
-        var indexedModel = File.Exists(MetaFile) ? (await File.ReadAllTextAsync(MetaFile)).Trim() : "";
-        if (File.Exists(IndexFile) && File.Exists(VecFile) && indexedModel == EmbedModel && !IsStale())
+        // index.meta: line 1 = the embedding model; line 2 = the settings the index was built under and how
+        // many image/audio files could NOT be turned into text that time. The shortcut is taken only when
+        // all of it matches and nothing was pending: a caption that failed (model not pulled yet) is
+        // deliberately not cached so a later run can retry, and "up to date" must not hide that retry -
+        // nor a caption/transcribe switch that was flipped since. (Found by the S45 grade card.)
+        var metaLines = File.Exists(MetaFile) ? (await File.ReadAllTextAsync(MetaFile)).Split('\n') : Array.Empty<string>();
+        var indexedModel = metaLines.Length > 0 ? metaLines[0].Trim() : "";
+        var indexedSettings = metaLines.Length > 1 ? metaLines[1].Trim() : "";
+        string Settings(int pendingCount) => $"caption={(CaptionImages ? 1 : 0)};transcribe={(TranscribeAudio ? 1 : 0)};pending={pendingCount}";
+        if (File.Exists(IndexFile) && File.Exists(VecFile) && indexedModel == EmbedModel
+            && indexedSettings == Settings(0) && !IsStale())
             return "Index up to date - nothing changed since the last index (no re-embedding done).";
 
         var chunks = new List<Chunk>();
-        int captioned = 0, transcribed = 0;
+        int captioned = 0, transcribed = 0, pending = 0;
         foreach (var f in files)
         {
             var ext = Path.GetExtension(f).ToLowerInvariant();
@@ -526,7 +535,7 @@ public static class Rag
             {
                 if (!CaptionImages) continue;
                 var text = await CachedSidecarAsync(f, "caption", () => DescribeImageAsync(f, null));
-                if (text is null) continue;
+                if (text is null) { pending++; continue; }
                 // Prefix the source so a hit reads as "this came from an image".
                 chunks.AddRange(ChunkText($"[image: {name}]\n{text}", name, null));
                 captioned++;
@@ -535,7 +544,7 @@ public static class Rag
             {
                 if (!TranscribeAudio) continue;
                 var text = await CachedSidecarAsync(f, "transcript", () => Sensors.TranscribeAsync(f));
-                if (text is null) continue;
+                if (text is null) { pending++; continue; }
                 chunks.AddRange(ChunkText($"[audio: {name}]\n{text}", name, null));
                 transcribed++;
             }
@@ -574,6 +583,24 @@ public static class Rag
             for (int k = 0; k < n; k++) chunks[todo[i + k]].Vector = vecs[k];
         }
         int reused = chunks.Count - todo.Count;
+        // An UNLABELLED old index (no index.meta) whose every chunk was reused never meets the length check
+        // below, because nothing new was embedded to compare with. If it came from a different model its
+        // vectors would be stamped as the current model's and then never match a query. Embed one chunk as
+        // a probe; a different length means the whole index is foreign: embed everything. (S45 grade card.)
+        if (indexedModel == "" && reused > 0 && todo.Count == 0)
+        {
+            var probe = await EmbedAsync(chunks[0].Text);
+            if (probe.Length != chunks[0].Vector!.Length)
+            {
+                for (int i = 0; i < chunks.Count; i += batch)
+                {
+                    int n = Math.Min(batch, chunks.Count - i);
+                    var vecs = await EmbedBatchAsync(chunks.Skip(i).Take(n).Select(c => c.Text).ToList());
+                    for (int k = 0; k < n; k++) chunks[i + k].Vector = vecs[k];
+                }
+                reused = 0;
+            }
+        }
         // One vector length per index. If the reused vectors are a different length from what the model
         // returns now (the model changed under an old, unlabelled index), the reuse was wrong: embed them too.
         if (todo.Count > 0 && reused > 0)
@@ -590,7 +617,9 @@ public static class Rag
         }
         // Write atomically (temp + move) so a concurrent search never reads a half-written index -
         // /build reindexes after every task while other agents may be searching. Vectors first, text
-        // second; a reader that catches the pair mid-swap sees a count mismatch and reads again.
+        // second. A reader that catches the pair mid-swap sees a count mismatch and reads again; when the
+        // count happens to be equal it may pair one new vector with the old text for that single read, and
+        // the stamp check corrects it on the next query. That is a stale ranking, never a corrupt index.
         var vtmp = VecFile + ".tmp";
         WriteVectors(vtmp, chunks);
         var tmp = IndexFile + ".tmp";
@@ -599,7 +628,7 @@ public static class Rag
             new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
         File.Move(vtmp, VecFile, overwrite: true);
         File.Move(tmp, IndexFile, overwrite: true);
-        await File.WriteAllTextAsync(MetaFile, EmbedModel);
+        await File.WriteAllTextAsync(MetaFile, EmbedModel + "\n" + Settings(pending));
         await File.WriteAllTextAsync(SigFile, CorpusSignature());   // record what we just indexed
 
         var sources = chunks.Select(c => c.Source).Distinct().OrderBy(x => x).ToList();

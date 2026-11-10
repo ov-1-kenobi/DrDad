@@ -43,18 +43,22 @@ if (-not $looksLikeProject -or $depth -lt 2) {
 if ($TmpOnly) {
   $tmpDir = Join-Path $proj "_tmp"
   if (-not (Test-Path -LiteralPath $tmpDir -PathType Container)) { Write-Host "tmp-sweep: removed=0 kept=0 (no _tmp/)"; exit 0 }
-  # Never delete what git TRACKS. _tmp/ is gitignored in every scaffolded project; if a project tracks it,
-  # those files are somebody's source and this sweep has no business with them.
+  # Never delete what git TRACKS. _tmp/ is gitignored in every scaffolded project; a file under it that a
+  # project does track (a .gitkeep, a kept fixture) is somebody's source. Those files are skipped one by
+  # one - a single tracked file no longer switches the whole sweep off without a word.
+  $trackedTmp = @()
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $proj ".git"))) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    $trackedTmp = ""
-    try { $trackedTmp = (& git -C $proj ls-files -- "_tmp" 2>$null | Select-Object -First 1 | Out-String).Trim() } catch { }
+    try { $trackedTmp = @(& git -C $proj ls-files -- "_tmp" 2>$null | ForEach-Object { (Join-Path $proj ($_ -replace '/', '\')).ToLowerInvariant() }) } catch { $trackedTmp = @() }
     finally { $ErrorActionPreference = $prevEap }
-    if ($trackedTmp) { Write-Host "tmp-sweep: removed=0 kept=0 (_tmp/ holds files tracked by git - not swept)"; exit 0 }
   }
   $cut = (Get-Date).AddHours(-1 * [Math]::Max(0, $OlderThanHours))
   $all = @(Get-ChildItem -LiteralPath $tmpDir -Recurse -Force -File -ErrorAction SilentlyContinue)
-  $old = @($all | Where-Object { $_.LastWriteTime -lt $cut })
+  # Age = the LATER of created and last-written. A backup just COPIED into _tmp keeps the old file's write
+  # time (Copy-Item preserves it), so judging by write time alone swept a file made seconds ago.
+  $old = @($all | Where-Object {
+    $age = $_.LastWriteTime; if ($_.CreationTime -gt $age) { $age = $_.CreationTime }
+    ($age -lt $cut) -and ($trackedTmp -notcontains $_.FullName.ToLowerInvariant()) })
   $removed = 0
   foreach ($f in $old) {
     if ($Fix) { try { $f.Attributes = 'Normal'; Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $removed++ } catch { } }
@@ -68,7 +72,9 @@ if ($TmpOnly) {
   }
   $kept = if ($Fix) { $all.Count - $removed } else { $all.Count - $old.Count }
   $shown = if ($Fix) { $removed } else { $old.Count }
-  Write-Host "tmp-sweep: removed=$shown kept=$kept$(if (-not $Fix) { ' (dry run: -Fix to remove)' })"
+  $trackedNote = ""
+  if ($trackedTmp.Count -gt 0) { $trackedNote = " ($($trackedTmp.Count) file(s) under _tmp/ are tracked by git and were left alone)" }
+  Write-Host "tmp-sweep: removed=$shown kept=$kept$(if (-not $Fix) { ' (dry run: -Fix to remove)' })$trackedNote"
   exit 0
 }
 

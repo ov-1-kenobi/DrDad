@@ -141,8 +141,17 @@ if (Test-Path $mcpPath) {
       # The same folder under an OLD absolute location counts too: a moved or cloned project still carries
       # the previous machine's path, which no longer exists here - and "<anything>\docs" that is missing
       # can only have meant this project's docs.
-      $isOwn = ($curDocs.TrimEnd('\', '/') -ieq $own) -or
-               (-not (Test-Path -LiteralPath $curDocs) -and (Split-Path -Leaf $curDocs.TrimEnd('\', '/')) -ieq "docs")
+      # (0.61.0, from the S38 grade card: "missing and named docs" alone also matched a deliberate external
+      # corpus on a share that happens to be offline. It must ALSO sit in a folder with this project's name;
+      # anything else is left alone and named, for the owner to decide.)
+      $curTrim = $curDocs.TrimEnd('\', '/')
+      $missingDocs = (-not (Test-Path -LiteralPath $curDocs)) -and ((Split-Path -Leaf $curTrim) -ieq "docs")
+      $sameProjectName = $missingDocs -and ((Split-Path -Leaf (Split-Path -Parent $curTrim)) -ieq (Split-Path -Leaf $proj.TrimEnd('\', '/')))
+      $isOwn = ($curTrim -ieq $own) -or $sameProjectName
+      if ($missingDocs -and -not $sameProjectName) {
+        Write-Host "  .mcp.json: LOCALTOOLS_DOCS_DIR is '$curDocs', which does not exist here. NOT changed (it may be a share that is" -ForegroundColor Yellow
+        Write-Host "             offline). If it meant this project's own docs folder, set it to: docs" -ForegroundColor Yellow
+      }
       if ($isOwn) {
         $j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR = "docs"
         $changed = $true

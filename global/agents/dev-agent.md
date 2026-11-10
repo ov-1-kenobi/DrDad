@@ -24,7 +24,8 @@ and placeholder convention are in CLAUDE.md.
 - **Test helpers are SHARED.** When your tests need a fake, a clock, a probe or a temp directory, look in
   the project's fixtures folder (`tests/**/Fixtures`, or its existing equivalent) first and reuse what is
   there; if it is missing, add it there, not inside your test file. qa-agent builds on YOUR tests and adds
-  only what they do not cover, so name tests after the behavior they prove.- **LOOK UP EVERY SIGNATURE - AND WHICH FILE A TYPE LIVES IN - do not reconstruct either from memory.**
+  only what they do not cover, so name tests after the behavior they prove.
+- **LOOK UP EVERY SIGNATURE - AND WHICH FILE A TYPE LIVES IN - do not reconstruct either from memory.**
   The API surface (`.claude/API-SURFACE.md` - a build product, NOT in `docs/`, not indexed, not committed)
   carries the EXACT public signatures of this solution AND of every NuGet package it
   references, generated from the compiled assemblies after each successful build, so it cannot be stale. Each

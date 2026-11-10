@@ -17,6 +17,8 @@
 # directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
 # wrong folder. These scripts are invoked by MODELS, which typo parameter names.
 [CmdletBinding()]
+#   grade-trends.ps1 -RecordRetro -Note "..."   append a line to grades\retro-log.md (the last step of /retro)
+#   grade-trends.ps1 -Json -EnsureBaseline       what close-unit calls at a story roll-up (0.61.0)
 param([string]$ProjectDir = ".", [switch]$Json, [switch]$RecordRetro, [string]$Note = "", [switch]$EnsureBaseline)
 $ErrorActionPreference = "Stop"
 # GUARD: -ProjectDir must exist. Resolve-Path ERRORS on a missing path but the .cmd wrapper still exited 0,
