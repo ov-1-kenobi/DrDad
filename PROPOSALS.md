@@ -1,6 +1,10 @@
 # Tier 2 proposals - DrDad kit, 2026-11-09
 
-Status: WAITING FOR YOUR ANSWER. Nothing in this file is implemented.
+Status: ANSWERED 2026-11-10 and IMPLEMENTED in kit 0.61.0. The owner chose 5A, 6A+C (the retro gate only
+when recurring suggestions exist), 7B, 8B, 9A, 11A, 13A, 16B, 17B. What was built for each is in
+CHANGELOG.md under 0.61.0; each has a `0.61.0 #<n>` case in test-kit.ps1. The options not chosen are kept
+below as the record of what was considered. Still open (not chosen, not built): 7B+ (limit on /design and
+/stories), 9D, the docs/sources vs docs/web path fix, and the "Also in the feedback file" items.
 
 Each item changes how the kit behaves for every project, so each one needs your choice first. For
 each: the evidence I found in the GDN project (read-only), two or three options with their

@@ -81,12 +81,26 @@ function Get-KitFiles([string[]]$include) {
     # generated JSON (CMS.deps.json etc.) - not kit-authored text, same reasoning as bin/obj/_tempReference.
     ($parts -notcontains 'bin') -and ($parts -notcontains 'obj') -and ($parts -notcontains '__pycache__') -and
     ($parts -notcontains '_tempReference') -and ($parts -notcontains '.claude') -and ($parts -notcontains '.git') -and
-    ($parts -notcontains 'examples')
+    ($parts -notcontains 'examples') -and
+    # _tmp is the kit's own gitignored scratch folder: a pasted report or a downloaded document there is not
+    # kit text, and it failed the ASCII check for the whole suite (0.61.0).
+    ($parts -notcontains '_tmp')
   }
 }
 
 Write-Host "== DAD-kit test suite ==" -ForegroundColor Cyan
 
+# A NEVER-BUILT tree (a fresh clone, an unpacked release zip): six cases above the server section need
+# local-tools.exe and failed with "built artifact missing on a FULL run" although the build case, far below
+# them, then passed - found by running the suite from an unpacked 0.60.0 package. Build once up front when
+# the exe is absent. "local-tools builds (Release)" in the server section remains the verdict on the build.
+if (-not $SkipBuild -and (Get-Command dotnet -ErrorAction SilentlyContinue) -and
+    -not (Test-Path (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"))) {
+  Write-Host "(first full run on this tree: building local-tools once, so the cases that need it can run)" -ForegroundColor DarkGray
+  $prevEapBuild = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try { dotnet build (Join-Path $kit "local-tools\local-tools.csproj") -c Release --nologo -v q *> $null } catch { }
+  finally { $ErrorActionPreference = $prevEapBuild }
+}
 # ---------------------------------------------------------------- static hygiene
 Write-Host "-- static --" -ForegroundColor Cyan
 
@@ -345,7 +359,10 @@ Test-Case "a MISTYPED parameter is an error, not a silent default" {
   $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $np -Kind general -Path "C:\this-must-not-be-used" 2>&1 | Out-String
   # \s+ not literal spaces: captured native-command output is HARD-WRAPPED at the console width, so any
   # asserted phrase can arrive with a newline inside it. This assertion failed on 'matches\nparameter'.
-  Assert ($out -match '(?s)cannot\s+be\s+found\s+that\s+matches\s+parameter\s+name') "a bogus -Path was accepted instead of rejected"
+  # '.*?' between the two halves, not '\s+': when the kit sits in a LONG path the message wraps and PowerShell
+  # prints its "At line / CategoryInfo" block between "cannot be found" and "that matches" - the case then
+  # failed purely because of where the kit was unpacked (found from a release zip under %TEMP%).
+  Assert ($out -match '(?s)cannot\s+be\s+found.*?matches\s+parameter\s+name') "a bogus -Path was accepted instead of rejected"
   Assert ($out -notmatch 'Scaffolding') "it started scaffolding despite a parameter it did not understand"
 }
 
