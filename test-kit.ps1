@@ -9411,6 +9411,71 @@ Test-Case "0.61.0 #13: qa-agent lists existing tests first and adds only uncover
   Assert ($qa.IndexOf('FIRST list what is already tested') -lt $qa.IndexOf('Write or extend tests covering the acceptance criteria')) "the list-first rule comes after the write-tests instruction"
 }
 
+Test-Case "0.61.0 index: a reindex reuses unchanged chunks, skips an unchanged corpus, stores vectors in binary, and still reads a pre-0.61.0 index" {
+  if ($SkipBuild) { Skip-Case "-SkipBuild: needs the built local-tools.exe" }
+  $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+  if (-not (Test-Path $exe)) { Skip-Case "local-tools.exe not built" -NeedsBuild }
+  $sb = New-Sandbox
+  $keepModel = $env:RAG_EMBED_MODEL
+  try {
+    # the test-only embedding (a hash of the text) makes this runnable with no Ollama
+    $env:RAG_EMBED_MODEL = "test-hash-embedding"
+    $d = Join-Path $sb "docs"; New-Item -ItemType Directory -Force $d | Out-Null
+    "# Design`nStatus: DRAFT`n`n## Goal`nstore files`n`n## Requirements`n- R1: put a file" | Set-Content "$d\DESIGN.md" -Encoding UTF8
+    "alpha bravo charlie" | Set-Content "$d\note.txt" -Encoding ASCII
+    "delta echo foxtrot" | Set-Content "$d\other.txt" -Encoding ASCII
+    $ix = "$d\.index"
+
+    $o1 = (& $exe --reindex $d | Out-String)
+    Assert ($LASTEXITCODE -eq 0 -and $o1 -match 'Indexed (\d+) chunks') "first index failed: $o1"
+    $total = [int]$Matches[1]
+    Assert ($o1 -match "embedded $total new, reused 0") "a first index did not embed everything: $o1"
+    Assert ((Test-Path "$ix\vectors.bin") -and (Test-Path "$ix\chunks.json")) "vectors.bin / chunks.json missing"
+    Assert ([System.IO.File]::ReadAllText("$ix\index.meta").Trim() -eq "test-hash-embedding") "index.meta does not name the embedding model"
+    Assert ([System.IO.File]::ReadAllText("$ix\chunks.json") -notmatch '"Vector"') "vectors are still written into chunks.json"
+    $vb = [System.IO.File]::ReadAllBytes("$ix\vectors.bin")
+    Assert ([BitConverter]::ToInt32($vb, 0) -eq $total) "vectors.bin header count is not the chunk count"
+    $dim = [BitConverter]::ToInt32($vb, 4)
+    Assert ($vb.Length -eq 8 + $total * $dim * 4) "vectors.bin is not count * dim float32"
+
+    # nothing changed -> no work at all
+    $o2 = (& $exe --reindex $d | Out-String)
+    Assert ($o2 -match 'Index up to date') "an unchanged corpus was reindexed: $o2"
+
+    # one file edited -> only its chunk is embedded
+    "alpha bravo charlie EDITED" | Set-Content "$d\note.txt" -Encoding ASCII
+    $o3 = (& $exe --reindex $d | Out-String)
+    Assert ($o3 -match "embedded 1 new, reused $($total - 1)") "an edit to one small file did not reuse the rest: $o3"
+
+    # search finds the exact text (score 1.00 with the hash embedding) through the binary vectors
+    $env:LOCALTOOLS_DOCS_DIR = $d
+    $s1 = (& $exe --search "delta echo foxtrot" 1 | Out-String)
+    Assert ($s1 -match '\[other\.txt\] \(score 1\.00\)') "search did not return the exact chunk first: $s1"
+
+    # a PRE-0.61.0 index (vectors inside chunks.json, no vectors.bin, no index.meta) is still searchable...
+    $chunks = [System.IO.File]::ReadAllText("$ix\chunks.json") | ConvertFrom-Json
+    $vb = [System.IO.File]::ReadAllBytes("$ix\vectors.bin"); $dim = [BitConverter]::ToInt32($vb, 4)
+    $legacy = @()
+    for ($i = 0; $i -lt $chunks.Count; $i++) {
+      $v = @(); for ($k = 0; $k -lt $dim; $k++) { $v += [BitConverter]::ToSingle($vb, 8 + ($i * $dim + $k) * 4) }
+      $legacy += [pscustomobject]@{ Source = $chunks[$i].Source; Page = $chunks[$i].Page; Text = $chunks[$i].Text; Vector = $v }
+    }
+    [System.IO.File]::WriteAllText("$ix\chunks.json", (ConvertTo-Json -InputObject @($legacy) -Depth 5 -Compress), (New-Object System.Text.UTF8Encoding($false)))
+    Remove-Item "$ix\vectors.bin","$ix\index.meta" -Force
+    $s2 = (& $exe --search "delta echo foxtrot" 1 | Out-String)
+    Assert ($s2 -match '\[other\.txt\] \(score 1\.00\)') "a pre-0.61.0 index is no longer searchable: $s2"
+    # ...and the next reindex converts it, REUSING its vectors instead of re-embedding the corpus
+    "golf hotel india" | Set-Content "$d\third.txt" -Encoding ASCII
+    $o4 = (& $exe --reindex $d | Out-String)
+    Assert ($o4 -match "embedded 1 new, reused $total") "converting an old index re-embedded chunks it already had: $o4"
+    Assert (Test-Path "$ix\vectors.bin") "the old index was not converted to the binary format"
+  } finally {
+    $env:RAG_EMBED_MODEL = $keepModel
+    Remove-Item Env:\LOCALTOOLS_DOCS_DIR -ErrorAction SilentlyContinue
+    Remove-Sandbox $sb
+  }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

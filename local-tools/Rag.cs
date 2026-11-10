@@ -104,6 +104,24 @@ public static class Rag
 
     static string IndexFile => Path.Combine(IndexDir, "chunks.json");
     static string SigFile   => Path.Combine(IndexDir, "manifest.sig");  // corpus signature, for staleness
+    // 0.61.0 index format. chunks.json keeps the TEXT (source, page, text); the vectors live beside it in
+    // vectors.bin as raw float32, and index.meta names the embedding model that produced them.
+    // Why: vectors written as JSON numbers were ~90% of the file - one project's chunks.json was 279 MB and
+    // every single search parsed all of it. An index written by an older kit (vectors inside chunks.json,
+    // no vectors.bin) is still read as-is, and is converted by the next reindex.
+    static string VecFile   => Path.Combine(IndexDir, "vectors.bin");
+    static string MetaFile  => Path.Combine(IndexDir, "index.meta");
+    // TEST-ONLY embedding: RAG_EMBED_MODEL=test-hash-embedding yields a deterministic vector from a hash of
+    // the text, with no Ollama call. It exists so the suite can exercise index / reuse / search offline;
+    // identical text scores 1.0, everything else is noise. Never a useful model for real search.
+    const string TestEmbedModel = "test-hash-embedding";
+    static float[] HashVector(string text)
+    {
+        var h = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text));
+        var v = new float[32];
+        for (int i = 0; i < 32; i++) v[i] = h[i] / 255f - 0.5f;
+        return v;
+    }
 
     // Per-project opt-in: set LOCALTOOLS_AUTO_REINDEX=1 in the project's .mcp.json env block to
     // make search auto-reindex when the docs folder has changed. Default off (manual reindex).
@@ -155,6 +173,7 @@ public static class Rag
     // Single embedding (used for the search query). Handles new /api/embed and old /api/embeddings.
     static async Task<float[]> EmbedAsync(string text)
     {
+        if (EmbedModel == TestEmbedModel) return HashVector(text);
         var attempts = new (string path, object payload, string key)[]
         {
             ("/api/embed", new { model = EmbedModel, input = text }, "embeddings"),
@@ -180,6 +199,7 @@ public static class Rag
     // Falls back to per-item if the batch endpoint isn't available or returns an unexpected count.
     static async Task<List<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts)
     {
+        if (EmbedModel == TestEmbedModel) return texts.Select(HashVector).ToList();
         try
         {
             var resp = await Http.PostAsJsonAsync(OllamaHost + "/api/embed", new { model = EmbedModel, input = texts });
@@ -404,6 +424,74 @@ public static class Rag
 
     static bool IsStale() => !File.Exists(SigFile) || File.ReadAllText(SigFile) != CorpusSignature();
 
+    // ---------- index storage: load once, keep in memory, vectors in binary ----------
+    // The MCP server is one long-lived process; reparsing the index for every query was pure waste. The
+    // parsed index is kept and reused until the files on disk change (a reindex by this process or by
+    // close-unit's one-shot --reindex). The stamp is the files' write time + size, so staleness is one stat.
+    sealed class LoadedIndex { public List<Chunk> Chunks = new(); public string Stamp = ""; }
+    static LoadedIndex? _loaded;
+
+    static string IndexStamp()
+    {
+        var sb = new StringBuilder();
+        foreach (var p in new[] { IndexFile, VecFile })
+        {
+            if (!File.Exists(p)) { sb.Append("-|"); continue; }
+            var fi = new FileInfo(p);
+            sb.Append(fi.LastWriteTimeUtc.Ticks).Append(':').Append(fi.Length).Append('|');
+        }
+        return sb.ToString();
+    }
+
+    // vectors.bin = int32 count, int32 dim, then count * dim float32 (little-endian, as the CPU has them).
+    static void WriteVectors(string path, IReadOnlyList<Chunk> chunks)
+    {
+        int dim = chunks.Count > 0 && chunks[0].Vector is { } v0 ? v0.Length : 0;
+        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16);
+        using var bw = new BinaryWriter(fs);
+        bw.Write(chunks.Count); bw.Write(dim);
+        var buf = new byte[dim * sizeof(float)];
+        foreach (var c in chunks)
+        {
+            var v = c.Vector is { } x && x.Length == dim ? x : new float[dim];   // a foreign-dim vector cannot be stored; zero it (never matches)
+            Buffer.BlockCopy(v, 0, buf, 0, buf.Length);
+            bw.Write(buf);
+        }
+    }
+
+    // False when the file does not belong to this chunk list (a reindex is replacing the pair right now).
+    static bool TryAttachVectors(string path, List<Chunk> chunks)
+    {
+        var bytes = File.ReadAllBytes(path);
+        if (bytes.Length < 8) return false;
+        int count = BitConverter.ToInt32(bytes, 0), dim = BitConverter.ToInt32(bytes, 4);
+        if (count != chunks.Count || dim < 0 || bytes.Length != 8L + (long)count * dim * sizeof(float)) return false;
+        for (int i = 0; i < count; i++)
+        {
+            var v = new float[dim];
+            Buffer.BlockCopy(bytes, 8 + i * dim * sizeof(float), v, 0, dim * sizeof(float));
+            chunks[i].Vector = v;
+        }
+        return true;
+    }
+
+    static async Task<List<Chunk>> LoadIndexAsync()
+    {
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            var stamp = IndexStamp();
+            var cur = _loaded;
+            if (cur != null && cur.Stamp == stamp) return cur.Chunks;
+            var chunks = JsonSerializer.Deserialize<List<Chunk>>(await File.ReadAllTextAsync(IndexFile)) ?? new List<Chunk>();
+            // No vectors.bin = an index from before 0.61.0, whose vectors are inside chunks.json: use it as it is.
+            if (File.Exists(VecFile) && !TryAttachVectors(VecFile, chunks)) { await Task.Delay(150); continue; }
+            if (stamp != IndexStamp()) continue;                 // replaced while we were reading: read again
+            _loaded = new LoadedIndex { Chunks = chunks, Stamp = stamp };
+            return chunks;
+        }
+        throw new Exception("the index is being rewritten right now - retry in a moment");
+    }
+
     // ---------- public tool logic ----------
     public static async Task<string> IndexAsync()
     {
@@ -412,6 +500,13 @@ public static class Rag
         var files = CorpusFiles();
         if (files.Count == 0)
             return $"No documents in {string.Join(" ; ", DocsRoots)}. Drop .pdf/.txt/.md files there and re-run.";
+
+        // Nothing changed since the last index (same files, sizes and write times; same model; current
+        // format): there is nothing to do. close-unit reindexes on every close, and most closes used to
+        // re-embed a corpus in which nothing but a ticked box had changed.
+        var indexedModel = File.Exists(MetaFile) ? (await File.ReadAllTextAsync(MetaFile)).Trim() : "";
+        if (File.Exists(IndexFile) && File.Exists(VecFile) && indexedModel == EmbedModel && !IsStale())
+            return "Index up to date - nothing changed since the last index (no re-embedding done).";
 
         var chunks = new List<Chunk>();
         int captioned = 0, transcribed = 0;
@@ -444,27 +539,70 @@ public static class Rag
         if (chunks.Count == 0)
             return "Found files but extracted no text (scanned PDFs need OCR; images need a vision model).";
 
-        const int batch = 64;
-        for (int i = 0; i < chunks.Count; i += batch)
+        // REUSE what is already embedded. The embedding of a chunk depends only on its text and the model,
+        // so a chunk whose text is unchanged keeps its vector and only new or edited chunks go to the model.
+        // Before 0.61.0 every reindex re-embedded the whole corpus: on a 45 MB corpus, ticking one task box
+        // sent all of it through the embedding model again. An index with no index.meta (written by an
+        // older kit) is assumed to come from the current model, checked by vector length below.
+        var known = new Dictionary<string, float[]>(StringComparer.Ordinal);
+        if (File.Exists(IndexFile) && (indexedModel == EmbedModel || indexedModel == ""))
         {
-            int n = Math.Min(batch, chunks.Count - i);
+            try
+            {
+                foreach (var old in await LoadIndexAsync())
+                    if (old.Vector is { Length: > 0 } ov) known[old.Text] = ov;
+            }
+            catch { known.Clear(); }      // unreadable old index: fall back to embedding everything
+        }
+        var todo = new List<int>();
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            if (known.TryGetValue(chunks[i].Text, out var kv)) chunks[i].Vector = kv;
+            else todo.Add(i);
+        }
+        const int batch = 64;
+        for (int i = 0; i < todo.Count; i += batch)
+        {
+            int n = Math.Min(batch, todo.Count - i);
             var texts = new List<string>(n);
-            for (int k = 0; k < n; k++) texts.Add(chunks[i + k].Text);
+            for (int k = 0; k < n; k++) texts.Add(chunks[todo[i + k]].Text);
             var vecs = await EmbedBatchAsync(texts);
-            for (int k = 0; k < n; k++) chunks[i + k].Vector = vecs[k];
+            for (int k = 0; k < n; k++) chunks[todo[i + k]].Vector = vecs[k];
+        }
+        int reused = chunks.Count - todo.Count;
+        // One vector length per index. If the reused vectors are a different length from what the model
+        // returns now (the model changed under an old, unlabelled index), the reuse was wrong: embed them too.
+        if (todo.Count > 0 && reused > 0)
+        {
+            int dimNow = chunks[todo[0]].Vector!.Length;
+            var stale = Enumerable.Range(0, chunks.Count).Where(i => chunks[i].Vector!.Length != dimNow).ToList();
+            for (int i = 0; i < stale.Count; i += batch)
+            {
+                int n = Math.Min(batch, stale.Count - i);
+                var vecs = await EmbedBatchAsync(stale.Skip(i).Take(n).Select(ix => chunks[ix].Text).ToList());
+                for (int k = 0; k < n; k++) chunks[stale[i + k]].Vector = vecs[k];
+            }
+            reused -= stale.Count;
         }
         // Write atomically (temp + move) so a concurrent search never reads a half-written index -
-        // /build reindexes after every task while other agents may be searching.
+        // /build reindexes after every task while other agents may be searching. Vectors first, text
+        // second; a reader that catches the pair mid-swap sees a count mismatch and reads again.
+        var vtmp = VecFile + ".tmp";
+        WriteVectors(vtmp, chunks);
         var tmp = IndexFile + ".tmp";
-        await File.WriteAllTextAsync(tmp, JsonSerializer.Serialize(chunks));
+        await File.WriteAllTextAsync(tmp, JsonSerializer.Serialize(
+            chunks.Select(c => new Chunk { Source = c.Source, Page = c.Page, Text = c.Text }),
+            new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
+        File.Move(vtmp, VecFile, overwrite: true);
         File.Move(tmp, IndexFile, overwrite: true);
+        await File.WriteAllTextAsync(MetaFile, EmbedModel);
         await File.WriteAllTextAsync(SigFile, CorpusSignature());   // record what we just indexed
 
         var sources = chunks.Select(c => c.Source).Distinct().OrderBy(x => x).ToList();
         var extra = (captioned > 0 ? $" ({captioned} image(s) captioned" : "")
                   + (transcribed > 0 ? (captioned > 0 ? $", {transcribed} audio transcribed)" : $" ({transcribed} audio transcribed)")
                                      : (captioned > 0 ? ")" : ""));
-        return $"Indexed {chunks.Count} chunks from {sources.Count} file(s){extra}: {string.Join(", ", sources)}";
+        return $"Indexed {chunks.Count} chunks from {sources.Count} file(s){extra} [embedded {chunks.Count - reused} new, reused {reused}]: {string.Join(", ", sources)}";
     }
 
     public static async Task<string> SearchAsync(string query, int k)
@@ -478,8 +616,7 @@ public static class Rag
         {
             await IndexAsync();
         }
-        var chunks = JsonSerializer.Deserialize<List<Chunk>>(await File.ReadAllTextAsync(IndexFile))
-                     ?? new List<Chunk>();
+        var chunks = await LoadIndexAsync();     // parsed once per process, until the files change
         var q = await EmbedAsync(query);
         var top = chunks
             .Where(c => c.Vector is { Length: > 0 } v && v.Length == q.Length)   // skip null/dim-mismatched

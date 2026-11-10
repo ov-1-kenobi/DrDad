@@ -15,6 +15,31 @@ The nine "Tier 2" items from the same review, each implemented as the option the
   (`tests/**/Fixtures`, or the project's existing equivalent) and to extend it rather than declare another copy.
   The reviewed project declared `FakeProbe` 31 times and `FakeClock` 19 times.
 - Prompt changes only (option A); no script check.
+### Changed - the search index: reuse embeddings, binary vectors, keep the index in memory
+Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), same machine, same query:
+
+| | before (0.60.0) | now |
+|---|---|---|
+| index size on disk | 279 MB (`chunks.json`) | 112 MB (`chunks.json` 32 MB text + `vectors.bin` 80 MB) |
+| reindex after one task box is ticked | re-embeds all 25,983 chunks | embeds 4 chunks, reuses 25,979; 1.3 s |
+| reindex when nothing changed | re-embeds everything | "Index up to date", 0.07 s |
+| one search from the shell (`docs-find`) | 4.6 s | 0.4 s |
+
+- `IndexAsync` reuses the stored vector of every chunk whose text is unchanged and sends only new or edited
+  chunks to the embedding model. The result line now ends `[embedded N new, reused M]`. close-unit reindexes on
+  every close, so this was the largest single cost of a close on a big project.
+- A reindex of an unchanged corpus (same files, sizes, write times, model and format) returns at once.
+- Vectors are stored as raw float32 in `.index\vectors.bin`; `chunks.json` keeps only source, page and text;
+  `.index\index.meta` names the embedding model, and a different model forces a full re-embed.
+- The server keeps the parsed index in memory and rereads it only when the files change.
+- UPGRADE PATH: none needed. An index written by an older kit is read as it is, and the first reindex converts
+  it, reusing its vectors (the 279 MB index above converted in 3.3 s with 0 chunks re-embedded).
+- `RAG_EMBED_MODEL=test-hash-embedding` is a TEST-ONLY model (a hash of the text, no Ollama call) so the suite can
+  exercise indexing and search offline. It is useless for real search.
+- Context for the change: in that project the index was searched about 160 times (`search_datasheets` 131,
+  `docs-find` 27) against about 5,000 greps and direct reads of the same documents, and explicitly rebuilt 164
+  times on top of the rebuild at every close.
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).

@@ -25,7 +25,7 @@ to Claude Code over stdio:
 
 The only external dependency at runtime is **Ollama over HTTP** (`/api/embed`) for embeddings -
 language-agnostic, so C# just POSTs JSON. Indexing **batches** chunks (one `/api/embed` call per
-64, not one per chunk) for fast (re)indexing. Vectors are stored raw in `.index/chunks.json` and
+64, not one per chunk) for fast (re)indexing. Vectors are stored raw as float32 in `.index/vectors.bin` (text in `.index/chunks.json`; since 0.61.0) and
 searched with **SIMD cosine** (`System.Numerics.Tensors.TensorPrimitives.CosineSimilarity`) - fast
 for thousands of chunks, no vector-DB server needed.
 
