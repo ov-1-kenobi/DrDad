@@ -153,6 +153,10 @@ its dependencies satisfied, STOP and report the blocked tasks.
    ```
 
 ## Per STORY (when close-unit reports `story <id> -> DONE`)
+**Do these steps NOW, before the next task.** The story is rolled up but not closed until step 7 has made
+its story commit, and close-unit refuses to close a task of any OTHER story until then (it tracks the
+stories that still owe their close). A real run left stories DONE with no grade card and no story commit
+and carried on for thirty tasks.
 5. **grade-agent** -> grade the completed STORY. It writes `grades/<story id>_GRADE.md` and returns the
    grade + prioritized, tagged suggestions. **Gate (run these checks - a stub card is NOT a grade):** the
    file must exist, be **at least 800 bytes**, and contain **`## Grade history`**, **`## Assessment`** and

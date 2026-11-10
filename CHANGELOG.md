@@ -89,6 +89,30 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
 - UPGRADE PATH: `Build / test` is a project-owned section, so `upgrade-project` does not inject the line; it prints
   how to add it when the project has a `Test:` line and no `Fast test:` line.
 
+### Fixed - issue 14: close-unit commit robustness
+- DOUBLED ID PREFIX: a `-Title` that already starts with the unit id (`-Title "T68.5: IUser32 wrapper"`) produced
+  the subject `T68.5: T68.5: IUser32 wrapper` (36 commits in the reviewed project). A leading `<id>:` or `<id> -`
+  is now stripped from the title, case-insensitively.
+- DUPLICATE COMMITS: re-running `close-unit` on a unit that already has its commit made a second commit with the
+  same subject containing only the gate-log lines the re-run itself wrote. When the unit's commit exists and only
+  kit bookkeeping (`grades/gates-log.jsonl`) is staged, nothing is committed and the index is unstaged; the lines
+  go into the next real close.
+- STORY COMMIT REQUIRED: when a task close rolls its story up to DONE, the story is recorded in
+  `.claude\.dad-story-open` as owing its story-level close (`close-unit -Id <story> ... -RequireGrade`, `/build` step
+  7). Until that close has made a `<story>: ...` commit, close-unit REFUSES to close a task of any other story and
+  prints the two commands. The story-level close always leaves a commit (an empty one if the tree is clean). An
+  entry is dropped when a `<story>:` commit already exists, and `-SkipVerify` (the human) skips the check.
+  The reviewed project has stories DONE with no grade card and no story commit, thirty task closes later.
+- BEHAVIOR CHANGE: `/spec` and `/build` now say to run the story-level close as soon as a story rolls up. A project
+  closed by an older kit has no `.dad-story-open` file, so nothing it did before the upgrade is blocked. The list is
+  local to a working folder (`.claude\` is git-ignored), so a roll-up made inside an agent worktree is not enforced
+  after that worktree is merged and removed.
+
+- The "Verified by close-unit" rows are now appended to `docs/RECIPES.md` BEFORE the commit instead of after it, so
+  they land in the unit's own commit. They used to leave the tree dirty after a project's first close, which gave a
+  re-run a "real" file to stage and was one source of the duplicate commits. Rolled back with the rest if the commit
+  fails.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)

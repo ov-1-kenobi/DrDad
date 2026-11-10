@@ -41,4 +41,7 @@ otherwise the next unbuilt story in `docs/STORIES.md`.
    dad close-unit -Id <unit id> -Title "<short title>"
    ```
    Non-zero exit = not closed; fix what it reports. Then WAIT for my confirmation before the next item.
+   **When it reports `story <id> -> DONE`, that story now owes its story-level close** - run
+   `dad close-unit -Id <story id> -Title "<story> closed"` before the first task of another story (it is
+   the story's own commit; close-unit refuses tasks of other stories until it exists).
    (If a file got mangled: restore via `/audit recover <file>` - never hand-reconstruct it.)

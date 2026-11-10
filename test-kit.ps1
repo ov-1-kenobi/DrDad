@@ -7141,6 +7141,12 @@ T1.1 -> T1.2 -> T2.1
     & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.1 -ProjectDir $p -NoReindex | Out-Null
     Assert ($LASTEXITCODE -eq 0) "re-run not idempotent"
 
+    # 0.60.0 (issue 14): S1 rolled up, so it owes its story-level close before a task of S2 may close
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T2.1 -Title "third" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "a task of S2 closed while S1 still owed its story-level close"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id S1 -Title "first story closed" -ProjectDir $p -NoReindex | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the story-level close of S1 failed"
+
     # heading with no Status comment must get one appended
     & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T2.1 -Title "third" -ProjectDir $p -NoReindex | Out-Null
     Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S2.*Status: DONE' -Quiet) "S2 status not appended"
@@ -9187,6 +9193,8 @@ Test-Case "0.60.0 #12: CLAUDE.md's optional 'Fast test:' runs on EVERY task clos
     # the STORY close runs the full Test command, not the subset
     $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
     Assert ($x.Code -eq 0 -and $x.Out -match 'tests verified \(3 test' -and $x.Out -notmatch 'fast tests') "the story close did not run the full suite (or ran the subset too):`n$($x.Out)"
+    # (S1 rolled up above: give it its story-level close so a task of S2 may close - issue 14)
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 closed"); Assert ($x.Code -eq 0) "story-level close of S1:`n$($x.Out)"
     # a filter that selects nothing is a refusal, not a pass
     "@echo off`r`necho No test matches the given testcase filter`r`nexit /b 0" | Set-Content "$p\tools\fake-scan.cmd" -Encoding ASCII
     $x = Invoke-Pf $p @("-Id","T2.1","-Title","u")
@@ -9204,6 +9212,95 @@ Test-Case "0.60.0 #12: CLAUDE.md's optional 'Fast test:' runs on EVERY task clos
   $line = [regex]::Match($tmpl, '(?m)^- Fast test: `([^`]+)`').Groups[1].Value
   Assert ($line.StartsWith('<optional')) "the template's Fast test placeholder is not an '<optional' placeholder: $line"
   Assert ($line -notmatch '<set in|<decided in|<how to stub') "the Fast test placeholder would trip /build Gate 1"
+}
+
+Test-Case "0.60.0 #14: a title that already starts with the id is not doubled, and a re-run makes no duplicate commit" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    # a scaffolded project has docs\RECIPES.md, which the first clean close appends its verified commands to
+    Copy-Item (Join-Path $kit "templates\_common\docs\RECIPES.md") "$p\docs\RECIPES.md"
+    git -C $p add -A 2>&1 | Out-Null; git -C $p -c user.name=t -c user.email=t@t commit -q -m recipes 2>&1 | Out-Null
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","T1.1: unit one")
+    Assert ($x.Code -eq 0) "close failed:`n$($x.Out)"
+    Assert ((git -C $p show --stat --format= HEAD | Out-String) -match 'docs/RECIPES\.md') "the verified-commands rows are not in the unit's own commit"
+    Assert (-not ((git -C $p status --porcelain | Out-String).Trim())) "the first close left the tree dirty: $((git -C $p status --porcelain | Out-String).Trim())"
+    $subj = (git -C $p log -1 --format=%s | Out-String).Trim()
+    Assert ($subj -ceq "T1.1: unit one") "the subject is '$subj' (expected 'T1.1: unit one')"
+    # other shapes agents pass: lower-case id, dash separator, the prefix twice
+    foreach ($case in @(@{ id = "T2.1"; title = "t2.1 - unit two"; want = "T2.1: unit two" })) {
+      $x = Invoke-Pf $p @("-Id",$case.id,"-Title",$case.title)
+      Assert ($x.Code -eq 0) "close $($case.id) failed:`n$($x.Out)"
+      $subj = (git -C $p log -1 --format=%s | Out-String).Trim()
+      Assert ($subj -ceq $case.want) "the subject is '$subj' (expected '$($case.want)')"
+    }
+    # a title that merely MENTIONS the id later is left alone
+    $n0 = [int]((git -C $p rev-list --count HEAD | Out-String).Trim())
+    # re-run of an already-closed unit: exit 0, and NO second commit holding only gate-log lines
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","T1.1: unit one")
+    Assert ($x.Code -eq 0) "the re-run failed:`n$($x.Out)"
+    Assert ($x.Out -match 'no duplicate commit') "the re-run did not say it skipped the commit:`n$($x.Out)"
+    $n1 = [int]((git -C $p rev-list --count HEAD | Out-String).Trim())
+    Assert ($n1 -eq $n0) "a re-run of a closed unit made a commit ($n0 -> $n1): $((git -C $p log -1 --format=%s | Out-String).Trim())"
+    Assert (-not ((git -C $p diff --cached --name-only | Out-String).Trim())) "the re-run left files staged"
+    # ...and the gate-log lines it wrote are picked up by the next real close, not lost
+    $x = Invoke-Pf $p @("-Id","T2.2","-Title","unit")
+    Assert ($x.Code -eq 0) "next close failed:`n$($x.Out)"
+    Assert (-not ((git -C $p status --porcelain -- grades | Out-String).Trim())) "gate-log lines were left uncommitted after the next close"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #14: a story that rolled up to DONE owes its story-level close; tasks of other stories wait for it; the close always leaves a story commit" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); Assert ($x.Code -eq 0) "T1.1:`n$($x.Out)"
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S1 -> DONE') "roll-up:`n$($x.Out)"
+    Assert ($x.Out -match 'owes its story-level close') "the roll-up did not say what S1 still owes:`n$($x.Out)"
+    Assert ((Get-Content "$p\.claude\.dad-story-open" -Raw) -match '(?m)^S1\s*$') "S1 was not recorded as open"
+    # straight on to another story: refused, nothing ticked
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'STORY S1 IS DONE BUT NOT CLOSED') "a task of another story closed while S1 owed its close:`n$($x.Out)"
+    Assert ($x.Out -match 'close-unit -Id S1') "the refusal does not give the command:`n$($x.Out)"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T2\.1' -Quiet)) "T2.1 was ticked anyway"
+    # the story-level close: makes a commit "S1: ..." and clears the debt
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish")
+    Assert ($x.Code -eq 0) "story-level close failed:`n$($x.Out)"
+    Assert (@((git -C $p log --format=%s | Out-String) -split "`r?`n" | Where-Object { $_ -match '^S1: ' }).Count -eq 1) "there is not exactly one 'S1:' commit"
+    Assert (-not (Test-Path "$p\.claude\.dad-story-open")) "S1 is still recorded as open after its story-level close"
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u")
+    Assert ($x.Code -eq 0) "T2.1 still refused after S1 was closed:`n$($x.Out)"
+    # a second story-level close of S1 does not add another commit
+    $n0 = (git -C $p rev-list --count HEAD | Out-String).Trim()
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 polish")
+    Assert ($x.Code -eq 0 -and ((git -C $p rev-list --count HEAD | Out-String).Trim()) -eq $n0) "a repeated story-level close made another commit"
+  } finally { Remove-Sandbox $sb }
+
+  # evidence beats the list: if the story commit exists (made elsewhere), a stale entry is dropped, not enforced
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    New-Item -ItemType Directory -Force "$p\.claude" | Out-Null
+    "x" | Set-Content "$p\x.txt"; git -C $p add -A 2>&1 | Out-Null; git -C $p -c user.name=t -c user.email=t@t commit -q -m "S1: closed on another machine" 2>&1 | Out-Null
+    [System.IO.File]::WriteAllText("$p\.claude\.dad-story-open", "S1`n")
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u")
+    Assert ($x.Code -eq 0) "a stale open-story entry blocked a close although the story commit exists:`n$($x.Out)"
+    Assert (-not (Test-Path "$p\.claude\.dad-story-open")) "the stale entry was not dropped"
+  } finally { Remove-Sandbox $sb }
+
+  # a clean tree at the story-level close still records the story (the -SkipVerify path writes no gate log)
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u","-SkipVerify"); $x = Invoke-Pf $p @("-Id","T1.2","-Title","u","-SkipVerify")
+    Assert ($x.Code -eq 0) "setup:`n$($x.Out)"
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 closed","-SkipVerify")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story commit recorded') "a clean-tree story-level close left no story commit:`n$($x.Out)"
+    Assert ((git -C $p log -1 --format=%s | Out-String).Trim() -ceq "S1: S1 closed") "the story commit subject is wrong"
+  } finally { Remove-Sandbox $sb }
 }
 
 # ---------------------------------------------------------------- summary

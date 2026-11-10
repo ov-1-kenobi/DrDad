@@ -252,6 +252,31 @@ function Save-Text([string]$path, [string[]]$lines) {
   [System.IO.File]::WriteAllText($path, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 }
 
+# --- stories that rolled up to DONE and still owe their story-level close (issue 14, 0.60.0) ---
+# One id per line in .claude\.dad-story-open. Written when a TASK close rolls its story up, removed by the
+# story-level close (`close-unit -Id <story> ... -RequireGrade`, /build step 7). Local state on purpose:
+# a project closed by an older kit has no such file, so nothing it did before the upgrade is ever blocked.
+$storyOpenFile = Join-Path $proj ".claude\.dad-story-open"
+function Get-OpenStories {
+  if (-not (Test-Path -LiteralPath $storyOpenFile)) { return @() }
+  return @([System.IO.File]::ReadAllLines($storyOpenFile) | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+}
+function Set-OpenStories([string[]]$ids) {
+  $ids = @($ids | Where-Object { $_ } | Select-Object -Unique)
+  if ($ids.Count -eq 0) { if (Test-Path -LiteralPath $storyOpenFile) { Remove-Item -LiteralPath $storyOpenFile -Force }; return }
+  $dir = Split-Path $storyOpenFile -Parent
+  if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+  [System.IO.File]::WriteAllText($storyOpenFile, (($ids -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+}
+# Is there a commit whose message has a line starting "<id>:"? That is what a close-unit commit looks like.
+function Test-UnitCommit([string]$unitId) {
+  if (-not (Get-Command git -ErrorAction SilentlyContinue) -or -not (Test-Path (Join-Path $proj ".git"))) { return $false }
+  $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try { $o = (& git -C $proj log -1 --format=%h -E --grep ("^" + [regex]::Escape($unitId) + ":") 2>$null | Out-String).Trim() }
+  catch { $o = "" } finally { $ErrorActionPreference = $prevEap }
+  return [bool]$o
+}
+
 # --- where are the docs? (.mcp.json wins, else <proj>\docs) ---
 . (Join-Path $PSScriptRoot "docs-dir.ps1")
 $docs = Resolve-DocsDir $proj
@@ -290,11 +315,13 @@ function Set-StoryDone([string]$storyId) {
 # the .sln). Ticking a box over a broken build manufactures confident green state - refuse to do it.
 # Will this close COMPLETE a story? Work it out BEFORE mutating anything, so tests can gate it.
 $predictedStory = $null
+$myTaskStory = $null          # set only for a TASK close: the story that task belongs to
 if ((Test-Path $tasksFile) -and (Select-String -Path $tasksFile -Pattern "^###\s*\[[ x]\]\s*$esc\b" -Quiet)) {
   $taskLines = @(Get-Content $tasksFile -Encoding UTF8 | Where-Object { $_ -match '^###\s*\[[ x]\]' })
   $mine = $taskLines | Where-Object { $_ -match "^###\s*\[[ x]\]\s*$esc\b" } | Select-Object -First 1
   if ($mine -and $mine -match '\(Story\s+([A-Za-z0-9._-]+)\)') {
     $st = $Matches[1]
+    $myTaskStory = $st
     $open = @($taskLines | Where-Object {
       $_ -match '^###\s*\[ \]' -and $_ -match ('\(Story\s+' + [regex]::Escape($st) + '\)') })
     # This task is the last one open - or it is already ticked and NOTHING is open. (Until 0.60.0 this was
@@ -322,6 +349,37 @@ if ((Test-Path $statusGuard) -and (Test-Path (Join-Path $proj ".git"))) {
     Write-Host "[close-unit] A STORY IS MARKED DONE BY HAND - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
     Write-Host ($sgOut.TrimEnd())
     Write-GateLog "block" "$Id not closed: a story Status marker was set to DONE outside close-unit"
+    exit 1
+  }
+}
+
+# --- 0b) does an earlier story still owe its story-level close? (issue 14, 0.60.0) ----------------
+# When a story's last task closes, the story rolls up to DONE - and /build then owes it a grade, a hygiene
+# pass and the story-level close (`close-unit -Id <story> -RequireGrade`), which is the story's own commit.
+# Nothing enforced that. A real project has stories that are DONE with no grade card and no story commit,
+# thirty task closes further on: the loop simply went to the next task. So a task of a DIFFERENT story
+# does not close while an earlier story is still open in this sense. An entry is dropped on evidence (a
+# commit "<story>: ..." exists) so a close made elsewhere is honoured. -SkipVerify (the human) skips this.
+if ($myTaskStory -and -not $SkipVerify) {
+  $stillOpen = @()
+  foreach ($sid in (Get-OpenStories)) {
+    if ($sid -eq $myTaskStory) { $stillOpen += $sid; continue }       # more work on the same story is fine
+    if (Test-UnitCommit $sid) { continue }                            # closed after all: forget it
+    $stillOpen += $sid
+  }
+  Set-OpenStories $stillOpen
+  $owed = @($stillOpen | Where-Object { $_ -ne $myTaskStory })
+  if ($owed.Count -gt 0) {
+    Write-Host "[close-unit] STORY $($owed -join ', ') IS DONE BUT NOT CLOSED - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+    Write-Host "             Its last task rolled it up to DONE, but the story-level close never ran, so it has no" -ForegroundColor Red
+    Write-Host "             story commit (and usually no grade). Finish it before starting on another story:" -ForegroundColor Red
+    foreach ($sid in $owed) {
+      Write-Host "               1. grade it (grade-agent -> grades\$($sid)_GRADE.md), run hygiene-agent" -ForegroundColor Yellow
+      Write-Host "               2. dad close-unit -Id $sid -Title `"$sid polish`" -RequireGrade" -ForegroundColor Yellow
+    }
+    Write-Host "             Then re-run this close. (/build 'Per STORY' steps 5-7. Under /spec, where stories are" -ForegroundColor Red
+    Write-Host "             not graded, step 2 without -RequireGrade is enough.)" -ForegroundColor Red
+    Write-GateLog "block" "$Id not closed: story $($owed -join ', ') rolled up to DONE but has no story-level close yet"
     exit 1
   }
 }
@@ -592,6 +650,7 @@ if (Test-Path $storiesFile) { $origStories = [System.IO.File]::ReadAllText($stor
 if (Test-Path $statusFile)  { $origStatus = [System.IO.File]::ReadAllText($statusFile) }
 $commitFailed = $false
 $rolledBack = $false
+$origRecipes = $null
 
 # --- 1) tick the unit ---
 $closedTask = $false
@@ -672,6 +731,43 @@ if (-not $NoReindex) {
   } else { $problems.Add("local-tools.exe not built - skipped reindex") }
 }
 
+# 0.60.0 (issue 14): this block used to run AFTER the commit, so the first close of a project left
+# docs\RECIPES.md modified and uncommitted - and a re-run of the same unit then had a 'real' file to stage
+# and made a duplicate commit. It now runs before staging, so the rows land in the unit's own commit.
+# --- record the commands that ACTUALLY WORKED --------------------------------------------------
+# docs\RECIPES.md was designed as a proven-commands log that agents append to on success. After NINE runs
+# on a real project it contained 18 lines: the bare template, zero entries. Asking a model to remember to
+# write down what worked is the same class of instruction as asking it to remember to run close-unit, and
+# it failed the same way. Meanwhile runs kept emitting broken shell - one used bash syntax and a wrong
+# path (`cd D:/projects/mediamotor_iiif`, missing two segments) and lost the turn to it.
+# So the close-out writes the entry. These two commands are the ones just VERIFIED to work on this machine.
+if ($problems.Count -eq 0) {
+  try {
+    $recipes = Join-Path $docs "RECIPES.md"
+    if (Test-Path $recipes) {
+      $origRecipes = [System.IO.File]::ReadAllText($recipes)
+      $rt = Get-Content $recipes -Raw
+      $add = @()
+      foreach ($pair in @(@{ K='Build'; V=(Get-ClaudeCommand 'Build') }, @{ K='Test'; V=(Get-ClaudeCommand 'Test') })) {
+        if (-not $pair.V) { continue }
+        # One row per distinct command, never a duplicate on every close.
+        if ($rt -match [regex]::Escape($pair.V)) { continue }
+        $add += "| ``$($pair.V)`` | $($pair.K.ToLower()) this project | from the project root | verified by close-unit on $Id | $(Get-Date -Format 'yyyy-MM-dd') |"
+      }
+      if ($add.Count) {
+        if ($rt -notmatch '(?m)^##\s*Verified by close-unit') {
+          $rt = $rt.TrimEnd() + "`r`n`r`n## Verified by close-unit`r`n" +
+                "<!-- Appended automatically when a unit closes clean. These ran and worked ON THIS MACHINE. -->`r`n" +
+                "| Command | Does | When | Gotcha | Verified |`r`n|---|---|---|---|---|`r`n"
+        }
+        $rt = $rt.TrimEnd() + "`r`n" + ($add -join "`r`n") + "`r`n"
+        [System.IO.File]::WriteAllText($recipes, $rt, (New-Object System.Text.UTF8Encoding($false)))
+        $notes.Add("recorded $($add.Count) verified command(s) in docs\RECIPES.md")
+      }
+    }
+  } catch { $warns.Add("could not update docs\RECIPES.md: $($_.Exception.Message)") }
+}
+
 # --- 4) commit: this unit becomes a restore point ---
 $committed = $false
 if (-not $NoCommit) {
@@ -685,7 +781,12 @@ if (-not $NoCommit) {
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-      $msg = if ($Title) { "$Id`: $Title" } else { "$Id" }
+      # A title that already starts with the id ("T68.5: IUser32 wrapper") used to produce the subject
+      # "T68.5: T68.5: IUser32 wrapper" - 36 commits in one project. Strip a leading "<id>:" / "<id> -".
+      $cleanTitle = "$Title".Trim()
+      $idPrefix = '^(?i)' + [regex]::Escape($Id) + '\s*[:\-]\s*'
+      while ($cleanTitle -match $idPrefix) { $cleanTitle = $cleanTitle.Substring($Matches[0].Length).Trim() }
+      $msg = if ($cleanTitle) { "$Id`: $cleanTitle" } else { "$Id" }
       # Log the clean-close allow BEFORE staging so the tracked grades\gates-log.jsonl line lands in this
       # unit's own commit. Written only while nothing has failed so far; if the commit/verify then fails,
       # the aggregate refusal below logs a block after it (honest sequence).
@@ -730,7 +831,32 @@ if (-not $NoCommit) {
       }
       if ($script:shrinkAccepted -and $reasonText) { $trailers += @('-m', "Shrink-accepted: $reasonText (human)") }
 
-      if (-not $staged) { $notes.Add("nothing to commit (working tree already clean)") ; $committed = $true }
+      # (ii) A RE-RUN of a unit that already has its commit must not make another one. It always had
+      # something to stage - the gate-log lines this very run just wrote - so it committed a second
+      # "<id>: <title>" holding nothing but log noise (three such pairs in one project's history). When
+      # the unit's commit exists and only kit bookkeeping is staged, unstage it; the lines ride along
+      # with the next real close.
+      $storyLevelClose = (-not $closedTask -and [bool]$storyClosed)
+      $hasUnitCommit = Test-UnitCommit $Id
+      $kitNoise = @('grades/gates-log.jsonl', 'docs/API-SURFACE.md')
+      $realStaged = @($stagedClean | Where-Object { $_ -and ($kitNoise -notcontains $_) })
+      if ($staged -and $realStaged.Count -eq 0 -and $hasUnitCommit) {
+        git reset -q | Out-Null
+        $staged = ""
+        $notes.Add("'$Id' already has its commit and nothing new is staged - no duplicate commit made")
+        $committed = $true
+      }
+      elseif (-not $staged -and $storyLevelClose -and -not $hasUnitCommit) {
+        # (iii) The story-level close IS the story's commit. With a clean tree it used to report "nothing
+        # to commit" and leave no trace in history that the story was ever closed; record it.
+        $prevStoryEnv = $env:DAD_CLOSE_UNIT_STORY
+        $env:DAD_CLOSE_UNIT_STORY = $storyClosed
+        try { git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q --allow-empty -m $msg @trailers | Out-Null }
+        finally { $env:DAD_CLOSE_UNIT_STORY = $prevStoryEnv }
+        if ($LASTEXITCODE -eq 0) { $notes.Add("story commit recorded: $((git log --oneline -1 | Out-String).Trim())"); $committed = $true }
+        else { $problems.Add("git commit (story commit) exited $LASTEXITCODE"); $commitFailed = $true }
+      }
+      elseif (-not $staged) { $notes.Add("nothing to commit (working tree already clean)") ; $committed = $true }
       else {
         # The pre-commit status guard lets a story become DONE only in a commit made right here, for the
         # story this run rolled up. Set for the lifetime of this one git call and removed again.
@@ -760,6 +886,7 @@ if (-not $NoCommit) {
           if ($null -ne $origTasks -and [System.IO.File]::ReadAllText($tasksFile) -ne $origTasks) { [System.IO.File]::WriteAllText($tasksFile, $origTasks, $enc); $rolledBack = $true }
           if ($null -ne $origStories -and [System.IO.File]::ReadAllText($storiesFile) -ne $origStories) { [System.IO.File]::WriteAllText($storiesFile, $origStories, $enc); $rolledBack = $true }
           if ($null -ne $origStatus -and (Test-Path $statusFile) -and [System.IO.File]::ReadAllText($statusFile) -ne $origStatus) { [System.IO.File]::WriteAllText($statusFile, $origStatus, $enc) }
+          if ($null -ne $origRecipes) { $rp = Join-Path $docs "RECIPES.md"; if ((Test-Path $rp) -and [System.IO.File]::ReadAllText($rp) -ne $origRecipes) { [System.IO.File]::WriteAllText($rp, $origRecipes, $enc) } }
           git reset -q | Out-Null
           if ($rolledBack) { $problems.Add("bookkeeping ROLLED BACK: the TASKS.md tick and any STORIES.md DONE marker were restored, because the commit did not land - '$Id' is NOT closed") }
         } catch { $problems.Add("could not roll the bookkeeping back after the failed commit: $($_.Exception.Message) - check docs\TASKS.md and docs\STORIES.md by hand") }
@@ -777,37 +904,20 @@ if ($closedTask -and -not $rolledBack -and -not (Select-String -Path $tasksFile 
   $problems.Add("VERIFY FAILED: $Id is still not [x] in TASKS.md")
 }
 
-# --- record the commands that ACTUALLY WORKED --------------------------------------------------
-# docs\RECIPES.md was designed as a proven-commands log that agents append to on success. After NINE runs
-# on a real project it contained 18 lines: the bare template, zero entries. Asking a model to remember to
-# write down what worked is the same class of instruction as asking it to remember to run close-unit, and
-# it failed the same way. Meanwhile runs kept emitting broken shell - one used bash syntax and a wrong
-# path (`cd D:/projects/mediamotor_iiif`, missing two segments) and lost the turn to it.
-# So the close-out writes the entry. These two commands are the ones just VERIFIED to work on this machine.
-if ($problems.Count -eq 0) {
+# --- the open-story list (issue 14) ------------------------------------------------------------
+# A TASK close that rolled its story up leaves the story owing its story-level close; that close clears it.
+if ($problems.Count -eq 0 -and $storyClosed -and -not $NoCommit) {
   try {
-    $recipes = Join-Path $docs "RECIPES.md"
-    if (Test-Path $recipes) {
-      $rt = Get-Content $recipes -Raw
-      $add = @()
-      foreach ($pair in @(@{ K='Build'; V=(Get-ClaudeCommand 'Build') }, @{ K='Test'; V=(Get-ClaudeCommand 'Test') })) {
-        if (-not $pair.V) { continue }
-        # One row per distinct command, never a duplicate on every close.
-        if ($rt -match [regex]::Escape($pair.V)) { continue }
-        $add += "| ``$($pair.V)`` | $($pair.K.ToLower()) this project | from the project root | verified by close-unit on $Id | $(Get-Date -Format 'yyyy-MM-dd') |"
+    $openNow = @(Get-OpenStories)
+    if ($closedTask) {
+      if (-not (Test-UnitCommit $storyClosed)) {
+        Set-OpenStories (@($openNow) + @($storyClosed))
+        $notes.Add("story $storyClosed now owes its story-level close: grade + hygiene, then 'dad close-unit -Id $storyClosed -Title `"$storyClosed polish`" -RequireGrade'. Tasks of OTHER stories will not close until then.")
       }
-      if ($add.Count) {
-        if ($rt -notmatch '(?m)^##\s*Verified by close-unit') {
-          $rt = $rt.TrimEnd() + "`r`n`r`n## Verified by close-unit`r`n" +
-                "<!-- Appended automatically when a unit closes clean. These ran and worked ON THIS MACHINE. -->`r`n" +
-                "| Command | Does | When | Gotcha | Verified |`r`n|---|---|---|---|---|`r`n"
-        }
-        $rt = $rt.TrimEnd() + "`r`n" + ($add -join "`r`n") + "`r`n"
-        [System.IO.File]::WriteAllText($recipes, $rt, (New-Object System.Text.UTF8Encoding($false)))
-        $notes.Add("recorded $($add.Count) verified command(s) in docs\RECIPES.md")
-      }
+    } else {
+      Set-OpenStories @($openNow | Where-Object { $_ -ne $storyClosed })
     }
-  } catch { $warns.Add("could not update docs\RECIPES.md: $($_.Exception.Message)") }
+  } catch { $warns.Add("could not update the open-story list: $($_.Exception.Message)") }
 }
 
 # --- stamp for the stop guard -----------------------------------------------------------------
