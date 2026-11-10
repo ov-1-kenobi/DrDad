@@ -3611,7 +3611,7 @@ interactive MCP approval), T46.5 is a /design unlock that depends on it, and T46
 - **Depends on:** T46.13
 - **Refs:** the `[human]` suggestions on `grades/S38_GRADE.md` to `grades/S45_GRADE.md`.
 
-### [ ] T46.18 - README.md and docs/GUIDE.md describe the 0.60.0 / 0.61.0 commands and rules   (Story S46)
+### [ ] T46.18 - README.md and docs/GUIDE.md describe the commands and rules added in 0.60.0 and 0.61.0   (Story S46)
 - **Goal:** a reader of the README or the guide can find every command and gate this release added.
 - **Touches:** `README.md`, `docs/GUIDE.md` (the cheatsheet rows were added with the release).
 - **Do:** add, where the neighbouring commands are described: `dad source-tier`, `dad archive-tasks`, `dad doctor -PrunePermissions`, `dad doc-stats -HumanGates`, `dad grade-trends -RecordRetro`, `dad-status-guard` (what the pre-commit hook now runs), the `Fast test:` line, `source-stats -LockCheck`, the `[e2e]` and `[human]` task tags, `Human-gate WIP limit`, the close evidence file, and the `tiered` column.
