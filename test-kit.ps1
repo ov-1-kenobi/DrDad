@@ -8897,6 +8897,111 @@ Test-Case "0.60.0 #1 upgrade path: upgrade-project rewrites an absolute .mcp.jso
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "0.60.0 #2: a story marked DONE by hand is refused - by close-unit for another unit, and by the pre-commit hook; the human override works" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb -WithHook
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u")
+    Assert ($x.Code -eq 0) "setup close failed:`n$($x.Out)"
+    # the story close fails its tests: nothing may change
+    "x" | Set-Content "$p\fail.flag" -Encoding ASCII
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'TESTS FAILED') "a story close over a red suite was not refused:`n$($x.Out)"
+    # the agent forges the marker, stamp included
+    $forged = [System.IO.File]::ReadAllText("$p\docs\STORIES.md").Replace("### Story S1: One   <!-- Status: TODO -->", "### Story S1: One   <!-- Status: DONE closed:close-unit -->")
+    [System.IO.File]::WriteAllText("$p\docs\STORIES.md", $forged, (New-Object System.Text.UTF8Encoding($false)))
+    $head0 = (git -C $p rev-parse HEAD | Out-String).Trim()
+    # (a) a close for a task of ANOTHER story must not bank it
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u")
+    Assert ($x.Code -eq 1) "close-unit banked a hand-written DONE marker under T2.1:`n$($x.Out)"
+    Assert ($x.Out -match 'MARKED DONE BY HAND' -and $x.Out -match '\bS1\b') "the refusal does not name the hand-marked story:`n$($x.Out)"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T2\.1' -Quiet)) "T2.1 was ticked although the close was refused"
+    Assert (((git -C $p rev-parse HEAD | Out-String).Trim()) -eq $head0) "a commit was made although the close was refused"
+    $gl = @([System.IO.File]::ReadAllLines("$p\grades\gates-log.jsonl") | Where-Object { $_ -match 'outside close-unit' })
+    Assert ($gl.Count -ge 1) "the refusal was not written to the gate log"
+    # (b) a hand commit must not bank it either
+    git -C $p add -A 2>&1 | Out-Null
+    $o = (git -C $p -c user.name=a -c user.email=a@a commit -m "T1.2: u; S1 DONE" 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -ne 0) "the pre-commit hook let a hand-written DONE marker through:`n$o"
+    Assert (((git -C $p show HEAD:docs/STORIES.md | Out-String)) -notmatch 'Story S1.*Status: DONE') "S1 is DONE in HEAD"
+    # (c) a human who means it can still do it, by saying so
+    $env:DAD_ALLOW_STATUS_EDIT = '1'
+    try { git -C $p -c user.name=h -c user.email=h@h commit -q -m "human: S1 imported as done" 2>&1 | Out-Null; $code = $LASTEXITCODE }
+    finally { Remove-Item Env:\DAD_ALLOW_STATUS_EDIT -ErrorAction SilentlyContinue }
+    Assert ($code -eq 0) "DAD_ALLOW_STATUS_EDIT=1 did not let a human commit the marker"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #2: a real story close still lands through the hook, and a re-run of an already-ticked task is not treated as a story close" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb -WithHook
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); Assert ($x.Code -eq 0) "T1.1:`n$($x.Out)"
+    # re-run of T1.1 while T1.2 is still open: NOT a story close, so the story suite must not run
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -notmatch 'tests \(story') "a re-run of a ticked task with another task open ran the story suite:`n$($x.Out)"
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S1 -> DONE') "the real story close failed:`n$($x.Out)"
+    Assert (((git -C $p show HEAD:docs/STORIES.md | Out-String)) -match 'Story S1.*Status: DONE closed:close-unit') "the DONE marker did not land in the close commit (hook refused close-unit itself?)"
+    Assert (-not $env:DAD_CLOSE_UNIT_STORY) "DAD_CLOSE_UNIT_STORY leaked out of close-unit"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #2: when the commit does not land, the tick and the DONE stamp are rolled back (nothing is left on disk to bank later)" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); Assert ($x.Code -eq 0) "T1.1:`n$($x.Out)"
+    New-Item -ItemType Directory -Force "$p\.git\hooks" | Out-Null
+    [System.IO.File]::WriteAllText("$p\.git\hooks\pre-commit", "#!/bin/sh`necho hook says no`nexit 1`n", (New-Object System.Text.UTF8Encoding($false)))
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 1) "a close whose commit failed exited 0:`n$($x.Out)"
+    Assert ($x.Out -match 'ROLLED BACK') "no roll-back was reported:`n$($x.Out)"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.2' -Quiet)) "T1.2 is still ticked on disk after the commit failed"
+    Assert (Select-String "$p\docs\STORIES.md" -Pattern 'Story S1: One\s+<!-- Status: TODO -->' -Quiet) "the DONE stamp is still on disk after the commit failed"
+    Assert (-not ((git -C $p diff --cached --name-only | Out-String).Trim())) "files were left staged after the failed commit"
+    Assert (-not (Test-Path "$p\.claude\.dad-verified") -or ((Get-Content "$p\.claude\.dad-verified" -Raw) -notmatch 'T1\.2')) "a failed close wrote the verified stamp"
+    # with the hook fixed, the same close now completes
+    Remove-Item "$p\.git\hooks\pre-commit" -Force
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S1 -> DONE') "the close did not complete after the commit problem was fixed:`n$($x.Out)"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #2: dad-status-guard reads HEADINGS only, allows a brand-new STORIES.md, and has a .cmd wrapper" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $g = Join-Path $kit "dad-status-guard.ps1"
+    Assert (Test-Path (Join-Path $kit "dad-status-guard.cmd")) "dad-status-guard.cmd wrapper is missing"
+    $p = Join-Path $sb "g"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false
+    "x" | Set-Content "$p\a.txt"; git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    # a NEW file that already holds DONE stories is an import, not a forged close
+    [System.IO.File]::WriteAllText("$p\docs\STORIES.md", "# Stories`n`n### Story S1: One   <!-- Status: DONE -->`n", (New-Object System.Text.UTF8Encoding($false)))
+    git -C $p add -A 2>&1 | Out-Null
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $g -ProjectDir $p -Staged | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "a brand-new STORIES.md was refused"
+    git -C $p -c user.name=t -c user.email=t@t commit -q -m stories 2>&1 | Out-Null
+    # prose quoting the marker is not a story heading
+    [System.IO.File]::AppendAllText("$p\docs\STORIES.md", "`n### Story S2: Two   <!-- Status: TODO -->`n- the marker reads <!-- Status: DONE closed:close-unit --> when S2 closes`n")
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $g -ProjectDir $p -WorkingTree | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "prose that quotes the marker was treated as a hand-closed story"
+    # the heading itself is
+    $t = [System.IO.File]::ReadAllText("$p\docs\STORIES.md").Replace("### Story S2: Two   <!-- Status: TODO -->", "### Story S2: Two   <!-- Status: DONE -->")
+    [System.IO.File]::WriteAllText("$p\docs\STORIES.md", $t, (New-Object System.Text.UTF8Encoding($false)))
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $g -ProjectDir $p -WorkingTree | Out-String)
+    Assert ($LASTEXITCODE -eq 1 -and $o -match '\bS2\b') "a hand-marked heading was not refused:`n$o"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $g -ProjectDir $p -WorkingTree -AllowStory S2 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-AllowStory did not exempt the story close-unit is rolling up"
+  } finally { Remove-Sandbox $sb }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

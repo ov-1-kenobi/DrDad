@@ -294,11 +294,33 @@ if ((Test-Path $tasksFile) -and (Select-String -Path $tasksFile -Pattern "^###\s
     $st = $Matches[1]
     $open = @($taskLines | Where-Object {
       $_ -match '^###\s*\[ \]' -and $_ -match ('\(Story\s+' + [regex]::Escape($st) + '\)') })
-    if ($open.Count -le 1) { $predictedStory = $st }   # this task is the last one open
+    # This task is the last one open - or it is already ticked and NOTHING is open. (Until 0.60.0 this was
+    # just "$open.Count -le 1", which also matched an already-ticked task with one OTHER task still open:
+    # a re-run then ran the whole story suite and, worse, named a story this close would not roll up.)
+    $mineOpen = ($mine -match '^###\s*\[ \]')
+    if (($mineOpen -and $open.Count -le 1) -or (-not $mineOpen -and $open.Count -eq 0)) { $predictedStory = $st }
   }
 }
 elseif ((Test-Path $storiesFile) -and (Select-String -Path $storiesFile -Pattern "\b$esc\b" -Quiet)) {
   $predictedStory = $Id
+}
+
+# --- 0a) is a story marked DONE on disk that close-unit did not close? (issue 2, 0.60.0) ---------
+# close-unit commits with `git add -A`, so a "Status: DONE" typed into STORIES.md by hand - or left there
+# by an earlier close whose commit failed - would be banked by THIS close under an unrelated id. That is
+# how a story whose close had just failed its tests ended up DONE in history. Refuse before doing anything.
+# The one story this run may itself roll up ($predictedStory, which gets the story tests below) is exempt.
+$statusGuard = Join-Path $kit "dad-status-guard.ps1"
+if ((Test-Path $statusGuard) -and (Test-Path (Join-Path $proj ".git"))) {
+  $sgArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $statusGuard, "-ProjectDir", $proj, "-WorkingTree")
+  if ($predictedStory) { $sgArgs += @("-AllowStory", $predictedStory) }
+  $sgOut = (& powershell @sgArgs | Out-String)
+  if ($LASTEXITCODE -eq 1) {
+    Write-Host "[close-unit] A STORY IS MARKED DONE BY HAND - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+    Write-Host ($sgOut.TrimEnd())
+    Write-GateLog "block" "$Id not closed: a story Status marker was set to DONE outside close-unit"
+    exit 1
+  }
 }
 
 if (-not $SkipVerify) {
@@ -500,6 +522,14 @@ if ($reasonText -and -not $script:shrinkAccepted) { $notes.Add("-Reason ignored:
 # Suffix only when a reason was given: the T9.3 case pins the reason-less -AcceptShrink line to exactly "clean close: <Id>".
 if ($script:shrinkAccepted -and $reasonText) { $allowText = "clean close: $Id - shrink accepted: $reasonText" }
 
+# The bookkeeping files exactly as they are BEFORE this close writes to them (issue 2): if the commit
+# below does not land, they are put back, so a tick and a DONE stamp never sit on disk unbacked.
+$origTasks = $null; $origStories = $null
+if (Test-Path $tasksFile)   { $origTasks = [System.IO.File]::ReadAllText($tasksFile) }
+if (Test-Path $storiesFile) { $origStories = [System.IO.File]::ReadAllText($storiesFile) }
+$commitFailed = $false
+$rolledBack = $false
+
 # --- 1) tick the unit ---
 $closedTask = $false
 $parentStory = $null
@@ -620,8 +650,13 @@ if (-not $NoCommit) {
 
       if (-not $staged) { $notes.Add("nothing to commit (working tree already clean)") ; $committed = $true }
       else {
-        git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m $msg @trailers | Out-Null
-        if ($LASTEXITCODE -ne 0) { $problems.Add("git commit exited $LASTEXITCODE") }
+        # The pre-commit status guard lets a story become DONE only in a commit made right here, for the
+        # story this run rolled up. Set for the lifetime of this one git call and removed again.
+        $prevStoryEnv = $env:DAD_CLOSE_UNIT_STORY
+        if ($storyClosed) { $env:DAD_CLOSE_UNIT_STORY = $storyClosed }
+        try { git -c user.name="DAD-kit" -c user.email="dad-kit@local" commit -q -m $msg @trailers | Out-Null }
+        finally { $env:DAD_CLOSE_UNIT_STORY = $prevStoryEnv }
+        if ($LASTEXITCODE -ne 0) { $problems.Add("git commit exited $LASTEXITCODE"); $commitFailed = $true }
         # --- 5) VERIFY the commit actually landed and mentions this unit ---
         $last = (git log --oneline -1 | Out-String).Trim()
         if ($last -match [regex]::Escape($Id)) {
@@ -631,15 +666,31 @@ if (-not $NoCommit) {
           if ($script:shrinkAccepted -and $reasonText) { $notes.Add("shrink acceptance recorded in the commit (Shrink-accepted:)") }
           $committed = $true
         }
-        else { $problems.Add("commit did not land or does not mention $Id (last: $last)") }
+        else { $problems.Add("commit did not land or does not mention $Id (last: $last)"); $commitFailed = $true }
+      }
+      # --- 5b) the commit did not land: UNDO the bookkeeping (issue 2) ---
+      # Without this the tick and the "DONE closed:close-unit" stamp stay on disk with no commit behind
+      # them, and the next `git add -A` - any close, any hand commit - banks a story close that never
+      # completed. Restore both files, and unstage, so the project is exactly as it was before this run.
+      if ($commitFailed) {
+        try {
+          $enc = New-Object System.Text.UTF8Encoding($false)
+          if ($null -ne $origTasks -and [System.IO.File]::ReadAllText($tasksFile) -ne $origTasks) { [System.IO.File]::WriteAllText($tasksFile, $origTasks, $enc); $rolledBack = $true }
+          if ($null -ne $origStories -and [System.IO.File]::ReadAllText($storiesFile) -ne $origStories) { [System.IO.File]::WriteAllText($storiesFile, $origStories, $enc); $rolledBack = $true }
+          git reset -q | Out-Null
+          if ($rolledBack) { $problems.Add("bookkeeping ROLLED BACK: the TASKS.md tick and any STORIES.md DONE marker were restored, because the commit did not land - '$Id' is NOT closed") }
+        } catch { $problems.Add("could not roll the bookkeeping back after the failed commit: $($_.Exception.Message) - check docs\TASKS.md and docs\STORIES.md by hand") }
       }
     } catch { $problems.Add("git commit failed: $($_.Exception.Message)") }
     finally { $ErrorActionPreference = $prevEap; Pop-Location }
   }
 }
+elseif ($storyClosed) {
+  $warns.Add("-NoCommit: story $storyClosed is marked DONE on disk but NOT committed. The pre-commit guard refuses a hand commit of that marker; a human who means it sets DAD_ALLOW_STATUS_EDIT=1 for that commit.")
+}
 
 # --- verify bookkeeping on disk ---
-if ($closedTask -and -not (Select-String -Path $tasksFile -Pattern "^###\s*\[x\]\s*$esc\b" -Quiet)) {
+if ($closedTask -and -not $rolledBack -and -not (Select-String -Path $tasksFile -Pattern "^###\s*\[x\]\s*$esc\b" -Quiet)) {
   $problems.Add("VERIFY FAILED: $Id is still not [x] in TASKS.md")
 }
 

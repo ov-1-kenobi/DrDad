@@ -134,6 +134,10 @@ its dependencies satisfied, STOP and report the blocked tasks.
    ```
    It ticks the task, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits,
    and verifies. **Non-zero exit means the unit is NOT closed** - fix what it reports before the next unit.
+   **Never write a story's `<!-- Status: ... -->` marker yourself, and never `git commit` the bookkeeping by
+   hand.** close-unit is the only writer of DONE: it refuses to run while a story is marked DONE by hand, the
+   pre-commit hook refuses a hand commit of one, and a close whose commit fails puts its own tick and marker
+   back. If a story close fails its tests, the story is not done - fix the tests and close again.
    For a **visible-surface** unit that went through step 2b, add **`-UxReviewed`** (and optionally
    **`-UxNote "<what changed>"`**) so the commit records the pass and `doc-stats` stays quiet:
    ```

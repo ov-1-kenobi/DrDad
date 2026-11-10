@@ -117,4 +117,4 @@ exit 0
 "@
 # LF endings + no BOM: sh will not run a CRLF/BOM script.
 [System.IO.File]::WriteAllText($hookPath, ($hook -replace "`r`n", "`n"), (New-Object System.Text.UTF8Encoding($false)))
-Write-Host "  hooks: pre-commit installed (secret scan)" -ForegroundColor Green
+Write-Host "  hooks: pre-commit installed (secret scan + story-status guard)" -ForegroundColor Green

@@ -23,6 +23,21 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
   measured there with an absolute `command`); whether Copilot CLI expands `${DAD_HOME}` is unknown. Check `/mcp` in
   Claude Code, and one real tool call under Copilot CLI, before relying on either.
 
+### Fixed - issue 2: close-unit is the only writer of a story's `Status: DONE` marker
+- New `dad-status-guard.ps1` (+ `.cmd`). It compares story headings in `STORIES.md` with `HEAD` and refuses any story
+  that became DONE by another hand. It runs in two places: the pre-commit hook (a hand `git commit`), and at the
+  start of every `close-unit` run (a marker sitting in the working tree would otherwise be banked by `git add -A`
+  under an unrelated id). close-unit names the one story it is rolling up itself through `DAD_CLOSE_UNIT_STORY`, set
+  only around its own `git commit`. A human who means to mark a story by hand sets `DAD_ALLOW_STATUS_EDIT=1` for
+  that commit. A brand-new `STORIES.md` (an import) is allowed.
+- close-unit now ROLLS BACK its own bookkeeping when its commit does not land: the `TASKS.md` tick and the
+  `DONE closed:close-unit` stamp are restored and the index is unstaged. Before, a failed commit left a stamped story
+  on disk with nothing behind it; in the reviewed project a hand commit then banked story S55 as DONE while its
+  story-level close was still failing tests.
+- close-unit no longer treats a re-run of an already-ticked task as a story close when another task of the story is
+  still open (it used to run the whole story suite and name a story it would not roll up).
+- `/build` step 4 tells the orchestrator never to write the marker or commit bookkeeping by hand.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)
