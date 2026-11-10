@@ -353,6 +353,14 @@ T36.2 -> T37.1 (needs T36.2) -> T37.2 (needs T37.1) -> T37.3 (needs T37.2) -> T3
 in-suite checks, T37.2 the blanking limits, T37.3 narrows `fully offline` and writes the CHANGELOG entry, T37.4 is the HUMAN decision on
 rephrased-claim patterns, like T34.3. `docs/DESIGN.md` is never edited.)
 
+T37.4 -> T46.7 (needs T37.4) -> T46.8 (needs T46.7) -> T46.9 (needs T46.8) -> T46.10 (needs T46.9) -> T46.11 (needs T46.10) -> T46.14 (needs T46.11) -> T46.15 (needs T46.14) -> T46.6 (needs T46.15) -> T46.5 (needs T46.6) -> T46.12 (needs T46.5) -> T46.13 (needs T46.12) [T46.6, T46.5, T46.12 and T46.13 WAIT FOR THE HUMAN]
+
+(added 2026-11-10; Stories S38-S46 - the 0.60.0 / 0.61.0 refactor work written up after it was built. T38.1-T45.1 and T46.1-T46.4 are already [x]:
+they were done directly from the review's issue list on branch drdad-fixes-2026-11 and are recorded here with their commits, so they are not
+sequenced. What remains is Story S46's open tasks, queued after the last T37 entry. T46.7-T46.11, T46.14 and T46.15 are agent work and are
+independent of each other; they are chained only because several edit 	est-kit.ps1. T46.6 is a MEASUREMENT only the human can make (it needs an
+interactive MCP approval), T46.5 is a /design unlock that depends on it, and T46.12 / T46.13 are human decisions.)
+
 ## Tasks
 
 ### [x] T1.1 - uninstall.ps1 default behavior (remove kit commands/agents, restore settings.json)   (Story S1)
@@ -3328,6 +3336,253 @@ rephrased-claim patterns, like T34.3. `docs/DESIGN.md` is never edited.)
 - **Depends on:** T37.3
 - **Refs:** Story S37 Behavior bullet 4 and AC4; `grades/S34_GRADE.md` suggestion 5; the T34.3 pattern (a task that waits for the human).
 - **Context:** every added pattern raises the false-positive risk on a locked design doc and none of the three occurs in the real DESIGN today (searched at sharding time, case-insensitive: 0 hits each), so choosing none costs nothing now and loses only future rephrased claims. This is a design-level judgment, so it is the human's; do not guess a default beyond "add none" and do not choose on the human's behalf. Do not edit DESIGN. ASCII only.
+
+<!-- T38.x-T46.x (added 2026-11-10): the 0.60.0 / 0.61.0 work, recorded after it was built (see the note above
+     Story S38). The [x] tasks were done directly from the review's issue list, not through close-unit; each names
+     its commit and the test-kit case that holds it. The [ ] tasks are what is left, all under Story S46. -->
+
+### [x] T38.1 - new-project / upgrade-project: portable `.mcp.json`, v2 `DAD_HOME` pre-commit hook, doctor checks   (Story S38)
+- **Goal:** no absolute kit or project path in a committed `.mcp.json`; the hook follows the kit when it moves.
+- **Touches:** `new-project.ps1`, `upgrade-project.ps1`, `install-hooks.ps1`, `docs-dir.ps1`, `dad-doctor.ps1`.
+- **Acceptance:** `0.60.0 #1: new-project writes a PORTABLE .mcp.json ...` and `0.60.0 #1 upgrade path: ...` pass.
+- **Depends on:** none
+- **Refs:** commit ddeb376; review issue 1; `VERIFICATION.md` issue 1.
+
+### [x] T38.2 - API surface: skip test projects, write to `.claude\`, never commit; migrate a legacy `docs\` copy   (Story S38)
+- **Goal:** the generated API surface is a build product: not indexed, not in git, no test assemblies.
+- **Touches:** `api-surface.ps1`, `local-tools/ApiSurface.cs`, `close-unit.ps1`, `doc-stats.ps1`, `upgrade-project.ps1`, dev-agent / survey-agent / `/document` text.
+- **Acceptance:** `0.60.0 #10: the API surface skips TEST projects ...` and `0.60.0 #10 upgrade path: ...` pass.
+- **Depends on:** none
+- **Refs:** commit b635882; review issue 10.
+
+### [x] T38.3 - new-project creates `grades\gates-log.jsonl` in the initial commit; upgrade adds it   (Story S38)
+- **Goal:** the gate log exists from the first commit.
+- **Touches:** `new-project.ps1`, `upgrade-project.ps1`, `global/commands/scaffold.md`.
+- **Acceptance:** `0.60.0 #15: scaffold creates grades\gates-log.jsonl ...` passes.
+- **Depends on:** none
+- **Refs:** commit cc76ad8; review issue 15.
+
+### [x] T39.1 - dad-status-guard: a story may become DONE only through close-unit; roll back bookkeeping when the commit fails   (Story S39)
+- **Goal:** a hand-written or left-over DONE marker cannot be committed, by close-unit or by hand.
+- **Touches:** `dad-status-guard.ps1` (+ `.cmd`), `close-unit.ps1`, `install-hooks.ps1`, `global/commands/build.md`.
+- **Acceptance:** the four `0.60.0 #2: ...` cases pass.
+- **Depends on:** T38.1
+- **Refs:** commit 6565b0f; review issue 2.
+
+### [x] T39.2 - close-unit: `-AcceptShrink` needs `-Reason`; the reason is recorded in the commit and the gate log   (Story S39)
+- **Goal:** a ratchet block cannot be cleared by re-running with a bare switch.
+- **Touches:** `close-unit.ps1`, `ratchet.ps1`, `global/commands/build.md`.
+- **Acceptance:** `0.60.0 #3: ...` passes; `S30 AC6` and `T9.3 (b)` updated to the new behavior.
+- **Depends on:** none
+- **Refs:** commit 7eef38b; review issue 3.
+
+### [x] T39.3 - close-unit commits: no doubled id prefix, no duplicate re-run commit, story commit required   (Story S39)
+- **Goal:** one commit per unit, named once; a rolled-up story gets its own story-level close before other stories continue.
+- **Touches:** `close-unit.ps1`, `global/commands/spec.md`, `global/commands/build.md`.
+- **Acceptance:** the two `0.60.0 #14: ...` cases pass.
+- **Depends on:** T39.1
+- **Refs:** commit 12c3180; review issue 14.
+
+### [x] T40.1 - STATUS.md Snapshot regenerated on every close; `[status]` staleness finding   (Story S40)
+- **Goal:** the dashboard's counts are always those of the commit they sit in.
+- **Touches:** `close-unit.ps1`, `doc-stats.ps1`, `templates/_common/docs/STATUS.md`.
+- **Acceptance:** `0.60.0 #4: ...` passes.
+- **Depends on:** none
+- **Refs:** commit 782acb4; review issue 4.
+
+### [x] T40.2 - a story close sweeps `_tmp\` files older than an hour (`tidy -TmpOnly -OlderThanHours`)   (Story S40)
+- **Goal:** scratch does not accumulate; an agent still working keeps its files.
+- **Touches:** `tidy.ps1`, `close-unit.ps1`, the `_tmp/` line in the CLAUDE.md template.
+- **Acceptance:** `0.60.0 #18: ...` passes.
+- **Depends on:** none
+- **Refs:** commit 5e3f0ae; review issue 18.
+
+### [x] T40.3 - close-unit and dad doctor WARN when the shell is elevated   (Story S40)
+- **Goal:** an Administrator agent shell is visible on every close.
+- **Touches:** `close-unit.ps1`, `dad-doctor.ps1`.
+- **Acceptance:** `0.60.0 #16 (warning part): ...` passes.
+- **Depends on:** none
+- **Refs:** commit ab4f9c9; review issue 16 (warning half).
+
+### [x] T41.1 - close-unit runs CLAUDE.md's optional `Fast test:` on every task close   (Story S41)
+- **Goal:** source-scan and other cheap tests fail at the task that breaks them.
+- **Touches:** `close-unit.ps1`, `templates/generic/CLAUDE.md`, `templates/dotnet/PROFILE.md`, `upgrade-project.ps1`.
+- **Acceptance:** `0.60.0 #12: ...` passes.
+- **Depends on:** none
+- **Refs:** commit daf7c49; review issue 12.
+
+### [x] T41.2 - qa-agent / dev-agent prompts: list existing tests first, add only uncovered ones, one fixtures folder   (Story S41)
+- **Goal:** no mirrored test suites; shared helpers.
+- **Touches:** `global/agents/qa-agent.md`, `global/agents/dev-agent.md`.
+- **Acceptance:** `0.61.0 #13: ...` passes.
+- **Depends on:** none
+- **Refs:** commit a8f0894; review issue 13, option A.
+
+### [x] T42.1 - close evidence file at roll-up; `-RequireGrade` checks the quoted line and the grade cap   (Story S42)
+- **Goal:** the grader sees the test history of the story, and cannot grade above B over it.
+- **Touches:** `close-unit.ps1`, `global/agents/grade-agent.md`, `global/commands/build.md`.
+- **Acceptance:** `0.61.0 #5: ...` passes.
+- **Depends on:** T39.3
+- **Refs:** commit dabcd2e; review issue 5, option A.
+
+### [x] T42.2 - grade-trends recurring suggestions; close-unit WARN at roll-up and the retro gate; `-RecordRetro`   (Story S42)
+- **Goal:** a suggestion repeated on three cards is surfaced, and five closes without a retro stop the sixth.
+- **Touches:** `grade-trends.ps1`, `close-unit.ps1`, `global/commands/retro.md`.
+- **Acceptance:** `0.61.0 #6: ...` passes.
+- **Depends on:** T42.1
+- **Refs:** commit 004828c; review issue 6, options A+C.
+
+### [x] T43.1 - human-gate WIP limit: doc-stats count and checklist, close-unit refusal for a new story   (Story S43)
+- **Goal:** finished stories waiting on the human stop new stories from starting, at the human's number.
+- **Touches:** `doc-stats.ps1`, `close-unit.ps1`, `templates/generic/CLAUDE.md`, `global/commands/build.md`, `upgrade-project.ps1`.
+- **Acceptance:** `0.61.0 #7: ...` passes.
+- **Depends on:** none
+- **Refs:** commit c9ed856; review issue 7, option B.
+
+### [x] T43.2 - `/design` step 4a, the `Serves:` line and `## Deferred`; doc-stats checks the quote against the Goal   (Story S43)
+- **Goal:** scope growth is a recorded human decision.
+- **Touches:** `global/commands/design.md`, `templates/_common/docs/DESIGN.md`, `doc-stats.ps1`.
+- **Acceptance:** `0.61.0 #8: ...` passes.
+- **Depends on:** none
+- **Refs:** commit 3cfa8af; review issue 8, option B.
+
+### [x] T43.3 - one `[e2e]` task per story: taskmap rule, close-unit roll-up refusal, `grades\e2e-exempt.txt`   (Story S43)
+- **Goal:** a story is reachable through the real entry point before it is DONE.
+- **Touches:** `global/agents/taskmap-agent.md`, `close-unit.ps1`, `doc-stats.ps1`, `new-project.ps1`, `upgrade-project.ps1`, `templates/_common/docs/TASKS.md`.
+- **Acceptance:** `0.61.0 #9: ...` passes.
+- **Depends on:** none
+- **Refs:** commit b442187; review issue 9, option A.
+
+### [x] T44.1 - archive-tasks at the story-level close; `docs\archive\` not indexed; security entries replaced, not appended   (Story S44)
+- **Goal:** TASKS.md and the security section stop growing with superseded text.
+- **Touches:** `archive-tasks.ps1` (+ `.cmd`), `close-unit.ps1`, `local-tools/Rag.cs`, `doc-stats.ps1`, `global/agents/security-agent.md`, `global/commands/design.md`.
+- **Acceptance:** the two `0.61.0 #11: ...` cases pass.
+- **Depends on:** T39.3, T45.1
+- **Refs:** commit e4ad399; review issue 11, option A.
+
+### [x] T44.2 - `dad source-tier`, the `tiered` column, source-stats FAIL and `-LockCheck`, upgrade marks `legacy`   (Story S44)
+- **Goal:** only a tier a human stamped counts, and a design cannot be locked on sources nobody assessed.
+- **Touches:** `source-tier.ps1` (+ `.cmd`), `source-stats.ps1`, `upgrade-project.ps1`, `templates/_common/docs/SOURCES.md`, research-agent / `/research` / `/design` text.
+- **Acceptance:** `0.61.0 #17: ...` passes.
+- **Depends on:** none
+- **Refs:** commit 79f6f4a; review issue 17, option B.
+
+### [x] T45.1 - Rag.cs: reuse embeddings, skip an unchanged corpus, binary vectors, in-memory index, read old indexes   (Story S45)
+- **Goal:** reindexing costs what changed; searching does not parse vectors from JSON.
+- **Touches:** `local-tools/Rag.cs`, `local-tools/README.md`.
+- **Acceptance:** `0.61.0 index: a reindex reuses unchanged chunks ...` passes; the measured table is in CHANGELOG 0.61.0.
+- **Depends on:** none
+- **Refs:** commit dd541c7.
+
+### [x] T46.1 - test-kit: build once on a never-built tree, tolerate a long kit path, ignore `_tmp\`   (Story S46)
+- **Goal:** the suite passes from an unpacked release zip.
+- **Touches:** `test-kit.ps1`.
+- **Acceptance:** the suite run from the unpacked 0.61.0 package reports 0 failed.
+- **Depends on:** none
+- **Refs:** commit da3e35b; found by the 0.60.0 package check (293 passed, 7 failed for these two reasons).
+
+### [x] T46.2 - dad doctor names broad allow rules; `-PrunePermissions` plans, asks, backs up, prunes   (Story S46)
+- **Goal:** rules that approve almost anything are visible and removable by the owner.
+- **Touches:** `dad-doctor.ps1`.
+- **Acceptance:** `0.61.0 #16: ...` passes.
+- **Depends on:** none
+- **Refs:** commit 5888ff4; review issue 16, option B.
+
+### [x] T46.3 - VERIFICATION.md, PROPOSALS.md and the reproduction script   (Story S46)
+- **Goal:** each Tier 1 fix has an old-kit and fixed-kit reproduction on record; each Tier 2 item has its options and the owner's choice.
+- **Touches:** `VERIFICATION.md`, `PROPOSALS.md`, `examples/verification-2026-11/repro.ps1`.
+- **Acceptance:** the files exist and are ASCII; `repro.ps1` reruns a case against a given kit.
+- **Depends on:** none
+- **Refs:** commit 18fe0af.
+
+### [x] T46.4 - docs/GUIDE.md describes `-AcceptShrink` and the API surface as they are since 0.60.0   (Story S46)
+- **Goal:** the guide matches the scripts.
+- **Touches:** `docs/GUIDE.md`.
+- **Acceptance:** GUIDE names `-AcceptShrink -Reason` and `.claude/API-SURFACE.md`.
+- **Depends on:** none
+- **Refs:** commit d07166e; audit finding of 2026-11-10.
+
+### [ ] T46.5 - [human] /design unlock: add requirements for the 0.60.0 / 0.61.0 behaviors and correct three stale passages   (Story S46)
+- **Goal:** the LOCKED contract describes the kit as it now behaves.
+- **Touches:** `docs/DESIGN.md` (via `/design`, unlock -> edit -> relock; the human approves each change).
+- **Do:** (1) R28 (about line 223): `-AcceptShrink` now needs `-Reason`. (2) R26 (about line 195): the API surface lives in `.claude\API-SURFACE.md`. (3) C5a schema row (about line 1367): the project `.mcp.json` command is `${DAD_HOME}\...`, pending T46.6. (4) Add requirements, or extend existing ones, for: the status guard and bookkeeping roll-back, the story-level close rule, `Fast test:`, the STATUS regeneration, the `_tmp` sweep, the elevated-shell warning, close evidence and the grade cap, the retro gate, the human-gate WIP limit, `Serves:` / `## Deferred`, `[e2e]`, task archiving, human source tiers, the incremental index. (5) Replace "(R: pending, see T46.5)" on S38-S46 with the real ids.
+- **Acceptance:** `doc-stats -Findings` reports no `[design]` item for these; S38-S46 cite requirement ids; DESIGN is LOCKED again.
+- **Depends on:** T46.6
+- **Refs:** audit findings 1 and 2 of 2026-11-10; CHANGELOG 0.60.0 and 0.61.0.
+
+### [ ] T46.6 - [human] measure `${DAD_HOME}` expansion in a project `.mcp.json` under Claude Code and under Copilot CLI   (Story S46)
+- **Goal:** know, not assume, that the portable server command starts under both harnesses.
+- **Touches:** nothing in the kit until the result is in; then `docs/DESIGN.md` C5a (through T46.5) and, if Copilot CLI does not expand it, `new-project.ps1` / `upgrade-project.ps1`.
+- **Do:** in a freshly scaffolded project: (a) Claude Code - approve the server, run `/mcp`, call `list_datasheets`; (b) Copilot CLI - trust the folder, make one real tool call. Record version and outcome for each.
+- **Acceptance:** both outcomes are written down with the harness versions; if either fails, a follow-up task names the fix.
+- **Depends on:** none
+- **Refs:** CHANGELOG 0.60.0 "NOT MEASURED"; DESIGN C5a. It needs an interactive approval, which an agent session cannot give.
+
+### [ ] T46.7 - research captures: `docs/sources/` in the ledger and agents vs `docs/web/` written by `ingest_url`   (Story S46)
+- **Goal:** one folder for captured pages, named the same by the tool, the ledger, the agents and source-stats.
+- **Touches:** `local-tools/Rag.cs` (WebDir) or `templates/_common/docs/SOURCES.md`, `global/agents/research-agent.md`, `source-stats.ps1` - one side moves to match the other.
+- **Do:** decide which name wins (the ledger and source-stats already expect `docs/sources/S<nnn>-*`); make `ingest_url` write there or teach the others to read `docs/web/`; add an upgrade step if files move. Whether captured pages are committed at all is the human's decision (a reviewed project has 419 pages, about 35 MB, in git).
+- **Acceptance:** a page captured by `ingest_url` is found by `source-stats` without being moved by hand; a Test-Case covers it.
+- **Depends on:** none
+- **Refs:** review issue 17 ("fix the path"); `PROPOSALS.md` section 17.
+
+### [ ] T46.8 - gate log: the allow line of a roll-up names the story it closed   (Story S46)
+- **Goal:** the log shows when a story rolled up, not only which task closed.
+- **Touches:** `close-unit.ps1` (the allow text), `dad-run-summary.ps1` if it parses that text, the tests that pin `clean close: <id>`.
+- **Do:** when a task close rolls its story up, log `clean close: T73.8 (story S73 -> DONE)`. A reviewer read "story S73 not closed: tests failed" as S73's last entry because the passing roll-up 51 minutes later was logged under the task id only.
+- **Acceptance:** a Test-Case shows the story id in the roll-up's allow line; non-roll-up lines are unchanged.
+- **Depends on:** none
+- **Refs:** review issue 2 evidence; `PROPOSALS.md` "Also in the feedback file".
+
+### [ ] T46.9 - loop-guard: threshold for consecutive read-only calls configurable per agent   (Story S46)
+- **Goal:** read-only exploration is not cut off at the same count as a stuck loop.
+- **Touches:** `dad-loopguard.ps1`, its tests.
+- **Acceptance:** a Test-Case shows a higher limit applied to read-only tool calls or to a named agent; the default is unchanged.
+- **Depends on:** none
+- **Refs:** review "Also seen": the loop-guard fired 63 times on read-only exploration (25 reads in a row).
+
+### [ ] T46.10 - project CLAUDE.md "Placeholder convention" comes from the design, and names nothing that does not exist   (Story S46)
+- **Goal:** the convention section does not name interfaces the project never created.
+- **Touches:** `global/commands/design.md` (where it copies the stack profile example), `doc-stats.ps1` (a finding for a type named in CLAUDE.md that is absent from the API surface).
+- **Acceptance:** a Test-Case with a CLAUDE.md naming a missing type produces one finding; a matching one produces none.
+- **Depends on:** T38.2
+- **Refs:** review "Also seen"; the companion architecture document, contradiction 4.
+
+### [ ] T46.11 - scaffold: a minimal README and a CI workflow that runs the Build and Test lines   (Story S46)
+- **Goal:** a generated project is verifiable somewhere other than one developer machine.
+- **Touches:** `new-project.ps1`, `templates/`, `/design` (it fills the commands in once the stack is chosen).
+- **Acceptance:** a scaffolded project has both files; the workflow runs the commands from CLAUDE.md; a Test-Case covers their presence.
+- **Depends on:** none
+- **Refs:** review "Also seen": no README, no CI.
+
+### [ ] T46.12 - [human] decide: remove the kit repo's own tracked `docs/API-SURFACE.md`; delete or move the root `audit.txt`   (Story S46)
+- **Goal:** the kit repo follows its own 0.60.0 rule, and its root holds no stray transcript.
+- **Touches:** `docs/API-SURFACE.md` (7,786 lines, tracked, indexed), `audit.txt` (untracked, an October console transcript).
+- **Do:** on the human's yes: `api-surface.ps1 -Migrate` in the kit repo, commit the removal, reindex; and delete `audit.txt` or move it to `_tmp/`.
+- **Acceptance:** `git ls-files docs/API-SURFACE.md` is empty; no `audit.txt` at the root.
+- **Depends on:** none
+- **Refs:** audit findings 4 and 6 of 2026-11-10. Deleting kit files needs the owner's approval.
+
+### [ ] T46.13 - [human] decide the two options left open: the WIP limit on `/design` and `/stories` ("7B+"), and one story at a time ("9D")   (Story S46)
+- **Goal:** a recorded yes or no for each.
+- **Touches:** on yes: `global/commands/design.md`, `global/commands/stories.md`, `close-unit.ps1`.
+- **Acceptance:** `PROPOSALS.md` records the decision; if yes, a follow-up task implements it with a Test-Case.
+- **Depends on:** none
+- **Refs:** `PROPOSALS.md` sections 7 and 9 ("Feedback file:" paragraphs).
+
+### [ ] T46.14 - the experience template (`TEDD.md`) gets the `Serves:` line and a Deferred section   (Story S46)
+- **Goal:** the Goal check of issue 8 applies to experience projects too.
+- **Touches:** `templates/_common/docs/TEDD.md`, `doc-stats.ps1` (it already reads either design doc; confirm the section names).
+- **Acceptance:** the `0.61.0 #8` checks pass against a TEDD fixture.
+- **Depends on:** T43.2
+- **Refs:** CHANGELOG 0.61.0, issue 8: "The experience template (TEDD.md) is unchanged."
+
+### [ ] T46.15 - stories and tasks that describe pre-0.60.0 behavior get a dated "superseded" note   (Story S46)
+- **Goal:** S30 and T30.3 no longer read as if a bare `-AcceptShrink` "still works with a warning".
+- **Touches:** `docs/STORIES.md` (S30, about lines 1245 and 1255), `docs/TASKS.md` (T30.3, about lines 2907 and 2911) - add a note; do not rewrite the history.
+- **Acceptance:** each of the four places carries "superseded by 0.60.0 (commit 7eef38b): ..." beside the old sentence.
+- **Depends on:** none
+- **Refs:** audit finding 5 of 2026-11-10.
 
 ## Open questions
 - **[design] S30 follow-up (recorded, not changed):** `[Fact(Skip="...")]` and `[Fact, Trait(...)]` are not counted by the base markers (exact `[Fact]`); widening them would raise counts everywhere and re-baseline every project. Decide separately whether to widen.

@@ -1375,3 +1375,146 @@
   - [ ] AC3: "Local mode runs fully offline" gives 0 findings; the old Goal wording `Run the real Claude Code agentic loop fully offline` gives 1.
   - [ ] AC4: the real `docs/DESIGN.md` still gives 0 findings; the human's decision on rephrased patterns is recorded; the full `test-kit.ps1` prints `0 failed`.
 - **Dev notes:** one task for the in-suite checks, one for the blanking limits, one for the `fully offline` narrowing; a fourth records the human decision (it WAITS for the human, like T34.3 did). Sequential. Refs: `grades/S34_GRADE.md`, S34, S28.
+
+<!-- S38-S46 (added 2026-11-10): the 0.60.0 / 0.61.0 refactor work, written up AFTER it was built. Source: a
+     review of a project built with the kit (the Galactic Data Network review, 18 issues) plus the search-index
+     question that followed. The work was implemented directly from that issue list on branch
+     drdad-fixes-2026-11, NOT through /build, so these stories were marked DONE by hand at the owner's request
+     and carry no close-unit stamp; doc-stats reports them as such, which is accurate. Each DONE story names its
+     commits and the test-kit cases that hold it. No DESIGN requirement covers this work yet (DESIGN is LOCKED):
+     T46.5 is the unlock that adds them. S46 is the catch-all, and holds everything still to do. -->
+
+### Story S38: Refactor - generated project files are portable and belong where they are used   (R: pending, see T46.5)   <!-- Status: DONE -->
+- **Goal:** a project scaffolded or upgraded by the kit commits nothing machine-specific, and its build products stay out of `docs/` and out of git.
+- **Context:** review issues 1, 10, 15. A committed `.mcp.json` carried `D:\Tools\...` and the project's absolute docs path; the pre-commit hook named the scanner by one fixed path; `docs/API-SURFACE.md` was 1.3 MB, half test classes, committed in 445 commits; the gate log started eleven days after the scaffold.
+- **Behavior:**
+  - `.mcp.json` uses `${DAD_HOME}\local-tools\...` and the relative `docs`; `docs-dir.ps1` resolves a relative docs dir against the project root.
+  - The pre-commit hook (v2) finds the kit through `DAD_HOME` at commit time, with the installing kit as fallback, and says "kit not found" when neither resolves.
+  - The API surface is written to `.claude\API-SURFACE.md` (git-ignored, not indexed); test projects are skipped by csproj marker or name.
+  - `new-project` creates `grades\gates-log.jsonl` before the initial commit.
+  - `upgrade-project` converts an old project: portable `.mcp.json`, v2 hook, generated `docs\API-SURFACE.md` moved and untracked, gate log added.
+- **Data / interfaces:** `new-project.ps1`, `upgrade-project.ps1`, `install-hooks.ps1`, `docs-dir.ps1`, `dad-doctor.ps1`, `api-surface.ps1`, `local-tools/ApiSurface.cs`, `close-unit.ps1`, `doc-stats.ps1`.
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [x] AC1: a fresh `.mcp.json` holds no drive path and a commit goes through the v2 hook, also with a stale `DAD_HOME` (`0.60.0 #1: new-project writes a PORTABLE .mcp.json ...`).
+  - [x] AC2: `upgrade-project` rewrites an absolute `.mcp.json` and a v1 hook, leaves an external docs dir alone, and is idempotent (`0.60.0 #1 upgrade path: ...`).
+  - [x] AC3: the API surface holds no test assembly, is not in `docs\`, is git-ignored, and a generated legacy copy is moved (`0.60.0 #10: ...`, `0.60.0 #10 upgrade path: ...`).
+  - [x] AC4: the gate log is in the scaffold's initial commit; upgrade adds it once (`0.60.0 #15: ...`).
+- **Dev notes:** commits ddeb376 (issue 1), b635882 (issue 10), cc76ad8 (issue 15). NOT measured live: `${DAD_HOME}` expansion by Claude Code and by Copilot CLI (T46.6). Old/new reproductions: `VERIFICATION.md`.
+
+### Story S39: Refactor - close-unit is the only writer of close state, and a refusal cannot be walked around   (R: pending, see T46.5)   <!-- Status: DONE -->
+- **Goal:** a story is DONE in history only when close-unit closed it; a ratchet block needs a recorded human reason to pass; the commits close-unit makes are one per unit and named for it.
+- **Context:** review issues 2, 3, 14. A DONE stamp left on disk by a close whose commit failed was banked by a hand commit while the story's tests were failing (S55); five ratchet blocks were followed seconds later by a reason-less `-AcceptShrink`; 36 doubled prefixes, three duplicate commits, and stories DONE with no story commit.
+- **Behavior:**
+  - `dad-status-guard.ps1` refuses a story heading that became DONE outside close-unit: in the pre-commit hook and at the start of every close-unit run. `DAD_ALLOW_STATUS_EDIT=1` is the human override.
+  - A close whose commit does not land rolls back its tick, DONE stamp, STATUS, RECIPES rows, evidence file and archive.
+  - `-AcceptShrink` without `-Reason` (ten characters or more) is refused; the reason lands in the commit and the gate log.
+  - A leading `<id>:` is stripped from the title; a re-run that stages only gate-log lines makes no commit; a rolled-up story owes its story-level close before a task of another story may close; that close always leaves a `<story>:` commit.
+- **Data / interfaces:** `close-unit.ps1`, `dad-status-guard.ps1` (+ `.cmd`), `install-hooks.ps1`, `ratchet.ps1`, `global/commands/build.md`, `global/commands/spec.md`.
+- **Dependencies:** S38 (the v2 hook carries the guard).
+- **Acceptance (testable):**
+  - [x] AC1: a hand-marked DONE is refused by close-unit for another unit and by the hook; the override works (`0.60.0 #2: a story marked DONE by hand is refused ...`).
+  - [x] AC2: a failed commit leaves no tick and no stamp on disk (`0.60.0 #2: when the commit does not land ...`).
+  - [x] AC3: a bare `-AcceptShrink` exits 1 and changes nothing; with a reason it closes and the reason is recorded twice (`0.60.0 #3: ...`, `S30 AC6: ...`).
+  - [x] AC4: no doubled prefix, no duplicate commit on a re-run, and the story-level close is enforced and leaves a commit (two `0.60.0 #14: ...` cases).
+- **Dev notes:** commits 6565b0f (issue 2), 7eef38b (issue 3), 12c3180 (issue 14). The open-story list is local (`.claude\.dad-story-open`), so a roll-up inside an agent worktree is not enforced after the worktree is removed. Follow-up: T46.8 (the gate log does not name the story at roll-up).
+
+### Story S40: Refactor - the dashboard and the scratch folder keep themselves current   (R: pending, see T46.5)   <!-- Status: DONE -->
+- **Goal:** `docs/STATUS.md` cannot silently go stale, `_tmp\` does not accumulate, and an elevated agent shell is called out.
+- **Context:** review issues 4, 18, 16 (warning half). A dashboard read "35/54 stories" while the documents said 42/109; `_tmp/` held 175 files after six weeks; the agent shell ran as Administrator for weeks.
+- **Behavior:**
+  - Every close that changes the bookkeeping regenerates the STATUS Snapshot in its own commit (`doc-stats -UpdateStatus -FromClose`); the Snapshot counts the units closed since the narrative was last refreshed.
+  - `doc-stats -Findings` reports `[status]` for wrong counts, a template dashboard on a project with work done, or a narrative ten or more closes old.
+  - A story close sweeps `_tmp\` files older than one hour (`tidy -Fix -TmpOnly -OlderThanHours 1`); recent files and anything git tracks stay.
+  - `close-unit` and `dad doctor` WARN when the shell is elevated; they never block.
+- **Data / interfaces:** `close-unit.ps1`, `doc-stats.ps1`, `tidy.ps1`, `dad-doctor.ps1`, `templates/_common/docs/STATUS.md`.
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [x] AC1: the Snapshot is regenerated per close and committed; a re-run does not touch it; a stale one is flagged (`0.60.0 #4: ...`).
+  - [x] AC2: a story close removes old scratch and keeps recent and tracked files; a task close does not sweep (`0.60.0 #18: ...`).
+  - [x] AC3: an elevated shell produces a WARN in close-unit and dad doctor, and a normal one does not (`0.60.0 #16 (warning part): ...`).
+- **Dev notes:** commits 782acb4 (issue 4), 5e3f0ae (issue 18), ab4f9c9 (issue 16 warning).
+
+### Story S41: Refactor - tests are checked at every task close, and the two test-writing agents stop duplicating each other   (R: pending, see T46.5)   <!-- Status: DONE -->
+- **Goal:** the cheap checks that break between story closes run on every task close, and qa-agent adds coverage where it is missing.
+- **Context:** review issues 12, 13. Source-scan tests broke on main and surfaced only at a later story close; about 60 components had mirrored `XTests` / `XQaTests` suites, `FakeProbe` was declared 31 times.
+- **Behavior:**
+  - An optional `- Fast test: <command>` line in a project's CLAUDE.md is run by close-unit on every task close; failure or zero tests refuses the close. The full `Test:` suite still runs at a story close.
+  - qa-agent lists the existing tests first and adds only uncovered acceptance criteria or contract examples; both agents keep helpers in one fixtures folder.
+- **Data / interfaces:** `close-unit.ps1`, `templates/generic/CLAUDE.md`, `templates/dotnet/PROFILE.md`, `upgrade-project.ps1`, `global/agents/qa-agent.md`, `global/agents/dev-agent.md`.
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [x] AC1: a failing or empty fast test stops a task close; no line means no change; a story close runs the full suite (`0.60.0 #12: ...`).
+  - [x] AC2: the qa-agent and dev-agent prompts carry the list-first and shared-fixtures rules, in that order (`0.61.0 #13: ...`).
+- **Dev notes:** commits daf7c49 (issue 12), a8f0894 (issue 13, option A - prompts only; no script check, by the owner's choice).
+
+### Story S42: Refactor - grades rest on facts the grader cannot fake, and repeated suggestions force a retro   (R: pending, see T46.5)   <!-- Status: DONE -->
+- **Goal:** a grade card quotes machine-made close evidence and obeys its cap; a suggestion the grader keeps making becomes a decision.
+- **Context:** review issues 5, 6 (options A and A+C). Forty cards ranged only B+ to A, 28 written without build or tests being run; the same refactor was suggested on five consecutive cards.
+- **Behavior:**
+  - At roll-up close-unit writes `grades\<story>_EVIDENCE.md` (test result, closes blocked for failing tests, findings naming the story, grade cap B or none). `-RequireGrade` rejects a card that does not quote its Evidence line or grades above the cap.
+  - `grade-trends` lists suggestions recurring on three or more cards; close-unit WARNs with them at every roll-up and, when five stories have closed since the last recorded retro, refuses the next roll-up. `/retro` records itself (`grade-trends -RecordRetro`).
+- **Data / interfaces:** `close-unit.ps1`, `grade-trends.ps1`, `global/agents/grade-agent.md`, `global/commands/build.md`, `global/commands/retro.md`.
+- **Dependencies:** S39 (the story-level close is where `-RequireGrade` runs).
+- **Acceptance (testable):**
+  - [x] AC1: the evidence file is written at roll-up with the right counts; a card without the line, or above the cap, is rejected; a story closed by an older kit is judged as before (`0.61.0 #5: ...`).
+  - [x] AC2: recurrence needs three cards; the sixth roll-up without a retro is refused only when something recurs; recording a retro releases it (`0.61.0 #6: ...`).
+- **Dev notes:** commits dabcd2e (issue 5), 004828c (issue 6). "Same suggestion" is same tag plus same theme - deliberately crude.
+
+### Story S43: Refactor - scope and work in progress are bounded by rules the human owns   (R: pending, see T46.5)   <!-- Status: DONE -->
+- **Goal:** new stories do not start while finished ones wait on the human; new epics name the Goal clause they serve; a story is reachable before it counts as done.
+- **Context:** review issues 7, 8, 9 (options B, B, A). About 25 stories waited on a single human gate while fifteen epics were designed and built; only 34 of 101 stories mapped to the original brief; tested library code had no command that called it.
+- **Behavior:**
+  - `- Human-gate WIP limit: N` in a project's CLAUDE.md: over it, close-unit refuses the first task of a new story and lists the open gates; `doc-stats -HumanGates` prints the checklist.
+  - `/design` step 4a asks for a quoted Goal clause before adding an epic (`- Serves: "..."`); an epic outside the Goal needs a dated human amendment or goes to `## Deferred`. `doc-stats` checks the quote against the Goal.
+  - taskmap-agent tags one `[e2e]` task per story; close-unit refuses to roll a story up without one where `grades\e2e-exempt.txt` exists (empty for new projects; filled by upgrade with stories already under way).
+- **Data / interfaces:** `close-unit.ps1`, `doc-stats.ps1`, `new-project.ps1`, `upgrade-project.ps1`, `templates/generic/CLAUDE.md`, `templates/_common/docs/DESIGN.md`, `templates/_common/docs/TASKS.md`, `global/commands/design.md`, `global/commands/build.md`, `global/agents/taskmap-agent.md`.
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [x] AC1: over the limit a new story cannot start, a started one continues, raising the limit or having no line lifts it (`0.61.0 #7: ...`).
+  - [x] AC2: a missing, unquoted or unsupported `Serves:` is flagged; a design that has not adopted the convention is not (`0.61.0 #8: ...`).
+  - [x] AC3: a story with no `[e2e]` task does not roll up where the rule is on; exempt stories and un-upgraded projects are untouched (`0.61.0 #9: ...`).
+- **Dev notes:** commits c9ed856 (issue 7), 3cfa8af (issue 8), b442187 (issue 9). Not built, the owner's call: the limit on `/design` and `/stories` ("7B+"), and "no task of story B while story A has open non-human tasks" ("9D") - T46.13.
+
+### Story S44: Refactor - the working documents stay small, and a source's tier says who set it   (R: pending, see T46.5)   <!-- Status: DONE -->
+- **Goal:** TASKS.md stops growing with finished work, the security section holds one entry per decision, and only a human-stamped source tier counts.
+- **Context:** review issues 11, 17 (options A, B). TASKS.md 3.6 MB; a security section of 1,200 lines from four appended passes; 317 of 334 sources tiered `primary`, labelled by the caller's instruction.
+- **Behavior:**
+  - The story-level close moves the bodies of the story's ticked tasks to `docs\archive\TASKS-<story>.md`; headings and every count stay. `dad archive-tasks -AllDone [-DryRun]` catches up an old project. `local-tools` does not index `docs\archive\`.
+  - security-agent edits a decision in place and moves the old wording to `docs/archive/SECURITY-history.md`; `/design` step 3b proposes prose compaction and waits; `doc-stats` says when it is time.
+  - `dad source-tier <ids> primary|secondary` asks a human at the console and stamps `human <date>` in a new `tiered` column; `source-stats` fails an unstamped tier; `-LockCheck` blocks locking a design that cites unknown or unstamped sources; upgrade marks existing tiers `legacy`.
+- **Data / interfaces:** `archive-tasks.ps1` (+ `.cmd`), `close-unit.ps1`, `local-tools/Rag.cs`, `doc-stats.ps1`, `source-tier.ps1` (+ `.cmd`), `source-stats.ps1`, `upgrade-project.ps1`, `templates/_common/docs/SOURCES.md`, `global/agents/security-agent.md`, `global/agents/research-agent.md`, `global/commands/design.md`, `global/commands/research.md`.
+- **Dependencies:** S39 (the story-level close), S45 (the corpus filter lives in the same file).
+- **Acceptance (testable):**
+  - [x] AC1: bodies move at the story-level close only, verbatim, into the story commit; doc-stats counts and the ratchet are unchanged; a second pass moves nothing (`0.61.0 #11: the story-level close archives ...`).
+  - [x] AC2: `docs\archive\` is not in the corpus, a nested folder of that name still is (`0.61.0 #11: local-tools does not index ...`).
+  - [x] AC3: an unstamped tier fails, a legacy one warns, the lock check blocks on cited unknown or unstamped sources, `source-tier` changes nothing without a console, and an upgraded ledger does not fail (`0.61.0 #17: ...`).
+- **Dev notes:** commits e4ad399 (issue 11), 79f6f4a (issue 17). The stamping path itself (a human answering y at a console) is not exercised by the suite - it cannot be. Follow-up: T46.7 (`docs/sources` vs `docs/web`).
+
+### Story S45: Refactor - the search index reuses its embeddings and is cheap to read   (R: pending, see T46.5)   <!-- Status: DONE -->
+- **Goal:** a reindex costs in proportion to what changed, and a search does not parse the whole index from JSON.
+- **Context:** measured on the reviewed project: about 160 searches against about 5,000 greps and direct reads; 164 explicit reindexes on top of one per close; a 279 MB `chunks.json`; every reindex re-embedded all 25,983 chunks (136 s).
+- **Behavior:**
+  - `IndexAsync` reuses the stored vector of every chunk whose text is unchanged and returns at once when nothing changed.
+  - Vectors are stored as float32 in `.index\vectors.bin`; `chunks.json` keeps text only; `index.meta` names the embedding model; the server keeps the parsed index in memory until the files change.
+  - An index written by an older kit is read as it is and converted, without re-embedding, by the first reindex.
+- **Data / interfaces:** `local-tools/Rag.cs` only. Test-only model name `test-hash-embedding`.
+- **Dependencies:** none.
+- **Acceptance (testable):**
+  - [x] AC1: a first index embeds everything; an unchanged corpus is skipped; one edited file embeds one chunk; search finds the exact text; an old-format index is searchable and converts with full reuse (`0.61.0 index: a reindex reuses unchanged chunks ...`).
+  - [x] AC2: measured on a copy of the reviewed corpus: 279 MB -> 112 MB; reindex after one tick 136 s -> 1.3 s (4 chunks embedded); one shell search 4.6 s -> 0.4 s; same top result (CHANGELOG 0.61.0).
+- **Dev notes:** commit dd541c7. Not done: a reindex still rereads and rechunks every file (seconds, not minutes); PDFs are reparsed each time.
+
+### Story S46: Catch-all - outliers of the 0.60.0 / 0.61.0 work, and what is still to do   (R: pending, see T46.5)   <!-- Status: TODO -->
+- **Goal:** one place for the pieces that fit no refactor story above, and for every follow-up the work left open, so nothing lives only in a chat log.
+- **Context:** `PROPOSALS.md`, `VERIFICATION.md`, CHANGELOG 0.60.0 and 0.61.0, and the audit of 2026-11-10.
+- **Behavior:** done so far - the kit's own suite runs clean from a never-built tree and from a long path, and ignores `_tmp\` (T46.1); `dad doctor` names broad allow rules and `-PrunePermissions` removes them on a human's yes (T46.2, review issue 16 option B); the verification record and reproduction script (T46.3); `docs/GUIDE.md` caught up (T46.4). Open - see the tasks T46.5 to T46.15: each is either a human decision, a measurement, or a small defect found along the way.
+- **Data / interfaces:** per task.
+- **Dependencies:** S38-S45.
+- **Acceptance (testable):**
+  - [x] AC1: the suite passes from an unpacked release zip in a long path (T46.1).
+  - [x] AC2: broad rules are named and the prune plan is correct; nothing changes without a console (`0.61.0 #16: ...`) (T46.2).
+  - [ ] AC3: DESIGN.md states the 0.60.0 / 0.61.0 behaviors as requirements and its three stale passages are corrected (T46.5).
+  - [ ] AC4: `${DAD_HOME}` expansion is measured under Claude Code and Copilot CLI and recorded in DESIGN C5a (T46.6).
+  - [ ] AC5: each remaining task T46.7-T46.15 is either done or closed by a recorded human decision.
+- **Dev notes:** commits 5888ff4 (T46.2), da3e35b (T46.1), 18fe0af (T46.3), d07166e (T46.4). T46.5, T46.6, T46.12 and T46.13 WAIT FOR THE HUMAN.
