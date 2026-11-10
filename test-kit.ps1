@@ -9814,6 +9814,77 @@ Test-Case "0.61.0 #16: dad doctor names BROAD allow rules; -PrunePermissions pla
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "0.61.0 #17: only a human-stamped tier counts; an unstamped tier FAILS source-stats; -LockCheck blocks on cited unknown/unstamped sources; upgrade marks old tiers 'legacy'" {
+  $sb = New-Sandbox
+  try {
+    $ss = Join-Path $kit "source-stats.ps1"; $stp = Join-Path $kit "source-tier.ps1"
+    Assert (Test-Path (Join-Path $kit "source-tier.cmd")) "source-tier.cmd wrapper is missing"
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs\sources" | Out-Null
+    "# Project: t" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    foreach ($n in 1..4) { "x" | Set-Content "$p\docs\sources\S00$n-a.md" -Encoding ASCII }
+    "# Design`nStatus: DRAFT`n`n## Goal`nx [S001] [S002] [S003] [S004]`n" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $today = (Get-Date -Format 'yyyy-MM-dd')
+    $ledger = @("# Sources","",
+      "| id | tier | fetched | title | url | published | tiered |",
+      "|---|---|---|---|---|---|---|",
+      "| S001 | unknown | $today | the spec | https://example.org/a | $today | |",
+      "| S002 | primary | $today | vendor reference | https://example.org/b | $today | human $today |",
+      "| S003 | primary | $today | some wiki | https://example.org/c | $today | |",
+      "| S004 | secondary | $today | old explainer | https://example.org/d | $today | legacy |")
+    [System.IO.File]::WriteAllText("$p\docs\SOURCES.md", (($ledger -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1) "source-stats passed although S003 is tiered with no stamp:`n$o"
+    Assert ($o -match "FAIL S003 is tiered 'primary' but nobody stamped it") "the unstamped tier was not named:`n$o"
+    Assert ($o -notmatch 'FAIL S002' -and $o -notmatch 'FAIL S004') "a human-stamped or legacy tier was failed:`n$o"
+    Assert ($o -match 'WARN 1 source\(s\) were tiered before human stamping existed') "the legacy tier was not warned about:`n$o"
+    $j = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p -Json 2>$null | Out-String | ConvertFrom-Json)
+    Assert ($j.tierUnstamped -eq 1 -and $j.tierLegacy -eq 1 -and $j.untiered -eq 1) "the -Json counts are wrong: unstamped=$($j.tierUnstamped) legacy=$($j.tierLegacy) untiered=$($j.untiered)"
+
+    # the lock gate: cited S001 (unknown) and S003 (unstamped) block; S004 (legacy) only warns
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p -LockCheck 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 1 -and $o -match 'DO NOT LOCK: 2 source' -and $o -match 'S001' -and $o -match 'S003' -and $o -notmatch '(?m)^\s+S004') "-LockCheck is wrong:`n$o"
+
+    # source-tier: lists what waits; refuses to stamp when no human is at a console; changes nothing
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $stp -ProjectDir $p -List 2>&1 | Out-String)
+    Assert ($o -match 'S001\s+unknown' -and $o -match "S003\s+'primary' with no human stamp" -and $o -match "S004\s+'secondary' with no human stamp \(legacy\)" -and $o -notmatch '(?m)^\s+S002') "source-tier -List is wrong:`n$o"
+    $before = [System.IO.File]::ReadAllText("$p\docs\SOURCES.md")
+    $o = ('y' | & powershell -NoProfile -ExecutionPolicy Bypass -File $stp S001,S003-S004 primary -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 3 -and $o -match 'NOT changed') "source-tier stamped (or did not refuse) without a console (exit $LASTEXITCODE):`n$o"
+    Assert ($o -match '3 source\(s\)') "the id list and range were not resolved to 3 sources:`n$o"
+    Assert ([System.IO.File]::ReadAllText("$p\docs\SOURCES.md") -eq $before) "the ledger was changed without a human"
+
+    # once the human has stamped them (the rows as source-tier writes them), the lock gate opens
+    $stamped = $before.Replace("| S001 | unknown | $today | the spec | https://example.org/a | $today | |", "| S001 | primary | $today | the spec | https://example.org/a | $today | human $today |").Replace("| S003 | primary | $today | some wiki | https://example.org/c | $today | |", "| S003 | secondary | $today | some wiki | https://example.org/c | $today | human $today |")
+    [System.IO.File]::WriteAllText("$p\docs\SOURCES.md", $stamped, (New-Object System.Text.UTF8Encoding($false)))
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p -LockCheck 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-LockCheck still blocks after every cited source was stamped (or is legacy)"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "source-stats still fails after stamping"
+
+    # UPGRADE: an older ledger (no tiered column) gets the column; set tiers become 'legacy', unknown stays empty; nothing FAILS
+    $p2 = Join-Path $sb "old"; New-Item -ItemType Directory -Force "$p2\docs\sources" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p2\CLAUDE.md" -Encoding UTF8
+    foreach ($n in 1..2) { "x" | Set-Content "$p2\docs\sources\S00$n-a.md" -Encoding ASCII }
+    "# Design`nStatus: DRAFT`n`nx [S001] [S002]`n" | Set-Content "$p2\docs\DESIGN.md" -Encoding UTF8
+    $oldLedger = "# Sources`n`n| id | tier | fetched | title | url | published |`n|---|---|---|---|---|---|`n| S001 | primary | $today | a | https://example.org/a | $today |`n| S002 | unknown | $today | b | https://example.org/b | $today |`n"
+    [System.IO.File]::WriteAllText("$p2\docs\SOURCES.md", $oldLedger, (New-Object System.Text.UTF8Encoding($false)))
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p2 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "an old ledger (no tiered column) fails source-stats under the new kit, before any upgrade"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") -ProjectDir $p2 2>&1 | Out-Null
+    $up = [System.IO.File]::ReadAllText("$p2\docs\SOURCES.md")
+    Assert ($up -match '(?m)^\| id \| tier \| fetched \| title \| url \| published \| tiered \|') "upgrade did not add the tiered column header:`n$up"
+    Assert ($up -match '(?m)^\| S001 \| primary \|.*\| legacy \|$' -and $up -match '(?m)^\| S002 \| unknown \|.*\|  \|$') "upgrade did not mark the set tier legacy / leave unknown empty:`n$up"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $ss -ProjectDir $p2 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "the upgraded ledger FAILS source-stats (an upgrade must not break a project)"
+    $again = [System.IO.File]::ReadAllText("$p2\docs\SOURCES.md")
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") -ProjectDir $p2 2>&1 | Out-Null
+    Assert ([System.IO.File]::ReadAllText("$p2\docs\SOURCES.md") -eq $again) "a second upgrade rewrote the ledger"
+  } finally { Remove-Sandbox $sb }
+  Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\commands\design.md")) -match 'dad source-stats -LockCheck') "/design does not run the lock check before offering LOCKED"
+  Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\agents\research-agent.md")) -match 'a caller is not the human') "research-agent may still take a tier from its caller"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

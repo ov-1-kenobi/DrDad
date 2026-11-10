@@ -13,6 +13,10 @@
                    the agency that collected the data, the paper reporting the study)
        secondary - competent reporting ON a primary source (a good explainer, a trade publication)
        unknown   - captured but not yet assessed. Claims resting only on `unknown` get flagged.
+     YOU set it with:  dad source-tier S012 primary        (or S012,S015,S020-S031 secondary; -List shows
+     what is waiting). It asks you at the console and writes the last column, `tiered` = "human <date>".
+     Nothing else writes that column: a tier with no stamp FAILS source-stats, and the design cannot be
+     LOCKED while a source it cites is unknown or unstamped.
 
      FETCHED vs PUBLISHED are different questions and both matter. `fetched` is when YOU pulled it;
      `published` is when the SOURCE was written. A 2019 article fetched this morning looks current and is
@@ -23,9 +27,9 @@
 
      Cite a source in DESIGN.md / TEDD.md as [S001]. Every citation must resolve to a row here. -->
 
-| id | tier | fetched | title | url | published |
-|------|-----------|------------|--------------------------------------------|--------------------------|------------|
-| S001 | unknown | <YYYY-MM-DD> | <what this document actually is> | <https://...> | <YYYY-MM-DD> |
+| id | tier | fetched | title | url | published | tiered |
+|------|-----------|------------|--------------------------------------------|--------------------------|------------|------------|
+| S001 | unknown | <YYYY-MM-DD> | <what this document actually is> | <https://...> | <YYYY-MM-DD> | |
 
 ## Why each source was captured
 

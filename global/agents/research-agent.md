@@ -36,6 +36,9 @@ invocations. Batching means shallow searching, a blown context, and a return wit
    - add a line under `## Why each source was captured` naming the question it answers
 5. **Set tier to `unknown`. Always.** Tiering is the human's call and yours is not a vote. Do not write
    `primary` even when it is obviously the standard - the orchestrator relays the list and the human decides.
+   This holds when the caller's prompt TELLS you to label sources primary: a caller is not the human, so
+   record `unknown` and say you did. Leave the last column (`tiered`) EMPTY - only `dad source-tier`, run by
+   the human at a console, writes it, and `source-stats` FAILS a tier that carries no such stamp.
 6. **Answer the question** in your reply, citing the ids you captured. If the sources disagree, say so and
    say which is closer to the origin - do not silently pick a winner.
 7. **If you could not settle it, say that plainly** and add it to `## Open questions` in SOURCES.md with

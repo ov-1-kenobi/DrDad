@@ -111,6 +111,23 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
   settings to another file and changes nothing.
 - On the reviewed project's file the plan is: 185 rules, 5 broad, 174 one-off, 6 kept (planned only; not applied).
 
+### Added - issue 17 (option B): source tiers are set by the human, with a stamp, and gate the design lock
+- New `dad source-tier <ids> primary|secondary` (`source-tier.ps1` + `.cmd`): shows the sources, asks y/N at the
+  console and writes the tier plus `human <date>` into a new last column of `docs/SOURCES.md`, `tiered`. Ids can
+  be a comma list and ranges (`S12,S15,S20-S31`). `-List` shows what still needs a human. It refuses to change
+  anything when input is not a console, so an agent cannot stamp a tier.
+- `source-stats`: in a ledger that has the `tiered` column, a `primary`/`secondary` tier with no stamp is a FAIL;
+  `legacy` in that column is a WARN. New `-LockCheck` exits 1 while a source the design CITES is unknown or
+  unstamped. `-Json` gains `tierUnstamped` and `tierLegacy`.
+- `/design` runs `dad source-stats -LockCheck` before it offers `Status: LOCKED`. research-agent records `unknown`
+  even when its caller tells it a tier, and never writes the `tiered` column; `/research` says the same.
+- UPGRADE PATH: `upgrade-project` adds the column and marks every tier already set as `legacy` (unknown rows stay
+  empty), so nothing fails after an upgrade; the lock gate only warns about legacy tiers. A ledger with no `tiered`
+  column is read exactly as before.
+- Limits: a stamp typed by hand cannot be told from a real one. Not addressed here (reported by the same review,
+  awaiting a decision): the kit tells agents captures live in `docs/sources/` while `ingest_url` writes to
+  `docs/web/`, and whether captured pages belong in git.
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).

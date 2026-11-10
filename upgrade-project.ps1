@@ -206,6 +206,39 @@ if (-not (Test-Path -LiteralPath $e2eFile)) {
     Write-Host "  added grades\e2e-exempt.txt ($($started.Count) stor(y/ies) already under way are exempt; the rest need one [e2e] task - run /taskmap)" -ForegroundColor Green
   } catch { Write-Host "  could not write grades\e2e-exempt.txt: $($_.Exception.Message)" -ForegroundColor Yellow }
 }
+# --- 0f) SOURCES.md gets the `tiered` column (0.61.0, issue 17) ---------------------------------
+# From now on only `dad source-tier` (the human, at a console) sets a tier, and it stamps "human <date>"
+# in this column. Tiers already in the ledger were set before that existed, by nobody-knows-who: they are
+# marked `legacy` - a WARN, never a FAIL - so the upgrade breaks nothing. `unknown` rows stay empty.
+$srcLedger = Join-Path $proj "docs\SOURCES.md"
+if (Test-Path -LiteralPath $srcLedger) {
+  try {
+    $sRaw = [System.IO.File]::ReadAllText($srcLedger)
+    if ($sRaw -match '(?m)^\s*\|\s*id\s*\|' -and $sRaw -notmatch '(?m)^\s*\|\s*id\s*\|.*\|\s*tiered\s*\|') {
+      $sEol = if ($sRaw.Contains("`r`n")) { "`r`n" } else { "`n" }
+      $sLines = @($sRaw -split "`r?`n"); $marked = 0
+      for ($i = 0; $i -lt $sLines.Count; $i++) {
+        $ln = $sLines[$i]
+        if ($ln -match '^\s*\|\s*id\s*\|') {
+          $sLines[$i] = $ln.TrimEnd().TrimEnd('|').TrimEnd() + " | tiered |"
+          if ($i + 1 -lt $sLines.Count -and $sLines[$i + 1] -match '^\s*\|[\s:|-]+\|\s*$') { $sLines[$i + 1] = $sLines[$i + 1].TrimEnd().TrimEnd('|').TrimEnd() + "|------------|" }
+        } elseif ($ln -match '^\s*\|\s*S\d+\s*\|') {
+          $cells = New-Object System.Collections.Generic.List[string]
+          foreach ($x in (($ln.Trim().Trim('|') -split '\|') | ForEach-Object { $_.Trim() })) { $cells.Add($x) }
+          while ($cells.Count -lt 6) { $cells.Add("") }
+          if ($cells.Count -lt 7) {
+            $isSet = ($cells[1] -match '^(primary|secondary)$')
+            $cells.Add($(if ($isSet) { "legacy" } else { "" }))
+            if ($isSet) { $marked++ }
+            $sLines[$i] = "| " + ($cells -join " | ") + " |"
+          }
+        }
+      }
+      [System.IO.File]::WriteAllText($srcLedger, ($sLines -join $sEol), (New-Object System.Text.UTF8Encoding($false)))
+      Write-Host "  docs\SOURCES.md: added the 'tiered' column ($marked existing tier(s) marked 'legacy'; confirm them with: dad source-tier -List)" -ForegroundColor Green
+    }
+  } catch { Write-Host "  could not add the 'tiered' column to docs\SOURCES.md: $($_.Exception.Message)" -ForegroundColor Yellow }
+}
 # --- 1) Missing docs from templates (never overwrite existing) ---
 foreach ($doc in @("STATUS.md","RECIPES.md","SOURCES.md","DATASETS.md","STYLE.md","UI-TOOLING.md")) {
   $dst = Join-Path $proj "docs\$doc"

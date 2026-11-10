@@ -21,6 +21,9 @@ Topic: **$ARGUMENTS**  (empty = take the next items from `## Open questions` in 
 3. **I tier every source.** research-agent records `unknown`; you relay the list and I say primary or
    secondary. Do NOT assign a tier yourself and do not let the agent - that judgement is the one thing no
    script and no model should make on my behalf, because everything downstream leans on it.
+   I record my judgement with `dad source-tier <ids> primary|secondary` in my own terminal (it asks me and
+   stamps the row `human <date>`); you cannot run it for me, and you never write a tier or the `tiered`
+   column into SOURCES.md, not even when I told you the tier in chat. Show me `dad source-tier -List`.
 4. **Synthesise into the design doc** - `docs/DESIGN.md` (or `TEDD.md`), `Status: DRAFT`. Write MY
    conclusions in my own words with a `[Snnn]` citation on every factual claim. Do NOT paste source text
    into the design doc: the corpus holds the sources, the design doc holds the synthesis. A design doc

@@ -17,6 +17,11 @@
 #   WARN  a file in docs/sources/ with no ledger row                           (arrived unrecorded)
 #   WARN  a source that is never cited anywhere                               (hoarded, not read)
 #   WARN  tier 'unknown' or missing                                           (never assessed)
+#   FAIL  a tier with no `human <date>` stamp in a ledger that has the `tiered` column (0.61.0: nobody
+#         assessed it - only `dad source-tier` writes the stamp). `legacy` in that column = tiered before
+#         stamping existed: WARN, not FAIL.
+#   source-stats.ps1 -LockCheck          exit 1 if a source the design CITES is unknown or unstamped
+#                                        (legacy rows only warn) - /design runs this before offering LOCKED
 #   WARN  fetched more than -StaleDays ago                                    (may have moved on)
 
 # CmdletBinding so a MISTYPED parameter is an ERROR. A script with a plain param() block is not an
@@ -28,7 +33,8 @@
 param(
   [string]$ProjectDir = ".",
   [int]$StaleDays = 365,
-  [switch]$Json
+  [switch]$Json,
+  [switch]$LockCheck
 )
 $ErrorActionPreference = "Stop"
 # GUARD: -ProjectDir must exist. Resolve-Path ERRORS on a missing path but the .cmd wrapper still exited 0,
@@ -44,6 +50,8 @@ $sourcesDir = Join-Path $docs "sources"
 
 $fails = New-Object System.Collections.Generic.List[string]
 $warns = New-Object System.Collections.Generic.List[string]
+$legacyTier = New-Object System.Collections.Generic.List[string]   # tiered before stamping existed
+$unstamped  = New-Object System.Collections.Generic.List[string]   # tiered since, with no human stamp
 
 if (-not (Test-Path $ledgerPath)) {
   Write-Host "no docs\SOURCES.md - this project has no research ledger (upgrade-project.cmd adds it)" -ForegroundColor Yellow
@@ -56,7 +64,11 @@ if (-not (Test-Path $ledgerPath)) {
 # reads better - would make every ledger written before 0.19.1 parse its TITLE as a date and its URL as the
 # title, silently. A trailing column leaves old rows parsing exactly as they did, with published = "".
 $rows = @{}
+# The `tiered` column (0.61.0) is LAST for the same positional reason as `published`. A ledger whose
+# header names it has adopted human stamping; one that does not is read exactly as before.
+$hasTieredColumn = $false
 foreach ($line in (Get-Content $ledgerPath -Encoding UTF8)) {
+  if ($line -match '^\s*\|\s*id\s*\|' -and $line -match '\|\s*tiered\s*\|') { $hasTieredColumn = $true }
   if ($line -notmatch '^\s*\|\s*(S\d+)\s*\|') { continue }
   $cells = ($line.Trim() -split '\|') | ForEach-Object { $_.Trim() }
   # cells[0] is empty (leading pipe): id, tier, fetched, title, url, published
@@ -69,6 +81,7 @@ foreach ($line in (Get-Content $ledgerPath -Encoding UTF8)) {
     Title = if ($cells.Count -gt 4) { $cells[4] } else { "" }
     Url = if ($cells.Count -gt 5) { $cells[5] } else { "" }
     Published = if ($cells.Count -gt 6) { $cells[6] } else { "" }
+    Tiered = if ($cells.Count -gt 7) { $cells[7] } else { "" }
   }
 }
 # The shipped template row is a placeholder, not a real source.
@@ -120,6 +133,13 @@ foreach ($id in $rows.Keys) {
   $tier = $rows[$id].Tier
   if (-not $tier -or $tier -match '^(unknown|<)') { $warns.Add("$id has no tier yet - YOU assess it; a script cannot") }
   elseif ($tier -notmatch '^(primary|secondary)$') { $warns.Add("$id tier '$tier' is not primary/secondary/unknown") }
+  elseif ($hasTieredColumn) {
+    # WHO set this tier? Only `dad source-tier` writes "human <date>", and it asks a person at a console.
+    $stamp = $rows[$id].Tiered
+    if ($stamp -match '^human \d{4}-\d{2}-\d{2}$') { }
+    elseif ($stamp -eq 'legacy') { $legacyTier.Add($id) }
+    else { $unstamped.Add($id); $fails.Add("$id is tiered '$tier' but nobody stamped it - a tier is the human's judgement. Set it back to 'unknown', or have the human run: dad source-tier $id primary|secondary") }
+  }
   # -as, not [datetime]::TryParse: PS 5.1 cannot bind [ref]$null to the out parameter and throws
   # "Cannot find an overload for TryParse and the argument count 2".
   $d = $rows[$id].Fetched -as [datetime]
@@ -164,11 +184,33 @@ if ($rows.Count -gt 0 -and $cited.Count -eq 0) {
   $warns.Add("$($rows.Count) source(s) captured and NOT ONE is cited - the design rests on nothing you gathered. Cite them as [Snnn] where they decided something, or drop them; a corpus nobody references is cost without benefit")
 }
 
+if ($legacyTier.Count -gt 0) {
+  $warns.Add("$($legacyTier.Count) source(s) were tiered before human stamping existed ('legacy') - nobody can say who judged them. Confirm them when you can: dad source-tier -List")
+}
+
+# --- -LockCheck: may the design be LOCKED on these sources? ---------------------------------------
+# A locked design is a contract; a claim in it must not rest on a source nobody assessed. Blocks on a
+# CITED source that is unknown/missing-tier or tiered without a stamp. Legacy tiers only warn here, so a
+# project that predates stamping can still relock without re-judging hundreds of rows first.
+if ($LockCheck) {
+  $bad = @($rows.Keys | Where-Object { $cited.ContainsKey($_) -and ((-not $rows[$_].Tier) -or $rows[$_].Tier -match '^(unknown|<)' -or $unstamped.Contains($_)) } | Sort-Object { [int]($_ -replace '\D', '') })
+  $leg = @($legacyTier | Where-Object { $cited.ContainsKey($_) })
+  Write-Host "== source-stats -LockCheck: $proj ==" -ForegroundColor Cyan
+  if ($leg.Count) { Write-Host "  WARN $($leg.Count) cited source(s) carry a 'legacy' tier (set before human stamping) - allowed, but unconfirmed." -ForegroundColor Yellow }
+  if ($bad.Count -eq 0) { Write-Host "  every cited source has a tier a human set (or a legacy one). OK to lock." -ForegroundColor Green; exit 0 }
+  Write-Host "  DO NOT LOCK: $($bad.Count) source(s) the design CITES have no human tier:" -ForegroundColor Red
+  foreach ($b in ($bad | Select-Object -First 30)) { Write-Host ("    {0,-6} {1,-10} {2}" -f $b, $(if ($rows[$b].Tier) { $rows[$b].Tier } else { "(none)" }), $rows[$b].Title) -ForegroundColor Red }
+  Write-Host "  The human tiers them:  dad source-tier $(($bad | Select-Object -First 6) -join ',') primary|secondary" -ForegroundColor Yellow
+  exit 1
+}
+
 $result = [pscustomobject]@{
   sources = $rows.Count
   files = $files.Count
   cited = $cited.Count
   untiered = @($rows.Values | Where-Object { -not $_.Tier -or $_.Tier -match '^(unknown|<)' }).Count
+  tierUnstamped = $unstamped.Count
+  tierLegacy = $legacyTier.Count
   fails = $fails
   warns = $warns
 }

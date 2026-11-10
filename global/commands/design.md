@@ -126,7 +126,10 @@ vision model transcribes it to text - and use that as design input.)
    picks. (Best run on `quality`/Next or a frontier model - it is rare and one-shot; you can also run JUST
    this step online, then build fully offline.)
    - Retrofit mode: `/design contracts` runs ONLY this step on an existing design (unlock first if LOCKED).
-6. When requirements + epics + CONTRACTS + architecture are set, OFFER to set `Status: LOCKED` and, on my
+6. When requirements + epics + CONTRACTS + architecture are set, FIRST run `dad source-stats -LockCheck`.
+   If it exits non-zero, do NOT offer to lock: a source the design cites has no tier set by me. Show me its
+   list; I tier them with `dad source-tier` in my terminal, then you run the check again. When it passes,
+   OFFER to set `Status: LOCKED` and, on my
    OK, flip the header + reindex. Do NOT offer to lock while a load-bearing contract is unpinned (the
    architect-agent reports lock-readiness). Then tell me: run `/stories` to break the epics into stories
    (STORIES.md), then `/taskmap` for tasks, then `/spec` or `/build`.
