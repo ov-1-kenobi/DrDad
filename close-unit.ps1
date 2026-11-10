@@ -353,6 +353,41 @@ if ((Test-Path $statusGuard) -and (Test-Path (Join-Path $proj ".git"))) {
   }
 }
 
+# --- 0f) human-gate WIP limit: do not START another story (issue 7 option B, 0.61.0) -----------
+# When more stories than the project's limit are built and waiting only on a human, the first task of a
+# NEW story does not close. Tasks of stories already started are untouched, so nothing in flight is
+# stranded. The limit is the human's number in CLAUDE.md ("- Human-gate WIP limit: N"); raising it is the
+# override, and with no such line nothing is enforced. doc-stats owns the definition and the count.
+if ($myTaskStory -and -not $SkipVerify) {
+  $wipCm = Join-Path $proj "CLAUDE.md"
+  $wipLimit = -1
+  if (Test-Path -LiteralPath $wipCm) {
+    $wm = [regex]::Match([System.IO.File]::ReadAllText($wipCm), '(?im)^\s*-\s*\*{0,2}Human-gate WIP limit\*{0,2}\s*:\s*(\d+)')
+    if ($wm.Success) { $wipLimit = [int]$wm.Groups[1].Value }
+  }
+  if ($wipLimit -ge 0) {
+    $storyLines = @(Get-Content $tasksFile -Encoding UTF8 | Where-Object {
+      $_ -match '^###\s*\[[ x]\]' -and $_ -match ('\(Story\s+' + [regex]::Escape($myTaskStory) + '\)') })
+    $startsStory = (@($storyLines | Where-Object { $_ -match '^###\s*\[x\]' }).Count -eq 0)
+    if ($startsStory) {
+      $wip = $null
+      try { $wip = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $proj -Json 2>$null | Out-String | ConvertFrom-Json) } catch { $wip = $null }
+      $waiting = @(); if ($wip -and $wip.humanGateStories) { $waiting = @($wip.humanGateStories | Where-Object { $_ -ne $myTaskStory }) }
+      if ($waiting.Count -gt $wipLimit) {
+        Write-Host "[close-unit] HUMAN-GATE WIP LIMIT REACHED - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+        Write-Host "             '$Id' would START story $myTaskStory, but $($waiting.Count) stories are already built and waiting only" -ForegroundColor Red
+        Write-Host "             on a human gate (limit: $wipLimit): $(($waiting | Select-Object -First 12) -join ', ')" -ForegroundColor Red
+        Write-Host "             Building more on top of work nobody has tried is how a backlog of unverified stories grows." -ForegroundColor Red
+        Write-Host "             STOP and give the human the checklist:   dad doc-stats -HumanGates" -ForegroundColor Yellow
+        foreach ($g in @($wip.humanGateTasks | Select-Object -First 8)) { Write-Host "               [ ] $g" -ForegroundColor Yellow }
+        Write-Host "             They clear gates (then close those tasks), or raise 'Human-gate WIP limit' in CLAUDE.md." -ForegroundColor Yellow
+        Write-Host "             Tasks of stories ALREADY started still close. Do not edit the limit yourself." -ForegroundColor DarkGray
+        Write-GateLog "block" "$Id not closed: human-gate WIP limit ($($waiting.Count) stories waiting on a human, limit $wipLimit) - would start story $myTaskStory"
+        exit 1
+      }
+    }
+  }
+}
 # --- 0e) is the story REACHABLE? one [e2e] task per story (issue 9 option A, 0.61.0) -------------
 # A story whose tasks are all library pieces rolls up green while nothing a user can run calls the code.
 # So the task map carries exactly one task per story tagged [e2e] in its title - the one whose acceptance

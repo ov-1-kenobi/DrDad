@@ -390,6 +390,14 @@ if ($cmNow -match '(?m)^\s*-\s*\*{0,2}Test\*{0,2}\s*:' -and $cmNow -notmatch '(?
   Write-Host "        story close). If the project has source-scan / static-guard tests, add under 'Build / test':" -ForegroundColor Yellow
   Write-Host "          - Fast test: ``<command that runs only those tests>``" -ForegroundColor Cyan
 }
+# 0.61.0 (issue 7): Human-in-loop is YOUR section, so the WIP limit is never injected either.
+if ($cmNow -notmatch '(?im)^\s*-\s*\*{0,2}Human-gate WIP limit\*{0,2}\s*:') {
+  Write-Host ""
+  Write-Host "  OPTIONAL: stop new stories starting while finished ones wait on you. Add under 'Human-in-loop':" -ForegroundColor Yellow
+  Write-Host "          - Human-gate WIP limit: 3" -ForegroundColor Cyan
+  Write-Host "        (close-unit then refuses to START a story while more than 3 wait only on a human task;" -ForegroundColor Yellow
+  Write-Host "         'dad doc-stats -HumanGates' lists the open gates. No line = nothing is enforced.)" -ForegroundColor Yellow
+}
 if ($needsSecHeader) {
   Write-Host ""
   Write-Host "  NOTE: docs\$docName has no 'Security review:' header, so /build will WARN and continue." -ForegroundColor Yellow

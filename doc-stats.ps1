@@ -21,7 +21,7 @@
 # directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
 # wrong folder. These scripts are invoked by MODELS, which typo parameter names.
 [CmdletBinding()]
-param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus, [switch]$FromClose, [string]$Contract = "", [switch]$Findings, [switch]$Junk)
+param([string]$ProjectDir = ".", [switch]$Json, [switch]$UpdateStatus, [switch]$FromClose, [string]$Contract = "", [switch]$Findings, [switch]$Junk, [switch]$HumanGates)
 $ErrorActionPreference = "Stop"
 
 # PROJECT-ROOT JUNK, computed in ONE place so `-Findings`, `-Junk` and `dad tidy` never disagree about what
@@ -241,6 +241,32 @@ if ($sln) {
   }
 }
 
+# --- human-gate WIP (0.61.0, issue 7 option B) -------------------------------------------------
+# A story "waits on a human gate" when it is not DONE, has tasks, and EVERY task still open is one only a
+# human can do: tagged [human] in its title (taskmap-agent's tag) or, for task maps written before the tag,
+# a title that STARTS with "Human" ("T31.11 - Human smoke check: ...") or carries HUMAN in capitals. A
+# lower-case "human" inside a title ("human-readable sizes") is not a gate. The agent cannot clear these, so they
+# pile up silently while it builds on: one project had 25 stories in this state and kept starting new ones.
+# The limit is a line in the project's CLAUDE.md (human-owned): "- Human-gate WIP limit: 3". No line = no
+# limit is enforced (the count is still shown), so a kit upgrade cannot stop a project by itself.
+$humanGateStories = @(); $humanGateTasks = @()
+foreach ($hsid in ($tasks | Where-Object { $_.Story } | ForEach-Object { $_.Story } | Select-Object -Unique)) {
+  if ($storiesDone -contains $hsid) { continue }
+  $hOpen = @($tasks | Where-Object { $_.Story -eq $hsid -and -not $_.Done })
+  if ($hOpen.Count -eq 0) { continue }
+  $hHuman = @($hOpen | Where-Object { $_.Head -cmatch '(?i:\[human\])|\bHUMAN\b|\s-\s+Human\b' })
+  if ($hHuman.Count -eq $hOpen.Count) {
+    $humanGateStories += $hsid
+    foreach ($ht in $hHuman) { $humanGateTasks += ($ht.Head -replace '^###\s*\[[ x]\]\s*', '').Trim() }
+  }
+}
+$humanGateLimit = -1            # -1 = the project has set no limit
+$hgClaude = Join-Path $proj "CLAUDE.md"
+if (Test-Path -LiteralPath $hgClaude) {
+  $hgm = [regex]::Match([System.IO.File]::ReadAllText($hgClaude), '(?im)^\s*-\s*\*{0,2}Human-gate WIP limit\*{0,2}\s*:\s*(\d+)')
+  if ($hgm.Success) { $humanGateLimit = [int]$hgm.Groups[1].Value }
+}
+
 $result = [ordered]@{
   design        = $designName
   designStatus  = $designStatus
@@ -251,6 +277,9 @@ $result = [ordered]@{
   nextTask      = if ($next) { "$($next.Id)$(if($next.Story){" (Story $($next.Story))"})" } elseif ($nextBlocked) { $nextBlocked } else { "none" }
   gradesMissing = $missing
   orphanTests   = $orphanTests
+  humanGateStories = $humanGateStories
+  humanGateTasks   = $humanGateTasks
+  humanGateLimit   = $humanGateLimit
 }
 
 if ($Findings) {
@@ -596,6 +625,15 @@ if ($Findings) {
       $f.Add("[taskmap] $($noE2e.Count) stor(y/ies) have tasks but NO [e2e] task ($shown) - nothing in them runs the real entry point, and close-unit will refuse to roll them up. /taskmap adds the one [e2e] task per story.")
     }
   }
+  # --- [wip] stories parked on human gates (issue 7) -------------------------------------------
+  if ($humanGateStories.Count -gt 0) {
+    $hgShown = ($humanGateStories | Select-Object -First 12) -join ', '
+    if ($humanGateLimit -ge 0 -and $humanGateStories.Count -gt $humanGateLimit) {
+      $f.Add("[wip] $($humanGateStories.Count) stories are built and waiting ONLY on a human gate ($hgShown) - over the project's limit of $humanGateLimit (CLAUDE.md 'Human-gate WIP limit'). close-unit will not START another story until the human clears gates or raises the limit. Open gates: 'dad doc-stats -HumanGates'.")
+    } elseif ($humanGateLimit -lt 0 -and $humanGateStories.Count -gt 3) {
+      $f.Add("[wip] $($humanGateStories.Count) stories are built and waiting ONLY on a human gate ($hgShown), and the project sets no limit. Add '- Human-gate WIP limit: 3' under CLAUDE.md's Human-in-loop section to stop new stories starting while gates pile up. Open gates: 'dad doc-stats -HumanGates'.")
+    }
+  }
   foreach ($m in $missing) { $f.Add("[grade] $m") }
   foreach ($o in $orphanTests) { $f.Add("[dev] test project not in the solution (dotnet test silently skips it): $o") }
 
@@ -898,7 +936,20 @@ if ($Findings) {
   Write-Host "mangled markup, prose quality. Stray/ad-hoc files, mangled dirs and navigation are computed above now." -ForegroundColor DarkGray
   exit 0
 }
-if ($Json) { $result | ConvertTo-Json -Depth 5; exit 0 }
+if ($HumanGates) {
+  # ONE checklist of everything only the human can clear, so it can be worked through in a sitting.
+  Write-Host "== human gates: $proj ==" -ForegroundColor Cyan
+  $allHuman = @($tasks | Where-Object { -not $_.Done -and $_.Head -cmatch '(?i:\[human\])|\bHUMAN\b|\s-\s+Human\b' })
+  if ($allHuman.Count -eq 0) { Write-Host "  none open." -ForegroundColor Green; exit 0 }
+  foreach ($ht in $allHuman) {
+    $mark = if ($humanGateStories -contains $ht.Story) { "*" } else { " " }
+    Write-Host ("  [ ] {0} {1}" -f $mark, ($ht.Head -replace '^###\s*\[[ x]\]\s*', '').Trim())
+  }
+  Write-Host ""
+  Write-Host ("  {0} open human task(s). * = the ONLY thing its story is waiting for ({1} stor(y/ies): {2})." -f $allHuman.Count, $humanGateStories.Count, ($humanGateStories -join ', '))
+  if ($humanGateLimit -ge 0) { Write-Host "  limit (CLAUDE.md 'Human-gate WIP limit'): $humanGateLimit" } else { Write-Host "  no 'Human-gate WIP limit' line in CLAUDE.md - nothing is enforced." -ForegroundColor Yellow }
+  exit 0
+}if ($Json) { $result | ConvertTo-Json -Depth 5; exit 0 }
 if ($UpdateStatus) {
   # Take the counting away from the model entirely. Telling the librarian to run this script was not
   # enough - a real audit reported "STATUS.md has been refreshed with current progress metrics" having
@@ -966,6 +1017,10 @@ Write-Host ("  design        : {0}  Status: {1}" -f $result.design, $result.desi
 Write-Host ("  stories       : {0}/{1} done" -f $result.storiesDone, $result.storiesTotal)
 Write-Host ("  tasks         : {0}/{1} done" -f $result.tasksDone, $result.tasksTotal)
 Write-Host ("  next task     : {0}" -f $result.nextTask)
+if ($humanGateStories.Count) {
+  $hgLim = if ($humanGateLimit -ge 0) { "limit $humanGateLimit" } else { "no limit set" }
+  Write-Host ("  human gates   : {0} stor(y/ies) wait only on a human ({1}) - dad doc-stats -HumanGates" -f $humanGateStories.Count, $hgLim) -ForegroundColor $(if ($humanGateLimit -ge 0 -and $humanGateStories.Count -gt $humanGateLimit) { "Red" } else { "Yellow" })
+}
 if ($missing.Count) {
   Write-Host ("  grades missing: {0}" -f $missing.Count) -ForegroundColor Yellow
   foreach ($m in $missing) { Write-Host "      $m" -ForegroundColor Yellow }

@@ -39,7 +39,10 @@ so, and continue - do not block work on an older project.
 ```
 dad doc-stats
 ```
-Use its numbers (done counts, next task) instead of counting by hand. If this command does not run - blocked,
+Use its numbers (done counts, next task) instead of counting by hand. If it prints a red `human gates` line, the
+project is over its human-gate WIP limit: do NOT pick a task that starts a new story (close-unit would
+refuse it). Run `dad doc-stats -HumanGates`, give me that checklist, finish tasks of stories already
+started if any are ready, and otherwise STOP. Never raise `Human-gate WIP limit` in CLAUDE.md yourself. If this command does not run - blocked,
 denied, no such file - **STOP and tell me the shell is unavailable.** Do not proceed with edits. Everything
 below this line depends on running the build, the tests and `close-unit`; a `/build` that cannot reach a
 shell can only produce unverified code, and it will produce a great deal of it before anyone notices.

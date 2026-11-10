@@ -56,6 +56,10 @@ plan mode to run these commands - execute their steps directly; if you land in p
 
 ## Human-in-loop
 - <manual/verification steps, or "none">
+- Human-gate WIP limit: 3
+<!-- ^ YOUR number. When more stories than this are built and waiting ONLY on a task a human must do
+     (tagged [human]), close-unit will not START another story: clear gates, or raise the number.
+     `dad doc-stats -HumanGates` prints the open gates as one checklist. Delete the line for no limit. -->
 
 ## Secrets (hard rules - a pre-commit hook enforces the last one)
 - **Never put a real credential in this repo.** Not in `docs/` (everything there is chunked into a

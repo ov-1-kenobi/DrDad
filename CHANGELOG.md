@@ -61,6 +61,20 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
   already has a ticked task, so only stories not yet started are held to the rule. A project that has not been
   upgraded has no such file and is not affected.
 
+### Added - issue 7 (option B): a work-in-progress limit while human gates are open
+- A project sets `- Human-gate WIP limit: N` in CLAUDE.md's Human-in-loop section (the template sets 3). When more
+  than N stories are built and waiting ONLY on a task a human must do, `close-unit` refuses to close the first task
+  of a NEW story, logs a `block`, and prints the open gates. Tasks of stories already started still close. The
+  override is the human raising the number; with no such line nothing is enforced.
+- A human task is one tagged `[human]` in its title (taskmap-agent's tag). For older task maps a title that starts
+  with "Human" or carries HUMAN in capitals also counts; a lower-case "human" inside a title does not.
+- `doc-stats` prints a `human gates` line, adds `humanGateStories` / `humanGateTasks` / `humanGateLimit` to `-Json`,
+  reports `[wip]` in `-Findings` (over the limit, or more than 3 waiting with no limit set), and
+  `doc-stats -HumanGates` prints every open human task as one checklist.
+- `/build` Gate 3 tells the orchestrator to stop starting stories and hand over that checklist.
+- UPGRADE PATH: Human-in-loop is a project-owned section, so `upgrade-project` does not add the line; it prints how
+  to. An upgraded project is therefore not limited until its owner adds the line.
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).

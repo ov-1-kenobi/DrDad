@@ -9567,6 +9567,58 @@ Test-Case "0.61.0 #9: a story does not roll up without an [e2e] task (where the 
   Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\agents\taskmap-agent.md")) -match 'exactly ONE task tagged `\[e2e\]`') "taskmap-agent is not told to tag one [e2e] task per story"
 }
 
+Test-Case "0.61.0 #7: over the project's human-gate WIP limit, close-unit will not START a new story; started stories and projects with no limit are untouched" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    # S1, S2: built, each waiting only on a human task (one tagged, one old-style title). S3: started. S4, S5: not started.
+    # T3.2's lower-case "human-readable" must NOT count as a gate.
+    $t = @("# Task map","","## Tasks","",
+      "### [x] T1.1 - build it   (Story S1)","### [ ] T1.2 - [human] smoke test in a real terminal   (Story S1)",
+      "### [x] T2.1 - build it   (Story S2)","### [ ] T2.2 - Human smoke check: playback   (Story S2)",
+      "### [x] T3.1 - part one   (Story S3)","### [ ] T3.2 - human-readable sizes   (Story S3)",
+      "### [ ] T4.1 - first task   (Story S4)","### [ ] T4.2 - second   (Story S4)",
+      "### [ ] T5.1 - first task   (Story S5)")
+    [System.IO.File]::WriteAllText("$p\docs\TASKS.md", (($t -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    $st = "# Stories`n`n" + ((1..5 | ForEach-Object { "### Story S${_}: s$_   <!-- Status: TODO -->" }) -join "`n") + "`n"
+    [System.IO.File]::WriteAllText("$p\docs\STORIES.md", $st, (New-Object System.Text.UTF8Encoding($false)))
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1```n`n## Human-in-loop`n- Human-gate WIP limit: 1" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    ".claude/" | Set-Content "$p\.gitignore" -Encoding ASCII
+    Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false; git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $ds = Join-Path $kit "doc-stats.ps1"
+    $j = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Json | Out-String | ConvertFrom-Json)
+    Assert ((@($j.humanGateStories) -join ',') -eq 'S1,S2') "stories waiting on a human = '$(@($j.humanGateStories) -join ',')' (expected S1,S2; S3's 'human-readable' is not a gate)"
+    Assert ($j.humanGateLimit -eq 1) "the limit was not read from CLAUDE.md"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($o -match '\[wip\] 2 stories are built and waiting ONLY on a human gate \(S1, S2\) - over the project.s limit of 1') "no [wip] finding:`n$o"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -HumanGates 2>&1 | Out-String)
+    Assert ($o -match '\[ \] \* T1\.2' -and $o -match '\[ \] \* T2\.2' -and $o -notmatch 'T3\.2') "the human-gate checklist is wrong:`n$o"
+
+    # starting S4 is refused; continuing S3 (already started) is not
+    $x = Invoke-Pf $p @("-Id","T4.1","-Title","u")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'HUMAN-GATE WIP LIMIT REACHED') "a new story was started over the limit:`n$($x.Out)"
+    Assert ($x.Out -match 'T1\.2' ) "the refusal does not list the open gates:`n$($x.Out)"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T4\.1' -Quiet)) "T4.1 was ticked anyway"
+    $x = Invoke-Pf $p @("-Id","T3.2","-Title","u")
+    Assert ($x.Code -eq 0) "a task of a story already under way was refused:`n$($x.Out)"
+    # the human raises the limit: the new story may start
+    $cm = [System.IO.File]::ReadAllText("$p\CLAUDE.md").Replace("Human-gate WIP limit: 1", "Human-gate WIP limit: 2")
+    [System.IO.File]::WriteAllText("$p\CLAUDE.md", $cm, (New-Object System.Text.UTF8Encoding($false)))
+    $x = Invoke-Pf $p @("-Id","S3","-Title","S3 closed"); Assert ($x.Code -eq 0) "story-level close of S3:`n$($x.Out)"
+    $x = Invoke-Pf $p @("-Id","T4.1","-Title","u")
+    Assert ($x.Code -eq 0) "the new story was still refused after the limit was raised:`n$($x.Out)"
+    # no limit line: nothing is enforced
+    $cm = [System.IO.File]::ReadAllText("$p\CLAUDE.md") -replace '(?m)^- Human-gate WIP limit: \d+\r?\n?', ''
+    [System.IO.File]::WriteAllText("$p\CLAUDE.md", $cm, (New-Object System.Text.UTF8Encoding($false)))
+    $x = Invoke-Pf $p @("-Id","T5.1","-Title","u")
+    Assert ($x.Code -eq 0) "a project with no limit line was blocked:`n$($x.Out)"
+  } finally { Remove-Sandbox $sb }
+  Assert ([System.IO.File]::ReadAllText((Join-Path $kit "templates\generic\CLAUDE.md")) -match '(?m)^- Human-gate WIP limit: 3\s*$') "the project template does not set the default limit of 3"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })
