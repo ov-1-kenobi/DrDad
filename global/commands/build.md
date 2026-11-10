@@ -105,7 +105,9 @@ its dependencies satisfied, STOP and report the blocked tasks.
      duplicated them. `-Restore` puts the vanished ones back while KEEPING whatever the change ADDED; a
      whole-file revert throws away the good half (there it would have re-broken a fixture and two fixes
      that were correct). Then RECONCILE and build. Never re-close with `-AcceptShrink` to get past it
-     unless I say the removal was deliberate.
+     unless I say the removal was deliberate - and then pass my words: `-AcceptShrink -Reason "<who approved
+     it, when, and why>"`. close-unit refuses `-AcceptShrink` without a reason; the reason is recorded in the
+     commit and the gate log. Do not invent one.
    - If it returns **"needs contract"**: do NOT relay that to me until you have CHECKED it:
      ```
      dad doc-stats -Contract <Cn>

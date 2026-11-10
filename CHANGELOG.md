@@ -38,6 +38,16 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
   still open (it used to run the whole story suite and name a story it would not roll up).
 - `/build` step 4 tells the orchestrator never to write the marker or commit bookkeeping by hand.
 
+### Fixed - issue 3: a ratchet block stops the close; `-AcceptShrink` needs a recorded human reason
+- `close-unit -AcceptShrink` WITHOUT `-Reason "<text>"` (ten characters or more) is now REFUSED with exit 1, logged as
+  a `block`, and nothing is ticked, committed or re-baselined. It used to print a WARN and close. The reviewed
+  project's gate log shows five ratchet blocks each followed 10 to 45 seconds later by a "clean close" of the same
+  unit, and no commit in its history carries a `Shrink-accepted:` line.
+- With a reason the close proceeds as before: the reason is written to the commit (`Shrink-accepted: ... (human)`)
+  and to the gate log's allow line. The refusal text, `ratchet.ps1`'s hint and `/build` now say the acceptance is the
+  human's decision and that the agent passes the human's words, not its own.
+- BEHAVIOR CHANGE for existing projects: a script or habit that passes a bare `-AcceptShrink` must add `-Reason`.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)

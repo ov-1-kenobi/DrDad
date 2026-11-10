@@ -507,19 +507,36 @@ if (-not $SkipVerify) {
       Write-Host "             Find out WHAT vanished (and what merely moved to another file):" -ForegroundColor Red
       Write-Host "               powershell -File `"$kit\recover-lost.ps1`" -ProjectDir `"$proj`"" -ForegroundColor Yellow
       Write-Host "               ...add -Restore to put the vanished units back, KEEPING what the change added." -ForegroundColor Yellow
-      Write-Host "             Or re-run with -AcceptShrink if the removal was deliberate (lowers the baseline)." -ForegroundColor Red
+      Write-Host "             If the HUMAN decided the removal is deliberate, they re-run with BOTH" -ForegroundColor Red
+      Write-Host "               -AcceptShrink -Reason `"<who approved it, when, and why>`"" -ForegroundColor Red
+      Write-Host "             (lowers the baseline; the reason goes into the commit and the gate log). An agent" -ForegroundColor Red
+      Write-Host "             does not pass -AcceptShrink on its own: ask the human, and quote their answer." -ForegroundColor Red
       # No log call here: ratchet.ps1 (the subprocess above) already logged its own block for this event.
+      exit 1
+    }
+    # 0.60.0 (issue 3): -AcceptShrink WITHOUT a recorded reason is refused. It used to WARN and close, and
+    # a real project's gate log shows what that was worth: five times a ratchet block was followed 10 to
+    # 45 seconds later by a "clean close" of the same unit - the flag simply re-run, nothing written down about who
+    # agreed to delete the tests or why. A bare switch is not a human decision; a sentence is at least a
+    # record somebody can be asked about. Ten characters is the floor that keeps "ok" and "x" out.
+    if ($rCode -ne 0 -and $AcceptShrink -and $reasonText.Length -lt 10) {
+      Write-Host "[close-unit] -AcceptShrink NEEDS A REASON - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+      Write-Host ($rOut.TrimEnd())
+      Write-Host "             The verification surface shrank and -AcceptShrink was given with no (or a one-word) -Reason." -ForegroundColor Red
+      Write-Host "             Lowering the baseline is the HUMAN's decision. Re-run with what they said:" -ForegroundColor Red
+      Write-Host "               -AcceptShrink -Reason `"<who approved it, when, and why>`"" -ForegroundColor Yellow
+      Write-Host "             It is recorded in the commit (Shrink-accepted:) and in grades\gates-log.jsonl." -ForegroundColor Red
+      Write-GateLog "block" "$Id not closed: -AcceptShrink given without a recorded -Reason (the shrink stands refused)"
       exit 1
     }
     if ($rCode -ne 0 -and $AcceptShrink) {
       $script:shrinkAccepted = $true
-      $warns.Add("shrink ACCEPTED by -AcceptShrink - baseline lowered")
-      if (-not $reasonText) { $warns.Add("shrink accepted with no -Reason - nothing recorded about WHY; re-run with -Reason `"<text>`" next time") }
+      $warns.Add("shrink ACCEPTED by -AcceptShrink - baseline lowered. Recorded reason: $reasonText")
     }
   }
 }
 if ($reasonText -and -not $script:shrinkAccepted) { $notes.Add("-Reason ignored: nothing shrank, so there was no shrink to accept") }
-# Suffix only when a reason was given: the T9.3 case pins the reason-less -AcceptShrink line to exactly "clean close: <Id>".
+# An accepted shrink always carries its reason (a reason-less -AcceptShrink is refused above since 0.60.0).
 if ($script:shrinkAccepted -and $reasonText) { $allowText = "clean close: $Id - shrink accepted: $reasonText" }
 
 # The bookkeeping files exactly as they are BEFORE this close writes to them (issue 2): if the commit

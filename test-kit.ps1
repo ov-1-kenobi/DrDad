@@ -3142,7 +3142,7 @@ Test-Case "S30 AC5: a discovery error falls back to the base markers with a note
   }
 }
 
-Test-Case "S30 AC6: close-unit -AcceptShrink -Reason puts a Shrink-accepted trailer in the commit; -AcceptShrink alone warns; -Reason without a shrink is ignored with a note" {
+Test-Case "S30 AC6: close-unit -AcceptShrink -Reason puts a Shrink-accepted trailer in the commit; -AcceptShrink alone is REFUSED (0.60.0); -Reason without a shrink is ignored with a note" {
   if (-not [bool](Get-Command git -ErrorAction SilentlyContinue)) { Skip-Case "git is not installed" }
   $sb = New-Sandbox
   try {
@@ -3180,16 +3180,23 @@ Test-Case "S30 AC6: close-unit -AcceptShrink -Reason puts a Shrink-accepted trai
     $glog = @(Get-Content "$p\grades\gates-log.jsonl" -Encoding UTF8)
     Assert ($glog.Count -gt 0 -and $glog[-1] -match 'shrink accepted' -and $glog[-1] -match 'obsolete suite removed by decision') "gate-log last line does not carry the accepted shrink and reason:`n$($glog[-1])"
 
-    # (b) shrink to 2, accepted WITHOUT a reason: still exit 0, warns, no trailer
+    # (b) shrink to 2, -AcceptShrink WITHOUT a reason: REFUSED since 0.60.0 (it used to warn and close;
+    #     a real gate log showed five ratchet blocks each followed seconds later by a reason-less accept)
     "public class T {`r`n    [Fact]`r`n    public void A() { }`r`n    [Fact]`r`n    public void B() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
-    $o3 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.3 -Title "u3" -ProjectDir $p -NoReindex -AcceptShrink 2>&1 | Out-String)
-    Assert ($LASTEXITCODE -eq 0) "-AcceptShrink alone no longer closes:`n$o3"
-    Assert ($o3 -match 'no -Reason') "no warning about the missing -Reason:`n$o3"
+    foreach ($weak in @(@(), @("-Reason", "ok"))) {
+      $o3 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.3 -Title "u3" -ProjectDir $p -NoReindex -AcceptShrink @weak 2>&1 | Out-String)
+      Assert ($LASTEXITCODE -eq 1) "-AcceptShrink with no real reason ($($weak -join ' ')) closed the unit:`n$o3"
+      Assert ($o3 -match 'NEEDS A REASON') "the refusal does not say a reason is needed:`n$o3"
+    }
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.3' -Quiet)) "T1.3 was ticked by a reason-less -AcceptShrink"
     $body3 = (git -C $p log -1 --format=%B | Out-String)
-    Assert ($body3 -match 'T1\.3') "the T1.3 commit did not land:`n$body3"
-    Assert ($body3 -notmatch 'Shrink-accepted:') "a trailer was written without a reason:`n$body3"
+    Assert ($body3 -notmatch 'T1\.3') "a T1.3 commit landed without a reason:`n$body3"
     $base = Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json
-    Assert ($base.tests -eq 2) "the baseline was not lowered by the reason-less acceptance ($($base.tests))"
+    Assert ($base.tests -eq 5) "the baseline was lowered by a refused, reason-less acceptance ($($base.tests))"
+    $glog3 = @(Get-Content "$p\grades\gates-log.jsonl" -Encoding UTF8)
+    Assert ($glog3[-1] -match '"decision":"block"' -and $glog3[-1] -match 'without a recorded -Reason') "the refusal was not logged as a block:`n$($glog3[-1])"
+    # put the five tests back so (c) starts from a surface that has not shrunk
+    "public class T {`r`n$five`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
 
     # (c) nothing shrank, -Reason given: ignored with a note, no trailer
     $o4 = (& powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.4 -Title "u4" -ProjectDir $p -NoReindex -Reason "x" 2>&1 | Out-String)
@@ -3317,8 +3324,8 @@ Test-Case "close-unit REFUSES to close over a shrink, and only ratchets on succe
     Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.2' -Quiet)) "it ticked the task anyway"
 
     # -AcceptShrink is the deliberate override, and it lowers the bar rather than silently passing
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.2 -Title "b" -ProjectDir $p -NoReindex -AcceptShrink | Out-Null
-    Assert ($LASTEXITCODE -eq 0) "-AcceptShrink did not allow a deliberate removal"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $cu -Id T1.2 -Title "b" -ProjectDir $p -NoReindex -AcceptShrink -Reason "deliberate removal, approved by the human in this test" | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "-AcceptShrink -Reason did not allow a deliberate removal"
     $base = Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json
     Assert ($base.tests -eq 1) "the baseline was not lowered to the accepted number ($($base.tests))"
   } finally { Remove-Sandbox $sb }
@@ -8132,11 +8139,11 @@ Test-Case "T9.3 (b): clean close logs allow INTO its own commit; ratchet logs on
     $x = Invoke-Cu $cu $p @("-Id","T1.1","-Title","a")
     Assert ($x.Code -eq 0) "setup close exit $($x.Code)"
     "public class T {`r`n    [Fact]`r`n    public void One() { }`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
-    $x = Invoke-Cu $cu $p @("-Id","T1.2","-Title","b","-AcceptShrink")
+    $x = Invoke-Cu $cu $p @("-Id","T1.2","-Title","b","-AcceptShrink","-Reason","characterization run, reason required since 0.60.0")
     Assert ($x.Code -eq 0) "-AcceptShrink close exit $($x.Code)"
     $rb = @(Get-GL $p "ratchet" | Where-Object { $_.decision -eq "block" })
     Assert ($rb.Count -eq 1) "(ii) characterization changed: ratchet block lines under -AcceptShrink = $($rb.Count) (was 1)"
-    $ca = @(Get-GL $p "close-unit-refusal" | Where-Object { $_.reason -eq "clean close: T1.2" })
+    $ca = @(Get-GL $p "close-unit-refusal" | Where-Object { $_.reason -eq "clean close: T1.2 - shrink accepted: characterization run, reason required since 0.60.0" })
     Assert ($ca.Count -eq 1) "-AcceptShrink close did not log its clean-close allow"
   } finally { Remove-Sandbox $sb }
 }
@@ -8999,6 +9006,36 @@ Test-Case "0.60.0 #2: dad-status-guard reads HEADINGS only, allows a brand-new S
     Assert ($LASTEXITCODE -eq 1 -and $o -match '\bS2\b') "a hand-marked heading was not refused:`n$o"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $g -ProjectDir $p -WorkingTree -AllowStory S2 | Out-Null
     Assert ($LASTEXITCODE -eq 0) "-AllowStory did not exempt the story close-unit is rolling up"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #3: a ratchet block stops the close; -AcceptShrink alone is refused; with a reason it closes and the reason is in the commit and the gate log" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); Assert ($x.Code -eq 0) "baseline close:`n$($x.Out)"
+    $four = (1..4 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+    "public class T {`r`n$four`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+    $head0 = (git -C $p rev-parse HEAD | Out-String).Trim()
+    # 1) the block stops the close
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'SHRANK') "the shrink did not stop the close:`n$($x.Out)"
+    Assert ($x.Out -match '-AcceptShrink -Reason') "the refusal does not say a reason is required:`n$($x.Out)"
+    # 2) the flag alone does not get past it (the exact sequence in the reviewed project's gate log)
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u","-AcceptShrink")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'NEEDS A REASON') "-AcceptShrink without -Reason closed the unit:`n$($x.Out)"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T2\.1' -Quiet)) "T2.1 was ticked without a reason"
+    Assert (((git -C $p rev-parse HEAD | Out-String).Trim()) -eq $head0) "a commit landed without a reason"
+    Assert ((Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json).tests -eq 10) "the baseline was lowered without a reason"
+    # 3) with the human's reason it closes, and the reason is on record twice
+    $why = "Kristen approved 2026-11-09: cases 5-10 duplicated the contract test"
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u","-AcceptShrink","-Reason",$why)
+    Assert ($x.Code -eq 0) "-AcceptShrink -Reason did not close:`n$($x.Out)"
+    Assert ((git -C $p log -1 --format=%B | Out-String) -match [regex]::Escape("Shrink-accepted: $why (human)")) "the reason is not in the commit"
+    $last = @([System.IO.File]::ReadAllLines("$p\grades\gates-log.jsonl") | Where-Object { $_ -match '"gate":"close-unit-refusal"' })[-1]
+    Assert ($last -match '"decision":"allow"' -and $last -match 'shrink accepted' -and $last -match 'duplicated the contract test') "the gate log allow line does not carry the reason: $last"
+    Assert ((Get-Content "$p\.claude\.dad-ratchet.json" -Raw | ConvertFrom-Json).tests -eq 4) "the baseline was not lowered by the reasoned acceptance"
   } finally { Remove-Sandbox $sb }
 }
 

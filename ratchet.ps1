@@ -287,6 +287,7 @@ if ($shrunk.Count -gt 0) {
 Write-Host ""
 Write-Host "A drop is not always wrong - an obsolete story deleted on purpose is fine. It is never something" -ForegroundColor Yellow
 Write-Host "a run gets to do SILENTLY. Restore it, or acknowledge the removal deliberately:" -ForegroundColor Yellow
-Write-Host "  close-unit.ps1 ... -AcceptShrink      (records the smaller number as the new baseline)" -ForegroundColor Yellow
+Write-Host "  close-unit.ps1 ... -AcceptShrink -Reason `"<who approved it, when, why>`"" -ForegroundColor Yellow
+Write-Host "  (the HUMAN's call; records the smaller number as the new baseline and the reason in the commit)" -ForegroundColor Yellow
 Write-GateLog "block" $dropReason
 exit 1
