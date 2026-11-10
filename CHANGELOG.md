@@ -120,6 +120,15 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
 - UPGRADE PATH: `upgrade-project` creates the log in a project that has none (never appends to an existing one).
 - No new gate id: both lines use the log's own id `gates-log`.
 
+### Fixed - issue 18: `_tmp/` was never tidied
+- `close-unit` now sweeps `_tmp\` at every STORY close (the roll-up and the story-level close): files not written in
+  the last hour are removed, emptied sub-folders go with them, `_tmp\` itself stays. Recent files are kept so an
+  agent still working on another unit does not lose its scratch. Nothing git tracks is ever removed, and a failed
+  sweep is a WARN. A task close does not sweep. The reviewed project's `_tmp/` held 175 entries after six weeks.
+- `tidy.ps1` gains `-TmpOnly` and `-OlderThanHours <n>` for this (`dad tidy -Fix -TmpOnly -OlderThanHours 1`); without
+  `-Fix` it lists what it would remove. The existing `dad tidy` / `dad tidy -Fix` behavior is unchanged.
+- The `_tmp/` line in the project CLAUDE.md template says so.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)

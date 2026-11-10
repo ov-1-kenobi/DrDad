@@ -93,7 +93,7 @@ plan mode to run these commands - execute their steps directly; if you land in p
 - **Git checkpoints:** the scaffold made an initial commit; every passing `/build`/`/spec` unit is
   committed. If a file gets mangled, restore it from git (`/audit recover <file>`) - NEVER
   hand-reconstruct a broken file from memory.
-- **Scratch work goes in _tmp/** (gitignored, and dad tidy empties it) - NEVER scatter ad-hoc
+- **Scratch work goes in _tmp/** (gitignored; close-unit sweeps files older than an hour out of it at every story close, and dad tidy empties it) - NEVER scatter ad-hoc
 SUMMARY/COMPLETE/NOTES files at the project root; state belongs in TASKS/STORIES/STATUS.
 - **ONE status file:** `docs/STATUS.md` (librarian-written). NEVER create ad-hoc status/summary/notes
   files (root STATUS.md, BUILD_SUMMARY.md, NOTES.md, ...). Summaries go in chat; state goes in

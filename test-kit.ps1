@@ -9333,6 +9333,44 @@ Test-Case "0.60.0 #15: scaffold creates grades\gates-log.jsonl in the initial co
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "0.60.0 #18: a STORY close sweeps old scratch out of _tmp\ (a task close does not; recent files and git-tracked files stay)" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    New-Item -ItemType Directory -Force "$p\_tmp\bak" | Out-Null
+    "old" | Set-Content "$p\_tmp\old-log.txt"; "old" | Set-Content "$p\_tmp\bak\old.orig"; "new" | Set-Content "$p\_tmp\in-flight.txt"
+    $then = (Get-Date).AddHours(-5)
+    (Get-Item "$p\_tmp\old-log.txt").LastWriteTime = $then; (Get-Item "$p\_tmp\bak\old.orig").LastWriteTime = $then
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); Assert ($x.Code -eq 0) "T1.1:`n$($x.Out)"
+    Assert ((Test-Path "$p\_tmp\old-log.txt") -and (Test-Path "$p\_tmp\bak\old.orig")) "a TASK close swept _tmp\ (only a story close should)"
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S1 -> DONE') "story close:`n$($x.Out)"
+    Assert (-not (Test-Path "$p\_tmp\old-log.txt")) "old scratch survived the story close"
+    Assert (-not (Test-Path "$p\_tmp\bak")) "an emptied scratch sub-folder was left behind"
+    Assert (Test-Path "$p\_tmp\in-flight.txt") "a file written minutes ago was swept (another agent may be using it)"
+    Assert (Test-Path "$p\_tmp") "_tmp\ itself was removed"
+    Assert ($x.Out -match '_tmp\\ swept at story close: 2 scratch file') "the sweep was not reported:`n$($x.Out)"
+    Assert (-not ((git -C $p status --porcelain | Out-String).Trim())) "the sweep left the tree dirty"
+  } finally { Remove-Sandbox $sb }
+
+  # tidy -TmpOnly on its own: a dry run removes nothing; files git TRACKS under _tmp are never swept
+  $sb = New-Sandbox
+  try {
+    $td = Join-Path $kit "tidy.ps1"
+    $p = Join-Path $sb "p"; New-Item -ItemType Directory -Force "$p\docs","$p\_tmp" | Out-Null
+    "# Project: t" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "a" | Set-Content "$p\_tmp\a.txt"; (Get-Item "$p\_tmp\a.txt").LastWriteTime = (Get-Date).AddHours(-9)
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $td -ProjectDir $p -TmpOnly -OlderThanHours 1 | Out-String)
+    Assert ((Test-Path "$p\_tmp\a.txt") -and $o -match 'dry run') "a dry run removed a file or did not say it was one:`n$o"
+    Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false; git add -A; git -c user.name=t -c user.email=t@t commit -q -m "tracks _tmp"
+    $ErrorActionPreference = $prev; Pop-Location
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $td -ProjectDir $p -Fix -TmpOnly -OlderThanHours 1 | Out-String)
+    Assert ((Test-Path "$p\_tmp\a.txt") -and $o -match 'tracked by git') "a git-tracked file under _tmp\ was swept:`n$o"
+  } finally { Remove-Sandbox $sb }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

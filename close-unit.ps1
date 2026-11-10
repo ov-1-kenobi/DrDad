@@ -920,6 +920,24 @@ if ($problems.Count -eq 0 -and $storyClosed -and -not $NoCommit) {
   } catch { $warns.Add("could not update the open-story list: $($_.Exception.Message)") }
 }
 
+# --- sweep _tmp\ at a story close (issue 18, 0.60.0) -------------------------------------------
+# Scratch belongs in _tmp\ and "dad tidy empties it" - when somebody runs tidy, which nobody did: one
+# project's _tmp\ held 175 entries after six weeks. A story close is the natural boundary: the work is
+# verified and committed, so its scratch is dead. Only files untouched for an hour go (an agent still
+# working on another unit keeps its files), never anything git tracks, and never fatal.
+if ($problems.Count -eq 0 -and $storyClosed) {
+  try {
+    $tidy = Join-Path $kit "tidy.ps1"
+    if ((Test-Path $tidy) -and (Test-Path (Join-Path $proj "_tmp"))) {
+      $sw = (& powershell -NoProfile -ExecutionPolicy Bypass -File $tidy -ProjectDir $proj -Fix -TmpOnly -OlderThanHours 1 2>$null | Out-String)
+      $swm = [regex]::Match($sw, 'tmp-sweep: removed=(\d+) kept=(\d+)')
+      if ($swm.Success -and [int]$swm.Groups[1].Value -gt 0) {
+        $notes.Add("_tmp\ swept at story close: $($swm.Groups[1].Value) scratch file(s) older than 1h removed, $($swm.Groups[2].Value) recent kept")
+      }
+    }
+  } catch { $warns.Add("could not sweep _tmp\: $($_.Exception.Message)") }
+}
+
 # --- stamp for the stop guard -----------------------------------------------------------------
 # dad-guard.ps1 blocks a turn from ending on uncommitted, unverified code. A clean close IS the
 # verification, so record it. Only on success - a failed close must stay blocked.
