@@ -355,9 +355,9 @@ rephrased-claim patterns, like T34.3. `docs/DESIGN.md` is never edited.)
 
 T37.4 -> T46.7 (needs T37.4) -> T46.8 (needs T46.7) -> T46.9 (needs T46.8) -> T46.10 (needs T46.9) -> T46.11 (needs T46.10) -> T46.14 (needs T46.11) -> T46.15 (needs T46.14) -> T46.16 (needs T46.15) -> T46.6 (needs T46.16) -> T46.5 (needs T46.6) -> T46.12 (needs T46.5) -> T46.13 (needs T46.12) -> T46.17 (needs T46.13) [T46.6, T46.5, T46.12, T46.13 and T46.17 WAIT FOR THE HUMAN]
 
-(added 2026-11-10; Stories S38-S46 - the 0.60.0 / 0.61.0 refactor work written up after it was built. T38.1-T45.1 and T46.1-T46.4 are already [x]:
+(added 2026-11-10; Stories S38-S46 - the 0.60.0 / 0.61.0 refactor work written up after it was built. the tasks of S38 to S45 and the first four tasks of S46 are already [x]:
 they were done directly from the review's issue list on branch drdad-fixes-2026-11 and are recorded here with their commits, so they are not
-sequenced. What remains is Story S46's open tasks, queued after the last T37 entry. T46.7-T46.11, T46.14 and T46.15 are agent work and are
+sequenced. What remains is Story S46's open tasks, queued after the last T37 entry. the tasks from T46.7 through T46.11, then T46.14, T46.15 and T46.16, are agent work and are
 independent of each other; they are chained only because several edit 	est-kit.ps1. T46.6 is a MEASUREMENT only the human can make (it needs an
 interactive MCP approval), T46.5 is a /design unlock that depends on it, and T46.12 / T46.13 are human decisions.)
 
