@@ -362,7 +362,11 @@ public static class Rag
             {
                 outp.AddRange(Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
                     .Where(f => IsCorpusExt(f)
-                                && !f.StartsWith(IndexDir, StringComparison.OrdinalIgnoreCase)));  // never index our own index
+                                && !f.StartsWith(IndexDir, StringComparison.OrdinalIgnoreCase)    // never index our own index
+                                // 0.61.0: <root>\archive\ holds what was moved OUT of the working docs (closed
+                                // tasks, superseded security rows, design history). It is kept and committed,
+                                // but a search should return the live contract, not what it replaced.
+                                && !f.StartsWith(Path.Combine(root, "archive") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)));
             }
             catch (Exception e) when (e is UnauthorizedAccessException or IOException) { }
         }

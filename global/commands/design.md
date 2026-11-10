@@ -93,6 +93,13 @@ vision model transcribes it to text - and use that as design input.)
    tradeoffs, recommend one, WAIT for my choice. Reindex after edits.
 4. **Group into epics** under `## Epics` - lightweight, coarse feature groups (`E1`, `E2`, ...). Keep it light:
    a small project may have one epic or none. These are what `/stories` expands into stories.
+3b. **Keep the design readable - compact it while it is DRAFT.** If `dad doc-stats -Findings` reports that
+   the design has grown too large (size, `amended` stamps, or a long Security decisions section), PROPOSE a
+   compaction before adding more: fold each dated amendment into the text it amends, so the doc states what
+   is true now; keep ONE entry per security decision; move the superseded wording and the amendment history,
+   verbatim, to `docs/archive/DESIGN-history.md` (kept and committed, not indexed). Show me the proposed
+   change as a diff and WAIT - the design is the contract, so nothing in it is compacted without my approval,
+   and requirement, contract and epic ids never change.
 4a. **Check EVERY new epic against `## Goal` - before writing it.** Read the Goal section and find the clause
    the epic serves. Show me the epic and that clause, QUOTED exactly, and WAIT for my confirmation. Then write
    the epic with `- Serves: "<the quoted clause>"`. If no clause of the Goal covers it, say so plainly and

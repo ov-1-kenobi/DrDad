@@ -128,6 +128,25 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
   awaiting a decision): the kit tells agents captures live in `docs/sources/` while `ingest_url` writes to
   `docs/web/`, and whether captured pages belong in git.
 
+### Added - issue 11 (option A): TASKS.md is compacted at story close; one security entry per decision
+- New `archive-tasks.ps1` (+ `.cmd`). At the story-level close, `close-unit` moves the BODIES of the story's ticked
+  tasks to `docs\archive\TASKS-<story>.md` and leaves each heading with one line
+  (`- archived: docs/archive/TASKS-S3.md (commit 1a2b3c4)`), in the story's own commit. Headings stay, so every
+  count is unchanged (doc-stats, the ratchet, the Build order); nothing is deleted. Tasks of stories that are still
+  open keep their bodies. If the commit fails the move is undone with the rest.
+- `dad archive-tasks -AllDone [-DryRun]` does the same for every DONE story, as a one-time catch-up. On the reviewed
+  project a dry run reports 192 task bodies, about 735 KB of its 3.6 MB TASKS.md (the rest belongs to stories that
+  are not DONE).
+- `local-tools` no longer indexes `<docs>\archive\`, so search returns the live documents.
+- security-agent keeps ONE entry per decision in `## Security decisions`: an incremental pass edits the entry it
+  changes and moves the old wording to `docs/archive/SECURITY-history.md`, never appends a new review block.
+- The design prose stays manual, as chosen: `/design` step 3b proposes a compaction diff while DRAFT (fold
+  amendments into the text, history to `docs/archive/DESIGN-history.md`) and waits for approval. `doc-stats
+  -Findings` says when it is time (`[design]` at 250 KB, 40 `amended` stamps or a 200-line security section;
+  `[taskmap]` when TASKS.md passes 400 KB with DONE stories).
+- UPGRADE PATH: nothing is moved by an upgrade. Archiving starts with the next story-level close; run
+  `dad archive-tasks -AllDone` when you want the backlog compacted. The archive is per story, not per epic.
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).

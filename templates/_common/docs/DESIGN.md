@@ -26,7 +26,9 @@ Security review: REQUIRED
 <!-- Written by security-agent (via /design) once the stack is known; each decision cites a source in
      SOURCES.md with its fetch date. Recency matters here more than anywhere else - guidance older than
      ~6 months may name a deprecated API or a library that has since had a CVE. Empty is fine ONLY when
-     the header above says NOT-REQUIRED. -->
+     the header above says NOT-REQUIRED.
+     ONE entry per decision: a later pass EDITS the entry it changes and moves the old wording to
+     docs/archive/SECURITY-history.md. This section is what is in force now, not a log of reviews. -->
 
 - <decision, the library/pattern chosen, and why - with [Snnn]>
 

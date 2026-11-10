@@ -180,6 +180,8 @@ and carried on for thirty tasks.
    project clean but a `[hygiene]` or `[integrity]` finding is present (or the suite fails), relay the
    disagreement as `CONTRADICTED` with the finding text. A CONTRADICTED report BLOCKS the story close
    (step 7) until resolved (fix, or a human-approved explanation).
+   (The story-level close in step 7 also moves the story's finished task bodies out of `docs/TASKS.md` into
+   `docs/archive/TASKS-<story>.md`; the headings stay. Look there if you need what a closed task asked for.)
 7. If the grade is below B, or the card has critical `[dev]` suggestions: relay them to **dev-agent**, then
    re-grade (max 3 rounds). Then commit the story with the grade REQUIRED - the script fails if the card is
    missing or a stub, so you cannot close a story ungraded:

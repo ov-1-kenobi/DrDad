@@ -9310,7 +9310,9 @@ Test-Case "0.60.0 #14: a story that rolled up to DONE owes its story-level close
     $x = Invoke-Pf $p @("-Id","T1.1","-Title","u","-SkipVerify"); $x = Invoke-Pf $p @("-Id","T1.2","-Title","u","-SkipVerify")
     Assert ($x.Code -eq 0) "setup:`n$($x.Out)"
     $x = Invoke-Pf $p @("-Id","S1","-Title","S1 closed","-SkipVerify")
-    Assert ($x.Code -eq 0 -and $x.Out -match 'story commit recorded') "a clean-tree story-level close left no story commit:`n$($x.Out)"
+    # (0.61.0: this close also archives the story's task bodies, so the tree is no longer clean here and the
+    #  ordinary commit path makes the story commit; the empty-commit path stays for a story with nothing to archive)
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story commit recorded|committed: \S+ S1: S1 closed') "a story-level close left no story commit:`n$($x.Out)"
     Assert ((git -C $p log -1 --format=%s | Out-String).Trim() -ceq "S1: S1 closed") "the story commit subject is wrong"
   } finally { Remove-Sandbox $sb }
 }
@@ -9883,6 +9885,71 @@ Test-Case "0.61.0 #17: only a human-stamped tier counts; an unstamped tier FAILS
   } finally { Remove-Sandbox $sb }
   Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\commands\design.md")) -match 'dad source-stats -LockCheck') "/design does not run the lock check before offering LOCKED"
   Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\agents\research-agent.md")) -match 'a caller is not the human') "research-agent may still take a tier from its caller"
+}
+
+Test-Case "0.61.0 #11: the story-level close archives the story's task BODIES (headings and every count stay); open stories are untouched; the archive is not indexed" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    # give the tasks real bodies, as taskmap writes them
+    $t = [System.IO.File]::ReadAllText("$p\docs\TASKS.md").Replace("- **Goal:** x", "- **Goal:** deliver the thing`n- **Touches:** src/A.cs`n- **Do:** " + ("a long outline. " * 30) + "`n- **Acceptance:** it works`n- **Depends on:** none")
+    [System.IO.File]::WriteAllText("$p\docs\TASKS.md", $t, (New-Object System.Text.UTF8Encoding($false)))
+    git -C $p add -A 2>&1 | Out-Null; git -C $p -c user.name=t -c user.email=t@t commit -q -m bodies 2>&1 | Out-Null
+    $ds = Join-Path $kit "doc-stats.ps1"; $rt = Join-Path $kit "ratchet.ps1"
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); $x = Invoke-Pf $p @("-Id","T2.1","-Title","u"); $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S1 -> DONE') "roll-up:`n$($x.Out)"
+    Assert (-not (Test-Path "$p\docs\archive")) "task bodies were archived at the roll-up (the grader still needs them)"
+    $sizeBefore = (Get-Item "$p\docs\TASKS.md").Length
+    $jBefore = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Json | Out-String | ConvertFrom-Json)
+
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 closed")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'archived 2 task bod') "the story-level close did not archive S1's tasks:`n$($x.Out)"
+    $tasks = [System.IO.File]::ReadAllText("$p\docs\TASKS.md")
+    $arch = [System.IO.File]::ReadAllText("$p\docs\archive\TASKS-S1.md")
+    Assert ($tasks -match '(?m)^### \[x\] T1\.1 - unit 1\.1   \(Story S1\)\r?\n- archived: docs/archive/TASKS-S1\.md \(commit [0-9a-f]{7,}\)') "T1.1 is not a heading plus an archive pointer with its commit:`n$($tasks.Substring(0, [Math]::Min(500, $tasks.Length)))"
+    Assert ($tasks -notmatch 'T1\.1[^#]*a long outline') "T1.1's body is still in TASKS.md"
+    Assert ($arch -match '### \[x\] T1\.1' -and $arch -match '### \[x\] T1\.2' -and ([regex]::Matches($arch, 'a long outline')).Count -eq 60) "the archive does not hold both bodies verbatim"
+    # S2 is still open: its ticked task T2.1 keeps its body
+    Assert ($tasks -match '(?s)### \[x\] T2\.1.*?a long outline') "a ticked task of a story that is still OPEN lost its body"
+    Assert ((Get-Item "$p\docs\TASKS.md").Length -lt $sizeBefore - 800) "TASKS.md did not get smaller"
+    # nothing the gates count has changed
+    $jAfter = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Json | Out-String | ConvertFrom-Json)
+    Assert ($jAfter.tasksTotal -eq $jBefore.tasksTotal -and $jAfter.tasksDone -eq $jBefore.tasksDone -and $jAfter.nextTask -eq $jBefore.nextTask) "doc-stats counts changed: $($jBefore.tasksDone)/$($jBefore.tasksTotal) next $($jBefore.nextTask) -> $($jAfter.tasksDone)/$($jAfter.tasksTotal) next $($jAfter.nextTask)"
+    Assert ((git -C $p show --stat --format= HEAD | Out-String) -match 'docs/archive/TASKS-S1\.md') "the archive is not in the story commit"
+    Assert (-not ((git -C $p status --porcelain | Out-String).Trim())) "the close left the tree dirty"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $rt -ProjectDir $p | Out-Null      # (writes a gate-log line, so it runs after the clean-tree check)
+    Assert ($LASTEXITCODE -eq 0) "the ratchet reads the archived tasks as a shrink"
+    # idempotent, and the open story still closes normally afterwards
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "archive-tasks.ps1") -ProjectDir $p -AllDone | Out-String)
+    Assert ($o -match 'moved=0') "a second archive pass moved something: $o"
+    $x = Invoke-Pf $p @("-Id","T2.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S2 -> DONE') "the next story did not close after the archive:`n$($x.Out)"
+    # -DryRun changes nothing
+    $before = [System.IO.File]::ReadAllText("$p\docs\TASKS.md")
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "archive-tasks.ps1") -ProjectDir $p -AllDone -DryRun | Out-String)
+    Assert ($o -match 'WOULD move 2 task' -and [System.IO.File]::ReadAllText("$p\docs\TASKS.md") -eq $before) "-DryRun is wrong or changed the file: $o"
+    Assert (Test-Path (Join-Path $kit "archive-tasks.cmd")) "archive-tasks.cmd wrapper is missing"
+  } finally { Remove-Sandbox $sb }
+  # prompts: one security entry per decision; /design proposes compaction and waits
+  Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\agents\security-agent.md")) -match 'REPLACE, never append') "security-agent still appends review blocks"
+  Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\commands\design.md")) -match '3b\. \*\*Keep the design readable') "/design has no compaction step"
+}
+
+Test-Case "0.61.0 #11: local-tools does not index docs\archive\ (the live documents are what search returns)" {
+  if ($SkipBuild) { Skip-Case "-SkipBuild: needs the built local-tools.exe" }
+  $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+  if (-not (Test-Path $exe)) { Skip-Case "local-tools.exe not built" -NeedsBuild }
+  $sb = New-Sandbox
+  try {
+    $d = Join-Path $sb "docs"; New-Item -ItemType Directory -Force "$d\archive","$d\notes\archive" | Out-Null
+    "# Design`nStatus: DRAFT" | Set-Content "$d\DESIGN.md" -Encoding UTF8
+    "old task bodies" | Set-Content "$d\archive\TASKS-S1.md" -Encoding UTF8
+    "a nested folder that merely happens to be called archive is still indexed" | Set-Content "$d\notes\archive\keep.md" -Encoding UTF8
+    $o = (& $exe --corpus $d | Out-String)
+    Assert ($o -match 'DESIGN\.md' -and $o -match 'keep\.md') "live files are missing from the corpus:`n$o"
+    Assert ($o -notmatch 'TASKS-S1\.md') "docs\archive\ is still indexed:`n$o"
+  } finally { Remove-Sandbox $sb }
 }
 
 # ---------------------------------------------------------------- summary

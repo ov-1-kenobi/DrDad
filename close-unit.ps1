@@ -889,6 +889,25 @@ if ($storyClosed) {
   } else { $notes.Add("story $storyClosed : grade card present") }
 }
 
+# --- 2d) the story is closed: archive its task bodies (issue 11 option A, 0.61.0) ---------------
+# At the story-level close the story's ticked tasks are finished reading. archive-tasks moves their BODIES
+# to docs\archive\TASKS-<story>.md and leaves each heading with a one-line pointer, so TASKS.md stops
+# growing without any count changing. In this commit; undone with the rest if the commit fails.
+$archiveFile = $null; $origArchive = $null
+if (-not $closedTask -and $storyClosed -and $problems.Count -eq 0 -and (Test-Path $tasksFile)) {
+  try {
+    $at = Join-Path $kit "archive-tasks.ps1"
+    if (Test-Path $at) {
+      $archiveFile = Join-Path $docs "archive\TASKS-$storyClosed.md"
+      if (Test-Path -LiteralPath $archiveFile) { $origArchive = [System.IO.File]::ReadAllText($archiveFile) }
+      $ao = (& powershell -NoProfile -ExecutionPolicy Bypass -File $at -ProjectDir $proj -Story $storyClosed 2>$null | Out-String)
+      $am = [regex]::Match($ao, 'archive-tasks: moved=(\d+) bytes=(\d+)')
+      if ($am.Success -and [int]$am.Groups[1].Value -gt 0) {
+        $notes.Add("archived $($am.Groups[1].Value) task bod(y/ies) of $storyClosed to docs\archive\TASKS-$storyClosed.md (TASKS.md is $([math]::Round([int]$am.Groups[2].Value / 1KB)) KB smaller; headings and counts unchanged)")
+      }
+    }
+  } catch { $warns.Add("could not archive the task bodies of ${storyClosed}: $($_.Exception.Message)") }
+}
 # --- 2c) keep the dashboard true: regenerate the STATUS.md Snapshot (issue 4, 0.60.0) ---
 # docs\STATUS.md is what every session reads first, and it was refreshed only when somebody remembered to
 # run /audit status: one project's dashboard was 200 closed tasks behind. The counts are computed, so
@@ -1076,6 +1095,10 @@ if (-not $NoCommit) {
           if ($null -ne $origStatus -and (Test-Path $statusFile) -and [System.IO.File]::ReadAllText($statusFile) -ne $origStatus) { [System.IO.File]::WriteAllText($statusFile, $origStatus, $enc) }
           if ($null -ne $origRecipes) { $rp = Join-Path $docs "RECIPES.md"; if ((Test-Path $rp) -and [System.IO.File]::ReadAllText($rp) -ne $origRecipes) { [System.IO.File]::WriteAllText($rp, $origRecipes, $enc) } }
           if ($evidenceWritten -and (Test-Path -LiteralPath $evidenceWritten)) { Remove-Item -LiteralPath $evidenceWritten -Force }
+          if ($archiveFile) {
+            if ($null -ne $origArchive) { [System.IO.File]::WriteAllText($archiveFile, $origArchive, $enc) }
+            elseif (Test-Path -LiteralPath $archiveFile) { Remove-Item -LiteralPath $archiveFile -Force }
+          }
           git reset -q | Out-Null
           if ($rolledBack) { $problems.Add("bookkeeping ROLLED BACK: the TASKS.md tick and any STORIES.md DONE marker were restored, because the commit did not land - '$Id' is NOT closed") }
         } catch { $problems.Add("could not roll the bookkeeping back after the failed commit: $($_.Exception.Message) - check docs\TASKS.md and docs\STORIES.md by hand") }

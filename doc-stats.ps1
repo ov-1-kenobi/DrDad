@@ -476,6 +476,24 @@ if ($Findings) {
       }
     }
   }
+  # --- [design]/[taskmap] documents that only grow (0.61.0, issue 11 option A) ------------------------
+  # TASKS.md is compacted by a script (archive-tasks, at each story close). The design doc is the contract,
+  # so no script rewrites it: this only SAYS when it is time for /design to propose a compaction.
+  if ($designRaw) {
+    $dKb = [math]::Round($designRaw.Length / 1KB)
+    $amended = ([regex]::Matches($designRaw, '(?i)\bamended \d{4}-')).Count
+    $secSecAll = [regex]::Match($designRaw, '(?ms)^##\s*Security decisions\b.*?(?=^##\s|\z)')
+    $secLines = if ($secSecAll.Success) { @($secSecAll.Value -split "`r?`n").Count } else { 0 }
+    if ($dKb -ge 250 -or $amended -ge 40 -or $secLines -ge 200) {
+      $f.Add("[design] $designName has grown to $dKb KB ($amended 'amended' stamps; Security decisions is $secLines lines) - too large to be read whole. At the next /design unlock: fold amendments into the text, keep ONE row per security decision (superseded ones go to docs/archive/), and move history to docs/archive/DESIGN-history.md. /design proposes the diff; the human approves it.")
+    }
+  }
+  if (Test-Path -LiteralPath $tasksFile) {
+    $tKb = [math]::Round((Get-Item -LiteralPath $tasksFile).Length / 1KB)
+    if ($tKb -ge 400 -and $storiesDone.Count -gt 0) {
+      $f.Add("[taskmap] TASKS.md is $tKb KB with $($storiesDone.Count) stor(y/ies) DONE - the bodies of finished tasks can move out: 'dad archive-tasks -AllDone -DryRun' shows what would go (headings and counts stay), then run it without -DryRun and commit.")
+    }
+  }
   if ($designStatus -eq "(no design doc)") { $f.Add("[design] no design doc in docs\ - run /scaffold or /design") }
   elseif ($designStatus -notin @("DRAFT","LOCKED")) { $f.Add("[design] $designName Status: is '$designStatus' - must be DRAFT or LOCKED") }
 

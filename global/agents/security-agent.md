@@ -47,6 +47,15 @@ with irrelevant controls is how a security section becomes unread.
 
 ## How to record it
 
+**ONE entry per decision - REPLACE, never append.** `## Security decisions` is the current state, not a
+log. On an incremental pass (a new epic, a new contract), read the section first. If your finding changes
+or sharpens a decision that is already there, EDIT that entry in place and move the old wording to
+`docs/archive/SECURITY-history.md` under a dated heading (create the file if needed; it is kept, not
+indexed). Add a new entry only for a decision that is genuinely new. Do not append a "review N" block: one
+project's section reached 1,200 lines from four appended passes, and nobody could say which line was in
+force. If the section is already a stack of passes, say so and propose a consolidation to the human
+instead of adding a fifth.
+
 For each decision, write ONE line under `## Security decisions` in the design doc:
 
 > - Sessions: use `<library>` <version>, cookie-based, `HttpOnly`+`Secure`+`SameSite=Lax`. Hand-rolled JWT
