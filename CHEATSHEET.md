@@ -118,7 +118,7 @@ never via `local-tools`. If the model claims otherwise, it's confused - point it
 | `dad-doctor.cmd [-ProjectDir x]`                | **readiness check**: prereqs, Ollama+models, server, install, project wiring |
 | `sync-models.cmd [-Report\|-All\|-Only a]`     | reconcile Ollama with `models.json` (pull bases, build the `-cc` variants) |
 | `source-stats.cmd [-ProjectDir x]`             | citation-integrity gate: do the design doc's [Snnn] cites resolve to real, tiered sources? |
-| `api-surface.cmd [-Lookup <Type>]`             | regenerate/query docs\API-SURFACE.md - exact signatures from the built assemblies |
+| `api-surface.cmd [-Lookup <Type>]`             | regenerate/query .claude\API-SURFACE.md - exact signatures from the built assemblies (not committed) |
 | `test-kit.cmd`                                 | run the kit's own test suite - the validation gate after any kit change |
 | `dad-guard.cmd -Check` / `-Ack`             | stop guard: would a turn be blocked for unverified code? / accept it anyway |
 | `scan-secrets.cmd [-Path x \| -Staged]`        | scan for credentials (also installed as each project's pre-commit hook) |

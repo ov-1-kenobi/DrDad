@@ -59,6 +59,23 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
   refreshed. The reviewed project's dashboard said 35/54 stories and 307/362 tasks while the documents said 42/109
   and 512/895.
 
+### Fixed - issue 10: `API-SURFACE.md` carried test assemblies, lived in `docs/` and was committed on every close
+- The generated API surface is now written to `.claude\API-SURFACE.md`: outside `docs\` (so it is no longer chunked
+  into the search index) and git-ignored (so it is no longer part of every task commit). In the reviewed project
+  it was 1.3 MB, tracked, and changed in almost every commit. Query it as before: `dad api-surface -Lookup <Name>`.
+  `close-unit`'s build-failure signature hints and `doc-stats`' `[domain]` check read the new location.
+- TEST projects are no longer emitted. A project is a test project when its `.csproj` says so (`IsTestProject`, or a
+  reference to `Microsoft.NET.Test.Sdk` / xunit / NUnit / MSTest / TUnit) or when its name ends in `Tests`, `Test`,
+  `Specs` (`App.IntegrationTests`, `App.UnitTests`, ...). The old rule only dropped names ending in `.Tests`. Packages
+  referenced only by test projects are skipped too. This part needs the rebuilt server (`install.cmd`).
+- UPGRADE PATH: `upgrade-project` (and the next successful `close-unit` build) moves a GENERATED
+  `docs\API-SURFACE.md` to `.claude\`, removes it from `docs\` and untracks it (`git rm --cached`); the deletion goes
+  into the project's next commit. A hand-written file of that name is left alone. If `.claude/` is not ignored, the
+  single line `.claude/API-SURFACE.md` is appended to `.gitignore`. Reindex once to drop the old chunks.
+- dev-agent, survey-agent and `/document` name the new location.
+- NOT done here: the kit repo itself still tracks its own `docs/API-SURFACE.md`. Nothing in this change deletes it,
+  but the first `close-unit` run inside the kit repo will move it like any other project.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)

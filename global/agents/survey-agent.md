@@ -29,8 +29,9 @@ Distinguish these three, explicitly, every time:
 ## What to report
 
 1. **Purpose** - what this area is for, as evidenced by what it does.
-2. **Entry points** - public types and methods callers actually use. `docs/API-SURFACE.md` (generated from
-   the compiled assemblies) is authoritative here if it exists - prefer it over reading signatures by eye.
+2. **Entry points** - public types and methods callers actually use. `.claude/API-SURFACE.md` (generated from
+   the compiled assemblies; `dad api-surface -Lookup <Name>` queries it) is authoritative here if it exists -
+   prefer it over reading signatures by eye.
 3. **Data shapes** - the formats and records this area produces or consumes, with a REAL example pulled
    from a test, a fixture or a literal in the code. These become contracts, so exactness matters more than
    completeness; a half-described format is how two people implement it differently.

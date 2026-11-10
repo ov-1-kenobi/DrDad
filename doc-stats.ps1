@@ -331,7 +331,8 @@ if ($Findings) {
     $dmSection = [regex]::Match($designRaw, '(?ms)^##\s*Domain model\b.*?(?=^##\s|\z)')
     if ($dmSection.Success -and $dmSection.Value -notmatch '(?im)^\s*None\b') {
       $pinnedEntities = @([regex]::Matches($dmSection.Value, '(?m)^###\s+([A-Za-z_]\w*)') | ForEach-Object { $_.Groups[1].Value })
-      $apiSurface = Join-Path $docs "API-SURFACE.md"
+      $apiSurface = Join-Path $proj ".claude\API-SURFACE.md"                      # 0.60.0 location
+      if (-not (Test-Path $apiSurface)) { $apiSurface = Join-Path $docs "API-SURFACE.md" }   # legacy copy
       if ($pinnedEntities.Count -gt 0 -and (Test-Path -LiteralPath $apiSurface)) {
         $builtTypes = @([regex]::Matches((Get-Content -LiteralPath $apiSurface -Raw), ('(?m)^' + [char]96 + '(?:class|struct|interface|enum|record) ([A-Za-z_]\w*)')) | ForEach-Object { $_.Groups[1].Value }) | Select-Object -Unique
         $unbuilt = @($pinnedEntities | Where-Object { $builtTypes -notcontains $_ })

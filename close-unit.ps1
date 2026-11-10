@@ -112,11 +112,13 @@ function Show-Tail([string]$text) {
 }
 
 # When the build fails on a SIGNATURE error, hand over the real signature instead of leaving the model to
-# go find it. This is the whole point of docs\API-SURFACE.md being mechanical rather than advisory: runA
+# go find it. This is the whole point of the API surface being mechanical rather than advisory: runA
 # made ZERO search_datasheets calls, so a registry the model has to remember to consult is worth nothing.
 # The compiler already names the type and member it could not resolve - we just look them up.
 function Show-Signatures([string]$buildOutput) {
-  $api = Join-Path $proj "docs\API-SURFACE.md"
+  # .claude\ since 0.60.0; a legacy docs\ copy still answers until the next successful build replaces it.
+  $api = Join-Path $proj ".claude\API-SURFACE.md"
+  if (-not (Test-Path $api)) { $api = Join-Path $proj "docs\API-SURFACE.md" }
   if (-not (Test-Path $api)) { return }
   # CS1501 no overload takes N args | CS1061/CS0117 no such member | CS7036 missing required parameter
   # | CS1503 argument type | CS0246 type not found. All of them quote the identifier in 'single quotes'.
@@ -133,7 +135,7 @@ function Show-Signatures([string]$buildOutput) {
   $script = Join-Path $kit "api-surface.ps1"
   if (-not (Test-Path $script)) { return }
   Write-Host ""
-  Write-Host "[close-unit] REAL SIGNATURES for what the compiler could not resolve (docs\API-SURFACE.md):" -ForegroundColor Cyan
+  Write-Host "[close-unit] REAL SIGNATURES for what the compiler could not resolve (dad api-surface -Lookup <Name>):" -ForegroundColor Cyan
   $shown = 0
   foreach ($n in ($names | Select-Object -First 6)) {
     $hit = & powershell -NoProfile -ExecutionPolicy Bypass -File $script -ProjectDir $proj -Lookup $n 2>$null
@@ -388,14 +390,17 @@ if (-not $SkipVerify) {
     if ($lockCurrent) { $notes.Add("build up-to-date (output locked by a running app; no sources changed since it was built) - nothing killed") }
     else { $notes.Add("build verified ($cmd)") }
     # The build just succeeded, so the assemblies are current: refresh the API surface while it is true.
-    # Generated from the DLLs, so it cannot drift, and it lands in docs\ where the index already looks.
+    # Generated from the DLLs, so it cannot drift. 0.60.0: it lands in .claude\ (gitignored) - a build
+    # product is not committed with every close and not indexed beside the design (issue 10).
     try {
       $apiScript = Join-Path $kit "api-surface.ps1"
       if (Test-Path $apiScript) {
+        $hadLegacyApi = Test-Path (Join-Path $proj "docs\API-SURFACE.md")
         & powershell -NoProfile -ExecutionPolicy Bypass -File $apiScript -ProjectDir $proj -Quiet | Out-Null
-        if (Test-Path (Join-Path $proj "docs\API-SURFACE.md")) { $notes.Add("API surface regenerated (docs\API-SURFACE.md)") }
+        if (Test-Path (Join-Path $proj ".claude\API-SURFACE.md")) { $notes.Add("API surface regenerated (.claude\API-SURFACE.md - not committed; query: dad api-surface -Lookup <Name>)") }
+        if ($hadLegacyApi -and -not (Test-Path (Join-Path $proj "docs\API-SURFACE.md"))) { $notes.Add("old docs\API-SURFACE.md removed from docs\ and from git (it is a build product now)") }
       }
-    } catch { $warns.Add("could not refresh docs\API-SURFACE.md: $($_.Exception.Message)") }
+    } catch { $warns.Add("could not refresh the API surface: $($_.Exception.Message)") }
   }
 
   # A STORY may only close on tests that actually RAN. Tasks skip this (too slow per task, and a partial

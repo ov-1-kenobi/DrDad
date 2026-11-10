@@ -160,6 +160,15 @@ if (Test-Path $mcpPath) {
   } catch { Write-Host "  could not repoint .mcp.json: $($_.Exception.Message)" -ForegroundColor Yellow }
 }
 
+# --- 0c) The API surface is a build product, not a document (0.60.0) ---------------------------
+# It used to be generated into docs\API-SURFACE.md, where it was committed on every close and chunked into
+# the search index. Move a generated copy to .claude\ (gitignored) and untrack it; the deletion is staged
+# for the project's next commit. A hand-written file of that name is left alone.
+try {
+  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "api-surface.ps1") -ProjectDir $proj -Migrate -Quiet | Out-Null
+  if ($LASTEXITCODE -eq 0) { Write-Host "  moved docs\API-SURFACE.md -> .claude\API-SURFACE.md (out of docs\ and out of git; reindex to drop it from search)" -ForegroundColor Green }
+} catch { Write-Host "  could not move docs\API-SURFACE.md: $($_.Exception.Message)" -ForegroundColor Yellow }
+
 # --- 1) Missing docs from templates (never overwrite existing) ---
 foreach ($doc in @("STATUS.md","RECIPES.md","SOURCES.md","DATASETS.md","STYLE.md","UI-TOOLING.md")) {
   $dst = Join-Path $proj "docs\$doc"

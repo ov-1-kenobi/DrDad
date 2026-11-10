@@ -61,7 +61,8 @@ if (args.Length > 0 && args[0] == "--corpus")
 // One-off CLI API-surface generation, does NOT start the MCP server:
 //   local-tools.exe --api-surface "C:\path\to\project" ["C:\out\API-SURFACE.md"]
 // Reflects over the project's built assemblies and its NuGet dependencies, writing exact public
-// signatures into docs\API-SURFACE.md so the RAG index carries them. Run after every build.
+// signatures into .claude\API-SURFACE.md (0.60.0: no longer docs\ - it is a build product, not a document;
+// test projects are skipped). Run after every build; query with: dad api-surface -Lookup <Name>.
 if (args.Length > 0 && args[0] == "--api-surface")
 {
     var dir = args.Length > 1 ? args[1] : Directory.GetCurrentDirectory();

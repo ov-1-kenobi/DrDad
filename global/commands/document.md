@@ -24,7 +24,7 @@ how something works, that is a FINDING ("cannot determine X"), not a gap to fill
    ```
    dad api-surface
    ```
-   Needs a successful build first. It writes `docs/API-SURFACE.md` - the EXACT public types and signatures
+   Needs a successful build first. It writes `.claude/API-SURFACE.md` - the EXACT public types and signatures
    of every assembly, read out of the compiled output. Contracts derived from that are derived from what
    the code actually is, not from what a model inferred from names.
 
@@ -36,7 +36,7 @@ how something works, that is a FINDING ("cannot determine X"), not a gap to fill
    - **Requirements** = what the system demonstrably does today, each cited. Mark anything you inferred
      from naming rather than read from logic as `(inferred)` - it is a question for me, not a fact.
    - **Contracts** = the data formats and semantics ALREADY in the code, pinned with a worked example
-     taken from a real test or a real payload where one exists. Cite the type from `API-SURFACE.md`.
+     taken from a real test or a real payload where one exists. Cite the type as `dad api-surface -Lookup <Type>` prints it.
    - **Solution architecture** = the stack as it IS (versions from the project files, not aspiration).
    - **Known gaps** = what has no tests, what is stubbed, what looks abandoned. Do not soften this; it is
      the most useful section in a brownfield doc.

@@ -5,7 +5,7 @@ using System.Text;
 namespace LocalTools;
 
 /// <summary>
-/// Generates docs/API-SURFACE.md: the exact public signatures of a solution's own assemblies AND of the
+/// Generates .claude/API-SURFACE.md: the exact public signatures of a solution's own assemblies AND of the
 /// third-party packages it references, read straight out of the compiled DLLs.
 ///
 /// Why this exists: a dev model that cannot find a signature INVENTS one. One project shipped 16 compile
@@ -19,8 +19,10 @@ namespace LocalTools;
 /// read net10.0 assemblies - which is also why this lives here and not in PowerShell 5.1, which runs on
 /// .NET Framework and cannot load them at all).
 ///
-/// The output lands in docs/, so it is picked up by the SAME index everything else uses - no new tool,
-/// no new server, and search_datasheets can already find it.
+/// 0.60.0: the output lands in .claude/ (gitignored), NOT docs/. In docs/ it was committed on every close
+/// and chunked into the RAG index; one project's copy reached 1.3 MB, most of it its own TEST assembly,
+/// and every task commit carried a diff of it. It is a build product: look things up with
+/// `dad api-surface -Lookup Name`. TEST projects are no longer emitted at all (see IsTestProject).
 /// </summary>
 public static class ApiSurface
 {
@@ -36,7 +38,7 @@ public static class ApiSurface
     public static string Generate(string projectDir, string? outFile = null)
     {
         projectDir = Path.GetFullPath(projectDir);
-        outFile ??= Path.Combine(projectDir, "docs", "API-SURFACE.md");
+        outFile ??= Path.Combine(projectDir, ".claude", "API-SURFACE.md");
 
         // Prefer Debug then Release; take the newest copy of each assembly name.
         var dlls = new Dictionary<string, FileInfo>(StringComparer.OrdinalIgnoreCase);
@@ -60,27 +62,32 @@ public static class ApiSurface
         // nobody writes code against, which would bury the project's own types in the index and make the
         // whole file useless. Direct PackageReferences are the ones a dev-agent actually calls.
         var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // TEST projects are not API. Nobody writes product code against a test class, and a test assembly
+        // is usually the largest one in the tree: one project's surface was 15,500 lines of its own
+        // "*.IntegrationTests" types before a single package signature. The old rule only dropped names
+        // ending in ".Tests", so "Gdn.IntegrationTests" sailed through. A test project is skipped whole -
+        // its assembly AND the packages only it references (test helpers nobody ships).
+        var testNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var proj in Directory.EnumerateFiles(projectDir, "*.csproj", SearchOption.AllDirectories))
         {
             if (proj.Split(Path.DirectorySeparatorChar).Contains("obj")) continue;
-            ownNames.Add(Path.GetFileNameWithoutExtension(proj));
-            try
-            {
-                foreach (var line in File.ReadLines(proj))
-                {
-                    var m = System.Text.RegularExpressions.Regex.Match(line, @"PackageReference\s+Include=""([^""]+)""");
-                    if (m.Success) wanted.Add(m.Groups[1].Value);
-                }
-            }
-            catch { }
+            var projName = Path.GetFileNameWithoutExtension(proj);
+            string projText = "";
+            try { projText = File.ReadAllText(proj); } catch { }
+            if (IsTestProject(projName, projText)) { testNames.Add(projName); continue; }
+            ownNames.Add(projName);
+            foreach (System.Text.RegularExpressions.Match m in
+                     System.Text.RegularExpressions.Regex.Matches(projText, @"PackageReference\s+Include=""([^""]+)"""))
+                wanted.Add(m.Groups[1].Value);
         }
         // Package id must be a prefix of the ASSEMBLY name, one direction only. Matching both ways let
         // the package Microsoft.AspNetCore.Mvc.Testing drag in the entire Mvc family (14 assemblies of
         // framework surface nobody was going to call).
         bool Wanted(string asm) =>
-            (ownNames.Contains(asm) && !asm.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase)) ||
-            wanted.Any(w => asm.Equals(w, StringComparison.OrdinalIgnoreCase)
-                         || asm.StartsWith(w + ".", StringComparison.OrdinalIgnoreCase));
+            !testNames.Contains(asm) &&
+            ((ownNames.Contains(asm) && !asm.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase)) ||
+             wanted.Any(w => asm.Equals(w, StringComparison.OrdinalIgnoreCase)
+                          || asm.StartsWith(w + ".", StringComparison.OrdinalIgnoreCase)));
         // Resolution and emission are DIFFERENT sets. TableClient's methods return Response<T> from
         // Azure.Core, which is not a direct PackageReference - dropping it from the resolver made every
         // one of those signatures unresolvable, and the type came out with a single constructor and no
@@ -164,6 +171,18 @@ public static class ApiSurface
         Directory.CreateDirectory(Path.GetDirectoryName(outFile)!);
         File.WriteAllText(outFile, sb.ToString(), new UTF8Encoding(false));
         return $"wrote {outFile} ({typeCount} types, {dlls.Count} assemblies)";
+    }
+
+    // A test project, by what it declares (the SDK's own markers) or, failing that, by its name. The
+    // name rule covers a project whose test packages come from a Directory.Build.props we do not read.
+    internal static bool IsTestProject(string name, string csprojText)
+    {
+        if (System.Text.RegularExpressions.Regex.IsMatch(csprojText,
+                @"<IsTestProject>\s*true\s*</IsTestProject>|PackageReference\s+Include=""(Microsoft\.NET\.Test\.Sdk|xunit|xunit\.v3|NUnit|MSTest|MSTest\.TestFramework|TUnit)""",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return true;
+        return System.Text.RegularExpressions.Regex.IsMatch(name,
+            @"(^|[._-])(Unit|Integration|Functional|Acceptance|E2E|EndToEnd)?(Tests?|Specs?)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
     private static string Kind(Type t) =>

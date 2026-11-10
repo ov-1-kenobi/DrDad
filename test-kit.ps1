@@ -813,7 +813,7 @@ Test-Case "api-surface resolves a type deriving from an ASP.NET framework base (
     & dotnet build $p -c Release --nologo -v q *> $null
     if ($LASTEXITCODE -ne 0) { return }   # no ASP.NET Core shared framework here -> skip, do not fail
     & $exe --api-surface $p *> $null
-    $surfaceFile = Join-Path $p "docs\API-SURFACE.md"
+    $surfaceFile = Join-Path $p ".claude\API-SURFACE.md"   # 0.60.0: the default output moved out of docs\
     Assert (Test-Path $surfaceFile) "api-surface wrote no surface for the ASP.NET fixture"
     Assert ((Get-Content $surfaceFile -Raw) -match 'class ApplicationUser') "api-surface dropped ApplicationUser : IdentityUser - the ASP.NET Core shared framework is not in the reflector's resolver paths"
   } finally { Remove-Sandbox $sb }
@@ -9085,6 +9085,87 @@ Test-Case "0.60.0 #4: every close regenerates the STATUS.md Snapshot in its own 
     [System.IO.File]::WriteAllText("$p\docs\STATUS.md", $old, (New-Object System.Text.UTF8Encoding($false)))
     $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
     Assert ($o -match '\[status\].*narrative' -and $o -match '14 unit') "an old narrative was not flagged:`n$o"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #10: the API surface skips TEST projects, is written to .claude\ (not docs\), and is never committed" {
+  if ($SkipBuild) { Skip-Case "-SkipBuild: needs the built local-tools.exe and a dotnet build of a fixture" }
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+  if (-not (Test-Path $exe)) { Skip-Case "local-tools.exe not built" -NeedsBuild }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\src\App","$p\tests\App.IntegrationTests","$p\docs" | Out-Null
+    $lib = '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><RollForward>LatestMajor</RollForward></PropertyGroup></Project>'
+    # NOT marked IsTestProject and no test package: the NAME alone (*.IntegrationTests) must be enough,
+    # because that is exactly the project the old ".Tests"-suffix rule let through.
+    $tst = '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><RollForward>LatestMajor</RollForward></PropertyGroup><ItemGroup><ProjectReference Include="..\..\src\App\App.csproj" /></ItemGroup></Project>'
+    $lib | Set-Content "$p\src\App\App.csproj" -Encoding UTF8
+    "namespace App; public class Greeter { public string Hello(string name) => name; }" | Set-Content "$p\src\App\Greeter.cs" -Encoding UTF8
+    $tst | Set-Content "$p\tests\App.IntegrationTests\App.IntegrationTests.csproj" -Encoding UTF8
+    "namespace App.IntegrationTests; public class GreeterTestHelper { public void Check_hello() { } }" | Set-Content "$p\tests\App.IntegrationTests\GreeterTestHelper.cs" -Encoding UTF8
+    "bin/`nobj/" | Set-Content "$p\.gitignore" -Encoding ASCII      # deliberately WITHOUT .claude/ (an old project)
+    # a legacy, generated, TRACKED docs\API-SURFACE.md - what every pre-0.60.0 .NET project has
+    "# API surface (generated - do not edit)`n`nold" | Set-Content "$p\docs\API-SURFACE.md" -Encoding UTF8
+    Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false; git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $b = (dotnet build "tests\App.IntegrationTests\App.IntegrationTests.csproj" -nologo -v q 2>&1 | Out-String); $bc = $LASTEXITCODE
+    $ErrorActionPreference = $prev; Pop-Location
+    Assert ($bc -eq 0) "fixture build failed:`n$b"
+
+    # before regeneration, -Lookup still answers from the legacy copy (no crash, a clean 'no match')
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "api-surface.ps1") -ProjectDir $p -Lookup "Nothing" 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 1) "lookup against a legacy-only surface did not exit 1 for a miss"
+
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "api-surface.ps1") -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "api-surface failed:`n$o"
+    $new = "$p\.claude\API-SURFACE.md"
+    Assert (Test-Path $new) "no .claude\API-SURFACE.md was written:`n$o"
+    $s = [System.IO.File]::ReadAllText($new)
+    Assert ($s -match 'class Greeter\b') "the product type is missing from the surface"
+    Assert ($s -notmatch 'GreeterTestHelper' -and $s -notmatch 'App\.IntegrationTests') "a TEST assembly is in the API surface"
+    Assert (-not (Test-Path "$p\docs\API-SURFACE.md")) "the legacy docs\API-SURFACE.md was left in docs\"
+    Assert (-not ((git -C $p ls-files -- docs/API-SURFACE.md | Out-String).Trim())) "docs/API-SURFACE.md is still tracked"
+    git -C $p check-ignore -q -- ".claude/API-SURFACE.md" 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) ".claude/API-SURFACE.md is not git-ignored - close-unit would commit it"
+    git -C $p add -A 2>&1 | Out-Null
+    Assert ((git -C $p diff --cached --name-only | Out-String) -notmatch '\.claude/API-SURFACE') "the new surface got staged by git add -A"
+    # lookup reads the new location
+    $hit = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "api-surface.ps1") -ProjectDir $p -Lookup "Greeter" 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0 -and $hit -match 'Hello\(string name\)') "lookup did not find the product type in the new location:`n$hit"
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #10 upgrade path: upgrade-project moves a generated docs\API-SURFACE.md out of docs\ and git; a hand-written one stays; IsTestProject rules" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $up = Join-Path $kit "upgrade-project.ps1"
+    foreach ($case in @(@{ n = "gen"; head = "# API surface (generated - do not edit)"; moved = $true }, @{ n = "hand"; head = "# API surface notes (mine)"; moved = $false })) {
+      $p = Join-Path $sb $case.n; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+      "# Project: t`n`n## Stack`n- x" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+      "$($case.head)`n`nbody" | Set-Content "$p\docs\API-SURFACE.md" -Encoding UTF8
+      Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+      git init -q; git config core.autocrlf false; git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+      $ErrorActionPreference = $prev; Pop-Location
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p 2>&1 | Out-Null
+      if ($case.moved) {
+        Assert (-not (Test-Path "$p\docs\API-SURFACE.md")) "[$($case.n)] generated file was left in docs\"
+        Assert (Test-Path "$p\.claude\API-SURFACE.md") "[$($case.n)] generated file was not moved to .claude\"
+        Assert (-not ((git -C $p ls-files -- docs/API-SURFACE.md | Out-String).Trim())) "[$($case.n)] still tracked"
+      } else {
+        Assert (Test-Path "$p\docs\API-SURFACE.md") "[$($case.n)] a hand-written file was removed"
+        Assert ((git -C $p ls-files -- docs/API-SURFACE.md | Out-String).Trim()) "[$($case.n)] a hand-written file was untracked"
+      }
+    }
+    # the test-project rule, straight from the source (text in, verdict out)
+    $cs = [System.IO.File]::ReadAllText((Join-Path $kit "local-tools\ApiSurface.cs"))
+    Assert ($cs -match 'IsTestProject\(projName, projText\)') "the generator does not skip test projects"
+    Assert ($cs -match 'Path\.Combine\(projectDir, "\.claude", "API-SURFACE\.md"\)') "the generator's default output is not .claude\"
+    $nameRx = '(^|[._-])(Unit|Integration|Functional|Acceptance|E2E|EndToEnd)?(Tests?|Specs?)$'
+    Assert ($cs.Contains($nameRx)) "the name rule in ApiSurface.cs changed - update this case"
+    foreach ($yes in @("Gdn.IntegrationTests", "App.Tests", "App.UnitTests", "App.Test", "Tests", "My_E2ETests")) { Assert ($yes -match $nameRx) "$yes should be a test project" }
+    foreach ($no in @("Gdn.Cli", "Latest", "Contest.Core", "App.Testing.Tools", "Attestation")) { Assert ($no -notmatch $nameRx) "$no should NOT be a test project" }
   } finally { Remove-Sandbox $sb }
 }
 

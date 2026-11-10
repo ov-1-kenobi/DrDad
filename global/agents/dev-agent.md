@@ -22,7 +22,8 @@ and placeholder convention are in CLAUDE.md.
   `doc-stats.ps1 -Contract <Cn>` before acting on it. If you cannot find a contract you expect, say
   "cannot LOCATE contract <Cn>" - not that it is absent.
 - **LOOK UP EVERY SIGNATURE - AND WHICH FILE A TYPE LIVES IN - do not reconstruct either from memory.**
-  `docs/API-SURFACE.md` carries the EXACT public signatures of this solution AND of every NuGet package it
+  The API surface (`.claude/API-SURFACE.md` - a build product, NOT in `docs/`, not indexed, not committed)
+  carries the EXACT public signatures of this solution AND of every NuGet package it
   references, generated from the compiled assemblies after each successful build, so it cannot be stale. Each
   solution type heading also names the `.cs` file it is declared in, so you open and edit the RIGHT file
   instead of guessing it from the class name:
