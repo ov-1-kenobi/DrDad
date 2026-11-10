@@ -431,6 +431,37 @@ if ((Test-Path $statusGuard) -and (Test-Path (Join-Path $proj ".git"))) {
   }
 }
 
+# --- 0g) recurring grader suggestions: warn, and hold the 6th story close for /retro (issue 6 A+C) --
+# A suggestion the grader makes on card after card is a convention problem, and nothing turned it into
+# work: one project had the same refactor suggested on five consecutive cards. /retro exists for exactly
+# this and was never run. So at every story roll-up: list the suggestions that recur on 3+ cards (WARN);
+# and when they exist AND five stories have closed since the last recorded retro, refuse this roll-up
+# until /retro has run (it ends with `dad grade-trends -RecordRetro`). No recurring suggestion = no gate.
+$retroWarn = @()
+if ($predictedStory -and -not $SkipVerify) {
+  $rollsUpNow = $true
+  if (Test-Path $storiesFile) {
+    $rollsUpNow = -not [bool](Get-Content $storiesFile -Encoding UTF8 | Where-Object {
+      $_ -match '^#{1,6}\s' -and $_ -match ('\b' + [regex]::Escape($predictedStory) + '\b') -and $_ -match '<!--\s*Status:\s*DONE\b' } | Select-Object -First 1)
+  }
+  $gt = Join-Path $kit "grade-trends.ps1"
+  if ($rollsUpNow -and (Test-Path $gt)) {
+    $trend = $null
+    try { $trend = (& powershell -NoProfile -ExecutionPolicy Bypass -File $gt -ProjectDir $proj -Json -EnsureBaseline 2>$null | Out-String | ConvertFrom-Json) } catch { $trend = $null }
+    if ($trend -and @($trend.recurringSuggestions).Count -gt 0) {
+      if ($trend.retroDue) {
+        Write-Host "[close-unit] RETRO DUE - story $predictedStory is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+        Write-Host "             $($trend.storyClosesSinceRetro) stories have closed since the last retro, and the grader keeps making the same suggestion(s):" -ForegroundColor Red
+        foreach ($rs in @($trend.recurringSuggestions | Select-Object -First 6)) { Write-Host "               - $rs" -ForegroundColor Yellow }
+        Write-Host "             Run /retro now: it turns these into a convention, a recipe, a task or a design item, on the" -ForegroundColor Red
+        Write-Host "             human's approval, and records itself (dad grade-trends -RecordRetro). Then close again." -ForegroundColor Red
+        Write-GateLog "block" "$Id not closed: retro due - $(@($trend.recurringSuggestions).Count) recurring grader suggestion(s), $($trend.storyClosesSinceRetro) story closes since the last retro"
+        exit 1
+      }
+      $retroWarn = @($trend.recurringSuggestions)
+    }
+  }
+}
 # --- 0f) human-gate WIP limit: do not START another story (issue 7 option B, 0.61.0) -----------
 # When more stories than the project's limit are built and waiting only on a human, the first task of a
 # NEW story does not close. Tasks of stories already started are untouched, so nothing in flight is
@@ -843,6 +874,9 @@ if ($script:storyFlipped) {
     $script:evidenceFresh = $script:storyFlipped
     $notes.Add("close evidence written for the grader: grades\$($script:storyFlipped)_EVIDENCE.md (the card must quote its Evidence line)")
   } catch { $warns.Add("could not write the close evidence for $($script:storyFlipped): $($_.Exception.Message)") }
+}
+if ($retroWarn.Count -gt 0) {
+  $warns.Add("$($retroWarn.Count) grader suggestion(s) recur on 3+ cards and are still open - run /retro (close-unit holds the story close after 5 closes without one): " + (($retroWarn | Select-Object -First 3) -join ' | '))
 }
 # --- 2b) a DONE story needs a real grade card ---
 # Grading is the step that keeps getting skipped. At task level this only warns (the card is written AFTER

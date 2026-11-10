@@ -9703,6 +9703,78 @@ Test-Case "0.61.0 #5: a roll-up writes machine-made close evidence; the grade ca
   Assert ($ga -match 'THE CLOSE EVIDENCE COMES FIRST' -and $ga -match 'grade cap: B') "grade-agent is not told to read and quote the close evidence"
 }
 
+Test-Case "0.61.0 #6: suggestions recurring on 3+ cards are listed at every roll-up, and hold the story close once 5 stories closed without a retro; no recurrence = no gate" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $gt = Join-Path $kit "grade-trends.ps1"
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\grades" | Out-Null
+    # eight one-task stories; S1..S6 will be closed here
+    $t = @("# Task map","","## Tasks",""); $st = @("# Stories","")
+    foreach ($s in 1..8) { $t += "### [ ] T$s.1 - unit   (Story S$s)"; $st += "### Story S${s}: s   <!-- Status: TODO -->" }
+    [System.IO.File]::WriteAllText("$p\docs\TASKS.md", (($t -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText("$p\docs\STORIES.md", (($st -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    ".claude/" | Set-Content "$p\.gitignore" -Encoding ASCII
+    Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false; git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    function Card([string]$id, [string]$sug) {
+      $body = "# Story $id : report card`n`n**Current grade: B**`n`n## Grade history`n| 1 | 2026-11-10 | B | initial |`n`n## Assessment`n- error handling is discussed here in prose only, which must NOT count as a suggestion`n`n## Suggestions`n$sug`n"
+      [System.IO.File]::WriteAllText("$p\grades\$($id)_GRADE.md", $body, (New-Object System.Text.UTF8Encoding($false)))
+    }
+    function CloseStory([int]$n) {
+      $x = Invoke-Pf $p @("-Id","T$n.1","-Title","u"); if ($x.Code -ne 0) { return $x }
+      return (Invoke-Pf $p @("-Id","S$n","-Title","S$n closed"))
+    }
+    # two cards with the same suggestion: not yet recurring (needs 3) -> no warning, baseline log appears
+    Card "S1" "1. [dev] extract the duplicated content-type guessing into one helper"
+    Card "S2" "1. [dev] the same duplicate logic appears again in UpdateCommand"
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -notmatch 'recur on 3\+ cards') "two cards were treated as a recurring suggestion:`n$($x.Out)"
+    Assert ((Test-Path "$p\grades\retro-log.md") -and ([System.IO.File]::ReadAllText("$p\grades\retro-log.md") -match 'baseline.*stories DONE: 0')) "no baseline line was written to grades\retro-log.md"
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 closed"); Assert ($x.Code -eq 0) "S1 story-level close:`n$($x.Out)"
+    # a third card makes it recurring: WARN at the next roll-up, listed by grade-trends, but no block yet
+    Card "S3" "1. [mechanical] tidy imports`n2. [dev] DRY: third copy of the content-type guess"
+    $j = (& powershell -NoProfile -ExecutionPolicy Bypass -File $gt -ProjectDir $p -Json | Out-String | ConvertFrom-Json)
+    Assert (@($j.recurringSuggestions).Count -eq 1 -and $j.recurringSuggestions[0] -match '^\[dev\] duplication - 3 cards \(S1, S2, S3\)') "recurring suggestions = '$(@($j.recurringSuggestions) -join ' ; ')'"
+    Assert (-not $j.retroDue) "retro reported due after one story close"
+    $x = CloseStory 2
+    Assert ($x.Code -eq 0) "S2:`n$($x.Out)"
+    foreach ($n in 3..5) { $x = CloseStory $n; Assert ($x.Code -eq 0) "S${n}:`n$($x.Out)" }
+    Assert ((Get-Content "$p\docs\STORIES.md" | Where-Object { $_ -match 'Status: DONE' }).Count -eq 5) "setup: five stories should be DONE"
+    # five stories closed since the baseline, suggestion still recurring -> the 6th roll-up is held
+    $x = Invoke-Pf $p @("-Id","T6.1","-Title","u")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'RETRO DUE') "the 6th story close was not held for a retro:`n$($x.Out)"
+    Assert ($x.Out -match '\[dev\] duplication - 3 cards') "the refusal does not list the recurring suggestion:`n$($x.Out)"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T6\.1' -Quiet)) "T6.1 was ticked anyway"
+    # /retro records itself -> the close goes through, with the suggestion still shown as a warning
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $gt -ProjectDir $p -RecordRetro -Note "duplication: task T9.9 created" | Out-String)
+    Assert ([System.IO.File]::ReadAllText("$p\grades\retro-log.md") -match 'retro recorded; stories DONE: 5; duplication: task T9\.9 created') "the retro was not recorded:`n$o"
+    $x = Invoke-Pf $p @("-Id","T6.1","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'WARN 1 grader suggestion\(s\) recur on 3\+ cards') "after the retro the close did not go through with a warning:`n$($x.Out)"
+  } finally { Remove-Sandbox $sb }
+  # no recurring suggestion: six closes in a row, never held
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $t = @("# Task map","","## Tasks",""); $st = @("# Stories","")
+    foreach ($s in 1..6) { $t += "### [ ] T$s.1 - unit   (Story S$s)"; $st += "### Story S${s}: s   <!-- Status: TODO -->" }
+    [System.IO.File]::WriteAllText("$p\docs\TASKS.md", (($t -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText("$p\docs\STORIES.md", (($st -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``cmd /c echo Total: 1``" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    ".claude/" | Set-Content "$p\.gitignore" -Encoding ASCII
+    Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false; git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    foreach ($n in 1..6) {
+      $x = Invoke-Pf $p @("-Id","T$n.1","-Title","u"); Assert ($x.Code -eq 0) "close $n was held although nothing recurs:`n$($x.Out)"
+      $x = Invoke-Pf $p @("-Id","S$n","-Title","closed"); Assert ($x.Code -eq 0) "story-level close ${n}:`n$($x.Out)"
+    }
+  } finally { Remove-Sandbox $sb }
+  Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\commands\retro.md")) -match 'dad grade-trends -RecordRetro') "/retro does not record itself"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

@@ -88,6 +88,19 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
   including for stories whose closes had just failed their tests.
 - UPGRADE PATH: none needed. A story closed by an older kit has no evidence file, and its card is judged as before.
 
+### Added - issue 6 (options A + C): repeated grader suggestions are surfaced, then force a retro
+- `grade-trends` reports RECURRING SUGGESTIONS: the same kind of suggestion with the same owner tag on three or more
+  cards, read from each card's `## Suggestions` section only (also `recurringSuggestions` in `-Json`).
+- (A) At every story roll-up `close-unit` prints them as a WARN.
+- (C) When recurring suggestions exist AND five stories have closed since the last recorded retro, `close-unit`
+  refuses the next story roll-up ("RETRO DUE") and logs a `block`. With no recurring suggestion there is no gate,
+  however many stories close.
+- `/retro` now ends with `dad grade-trends -RecordRetro -Note "..."`, which appends to `grades\retro-log.md`. A
+  recurring suggestion may also become a task (via taskmap-agent) on the human's approval.
+- UPGRADE PATH: the first roll-up under this kit writes a baseline line to `grades\retro-log.md`, so an existing
+  project gets five further story closes before it can be held. "Same suggestion" means same tag and same theme
+  (duplication, error handling, tests, naming, ...); it is deliberately crude.
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).

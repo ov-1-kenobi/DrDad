@@ -17,7 +17,7 @@
 # directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
 # wrong folder. These scripts are invoked by MODELS, which typo parameter names.
 [CmdletBinding()]
-param([string]$ProjectDir = ".", [switch]$Json)
+param([string]$ProjectDir = ".", [switch]$Json, [switch]$RecordRetro, [string]$Note = "", [switch]$EnsureBaseline)
 $ErrorActionPreference = "Stop"
 # GUARD: -ProjectDir must exist. Resolve-Path ERRORS on a missing path but the .cmd wrapper still exited 0,
 # so a mistyped path looked like a project with no stories and no tasks. Fail loudly instead.
@@ -28,12 +28,51 @@ if (-not (Test-Path -LiteralPath $ProjectDir)) {
 $proj = (Resolve-Path -LiteralPath $ProjectDir).Path
 $gradesDir = Join-Path $proj "grades"
 
+# --- the retro log (0.61.0, issue 6 options A+C) -------------------------------------------------
+# grades\retro-log.md records each /retro and how many stories were DONE at that moment. close-unit reads
+# it: when the same suggestion keeps coming back and five stories have closed since the last retro, the
+# next story does not roll up until /retro has run. No recurring suggestions = no gate, whatever the count.
+. (Join-Path $PSScriptRoot "docs-dir.ps1")
+$retroLog = Join-Path $gradesDir "retro-log.md"
+function Get-DoneStoryCount {
+  $sf = Join-Path (Resolve-DocsDir $proj -Quiet) "STORIES.md"
+  if (-not (Test-Path -LiteralPath $sf)) { return 0 }
+  return @([System.IO.File]::ReadAllLines($sf) | Where-Object { $_ -match '^#{1,6}\s' -and $_ -match '<!--\s*Status:\s*DONE\b' }).Count
+}
+function Add-RetroLine([string]$kind, [string]$text) {
+  if (-not (Test-Path $gradesDir)) { New-Item -ItemType Directory -Path $gradesDir -Force | Out-Null }
+  $head = ""
+  if (-not (Test-Path -LiteralPath $retroLog)) {
+    $head = "# Retro log`n<!-- One line per /retro (written by 'dad grade-trends -RecordRetro'). close-unit reads the LAST line's`n     'stories DONE' number to know how many stories have closed since. Do not edit by hand. -->`n"
+  }
+  $line = "- $(Get-Date -Format 'yyyy-MM-dd') $kind; stories DONE: $(Get-DoneStoryCount)" + $(if ($text) { "; " + (($text -replace '\s+', ' ').Trim()) } else { "" })
+  [System.IO.File]::AppendAllText($retroLog, ($head + $line + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  return $line
+}
+if ($RecordRetro) {
+  $l = Add-RetroLine "retro recorded" $Note
+  Write-Host "recorded in grades\retro-log.md: $l" -ForegroundColor Green
+  exit 0
+}
+if ($EnsureBaseline -and -not (Test-Path -LiteralPath $retroLog)) {
+  [void](Add-RetroLine "baseline (no retro yet; counting story closes from here)" "")
+}
+$doneAtRetro = $null
+if (Test-Path -LiteralPath $retroLog) {
+  $lastRetro = @([System.IO.File]::ReadAllLines($retroLog) | Where-Object { $_ -match '^- .*stories DONE:\s*\d+' }) | Select-Object -Last 1
+  if ($lastRetro) { $doneAtRetro = [int]([regex]::Match($lastRetro, 'stories DONE:\s*(\d+)').Groups[1].Value) }
+}
+$doneNow = Get-DoneStoryCount
+$sinceRetro = if ($null -ne $doneAtRetro) { [Math]::Max(0, $doneNow - $doneAtRetro) } else { 0 }
+
 if (-not (Test-Path $gradesDir)) {
+  if ($Json) { [pscustomobject]@{ cards = 0; recurringSuggestions = @(); storyClosesSinceRetro = $sinceRetro; retroDue = $false } | ConvertTo-Json -Depth 5; exit 0 }
   Write-Host "no grades\ folder - nothing to retrospect on yet" -ForegroundColor Yellow
   exit 0
 }
 $cards = @(Get-ChildItem $gradesDir -Filter *_GRADE.md -File | Sort-Object Name)
 if ($cards.Count -eq 0) {
+  if ($Json) { [pscustomobject]@{ cards = 0; recurringSuggestions = @(); storyClosesSinceRetro = $sinceRetro; retroDue = $false } | ConvertTo-Json -Depth 5; exit 0 }
   Write-Host "no grade cards yet - run /build (or /grade <id>) first" -ForegroundColor Yellow
   exit 0
 }
@@ -103,6 +142,35 @@ foreach ($c in $cards) {
   }
 }
 
+# RECURRING SUGGESTIONS (issue 6): the same kind of suggestion, with the same owner tag, on three or more
+# cards. Read from each card's "## Suggestions" section only - a theme word in the assessment prose is not
+# a suggestion. "Same" is (tag, theme): crude, but deterministic, and it is what caught the real case - a
+# duplicated-logic refactor suggested on five consecutive cards and never done.
+$sugHits = @{}
+foreach ($c in $cards) {
+  $text = Get-Content $c.FullName -Raw
+  $id = $c.BaseName -replace '_GRADE$',''
+  $sec = [regex]::Match($text, '(?ms)^##\s*Suggestions\b.*?(?=^##\s|\z)')
+  if (-not $sec.Success) { continue }
+  foreach ($sl in ($sec.Value -split "`r?`n")) {
+    $sm = [regex]::Match($sl, '^\s*(?:\d+[.)]|[-*])\s*\[([a-z-]+)\]\s*(.+)$')
+    if (-not $sm.Success) { continue }
+    $tag = $sm.Groups[1].Value.ToLower(); $body = $sm.Groups[2].Value.Trim()
+    if ($body -match '^(none|nothing)\b') { continue }
+    foreach ($k in $themes.Keys) {
+      if ($body -match $themes[$k]) {
+        $key = "[$tag] $k"
+        if (-not $sugHits.ContainsKey($key)) { $sugHits[$key] = [pscustomobject]@{ Ids = (New-Object System.Collections.Generic.List[string]); Example = $body } }
+        if (-not $sugHits[$key].Ids.Contains($id)) { $sugHits[$key].Ids.Add($id) }
+      }
+    }
+  }
+}
+$recurringSug = @($sugHits.Keys | Where-Object { $sugHits[$_].Ids.Count -ge 3 } | Sort-Object { -$sugHits[$_].Ids.Count }, { $_ } | ForEach-Object {
+  $ex = $sugHits[$_].Example; if ($ex.Length -gt 110) { $ex = $ex.Substring(0, 110) + "..." }
+  "$_ - $($sugHits[$_].Ids.Count) cards ($($sugHits[$_].Ids -join ', ')), e.g. '$ex'" })
+$retroDue = ($recurringSug.Count -gt 0 -and $null -ne $doneAtRetro -and $sinceRetro -ge 5)
+
 $order = @{ "A+"=1;"A"=2;"A-"=3;"B+"=4;"B"=5;"B-"=6;"C+"=7;"C"=8;"C-"=9;"D+"=10;"D"=11;"D-"=12;"F"=13;"?"=99 }
 # Chronological, so the trend means something. Cards with no date fall to the end in name order.
 $graded = @($rows | Where-Object { $_.Grade -ne "?" } | Sort-Object When, Id)
@@ -129,6 +197,9 @@ $result = [pscustomobject]@{
   stubCards = @($stubs | ForEach-Object { $_.Id })
   recurringThemes = @($recurring | ForEach-Object { "$_ ($($themeHits[$_].Count)/$($cards.Count) cards: $($themeHits[$_] -join ', '))" })
   grades = @(($rows | Sort-Object When, Id) | ForEach-Object { "$($_.Id)=$($_.Grade)" })
+  recurringSuggestions = $recurringSug
+  storyClosesSinceRetro = $sinceRetro
+  retroDue = $retroDue
 }
 if ($Json) { $result | ConvertTo-Json -Depth 5; exit 0 }
 
@@ -148,6 +219,16 @@ if ($recurring.Count) {
   foreach ($r in $recurring) { Write-Host "    - $r" -ForegroundColor Yellow }
 } else {
   Write-Host "  no theme appears in enough cards to call it a pattern yet." -ForegroundColor Green
+}
+Write-Host ""
+if ($recurringSug.Count) {
+  Write-Host "  RECURRING SUGGESTIONS - the same suggestion on 3+ cards, still not done:" -ForegroundColor Yellow
+  foreach ($r in $recurringSug) { Write-Host "    - $r" -ForegroundColor Yellow }
+  $sinceTxt = if ($null -ne $doneAtRetro) { "$sinceRetro stor(y/ies) closed since the last retro" } else { "no retro recorded yet" }
+  Write-Host "    ($sinceTxt; at 5, close-unit holds the next story close until /retro has run)" -ForegroundColor $(if ($retroDue) { "Red" } else { "Yellow" })
+  if ($retroDue) { Write-Host "    RETRO DUE - run /retro now." -ForegroundColor Red }
+} else {
+  Write-Host "  no suggestion recurs on 3 or more cards." -ForegroundColor Green
 }
 Write-Host ""
 Write-Host "Themes seen (any count):" -ForegroundColor DarkGray

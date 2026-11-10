@@ -57,6 +57,17 @@ Relay the proposals with their evidence (theme, card count, which cards). I pick
 Then re-run `grade-trends.ps1` and record in `docs/STATUS.md` under Notes what changed and why, so the
 next retro can tell whether it worked.
 
+**Finish EVERY retro - including one where I approved nothing - by recording it:**
+```
+dad grade-trends -RecordRetro -Note "<one line: what was decided>"
+```
+That appends a line to `grades/retro-log.md` (commit it). `close-unit` reads it: when the grader's
+suggestions recur on three or more cards (`RECURRING SUGGESTIONS` in the grade-trends output) and five
+stories have closed since the last recorded retro, it refuses the next story close until a retro is
+recorded. For each recurring suggestion, the outcomes are the ones in step 3, plus one more: **a task** -
+if I approve, route it to taskmap-agent as a real task under the story it belongs to, so it gets built
+instead of being suggested a sixth time. Do not record a retro you did not run.
+
 ## What this is for
 
 The system drifts. Different models fail differently - one invents API signatures, one fabricates missing
