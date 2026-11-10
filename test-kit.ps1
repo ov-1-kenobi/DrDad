@@ -30,6 +30,9 @@ $haveGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
 # variable names the INSTALLED kit, so without this every fixture commit would run the installed copy's
 # hook scripts instead of the ones being tested. Process-scoped; the machine's User value is never touched.
 $env:DAD_HOME = $kit
+# 0.60.0 (issue 16): close-unit and dad-doctor WARN when the shell is elevated. Pin the probe so results do
+# not depend on how the suite happened to be launched; the one case about the warning sets it to 1 itself.
+$env:DAD_ASSUME_ELEVATED = '0'
 
 function Test-Case([string]$name, [scriptblock]$body) {
   # Child processes (git, dotnet, the exe) write notices to stderr. If the suite's own stderr is being
@@ -9369,6 +9372,28 @@ Test-Case "0.60.0 #18: a STORY close sweeps old scratch out of _tmp\ (a task clo
     $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $td -ProjectDir $p -Fix -TmpOnly -OlderThanHours 1 | Out-String)
     Assert ((Test-Path "$p\_tmp\a.txt") -and $o -match 'tracked by git') "a git-tracked file under _tmp\ was swept:`n$o"
   } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #16 (warning part): close-unit and dad-doctor WARN when the shell is elevated, and stay quiet when it is not" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  $keep = $env:DAD_ASSUME_ELEVATED
+  try {
+    $p = New-PfFixture $sb
+    $env:DAD_ASSUME_ELEVATED = '1'
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u")
+    Assert ($x.Code -eq 0) "an elevated shell must WARN, not block:`n$($x.Out)"
+    Assert ($x.Out -match 'WARN this shell is ELEVATED') "close-unit did not warn about an elevated shell:`n$($x.Out)"
+    Push-Location $p
+    try { $d = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") 2>&1 | Out-String) } finally { Pop-Location }
+    Assert ($d -match '(?m)WARN.*shell\s+ELEVATED') "dad-doctor did not warn about an elevated shell"
+    $env:DAD_ASSUME_ELEVATED = '0'
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -notmatch '(?i)elevated') "close-unit mentioned elevation in a normal shell:`n$($x.Out)"
+    Push-Location $p
+    try { $d = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-doctor.ps1") 2>&1 | Out-String) } finally { Pop-Location }
+    Assert ($d -match '(?m)OK.*shell\s+not elevated') "dad-doctor did not report a normal shell as OK"
+  } finally { $env:DAD_ASSUME_ELEVATED = $keep; Remove-Sandbox $sb }
 }
 
 # ---------------------------------------------------------------- summary

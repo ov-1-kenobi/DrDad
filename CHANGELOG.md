@@ -129,6 +129,12 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
   `-Fix` it lists what it would remove. The existing `dad tidy` / `dad tidy -Fix` behavior is unchanged.
 - The `_tmp/` line in the project CLAUDE.md template says so.
 
+### Added - issue 16 (warning part only): warn when the agent shell is elevated
+- `close-unit` prints a WARN on every close, and `dad doctor` reports `[WARN] shell ELEVATED`, when the shell runs as
+  Administrator: every command the agent runs then has admin rights, and tools that refuse elevation fail. It never
+  blocks. `DAD_ASSUME_ELEVATED=1|0` overrides the probe (used by the test suite).
+- NOT done: pruning broad permission allow-rules, the other half of issue 16, is a proposal in `PROPOSALS.md`.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)

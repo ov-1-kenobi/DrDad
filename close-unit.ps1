@@ -938,6 +938,22 @@ if ($problems.Count -eq 0 -and $storyClosed) {
   } catch { $warns.Add("could not sweep _tmp\: $($_.Exception.Message)") }
 }
 
+# --- is this shell ELEVATED? (issue 16, 0.60.0 - warning only) ----------------------------------
+# An agent session started from an Administrator terminal runs EVERY command with admin rights: a wrong
+# path in a delete is a system-wide mistake, and tools that (rightly) refuse to run elevated fail in ways
+# that look like code bugs. One project's dashboard carried the note "agent shell is elevated" for weeks as
+# the reason its human smoke tests could not be run by the agent. Nobody chose that; say it every close.
+# DAD_ASSUME_ELEVATED=1/0 overrides the probe (the test suite uses it; nothing else should).
+$elevated = $false
+try {
+  if ($env:DAD_ASSUME_ELEVATED -eq '1') { $elevated = $true }
+  elseif ($env:DAD_ASSUME_ELEVATED -eq '0') { $elevated = $false }
+  else { $elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
+} catch { $elevated = $false }
+if ($elevated) {
+  $warns.Add("this shell is ELEVATED (Administrator). Every command the agent runs has admin rights, and tools that refuse elevation will fail. Unless you chose this, close the editor/terminal and start it NON-elevated. (dad doctor reports it too.)")
+}
+
 # --- stamp for the stop guard -----------------------------------------------------------------
 # dad-guard.ps1 blocks a turn from ending on uncommitted, unverified code. A clean close IS the
 # verification, so record it. Only on success - a failed close must stay blocked.

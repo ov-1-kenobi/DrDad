@@ -61,6 +61,19 @@ elseif ($cloudMode) { Write-Host "mode: CLOUD (Anthropic API) - the local agent 
 Write-Host "`n-- prerequisites --" -ForegroundColor Cyan
 Say "OK" "PowerShell" "$($PSVersionTable.PSVersion) on $([Environment]::OSVersion.VersionString)"
 
+# 0.60.0 (issue 16): an ELEVATED shell means every command an agent runs here has admin rights. Usually
+# nobody chose that - the editor was started from an Administrator terminal once and kept. WARN, not FAIL:
+# an installer step may need it. DAD_ASSUME_ELEVATED=1/0 overrides the probe (tests).
+$isElevated = $false
+try {
+  if ($env:DAD_ASSUME_ELEVATED -eq '1') { $isElevated = $true }
+  elseif ($env:DAD_ASSUME_ELEVATED -eq '0') { $isElevated = $false }
+  else { $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
+} catch { $isElevated = $false }
+if ($isElevated) {
+  Say "WARN" "shell" "ELEVATED (Administrator) - agent commands run with admin rights; tools that refuse elevation will fail" "start the editor / terminal NON-elevated for agent work"
+} else { Say "OK" "shell" "not elevated" }
+
 if (Get-Exe "dotnet") { Say "OK" ".NET SDK" (Get-Ver "dotnet") }
 else { Say "FAIL" ".NET SDK" "not found" "winget install Microsoft.DotNet.SDK.8   (needed to build local-tools)" }
 
