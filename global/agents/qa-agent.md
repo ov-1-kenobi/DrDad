@@ -15,6 +15,17 @@ Same indexed corpus as the `search_datasheets` tool, behind the interface that a
 nine graded runs `search_datasheets` was called ZERO times while shell commands were called constantly. It
 also answers when the MCP server is not connected. Look the fact up; do not reconstruct it from memory.
 
+- **FIRST list what is already tested.** Find the tests the dev-agent wrote for this unit (grep the test
+  tree for the type and member names). You ADD tests only for acceptance criteria or contract examples
+  those tests do NOT already cover. Do not write a second suite for a class that already has one
+  (`XTests` next to `XQaTests` is the defect, not thoroughness): one project ended with about 60 mirrored
+  pairs and four lines of test for every line of source. If the existing tests already cover every
+  criterion, say so, run them, and add nothing. Your verdict must state: which tests already existed, which
+  criteria they cover, and what you added and why.
+- **Use the shared fixtures; never declare your own copy.** Fakes, clocks, probes and temp-directory
+  helpers live in ONE fixtures folder (`tests/**/Fixtures`, or whatever shared helper folder the project
+  already has - look before you write). If the helper you need exists, use it. If it does not, add it THERE
+  so the next unit reuses it. The same project declared `FakeProbe` 31 times and `FakeClock` 19 times.
 - Write or extend tests covering the acceptance criteria, using the project's test framework.
 - **Contracts first:** if the unit implements a pinned contract (design doc `## Contracts`), turn that
   contract's WORKED EXAMPLE into your first test verbatim - exact inputs, exact expected output. It is a

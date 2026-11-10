@@ -2,6 +2,19 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.61.0 - 2026-11-10
+
+The nine "Tier 2" items from the same review, each implemented as the option the owner chose in
+`PROPOSALS.md` (5A, 6A+C, 7B, 8B, 9A, 11A, 13A, 16B, 17B). Existing projects: run `upgrade-project.cmd`.
+
+### Changed - issue 13 (option A): qa-agent stops mirroring dev-agent's tests; fixtures are shared
+- qa-agent must first LIST the tests the dev-agent already wrote for the unit, and may add tests only for
+  acceptance criteria or contract examples those do not cover. A second suite that re-tests the same behavior
+  (`XTests` plus `XQaTests`) is called out as a defect. Reported in the verdict: what already existed, what was added.
+- Both agents are told to keep fakes, clocks, probes and temp-directory helpers in ONE shared fixtures folder
+  (`tests/**/Fixtures`, or the project's existing equivalent) and to extend it rather than declare another copy.
+  The reviewed project declared `FakeProbe` 31 times and `FakeClock` 19 times.
+- Prompt changes only (option A); no script check.
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).

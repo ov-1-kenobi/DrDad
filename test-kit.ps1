@@ -9396,6 +9396,21 @@ Test-Case "0.60.0 #16 (warning part): close-unit and dad-doctor WARN when the sh
   } finally { $env:DAD_ASSUME_ELEVATED = $keep; Remove-Sandbox $sb }
 }
 
+# ---------------------------------------------------------------- 0.61.0: Tier 2 of the GDN review
+# The options the owner chose in PROPOSALS.md: 5A, 6A+C, 7B, 8B, 9A, 11A, 13A, 16B, 17B.
+Write-Host "-- 0.61.0 tier 2 --" -ForegroundColor Cyan
+
+Test-Case "0.61.0 #13: qa-agent lists existing tests first and adds only uncovered ones; both agents share one fixtures folder" {
+  $qa = [System.IO.File]::ReadAllText((Join-Path $kit "global\agents\qa-agent.md"))
+  $dev = [System.IO.File]::ReadAllText((Join-Path $kit "global\agents\dev-agent.md"))
+  Assert ($qa -match 'FIRST list what is already tested') "qa-agent is not told to list the existing tests first"
+  Assert ($qa -match '(?s)ADD tests only for acceptance criteria or contract examples\s+those tests do NOT already cover') "qa-agent is not limited to uncovered criteria"
+  Assert ($qa -match 'XTests.{0,20}XQaTests') "qa-agent does not name the mirrored-suite defect"
+  Assert ($qa -match 'tests/\*\*/Fixtures' -and $dev -match 'tests/\*\*/Fixtures') "the shared fixtures folder is not named in both agents"
+  # the rule must come BEFORE the instruction to write tests, or it is read too late
+  Assert ($qa.IndexOf('FIRST list what is already tested') -lt $qa.IndexOf('Write or extend tests covering the acceptance criteria')) "the list-first rule comes after the write-tests instruction"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })
