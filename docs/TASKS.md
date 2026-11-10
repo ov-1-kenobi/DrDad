@@ -353,13 +353,16 @@ T36.2 -> T37.1 (needs T36.2) -> T37.2 (needs T37.1) -> T37.3 (needs T37.2) -> T3
 in-suite checks, T37.2 the blanking limits, T37.3 narrows `fully offline` and writes the CHANGELOG entry, T37.4 is the HUMAN decision on
 rephrased-claim patterns, like T34.3. `docs/DESIGN.md` is never edited.)
 
-T37.4 -> T46.7 (needs T37.4) -> T46.8 (needs T46.7) -> T46.9 (needs T46.8) -> T46.10 (needs T46.9) -> T46.11 (needs T46.10) -> T46.14 (needs T46.11) -> T46.15 (needs T46.14) -> T46.16 (needs T46.15) -> T46.6 (needs T46.16) -> T46.5 (needs T46.6) -> T46.12 (needs T46.5) -> T46.13 (needs T46.12) -> T46.17 (needs T46.13) [T46.6, T46.5, T46.12, T46.13 and T46.17 WAIT FOR THE HUMAN]
+T37.4 -> T46.7 -> T46.8 -> T46.9 -> T46.10 -> T46.11 -> T46.14 -> T46.15 -> T46.16 (needs T46.15) -> T46.18
+T46.6 -> T46.5 (needs T46.6) [both WAIT FOR THE HUMAN]
+T46.12 [WAITS FOR THE HUMAN]
+T46.13 -> T46.17 (needs T46.13) [both WAIT FOR THE HUMAN]
 
 (added 2026-11-10; Stories S38-S46 - the 0.60.0 / 0.61.0 refactor work written up after it was built. the tasks of S38 to S45 and the first four tasks of S46 are already [x]:
 they were done directly from the review's issue list on branch drdad-fixes-2026-11 and are recorded here with their commits, so they are not
 sequenced. What remains is Story S46's open tasks, queued after the last T37 entry. the tasks from T46.7 through T46.11, then T46.14, T46.15 and T46.16, are agent work and are
-independent of each other; they are chained only because several edit 	est-kit.ps1. T46.6 is a MEASUREMENT only the human can make (it needs an
-interactive MCP approval), T46.5 is a /design unlock that depends on it, and T46.12 / T46.13 are human decisions.)
+independent of each other; they are chained only because several edit `test-kit.ps1`. The human tasks are listed on their own lines, outside that chain: T46.6 is a MEASUREMENT only the human can make (it needs an
+interactive MCP approval), T46.5 is a /design unlock that depends on it, and T46.12, T46.13 and T46.17 are human decisions.)
 
 ## Tasks
 
@@ -3607,6 +3610,14 @@ interactive MCP approval), T46.5 is a /design unlock that depends on it, and T46
 - **Acceptance:** each item has a dated decision in `PROPOSALS.md` or in this task; any yes that needs code becomes its own task.
 - **Depends on:** T46.13
 - **Refs:** the `[human]` suggestions on `grades/S38_GRADE.md` to `grades/S45_GRADE.md`.
+
+### [ ] T46.18 - README.md and docs/GUIDE.md describe the 0.60.0 / 0.61.0 commands and rules   (Story S46)
+- **Goal:** a reader of the README or the guide can find every command and gate this release added.
+- **Touches:** `README.md`, `docs/GUIDE.md` (the cheatsheet rows were added with the release).
+- **Do:** add, where the neighbouring commands are described: `dad source-tier`, `dad archive-tasks`, `dad doctor -PrunePermissions`, `dad doc-stats -HumanGates`, `dad grade-trends -RecordRetro`, `dad-status-guard` (what the pre-commit hook now runs), the `Fast test:` line, `source-stats -LockCheck`, the `[e2e]` and `[human]` task tags, `Human-gate WIP limit`, the close evidence file, and the `tiered` column.
+- **Acceptance:** each name above appears in README.md or docs/GUIDE.md with one sentence on what it does; `test-kit.ps1` prints `0 failed`.
+- **Depends on:** none
+- **Refs:** audit finding 3 of 2026-11-10 (second audit).
 
 ## Open questions## Open questions
 - **[design] S30 follow-up (recorded, not changed):** `[Fact(Skip="...")]` and `[Fact, Trait(...)]` are not counted by the base markers (exact `[Fact]`); widening them would raise counts everywhere and re-baseline every project. Decide separately whether to widen.

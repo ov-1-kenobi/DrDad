@@ -1484,7 +1484,7 @@
   - security-agent edits a decision in place and moves the old wording to `docs/archive/SECURITY-history.md`; `/design` step 3b proposes prose compaction and waits; `doc-stats` says when it is time.
   - `dad source-tier <ids> primary|secondary` asks a human at the console and stamps `human <date>` in a new `tiered` column; `source-stats` fails an unstamped tier; `-LockCheck` blocks locking a design that cites unknown or unstamped sources; upgrade marks existing tiers `legacy`.
 - **Data / interfaces:** `archive-tasks.ps1` (+ `.cmd`), `close-unit.ps1`, `local-tools/Rag.cs`, `doc-stats.ps1`, `source-tier.ps1` (+ `.cmd`), `source-stats.ps1`, `upgrade-project.ps1`, `templates/_common/docs/SOURCES.md`, `global/agents/security-agent.md`, `global/agents/research-agent.md`, `global/commands/design.md`, `global/commands/research.md`.
-- **Dependencies:** S39 (the story-level close), S45 (the corpus filter lives in the same file).
+- **Dependencies:** S39 (the story-level close), S45 (the corpus filter lives in the same file - a FORWARD reference by number only: the index work was built first and written up as S45 afterwards).
 - **Acceptance (testable):**
   - [x] AC1: bodies move at the story-level close only, verbatim, into the story commit; doc-stats counts and the ratchet are unchanged; a second pass moves nothing (`0.61.0 #11: the story-level close archives ...`).
   - [x] AC2: `docs\archive\` is not in the corpus, a nested folder of that name still is (`0.61.0 #11: local-tools does not index ...`).
@@ -1498,7 +1498,7 @@
   - `IndexAsync` reuses the stored vector of every chunk whose text is unchanged and returns at once when nothing changed.
   - Vectors are stored as float32 in `.index\vectors.bin`; `chunks.json` keeps text only; `index.meta` names the embedding model; the server keeps the parsed index in memory until the files change.
   - An index written by an older kit is read as it is and converted, without re-embedding, by the first reindex.
-- **Data / interfaces:** `local-tools/Rag.cs` only. Test-only model name `test-hash-embedding`.
+- **Data / interfaces:** `local-tools/Rag.cs` (code) and `local-tools/README.md` (one sentence). Test-only model name `test-hash-embedding`.
 - **Dependencies:** none.
 - **Acceptance (testable):**
   - [x] AC1: a first index embeds everything; an unchanged corpus is skipped; one edited file embeds one chunk; search finds the exact text; an old-format index is searchable and converts with full reuse (`0.61.0 index: a reindex reuses unchanged chunks ...`).
@@ -1508,7 +1508,7 @@
 ### Story S46: Catch-all - outliers of the 0.60.0 / 0.61.0 work, and what is still to do   (R: pending, see T46.5)   <!-- Status: TODO -->
 - **Goal:** one place for the pieces that fit no refactor story above, and for every follow-up the work left open, so nothing lives only in a chat log.
 - **Context:** `PROPOSALS.md`, `VERIFICATION.md`, CHANGELOG 0.60.0 and 0.61.0, and the audit of 2026-11-10.
-- **Behavior:** done so far - the kit's own suite runs clean from a never-built tree and from a long path, and ignores `_tmp\` (T46.1); `dad doctor` names broad allow rules and `-PrunePermissions` removes them on a human's yes (T46.2, review issue 16 option B); the verification record and reproduction script (T46.3); `docs/GUIDE.md` caught up (T46.4). Open - see the tasks T46.5 to T46.15: each is either a human decision, a measurement, or a small defect found along the way.
+- **Behavior:** done so far - the kit's own suite runs clean from a never-built tree and from a long path, and ignores `_tmp\` (T46.1); `dad doctor` names broad allow rules and `-PrunePermissions` removes them on a human's yes (T46.2, review issue 16 option B); the verification record and reproduction script (T46.3); `docs/GUIDE.md` caught up (T46.4). Open - see the tasks T46.5 to T46.18: each is either a human decision, a measurement, a documentation gap, or a small defect found along the way.
 - **Data / interfaces:** per task.
 - **Dependencies:** S38-S45.
 - **Acceptance (testable):**
@@ -1516,5 +1516,5 @@
   - [x] AC2: broad rules are named and the prune plan is correct; nothing changes without a console (`0.61.0 #16: ...`) (T46.2).
   - [ ] AC3: DESIGN.md states the 0.60.0 / 0.61.0 behaviors as requirements and its three stale passages are corrected (T46.5).
   - [ ] AC4: `${DAD_HOME}` expansion is measured under Claude Code and Copilot CLI and recorded in DESIGN C5a (T46.6).
-  - [ ] AC5: each remaining task T46.7-T46.15 is either done or closed by a recorded human decision.
+  - [ ] AC5: each remaining task T46.7-T46.18 is either done or closed by a recorded human decision.
 - **Dev notes:** commits 5888ff4 (T46.2), da3e35b (T46.1), 18fe0af (T46.3), d07166e (T46.4). T46.5, T46.6, T46.12, T46.13 and T46.17 WAIT FOR THE HUMAN. S38-S45 were graded on 2026-11-10 (all B); the defects those cards found were fixed the same day, and what is left of their suggestions is T46.16 (agent work) and T46.17 (human decisions).
