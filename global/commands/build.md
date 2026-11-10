@@ -134,7 +134,8 @@ its dependencies satisfied, STOP and report the blocked tasks.
    ```
    dad close-unit -Id <unit id> -Title "<short title>"
    ```
-   It ticks the task, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits,
+   It verifies the build (and CLAUDE.md's optional `Fast test:` subset on every task close; the full
+   `Test:` suite at a story close), ticks the task, rolls the parent story up to DONE when all its tasks are `[x]`, reindexes, commits,
    and verifies. **Non-zero exit means the unit is NOT closed** - fix what it reports before the next unit.
    **Never write a story's `<!-- Status: ... -->` marker yourself, and never `git commit` the bookkeeping by
    hand.** close-unit is the only writer of DONE: it refuses to run while a story is marked DONE by hand, the

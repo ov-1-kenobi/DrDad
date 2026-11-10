@@ -52,6 +52,7 @@ plan mode to run these commands - execute their steps directly; if you land in p
 <!-- Filled by /design once the stack is chosen (cribbed from templates/<stack>). -->
 - Build: `<set in /design's architecture step>`
 - Test:  `<set in /design's architecture step>`
+- Fast test: `<optional - a QUICK subset close-unit runs on EVERY task close (the full Test runs at story close). Put the source-scan / static-guard tests here, e.g. dotnet test --filter "Category=SourceScan">`
 
 ## Human-in-loop
 - <manual/verification steps, or "none">

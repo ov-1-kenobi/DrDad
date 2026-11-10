@@ -23,6 +23,9 @@
 ## Build / test
 - Build: `dotnet build`
 - Test:  `dotnet test`
+- Fast test (optional - close-unit runs it on EVERY task close; mark source-scan / static-guard tests with
+  `[Trait("Category", "SourceScan")]` so they are caught at the task that breaks them, not at story close):
+  `dotnet test --filter "Category=SourceScan"` - write it in CLAUDE.md as a line starting `- Fast test:`
 - Format (optional): `dotnet format --verify-no-changes`
 
 ## Project-file hygiene (learned the hard way - this is why a solution "works here" and not on a clean box)

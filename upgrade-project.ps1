@@ -345,6 +345,14 @@ Write-Host "Done. Next:" -ForegroundColor Green
 Write-Host "  1. Review CLAUDE.md (your Stack/Build/test sections were preserved; kit sections refreshed)."
 Write-Host "  2. Reindex: run index_datasheets in a session (or reindex.cmd $proj\docs)."
 Write-Host "  3. /audit status  - populate the new docs\STATUS.md dashboard."
+# 0.60.0 (issue 12): Build / test is YOUR section, so the optional 'Fast test:' line is never injected.
+$cmNow = [System.IO.File]::ReadAllText($cmPath)
+if ($cmNow -match '(?m)^\s*-\s*\*{0,2}Test\*{0,2}\s*:' -and $cmNow -notmatch '(?m)^\s*-\s*\*{0,2}Fast test\*{0,2}\s*:') {
+  Write-Host ""
+  Write-Host "  OPTIONAL: close-unit can run a QUICK test subset on every TASK close (the full Test: still runs at" -ForegroundColor Yellow
+  Write-Host "        story close). If the project has source-scan / static-guard tests, add under 'Build / test':" -ForegroundColor Yellow
+  Write-Host "          - Fast test: ``<command that runs only those tests>``" -ForegroundColor Cyan
+}
 if ($needsSecHeader) {
   Write-Host ""
   Write-Host "  NOTE: docs\$docName has no 'Security review:' header, so /build will WARN and continue." -ForegroundColor Yellow

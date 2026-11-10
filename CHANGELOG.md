@@ -76,6 +76,19 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
 - NOT done here: the kit repo itself still tracks its own `docs/API-SURFACE.md`. Nothing in this change deletes it,
   but the first `close-unit` run inside the kit repo will move it like any other project.
 
+### Fixed - issue 12: source-scan tests ran only at story close
+- New OPTIONAL line in a project's CLAUDE.md `## Build / test` section: `- Fast test: <command>`. When it is present,
+  `close-unit` runs that command on EVERY task close and refuses the close if it fails or selects zero tests. The full
+  `Test:` suite still runs at a story close (and the fast subset is not run twice there). No line: no change.
+  It is meant for the cheap checks that break between story closes - source-scan / static-guard tests. In the
+  reviewed project these failed on `main` and were found only by a later story-close suite, then fixed by hand
+  commits ("found by the S92 story-close suite", "was failing on main").
+- The scaffold template carries the line as an `<optional ...>` placeholder (ignored until filled; it does not trip
+  `/build` Gate 1), and the dotnet profile suggests `dotnet test --filter "Category=SourceScan"`.
+- `Get-TestCount` now reads dotnet's "No test matches the given testcase filter" as zero tests.
+- UPGRADE PATH: `Build / test` is a project-owned section, so `upgrade-project` does not inject the line; it prints
+  how to add it when the project has a `Test:` line and no `Fast test:` line.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)

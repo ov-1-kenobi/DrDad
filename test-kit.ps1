@@ -9169,6 +9169,43 @@ Test-Case "0.60.0 #10 upgrade path: upgrade-project moves a generated docs\API-S
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "0.60.0 #12: CLAUDE.md's optional 'Fast test:' runs on EVERY task close and blocks it; no line = unchanged; a story close runs the full suite instead" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb -FastTest
+    # a failing fast test stops an ordinary TASK close (the old kit ran no tests at all here)
+    "x" | Set-Content "$p\scan.flag" -Encoding ASCII
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'FAST TESTS FAILED') "a failing fast test did not stop a task close:`n$($x.Out)"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.1' -Quiet)) "T1.1 was ticked over a failing fast test"
+    $gl = @([System.IO.File]::ReadAllLines("$p\grades\gates-log.jsonl") | Where-Object { $_ -match 'fast tests failed' })
+    Assert ($gl.Count -eq 1) "the fast-test refusal was not logged"
+    Remove-Item "$p\scan.flag" -Force
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'fast tests verified \(1 test') "a passing fast test did not close the task:`n$($x.Out)"
+    # the STORY close runs the full Test command, not the subset
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'tests verified \(3 test' -and $x.Out -notmatch 'fast tests') "the story close did not run the full suite (or ran the subset too):`n$($x.Out)"
+    # a filter that selects nothing is a refusal, not a pass
+    "@echo off`r`necho No test matches the given testcase filter`r`nexit /b 0" | Set-Content "$p\tools\fake-scan.cmd" -Encoding ASCII
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'RAN ZERO TESTS') "a fast test that selected nothing was accepted:`n$($x.Out)"
+  } finally { Remove-Sandbox $sb }
+  # no 'Fast test:' line: a task close behaves exactly as before
+  $sb = New-Sandbox
+  try {
+    $p = New-PfFixture $sb
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -notmatch '(?i)fast test') "a project with no Fast test line was affected:`n$($x.Out)"
+  } finally { Remove-Sandbox $sb }
+  # the scaffold's placeholder is not a command, and it must not trip /build's Gate 1 grep
+  $tmpl = [System.IO.File]::ReadAllText((Join-Path $kit "templates\generic\CLAUDE.md"))
+  $line = [regex]::Match($tmpl, '(?m)^- Fast test: `([^`]+)`').Groups[1].Value
+  Assert ($line.StartsWith('<optional')) "the template's Fast test placeholder is not an '<optional' placeholder: $line"
+  Assert ($line -notmatch '<set in|<decided in|<how to stub') "the Fast test placeholder would trip /build Gate 1"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

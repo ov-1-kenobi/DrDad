@@ -195,7 +195,8 @@ function Get-TestCount([string]$out) {
     $ms = [regex]::Matches($out, $rx)
     if ($ms.Count -gt 0) { return [int]$ms[$ms.Count - 1].Groups[1].Value }
   }
-  if ($out -match '(?i)(no tests? (were run|to run|ran|available)|zero tests|found 0 test)') { return 0 }
+  # "No test matches the given testcase filter" is dotnet's exit-0 answer to a --filter that selects nothing.
+  if ($out -match '(?i)(no tests? (were run|to run|ran|available)|zero tests|found 0 test|no test matches)') { return 0 }
   return -1
 }
 
@@ -403,8 +404,46 @@ if (-not $SkipVerify) {
     } catch { $warns.Add("could not refresh the API surface: $($_.Exception.Message)") }
   }
 
-  # A STORY may only close on tests that actually RAN. Tasks skip this (too slow per task, and a partial
-  # story is not claiming verification yet).
+  # --- FAST TESTS on EVERY task close (issue 12, 0.60.0) -------------------------------------------
+  # The full suite runs only at a story close ("too slow per task"), so a task close verified the BUILD
+  # and nothing else. In a real project the tests that broke most often between story closes were the
+  # cheapest ones in the suite: SOURCE-SCAN / static-guard tests (a banned literal, a word list, an
+  # allow-set of files). A task added the offending line, closed green, and the failure surfaced several
+  # tasks later at the story close - on main, attributed to the wrong unit, and fixed by a hand commit.
+  # So a project may name a quick subset on an optional line in CLAUDE.md's Build / test section:
+  #     - Fast test: `dotnet test --filter "Category=SourceScan"`
+  # and close-unit runs it on every TASK close. No such line: nothing changes. A story close runs the
+  # full Test command instead, which contains the subset.
+  if (-not $predictedStory) {
+    $fcmd = Get-ClaudeCommand 'Fast test'
+    if ($fcmd) {
+      Write-Host "[close-unit] fast tests (every task close): $fcmd" -ForegroundColor Cyan
+      $ft = Invoke-Verify $fcmd
+      $fcount = Get-TestCount $ft.Output
+      if ($ft.Code -ne 0) {
+        Write-Host "[close-unit] FAST TESTS FAILED (exit $($ft.Code)) - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+        Show-Tail $ft.Output
+        [void](Show-EnvBlock $ft.Output)
+        Write-Host "             These are the project's quick checks (CLAUDE.md 'Fast test:'). This unit broke one;" -ForegroundColor Red
+        Write-Host "             fix it now, while the change that caused it is still in front of you." -ForegroundColor Red
+        Write-GateLog "block" "$Id not closed: fast tests failed (exit $($ft.Code))"
+        exit 1
+      }
+      if ($fcount -eq 0) {
+        Write-Host "[close-unit] FAST TESTS RAN ZERO TESTS - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+        Write-Host "             CLAUDE.md's 'Fast test:' command selected nothing (a filter that matches no test" -ForegroundColor Red
+        Write-Host "             exits 0). Fix the filter, or remove the line if the project has no quick subset." -ForegroundColor Red
+        Show-Tail $ft.Output
+        Write-GateLog "block" "$Id not closed: fast tests ran zero tests"
+        exit 1
+      }
+      if ($fcount -lt 0) { $notes.Add("fast tests passed (exit 0; no test count in the output)") }
+      else { $notes.Add("fast tests verified ($fcount test(s) ran)") }
+    }
+  }
+
+  # A STORY may only close on tests that actually RAN. Tasks run only the optional 'Fast test:' subset
+  # above (the full suite is too slow per task, and a partial story is not claiming verification yet).
   if ($predictedStory) {
     $tcmd = Get-ClaudeCommand 'Test'
     if (-not $tcmd) {
