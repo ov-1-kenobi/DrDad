@@ -7,9 +7,11 @@ each: the evidence I found in the GDN project (read-only), two or three options 
 trade-off, and my recommendation. To answer, reply with the item number and option letter
 (for example "5B, 6A, 7B ..."), or with changes.
 
-Note on sources: the file DRDAD-FEEDBACK-2026-11-09.md was not present on disk, so the evidence
-below is what I measured in GDN myself. If the feedback file suggests a different fix for an item,
-that suggestion should win over my reading.
+Note on sources: these proposals were first written from evidence I measured in GDN myself,
+because DRDAD-FEEDBACK-2026-11-09.md was not on disk at the time. The file was supplied later
+(2026-11-09, `_tmp/`). I compared each item with it. Where the feedback asks for something my
+options did not cover, the item now ends with a line starting "Feedback file:". Its counts differ
+a little from mine (for example 7 A / 26 A- / 7 B+ against my 6 / 27 / 7); both are approximate.
 
 ---
 
@@ -37,6 +39,12 @@ The grader has no shell, so it cannot see a red suite.
 
 Recommendation: A now. It removes the main cause (the grader cannot see failures) with a script,
 which is where this kit's gates have worked. Consider B after one project has run with A.
+
+Feedback file: it asks for the same thing as A ("require each card to quote close-unit's test
+result"), adds that 28 of 40 cards say the grader ran neither build nor tests, and that cards stop
+at S59 while later stories are DONE. The second point is partly closed by the Tier 1 fix for issue
+14 (a rolled-up story now blocks other stories until its story-level close, which /build runs
+with -RequireGrade). Citation checking at story close already exists (-RequireGrade).
 
 ## 6. Turning repeated grader suggestions into tasks
 
@@ -78,6 +86,12 @@ work moved on to S104.
 Recommendation: B with N=3 in CLAUDE.md. The pile-up is the expensive failure, and the limit is a
 number you control.
 
+Feedback file: it places the limit one step earlier - block `/design` and `/stories` from
+EXPANDING the backlog while more than N human gates are open - and asks for the open gates to be
+batched into one human checklist. I agree that is the better place: option B should gate /design
+(new epics) and /stories (new stories) as well as /build, and doc-stats should print the open
+[human] tasks as one checklist. Say "7B+" to choose that.
+
 ## 8. Checking new epics against the design's Goal
 
 Evidence: GDN went from 54 to 109 stories in ten days; DESIGN.md is 1.24 MB with a "Supported
@@ -115,6 +129,12 @@ suite") show tasks closing green in isolation.
   NEW story is on the path.
 
 Recommendation: A, applied only to stories that have no ticked tasks at upgrade time.
+
+Feedback file: it also asks that /build finish one story before starting the next (on 2026-11-09
+tasks from about nine stories were interleaved) and that a command whose core path is a stub is
+not registered. The first is partly enforced by the Tier 1 fix for issue 14; a stricter rule
+("no task of story B while story A has open non-human tasks") would be a further option, 9D. The
+second is a project code rule: it fits as a line in the grade rubric and in dev-agent, not a gate.
 
 ## 11. Compacting DESIGN/TASKS and consolidating security reviews
 
@@ -196,3 +216,26 @@ WARNs on unknown.
   agents from editing. Trade-off: strongest; splits the ledger in two and complicates citations.
 
 Recommendation: B, with the lock gate from A.
+
+Feedback file: it reports 317 of 334 rows tiered `primary` (deepwiki.com among them), and two
+mechanical defects beside the tiering question: the SOURCES.md header and research-agent say
+captures live in `docs/sources/`, while `ingest_url` writes them to `docs/web/` (Rag.cs WebDir);
+and GDN has 419 captured pages, about 35 MB, committed. The path mismatch is a plain bug I can fix
+without a policy decision - say "17 path" to have it done. Whether captured pages belong in git
+is yours to decide (keep, gitignore `docs/web/`, or keep only the ledger).
+
+## Also in the feedback file (not in the 18)
+
+- Loop-guard fired 63 times on read-only exploration (25 reads in a row): make the threshold
+  configurable per agent. Small and mechanical; not done, because it was not in the Tier 1 list.
+- The project CLAUDE.md "Placeholder convention" named interfaces GDN never created. That text
+  comes from the stack profile example that /design copies in. Option: /design writes the section
+  from the design's own Domain model, and doc-stats flags a type named in CLAUDE.md that is absent
+  from the API surface.
+- No README and no CI in the generated project: the scaffold could add a minimal README and a CI
+  workflow that runs the Build and Test lines.
+- One thing I found while checking issue 2: when the last task of a story closes, the gate log
+  records only "clean close: T73.8" - nothing in the log says story S73 rolled up. That is why the
+  feedback reads S73's last entry as a failed close. The roll-up was in fact a passing close 51
+  minutes later. Adding "(story S73 -> DONE)" to that log line is a one-line change; not done
+  yet, to keep the deployed tools stable.
