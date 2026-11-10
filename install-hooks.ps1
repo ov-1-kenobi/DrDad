@@ -45,18 +45,36 @@ if ($foreign.Count -gt 0) {
 if ((Test-Path $hookPath) -and -not $Force) {
   $existing = Get-Content $hookPath -Raw
   if ($existing -match 'scan-secrets\.ps1') {
-    # It is ours - but does the scanner it names still EXIST? A hook left pointing at a moved or renamed
-    # kit fails CLOSED: every commit in the project aborts with "secret scan failed", and this branch
-    # reported that as "already installed". upgrade-project calls us, so nothing ever repaired it.
-    $refPath = $null
-    $m = [regex]::Match($existing, '-File\s+"([^"]*scan-secrets\.ps1)"')
-    if ($m.Success) { $refPath = $m.Groups[1].Value }
-    if ($refPath -and (Test-Path -LiteralPath $refPath)) {
-      Write-Host "  hooks: pre-commit already installed" -ForegroundColor Green
-      return
+    # It is ours - but is it CURRENT, and can it still find the kit? Two ways it goes bad:
+    #  - a v1 hook (before 0.60.0) names the scanner by one fixed absolute path. A hook left pointing at a
+    #    moved or renamed kit fails CLOSED (every commit aborts), and one pointing at an OLD kit version that
+    #    still exists on disk keeps running that old scanner forever. Both are rewritten to the v2 form.
+    #  - a v2 hook resolves the kit through DAD_HOME, then its fallback path. Healthy if either resolves.
+    $isV2 = ($existing -match 'dad-hook-version:\s*2\b')
+    if ($isV2) {
+      $fb = $null
+      $m = [regex]::Match($existing, "(?m)^\s*fallback='([^']*)'")
+      if ($m.Success) { $fb = $m.Groups[1].Value }
+      $envKit = $env:DAD_HOME
+      if (-not $envKit) { $envKit = [Environment]::GetEnvironmentVariable("DAD_HOME", "User") }
+      $ok = ($envKit -and (Test-Path -LiteralPath (Join-Path $envKit "scan-secrets.ps1"))) -or
+            ($fb -and (Test-Path -LiteralPath (Join-Path $fb "scan-secrets.ps1")))
+      if ($ok) {
+        Write-Host "  hooks: pre-commit already installed" -ForegroundColor Green
+        return
+      }
+      Write-Host "  hooks: pre-commit could not find the kit (DAD_HOME and its fallback are both stale) - rewriting" -ForegroundColor Yellow
+    } else {
+      $refPath = $null
+      $m = [regex]::Match($existing, '-File\s+"([^"]*scan-secrets\.ps1)"')
+      if ($m.Success) { $refPath = $m.Groups[1].Value }
+      if ($refPath -and (Test-Path -LiteralPath $refPath)) {
+        Write-Host "  hooks: pre-commit named the kit by a fixed path - rewriting it to follow DAD_HOME" -ForegroundColor Yellow
+      } else {
+        Write-Host "  hooks: pre-commit pointed at a missing scanner - repointing at this kit" -ForegroundColor Yellow
+      }
+      if ($refPath) { Write-Host "         was: $refPath" -ForegroundColor DarkGray }
     }
-    Write-Host "  hooks: pre-commit pointed at a missing scanner - repointing at this kit" -ForegroundColor Yellow
-    if ($refPath) { Write-Host "         was: $refPath" -ForegroundColor DarkGray }
     # fall through and rewrite
   } else {
     Write-Host "  hooks: a different pre-commit hook exists - leaving it alone (re-run with -Force to replace)" -ForegroundColor Yellow
@@ -66,15 +84,34 @@ if ((Test-Path $hookPath) -and -not $Force) {
 }
 
 # git for Windows runs hooks with sh, so this is a POSIX script that shells out to PowerShell.
-$scanner = $scannerPath
+# v2 (0.60.0): the kit is found at COMMIT time through DAD_HOME, which install.cmd sets for every shell, so
+# the hook follows the kit when it is moved or a new version is installed - no project needs repairing.
+# The fallback is the kit that wrote this hook, used only where DAD_HOME is unset (CI, a never-installed
+# checkout). Forward slashes: safe inside sh single quotes and accepted by both `test -f` and powershell.
+$fallback = $kit.Replace('\', '/').TrimEnd('/')
 $hook = @"
 #!/bin/sh
-# DAD-kit pre-commit: block credentials from entering history. Bypass (rarely): git commit --no-verify
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$scanner" -Staged -Quiet
+# DAD-kit pre-commit (dad-hook-version: 2): block credentials from entering history, and keep close-unit
+# the only writer of a story's DONE marker. Bypass (rarely): git commit --no-verify
+kit="`$DAD_HOME"
+fallback='$fallback'
+if [ -z "`$kit" ] || [ ! -f "`$kit/scan-secrets.ps1" ]; then kit="`$fallback"; fi
+if [ ! -f "`$kit/scan-secrets.ps1" ]; then
+  echo "pre-commit: DrDad kit not found (DAD_HOME unset or stale). Run the kit's install.cmd, then upgrade-project.cmd in this project. Commit aborted."
+  exit 1
+fi
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "`$kit/scan-secrets.ps1" -Staged -Quiet
 status=`$?
 if [ `$status -ne 0 ]; then
   echo "pre-commit: secret scan failed - commit aborted."
   exit 1
+fi
+if [ -f "`$kit/dad-status-guard.ps1" ]; then
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "`$kit/dad-status-guard.ps1" -Staged
+  if [ `$? -ne 0 ]; then
+    echo "pre-commit: story status guard refused - commit aborted."
+    exit 1
+  fi
 fi
 exit 0
 "@

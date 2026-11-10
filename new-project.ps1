@@ -82,8 +82,16 @@ New-Item -ItemType Directory -Force (Join-Path $proj "docs\sources") | Out-Null
 Copy-Item (Join-Path $templates "_common\.mcp.json") (Join-Path $proj ".mcp.json") -Force
 $mp = Join-Path $proj ".mcp.json"
 $j = Get-Content $mp -Raw | ConvertFrom-Json
-$j.mcpServers.'local-tools'.command = (Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe")
-$j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR = (Join-Path $proj "docs")
+# PORTABLE paths (0.60.0): .mcp.json is COMMITTED, so an absolute kit path or project path in it is wrong on
+# every other machine and after every move (one project carried D:\Tools\... and D:\projects\... in git).
+# Claude Code expands ${VAR} in .mcp.json and install.cmd sets DAD_HOME for every shell, so the kit is named
+# through it; the corpus is "docs", relative to the project root (docs-dir.ps1 and the server resolve it).
+. (Join-Path $kit "docs-dir.ps1")
+$j.mcpServers.'local-tools'.command = (Get-DadPortableExe)
+$j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR = "docs"
+if ($j.PSObject.Properties.Name -contains '_comment') {
+  $j._comment = "Portable on purpose: DAD_HOME (set by the kit's install.cmd) locates the shared server exe, and LOCALTOOLS_DOCS_DIR is relative to this project root. Keep both free of absolute paths - this file is committed."
+}
 [System.IO.File]::WriteAllText($mp, ($j | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
 
 # Git safety net: init + first commit, so /build can checkpoint each passing unit and a mangled file
@@ -150,6 +158,10 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   Write-Host "  git not found - skipping the safety net (install git so /build can checkpoint + recover)" -ForegroundColor Yellow
 }
 
+if (-not $env:DAD_HOME -and -not [Environment]::GetEnvironmentVariable("DAD_HOME", "User")) {
+  Write-Host "  NOTE: DAD_HOME is not set. .mcp.json finds the kit through it - run the kit's install.cmd once" -ForegroundColor Yellow
+  Write-Host "        (it sets DAD_HOME for every shell), then restart the editor." -ForegroundColor Yellow
+}
 Write-Host "  created: CLAUDE.md (generic), .mcp.json (docs -> $proj\docs), docs\$docName (Status: DRAFT), docs\RECIPES.md, docs\STATUS.md, docs\SOURCES.md + docs\sources\" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Green

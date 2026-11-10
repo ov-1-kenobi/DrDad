@@ -393,7 +393,21 @@ if ($ProjectDir) {
       try {
         $j = Get-Content $mcp -Raw | ConvertFrom-Json
         $cmd = $j.mcpServers.'local-tools'.command
-        if ($cmd -eq $exe) { Say "OK" ".mcp.json" "points at this kit's exe" }
+        # 0.60.0: the portable form names the kit through DAD_HOME. It is healthy when DAD_HOME resolves to
+        # an exe that exists; an ABSOLUTE path - even a correct one - is machine-specific in a committed file.
+        $portable = ($cmd -and ([string]$cmd).Contains('${DAD_HOME}'))
+        $cmdReal = if ($portable) { Expand-DadHome ([string]$cmd) } else { $cmd }
+        if ($portable -and -not $cmdReal) {
+          Say "WARN" ".mcp.json" "uses `${DAD_HOME} but DAD_HOME is not set - MCP server will not start" "install.cmd (sets DAD_HOME), then restart the editor"
+        }
+        elseif ($portable -and (Test-Path -LiteralPath $cmdReal)) { Say "OK" ".mcp.json" "portable (`${DAD_HOME} -> $cmdReal)" }
+        elseif ($portable) {
+          Say "WARN" ".mcp.json" "`${DAD_HOME} resolves to '$cmdReal' which does NOT exist - MCP server will not start" "install.cmd (rebuilds the server and resets DAD_HOME)"
+        }
+        elseif ($cmd -eq $exe) {
+          Say "WARN" ".mcp.json" "points at this kit's exe by ABSOLUTE path - machine-specific in a committed file" `
+              "upgrade-project.cmd `"$p`"   (rewrites it to the portable `${DAD_HOME} form)"
+        }
         elseif ($cmd -and -not (Test-Path -LiteralPath $cmd)) {
           # The stale-after-a-move case: the path does not resolve, so the MCP server never starts and
           # search_datasheets silently returns nothing. This is the .mcp.json half of the relocation break.
@@ -425,8 +439,24 @@ if ($ProjectDir) {
         # commit in the project aborts - and this used to report it as OK.
         $hookTxt = Get-Content $hp -Raw
         $ref = [regex]::Match($hookTxt, '-File\s+"([^"]*scan-secrets\.ps1)"')
-        if (-not $ref.Success) { Say "OK" "pre-commit hook" "present (not this kit's secret scan)" }
-        elseif (Test-Path -LiteralPath $ref.Groups[1].Value) { Say "OK" "pre-commit hook" "secret scan installed" }
+        if ($hookTxt -match 'dad-hook-version:\s*2\b') {
+          # v2 (0.60.0): the hook finds the kit through DAD_HOME at commit time, then its fallback path.
+          $fbm = [regex]::Match($hookTxt, "(?m)^\s*fallback='([^']*)'")
+          $viaEnv = Expand-DadHome '${DAD_HOME}\scan-secrets.ps1'
+          if ($viaEnv -and (Test-Path -LiteralPath $viaEnv)) { Say "OK" "pre-commit hook" "secret scan + story-status guard (kit found through DAD_HOME)" }
+          elseif ($fbm.Success -and (Test-Path -LiteralPath (Join-Path $fbm.Groups[1].Value "scan-secrets.ps1"))) {
+            Say "WARN" "pre-commit hook" "DAD_HOME does not resolve; the hook is running on its fallback kit path ($($fbm.Groups[1].Value))" "install.cmd (sets DAD_HOME)"
+          }
+          else {
+            Say "FAIL" "pre-commit hook" "cannot find the kit (DAD_HOME and the fallback are both stale) - every commit here is blocked" `
+                "install.cmd, then upgrade-project.cmd `"$p`""
+          }
+        }
+        elseif (-not $ref.Success) { Say "OK" "pre-commit hook" "present (not this kit's secret scan)" }
+        elseif (Test-Path -LiteralPath $ref.Groups[1].Value) {
+          Say "WARN" "pre-commit hook" "old-style hook pinned to one kit path ($($ref.Groups[1].Value)) - it will not follow a kit upgrade and has no story-status guard" `
+              "upgrade-project.cmd `"$p`""
+        }
         else {
           Say "FAIL" "pre-commit hook" "points at a MISSING scanner - every commit here is blocked" `
               "upgrade-project.cmd `"$p`"   (repoints the hook AND .mcp.json; or: install-hooks.ps1 -ProjectDir `"$p`" -Force)"

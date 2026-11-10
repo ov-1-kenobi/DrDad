@@ -2,6 +2,27 @@
 
 All notable changes to DrDad. Versions follow semver; the requirement ids (R<n>) are in `docs/DESIGN.md`.
 
+## 0.60.0 - 2026-11-09
+
+Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).
+Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `upgrade-project.cmd` once.
+
+### Fixed - issue 1: machine-specific paths in a project's `.mcp.json` and pre-commit hook
+- `new-project` now writes a PORTABLE `.mcp.json`: the server command is
+  `${DAD_HOME}\local-tools\bin\Release\net8.0\local-tools.exe` (Claude Code expands `${VAR}`; `install.cmd` already
+  sets `DAD_HOME`) and `LOCALTOOLS_DOCS_DIR` is the relative `docs`. The file is committed, and it used to carry this
+  machine's kit path and the project's absolute folder. `docs-dir.ps1` resolves a relative docs dir against the
+  project root, never the current directory.
+- The pre-commit hook is now "v2": it finds the kit through `DAD_HOME` at commit time, so it follows a kit move or
+  upgrade. The kit that wrote the hook is kept only as a fallback for shells where `DAD_HOME` is not set.
+- UPGRADE PATH: `upgrade-project` rewrites an absolute server command to the portable form, rewrites the docs dir to
+  `docs` when it pointed at the project's own docs folder (an external or multi-root corpus is left alone), and
+  replaces a v1 hook with the v2 hook. `dad doctor` reports an absolute command or a v1 hook as WARN with that fix.
+- NOT MEASURED: `${VAR}` expansion in `.mcp.json` is documented Claude Code behavior, but it was not watched live
+  here (a project server needs interactive approval). Copilot CLI reads the same project `.mcp.json` (DESIGN C5a,
+  measured there with an absolute `command`); whether Copilot CLI expands `${DAD_HOME}` is unknown. Check `/mcp` in
+  Claude Code, and one real tool call under Copilot CLI, before relying on either.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)

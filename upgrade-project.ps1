@@ -115,19 +115,47 @@ if ((Test-Path $oldRecipes) -and -not (Test-Path $newRecipes)) {
 # may no longer exist - silently, because a dead MCP server just means no search_datasheets. Observed
 # after the rename: a project still pointed at the old kit folder while the kit had moved. DAD-RENAME-OK
 # Parse/serialize, never string-replace: JSON doubles backslashes.
+# 0.60.0: the repoint now writes the PORTABLE form instead of this machine's absolute path. .mcp.json is
+# committed, so "D:\Tools\...\local-tools.exe" and "D:\projects\<name>\docs" were wrong on every other
+# machine and went stale on every kit move - which is the bug this block was written to repair, one
+# project at a time. ${DAD_HOME} (expanded by Claude Code; set by install.cmd) follows the kit wherever it
+# is installed. LOCALTOOLS_DOCS_DIR becomes "docs" ONLY when it pointed at this project's own docs folder;
+# a deliberate external or multi-root corpus is left exactly as written.
+. (Join-Path $kit "docs-dir.ps1")
 $mcpPath = Join-Path $proj ".mcp.json"
 if (Test-Path $mcpPath) {
   try {
-    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
     $j = Get-Content $mcpPath -Raw | ConvertFrom-Json
+    $changed = $false
+    $portableExe = Get-DadPortableExe
     $cur = $j.mcpServers.'local-tools'.command
-    if ($cur -ne $exe) {
-      $j.mcpServers.'local-tools'.command = $exe
-      # The corpus stays the PROJECT's own docs - only the server binary moves.
+    if ($cur -ne $portableExe) {
+      $j.mcpServers.'local-tools'.command = $portableExe
+      $changed = $true
+      Write-Host "  .mcp.json: server command made portable (`${DAD_HOME}\local-tools\...)" -ForegroundColor Green
+      Write-Host "    was: $cur" -ForegroundColor DarkGray
+    }
+    $curDocs = [string]$j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR
+    if ($curDocs -and $curDocs -ne "docs" -and $curDocs -notmatch ';' -and [System.IO.Path]::IsPathRooted($curDocs)) {
+      $own = (Join-Path $proj "docs").TrimEnd('\', '/')
+      # The same folder under an OLD absolute location counts too: a moved or cloned project still carries
+      # the previous machine's path, which no longer exists here - and "<anything>\docs" that is missing
+      # can only have meant this project's docs.
+      $isOwn = ($curDocs.TrimEnd('\', '/') -ieq $own) -or
+               (-not (Test-Path -LiteralPath $curDocs) -and (Split-Path -Leaf $curDocs.TrimEnd('\', '/')) -ieq "docs")
+      if ($isOwn) {
+        $j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR = "docs"
+        $changed = $true
+        Write-Host "  .mcp.json: LOCALTOOLS_DOCS_DIR made relative (docs)" -ForegroundColor Green
+        Write-Host "    was: $curDocs" -ForegroundColor DarkGray
+      }
+    }
+    if ($changed) {
       $mEol = Get-ProjectEol $mcpPath
       [System.IO.File]::WriteAllText($mcpPath, (ConvertTo-Eol ($j | ConvertTo-Json -Depth 10) $mEol), (New-Object System.Text.UTF8Encoding($false)))
-      Write-Host "  .mcp.json repointed at this kit's local-tools.exe" -ForegroundColor Green
-      Write-Host "    was: $cur" -ForegroundColor DarkGray
+    }
+    if (-not (Expand-DadHome $portableExe)) {
+      Write-Host "  NOTE: DAD_HOME is not set - .mcp.json finds the kit through it. Run the kit's install.cmd once, then restart the editor." -ForegroundColor Yellow
     }
   } catch { Write-Host "  could not repoint .mcp.json: $($_.Exception.Message)" -ForegroundColor Yellow }
 }

@@ -26,6 +26,10 @@ $script:skip = 0
 $script:failures = New-Object System.Collections.Generic.List[string]
 # assigned here because 17 cases above its old position (in the scripts section) read it and saw $null
 $haveGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
+# 0.60.0: project pre-commit hooks (v2) and .mcp.json find the kit through DAD_HOME. On a dev machine that
+# variable names the INSTALLED kit, so without this every fixture commit would run the installed copy's
+# hook scripts instead of the ones being tested. Process-scoped; the machine's User value is never touched.
+$env:DAD_HOME = $kit
 
 function Test-Case([string]$name, [scriptblock]$body) {
   # Child processes (git, dotnet, the exe) write notices to stderr. If the suite's own stderr is being
@@ -5675,7 +5679,9 @@ Test-Case "a stale pre-commit hook is REPAIRED, not reported healthy" {
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install-hooks.ps1") -ProjectDir $p | Out-Null
     $now = Get-Content $hookPath -Raw
     Assert ($now -notmatch 'OLD-kit') "the stale hook was left pointing at a missing scanner"
-    Assert ($now -match [regex]::Escape((Join-Path $kit "scan-secrets.ps1"))) "the hook was not repointed at this kit"
+    # 0.60.0: the repaired hook is v2 - it finds the kit through DAD_HOME, with this kit as the fallback
+    Assert ($now -match 'dad-hook-version: 2' -and $now -match 'DAD_HOME') "the repaired hook is not the v2 (DAD_HOME) form"
+    Assert ($now.Contains("fallback='" + $kit.Replace('\', '/').TrimEnd('/') + "'")) "the hook fallback does not name this kit"
 
     # a HEALTHY hook must be left alone (no needless rewrites)
     $before = Get-Content $hookPath -Raw
@@ -5710,9 +5716,10 @@ Test-Case "upgrade-project repoints a project's .mcp.json at THIS kit" {
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") $p 2>$null | Out-Null
     $j = Get-Content "$p\.mcp.json" -Raw | ConvertFrom-Json
     Assert ($j.mcpServers.'local-tools'.command -ne $stale) ".mcp.json still points at the old kit"
-    Assert ($j.mcpServers.'local-tools'.command -like "$kit*") "exe path was not repointed at this kit: $($j.mcpServers.'local-tools'.command)"
-    # the corpus is the PROJECT's - only the binary moves
-    Assert ($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -like "$p*") "the project's docs dir was clobbered"
+    # 0.60.0: repointed to the PORTABLE form, not to this machine's absolute kit path
+    Assert ($j.mcpServers.'local-tools'.command -eq '${DAD_HOME}\local-tools\bin\Release\net8.0\local-tools.exe') "exe path was not made portable: $($j.mcpServers.'local-tools'.command)"
+    # the corpus is the PROJECT's own docs - written relative so the file is the same on every machine
+    Assert ($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -eq "docs") "the project's own docs dir was not made relative: $($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR)"
     # no BOM: Node reads this file
     $bytes = [System.IO.File]::ReadAllBytes("$p\.mcp.json")
     Assert (-not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB)) ".mcp.json was written with a BOM"
@@ -5870,7 +5877,7 @@ Test-Case "S27 AC3: .mcp.json repoint and .dad-kit-version follow the same rule"
   $sb = New-Sandbox
   try {
     $up = Join-Path $kit "upgrade-project.ps1"
-    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    $exe = '${DAD_HOME}\local-tools\bin\Release\net8.0\local-tools.exe'   # 0.60.0: the repoint writes the portable form
     $kitVer = ([System.IO.File]::ReadAllText((Join-Path $kit "VERSION"))).Trim()
     $stale = 'D:\gone\OLD-kit\local-tools\bin\Release\net8.0\local-tools.exe'
 
@@ -5921,7 +5928,7 @@ Test-Case "S27 AC3 follow-up: an existing file's line ending beats a conflicting
   $sb = New-Sandbox
   try {
     $up = Join-Path $kit "upgrade-project.ps1"
-    $exe = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    $exe = '${DAD_HOME}\local-tools\bin\Release\net8.0\local-tools.exe'   # 0.60.0: the repoint writes the portable form
     $stale = 'D:\gone\OLD-kit\local-tools\bin\Release\net8.0\local-tools.exe'
 
     # (a): LF CLAUDE.md + LF .mcp.json under eol=crlf -> both stay LF
@@ -6447,8 +6454,9 @@ Test-Case "scaffold general: docs + wiring + git + hook" {
     Assert ($cm -match 'docs/DESIGN.md') "CLAUDE.md missing design-doc path"
     Assert ($cm -match '## Secrets') "CLAUDE.md missing Secrets section"
     $j = Get-Content (Join-Path $p ".mcp.json") -Raw | ConvertFrom-Json
-    Assert ($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -like "*docs") "docs dir not wired"
+    Assert ($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -eq "docs") "docs dir not wired as the relative 'docs'"
     Assert ($j.mcpServers.'local-tools'.command -notmatch 'DAD-kit') "exe path not rewritten to this kit"
+    Assert ((Get-Content (Join-Path $p ".mcp.json") -Raw) -notmatch '[A-Za-z]:\\') "a fresh .mcp.json contains an absolute drive path"
     $gi = Get-Content (Join-Path $p ".gitignore") -Raw
     Assert ($gi -match '\.env') ".gitignore missing .env"
     if ($haveGit) {
@@ -8762,6 +8770,131 @@ Test-Case "T10.4: static wiring - build.md '## End of scope' contains run-summar
   $rs = $a.IndexOf("run-summary", $us)
   Assert ($rs -gt $us) "audit.md has no run-summary after the -UpdateStatus step"
   Assert (($rs - $us) -lt 1500) "audit.md run-summary is not near the -UpdateStatus step ($($rs - $us) chars away)"
+}
+
+# ---------------------------------------------------------------- 0.60.0: process fixes (GDN review 2026-11-09)
+# One block per issue number of the review. Each case is the automated form of a reproduction that is
+# written up in VERIFICATION.md.
+Write-Host "-- 0.60.0 process fixes --" -ForegroundColor Cyan
+
+# A scaffolded-looking project with two stories of two tasks each. The test command fails while fail.flag
+# exists and the fast test fails while scan.flag exists, so a case can turn the suite red and green.
+function New-PfFixture([string]$sb, [switch]$FastTest, [switch]$WithHook) {
+  $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\tests","$p\tools" | Out-Null
+  $t = @("# Task map","","## Tasks","")
+  foreach ($s in 1..2) { foreach ($n in 1..2) { $t += @("### [ ] T$s.$n - unit $s.$n   (Story S$s)","- **Goal:** x","") } }
+  [System.IO.File]::WriteAllText("$p\docs\TASKS.md", (($t -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText("$p\docs\STORIES.md", "# Stories`n`n### Story S1: One   <!-- Status: TODO -->`n- x`n`n### Story S2: Two   <!-- Status: TODO -->`n- y`n", (New-Object System.Text.UTF8Encoding($false)))
+  "@echo off`r`necho Total: 3`r`nif exist fail.flag exit /b 1`r`nexit /b 0" | Set-Content "$p\tools\fake-test.cmd" -Encoding ASCII
+  "@echo off`r`necho Total: 1`r`nif exist scan.flag exit /b 1`r`nexit /b 0" | Set-Content "$p\tools\fake-scan.cmd" -Encoding ASCII
+  $cm = "# Project: t`n`n## Build / test`n- Build: ``exit 0```n- Test:  ``tools\fake-test.cmd``"
+  if ($FastTest) { $cm += "`n- Fast test: ``tools\fake-scan.cmd``" }
+  $cm | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+  ".claude/`n_tmp/`n*.flag" | Set-Content "$p\.gitignore" -Encoding ASCII
+  $tests = (1..10 | ForEach-Object { "    [Fact]`r`n    public void Case$_() { }" }) -join "`r`n"
+  "public class T {`r`n$tests`r`n}" | Set-Content "$p\tests\ApiTests.cs" -Encoding UTF8
+  Push-Location $p
+  $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  git init -q; git config core.autocrlf false
+  git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+  $ErrorActionPreference = $prev; Pop-Location
+  if ($WithHook) { & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install-hooks.ps1") -ProjectDir $p | Out-Null }
+  return $p
+}
+function Invoke-Pf([string]$p, [string[]]$more) {
+  $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "close-unit.ps1") -ProjectDir $p -NoReindex @more 2>&1 | Out-String)
+  return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
+}
+
+Test-Case "0.60.0 #1: new-project writes a PORTABLE .mcp.json (no absolute path) and a v2 hook that finds the kit through DAD_HOME" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "gen"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $p | Out-Null
+    $raw = [System.IO.File]::ReadAllText("$p\.mcp.json")
+    $j = $raw | ConvertFrom-Json
+    Assert ($j.mcpServers.'local-tools'.command -eq '${DAD_HOME}\local-tools\bin\Release\net8.0\local-tools.exe') "command is not the portable form: $($j.mcpServers.'local-tools'.command)"
+    Assert ($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -eq "docs") "docs dir is not relative: $($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR)"
+    Assert ($raw -notmatch '[A-Za-z]:\\\\') ".mcp.json still carries an absolute drive path"
+    Assert ($raw -notmatch [regex]::Escape((Split-Path -Leaf $sb))) ".mcp.json carries the project's own location"
+    # the kit scripts still find the docs folder, from ANY current directory
+    . (Join-Path $kit "docs-dir.ps1")
+    Push-Location $env:TEMP
+    try { $rd = Resolve-DocsDir $p -Quiet } finally { Pop-Location }
+    Assert ($rd.TrimEnd('\') -ieq (Join-Path $p "docs")) "Resolve-DocsDir did not resolve the relative docs dir against the project: $rd"
+    # the hook: v2, no hard dependency on one absolute path, and a commit goes through it
+    $hook = [System.IO.File]::ReadAllText("$p\.git\hooks\pre-commit")
+    Assert ($hook -match 'dad-hook-version: 2' -and $hook -match 'kit="\$DAD_HOME"') "the hook does not resolve the kit through DAD_HOME"
+    Assert ($hook -notmatch '-File\s+"[A-Za-z]:') "the hook still names the scanner by a fixed absolute path"
+    "n" | Set-Content "$p\docs\note.md" -Encoding ASCII
+    git -C $p add -A 2>&1 | Out-Null
+    git -C $p -c user.name=t -c user.email=t@t commit -q -m "note" 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) "a commit through the v2 hook failed with DAD_HOME set"
+    # DAD_HOME stale: the fallback (the kit that wrote the hook) keeps commits working
+    $keep = $env:DAD_HOME
+    try {
+      $env:DAD_HOME = Join-Path $sb "no-such-kit"
+      "n2" | Set-Content "$p\docs\note.md" -Encoding ASCII
+      git -C $p add -A 2>&1 | Out-Null
+      git -C $p -c user.name=t -c user.email=t@t commit -q -m "note2" 2>&1 | Out-Null
+      Assert ($LASTEXITCODE -eq 0) "a commit failed when DAD_HOME was stale although the fallback kit exists"
+    } finally { $env:DAD_HOME = $keep }
+  } finally { Remove-Sandbox $sb }
+}
+
+Test-Case "0.60.0 #1 upgrade path: upgrade-project rewrites an absolute .mcp.json and a v1 hook, and leaves an external docs dir alone" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $up = Join-Path $kit "upgrade-project.ps1"
+    # (a) the shape every pre-0.60.0 project has: this machine's kit exe, this project's absolute docs dir,
+    #     and a v1 hook whose fixed scanner path still EXISTS (so the old "repair if missing" never fired)
+    $p = Join-Path $sb "old"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "# Design`nStatus: DRAFT" | Set-Content "$p\docs\DESIGN.md" -Encoding UTF8
+    $abs = Join-Path $kit "local-tools\bin\Release\net8.0\local-tools.exe"
+    $mcp = @{ mcpServers = @{ 'local-tools' = @{ command = $abs; env = @{ LOCALTOOLS_DOCS_DIR = "$p\docs"; OLLAMA_HOST = "http://localhost:11434" } } } } | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText("$p\.mcp.json", $mcp, (New-Object System.Text.UTF8Encoding($false)))
+    Push-Location $p; $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    git init -q; git config core.autocrlf false; git add -A; git -c user.name=t -c user.email=t@t commit -q -m base
+    $ErrorActionPreference = $prev; Pop-Location
+    $v1 = "#!/bin/sh`n# DAD-kit pre-commit`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $kit 'scan-secrets.ps1')`" -Staged -Quiet`nexit `$?`n"
+    [System.IO.File]::WriteAllText("$p\.git\hooks\pre-commit", $v1, (New-Object System.Text.UTF8Encoding($false)))
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 0) "upgrade-project failed:`n$o"
+    $j = [System.IO.File]::ReadAllText("$p\.mcp.json") | ConvertFrom-Json
+    Assert ($j.mcpServers.'local-tools'.command -eq '${DAD_HOME}\local-tools\bin\Release\net8.0\local-tools.exe') "(a) command not made portable: $($j.mcpServers.'local-tools'.command)"
+    Assert ($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -eq "docs") "(a) own docs dir not made relative: $($j.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR)"
+    Assert ($j.mcpServers.'local-tools'.env.OLLAMA_HOST -eq "http://localhost:11434") "(a) another env value was lost"
+    Assert ([System.IO.File]::ReadAllText("$p\.git\hooks\pre-commit") -match 'dad-hook-version: 2') "(a) the v1 hook was not rewritten to v2:`n$o"
+    Assert ([System.IO.File]::ReadAllText("$p\.dad-kit-version").Trim() -eq ([System.IO.File]::ReadAllText((Join-Path $kit "VERSION"))).Trim()) "(a) version stamp not updated"
+    # idempotent
+    $before = [System.IO.File]::ReadAllText("$p\.mcp.json")
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p 2>&1 | Out-Null
+    Assert ([System.IO.File]::ReadAllText("$p\.mcp.json") -eq $before) "(a) a second upgrade rewrote an already-portable .mcp.json"
+
+    # (b) a deliberate EXTERNAL corpus (it exists and is not this project's docs) is not touched
+    $ext = Join-Path $sb "shared-corpus"; New-Item -ItemType Directory -Force $ext | Out-Null
+    "# Design`nStatus: DRAFT" | Set-Content "$ext\DESIGN.md" -Encoding UTF8
+    $p2 = Join-Path $sb "ext"; New-Item -ItemType Directory -Force "$p2\docs" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p2\CLAUDE.md" -Encoding UTF8
+    $mcp2 = @{ mcpServers = @{ 'local-tools' = @{ command = $abs; env = @{ LOCALTOOLS_DOCS_DIR = $ext } } } } | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText("$p2\.mcp.json", $mcp2, (New-Object System.Text.UTF8Encoding($false)))
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p2 2>&1 | Out-Null
+    $j2 = [System.IO.File]::ReadAllText("$p2\.mcp.json") | ConvertFrom-Json
+    Assert ($j2.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -eq $ext) "(b) an external docs dir was rewritten: $($j2.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR)"
+    Assert ($j2.mcpServers.'local-tools'.command -eq '${DAD_HOME}\local-tools\bin\Release\net8.0\local-tools.exe') "(b) command not made portable"
+
+    # (c) a project MOVED from another machine: its absolute docs dir no longer exists -> it meant this project's docs
+    $p3 = Join-Path $sb "moved"; New-Item -ItemType Directory -Force "$p3\docs" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p3\CLAUDE.md" -Encoding UTF8
+    $mcp3 = @{ mcpServers = @{ 'local-tools' = @{ command = 'Q:\gone\kit\local-tools.exe'; env = @{ LOCALTOOLS_DOCS_DIR = 'Q:\other-machine\proj\docs' } } } } | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText("$p3\.mcp.json", $mcp3, (New-Object System.Text.UTF8Encoding($false)))
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $up -ProjectDir $p3 2>&1 | Out-Null
+    $j3 = [System.IO.File]::ReadAllText("$p3\.mcp.json") | ConvertFrom-Json
+    Assert ($j3.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR -eq "docs") "(c) a dead absolute docs dir was not repaired: $($j3.mcpServers.'local-tools'.env.LOCALTOOLS_DOCS_DIR)"
+  } finally { Remove-Sandbox $sb }
 }
 
 # ---------------------------------------------------------------- summary
