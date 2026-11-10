@@ -104,6 +104,13 @@ try {
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-gates-log.ps1") -ProjectDir $proj -Gate "gates-log" -Decision "allow" -Reason "project scaffolded ($Kind, kit $glVer)" 2>$null | Out-Null
 } catch { }
 
+# The [e2e] rule is ON for a new project (0.61.0, issue 9): this file existing is the switch, and its
+# lines are the stories exempt from "one [e2e] task per story". Empty here - every story is held to it.
+$e2eFile = Join-Path $proj "grades\e2e-exempt.txt"
+if (-not (Test-Path -LiteralPath $e2eFile)) {
+  New-Item -ItemType Directory -Force (Join-Path $proj "grades") | Out-Null
+  [System.IO.File]::WriteAllText($e2eFile, "# Stories EXEMPT from the 'one [e2e] task per story' rule, one id per line. Human-owned: an agent never adds a line.`n", (New-Object System.Text.UTF8Encoding($false)))
+}
 # Git safety net: init + first commit, so /build can checkpoint each passing unit and a mangled file
 # can be restored (git checkout) instead of hand-reconstructed.
 if (Get-Command git -ErrorAction SilentlyContinue) {

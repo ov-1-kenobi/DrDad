@@ -9512,6 +9512,61 @@ Test-Case "0.61.0 #8: every epic names the Goal clause it serves; doc-stats flag
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "0.61.0 #9: a story does not roll up without an [e2e] task (where the rule is on); exempt and old projects are untouched; upgrade exempts stories under way" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    # rule OFF (no grades\e2e-exempt.txt): the story rolls up as before
+    $p = New-PfFixture $sb
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S1 -> DONE') "a project without the exempt file was held to the [e2e] rule:`n$($x.Out)"
+  } finally { Remove-Sandbox $sb }
+  $sb = New-Sandbox
+  try {
+    # rule ON, S1 has no [e2e] task: the LAST task of S1 is refused; an earlier task is not
+    $p = New-PfFixture $sb
+    New-Item -ItemType Directory -Force "$p\grades" | Out-Null
+    "# exempt stories`nS2   # under way before the rule" | Set-Content "$p\grades\e2e-exempt.txt" -Encoding ASCII
+    git -C $p add -A 2>&1 | Out-Null; git -C $p -c user.name=t -c user.email=t@t commit -q -m exempt 2>&1 | Out-Null
+    $x = Invoke-Pf $p @("-Id","T1.1","-Title","u"); Assert ($x.Code -eq 0) "a non-final task was refused:`n$($x.Out)"
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 1 -and $x.Out -match 'STORY S1 HAS NO \[e2e\] TASK') "a story with no [e2e] task rolled up:`n$($x.Out)"
+    Assert (-not (Select-String "$p\docs\TASKS.md" -Pattern '^###\s*\[x\]\s*T1\.2' -Quiet)) "T1.2 was ticked although the roll-up was refused"
+    Assert (@([System.IO.File]::ReadAllLines("$p\grades\gates-log.jsonl") | Where-Object { $_ -match 'no \[e2e\] task' }).Count -eq 1) "the refusal was not logged"
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "doc-stats.ps1") -ProjectDir $p -Findings 2>&1 | Out-String)
+    Assert ($o -match '\[taskmap\] 1 stor\(y/ies\) have tasks but NO \[e2e\] task \(S1\)') "doc-stats did not report S1 (and only S1; S2 is exempt):`n$o"
+    # /taskmap tags the end-to-end task: now it rolls up
+    $t = [System.IO.File]::ReadAllText("$p\docs\TASKS.md").Replace("### [ ] T1.2 - unit 1.2", "### [ ] T1.2 - [e2e] unit 1.2")
+    [System.IO.File]::WriteAllText("$p\docs\TASKS.md", $t, (New-Object System.Text.UTF8Encoding($false)))
+    $x = Invoke-Pf $p @("-Id","T1.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S1 -> DONE') "a story WITH an [e2e] task did not roll up:`n$($x.Out)"
+    # the exempt story rolls up with no [e2e] task
+    $x = Invoke-Pf $p @("-Id","S1","-Title","S1 closed"); Assert ($x.Code -eq 0) "story-level close of S1:`n$($x.Out)"
+    $x = Invoke-Pf $p @("-Id","T2.1","-Title","u"); $x = Invoke-Pf $p @("-Id","T2.2","-Title","u")
+    Assert ($x.Code -eq 0 -and $x.Out -match 'story S2 -> DONE') "an exempt story was held to the rule:`n$($x.Out)"
+  } finally { Remove-Sandbox $sb }
+  $sb = New-Sandbox
+  try {
+    # new-project turns the rule on with an empty list; upgrade-project exempts what is already under way
+    $np = Join-Path $sb "gen"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $np | Out-Null
+    Assert (Test-Path "$np\grades\e2e-exempt.txt") "new-project did not create grades\e2e-exempt.txt"
+    Assert (@([System.IO.File]::ReadAllLines("$np\grades\e2e-exempt.txt") | Where-Object { $_ -and $_ -notmatch '^\s*#' }).Count -eq 0) "a new project starts with exempt stories"
+    Assert (-not ((git -C $np status --porcelain | Out-String).Trim())) "the scaffold left the tree dirty"
+    $p = Join-Path $sb "old"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "# Stories`n`n### Story S1: a   <!-- Status: DONE closed:close-unit -->`n### Story S2: b   <!-- Status: TODO -->`n### Story S3: c   <!-- Status: TODO -->" | Set-Content "$p\docs\STORIES.md" -Encoding UTF8
+    "# Task map`n`n## Tasks`n`n### [x] T1.1 - a   (Story S1)`n### [x] T2.1 - b   (Story S2)`n### [ ] T2.2 - b2   (Story S2)`n### [ ] T3.1 - c   (Story S3)" | Set-Content "$p\docs\TASKS.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") -ProjectDir $p 2>&1 | Out-Null
+    $ex = @([System.IO.File]::ReadAllLines("$p\grades\e2e-exempt.txt") | Where-Object { $_ -and $_ -notmatch '^\s*#' })
+    Assert (($ex -join ',') -eq 'S1,S2') "upgrade-project exempted '$($ex -join ',')' (expected S1,S2: done or under way; S3 not started)"
+    $before = [System.IO.File]::ReadAllText("$p\grades\e2e-exempt.txt")
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") -ProjectDir $p 2>&1 | Out-Null
+    Assert ([System.IO.File]::ReadAllText("$p\grades\e2e-exempt.txt") -eq $before) "a second upgrade rewrote the exempt list"
+  } finally { Remove-Sandbox $sb }
+  Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\agents\taskmap-agent.md")) -match 'exactly ONE task tagged `\[e2e\]`') "taskmap-agent is not told to tag one [e2e] task per story"
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

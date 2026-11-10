@@ -2,7 +2,9 @@
 <!-- Managed by /taskmap (taskmap-agent) from STORIES.md. Regenerate after stories change - done-state
      (`[x]`) is preserved. /build and /spec work the next unchecked task whose dependencies are all `[x]`.
      Each task is self-contained and traces to its story by tag. This is a working doc (no Status header);
-     it implements the LOCKED DESIGN. -->
+     it implements the LOCKED DESIGN.
+     Title tags: [e2e] = the ONE task per story whose acceptance runs the real entry point (close-unit will
+     not roll a story up without one); [human] = only a human can do it; [ui]; [research]. -->
 
 ## Build order (dependency-sorted)
 <!-- e.g.  T1.1 -> T1.2 -> T3.1 (needs T1.2) -> T3.2 -> ... -->

@@ -51,6 +51,16 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
 - UPGRADE PATH: none forced. A design with no `Serves:` line and no `## Deferred` section is not flagged; add both
   the next time the design is unlocked. The experience template (`TEDD.md`) is unchanged.
 
+### Added - issue 9 (option A): a story needs one end-to-end task before it can roll up
+- taskmap-agent tags exactly ONE task per story `[e2e]` in its title: the task whose acceptance runs the real entry
+  point (command, route, screen). It also tags human-only tasks `[human]`.
+- `close-unit` refuses to close the LAST task of a story when none of the story's tasks is tagged `[e2e]`, logs a
+  `block`, and points at `/taskmap`. `doc-stats -Findings` reports `[taskmap]` for stories with tasks and no `[e2e]`.
+- The rule is switched on by the file `grades\e2e-exempt.txt` (story ids exempt from it, human-owned).
+  `new-project` creates it empty. UPGRADE PATH: `upgrade-project` creates it listing every story that is DONE or
+  already has a ticked task, so only stories not yet started are held to the rule. A project that has not been
+  upgraded has no such file and is not affected.
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).

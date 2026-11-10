@@ -173,7 +173,7 @@ if (Test-Path $tasksFile) {
       $story = if ($line -match '\(Story\s+([A-Za-z0-9._-]+)\)') { $Matches[1] } else { "" }
       # NOTE: $Matches was overwritten above - re-match for the id/state
       $m2 = [regex]::Match($line, '^###\s*\[( |x)\]\s*([A-Za-z0-9._-]+)')
-      $cur = [pscustomobject]@{ Id = $m2.Groups[2].Value; Done = ($m2.Groups[1].Value -eq 'x'); Story = $story; Deps = @() }
+      $cur = [pscustomobject]@{ Id = $m2.Groups[2].Value; Done = ($m2.Groups[1].Value -eq 'x'); Story = $story; Deps = @(); Head = $line }
       $tasks += $cur
     } elseif ($cur -and $line -match '^\s*-\s*\*\*Depends on:\*\*\s*(.*)$') {
       $cur.Deps = @([regex]::Matches($Matches[1], '[A-Za-z][A-Za-z0-9._-]*') |
@@ -582,6 +582,20 @@ if ($Findings) {
     }
   }
 
+  # --- [taskmap] a story with no [e2e] task (0.61.0, issue 9 option A) - only where the rule is on ----
+  $e2eExemptFile = Join-Path $gradesDir "e2e-exempt.txt"
+  if (Test-Path -LiteralPath $e2eExemptFile) {
+    $e2eExempt = @([System.IO.File]::ReadAllLines($e2eExemptFile) | ForEach-Object { ($_ -split '#')[0].Trim() } | Where-Object { $_ })
+    $noE2e = @()
+    foreach ($sid in ($tasks | Where-Object { $_.Story } | ForEach-Object { $_.Story } | Select-Object -Unique)) {
+      if ($e2eExempt -contains $sid -or $storiesDone -contains $sid) { continue }
+      if (@($tasks | Where-Object { $_.Story -eq $sid -and $_.Head -match '(?i)\[e2e\]' }).Count -eq 0) { $noE2e += $sid }
+    }
+    if ($noE2e.Count) {
+      $shown = ($noE2e | Select-Object -First 12) -join ', '
+      $f.Add("[taskmap] $($noE2e.Count) stor(y/ies) have tasks but NO [e2e] task ($shown) - nothing in them runs the real entry point, and close-unit will refuse to roll them up. /taskmap adds the one [e2e] task per story.")
+    }
+  }
   foreach ($m in $missing) { $f.Add("[grade] $m") }
   foreach ($o in $orphanTests) { $f.Add("[dev] test project not in the solution (dotnet test silently skips it): $o") }
 

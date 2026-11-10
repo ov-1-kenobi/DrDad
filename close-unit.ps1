@@ -353,6 +353,33 @@ if ((Test-Path $statusGuard) -and (Test-Path (Join-Path $proj ".git"))) {
   }
 }
 
+# --- 0e) is the story REACHABLE? one [e2e] task per story (issue 9 option A, 0.61.0) -------------
+# A story whose tasks are all library pieces rolls up green while nothing a user can run calls the code.
+# So the task map carries exactly one task per story tagged [e2e] in its title - the one whose acceptance
+# runs the real entry point - and a story without one does not roll up. Enforced only where the project
+# has grades\e2e-exempt.txt: new-project creates it empty, upgrade-project fills it with the stories that
+# were already under way, so no story planned under the old rules is blocked after the fact.
+if ($predictedStory -and $myTaskStory -and -not $SkipVerify) {
+  $exemptFile = Join-Path $proj "grades\e2e-exempt.txt"
+  if (Test-Path -LiteralPath $exemptFile) {
+    $exempt = @([System.IO.File]::ReadAllLines($exemptFile) | ForEach-Object { ($_ -split '#')[0].Trim() } | Where-Object { $_ })
+    if ($exempt -notcontains $predictedStory) {
+      $storyTasks = @(Get-Content $tasksFile -Encoding UTF8 | Where-Object {
+        $_ -match '^###\s*\[[ x]\]' -and $_ -match ('\(Story\s+' + [regex]::Escape($predictedStory) + '\)') })
+      if (@($storyTasks | Where-Object { $_ -match '(?i)\[e2e\]' }).Count -eq 0) {
+        Write-Host "[close-unit] STORY $predictedStory HAS NO [e2e] TASK - '$Id' is NOT closed. Nothing was ticked or committed." -ForegroundColor Red
+        Write-Host "             This is the last open task of $predictedStory, so closing it would mark the story DONE - but" -ForegroundColor Red
+        Write-Host "             none of its $($storyTasks.Count) task(s) is tagged [e2e]: nothing proves a user can reach this work" -ForegroundColor Red
+        Write-Host "             through the real entry point (command, route, screen)." -ForegroundColor Red
+        Write-Host "             Run /taskmap for story ${predictedStory} - it adds the one [e2e] task (or tags the task that already" -ForegroundColor Yellow
+        Write-Host "             is the end-to-end path). Then build that task and close again." -ForegroundColor Yellow
+        Write-Host "             (A story with genuinely no entry point is the HUMAN's call: they add its id to grades\e2e-exempt.txt.)" -ForegroundColor DarkGray
+        Write-GateLog "block" "$Id not closed: story $predictedStory has no [e2e] task (no end-to-end path)"
+        exit 1
+      }
+    }
+  }
+}
 # --- 0b) does an earlier story still owe its story-level close? (issue 14, 0.60.0) ----------------
 # When a story's last task closes, the story rolls up to DONE - and /build then owes it a grade, a hygiene
 # pass and the story-level close (`close-unit -Id <story> -RequireGrade`), which is the story's own commit.

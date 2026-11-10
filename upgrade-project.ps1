@@ -177,6 +177,35 @@ if (-not (Test-Path -LiteralPath (Join-Path $proj "grades\gates-log.jsonl"))) {
   } catch { }
 }
 
+# --- 0e) Turn the [e2e] rule on WITHOUT blocking work already under way (0.61.0, issue 9) -------
+# grades\e2e-exempt.txt existing is the switch. On first upgrade it is written with every story that is
+# DONE or already has a ticked task: those were planned before the rule and are never held to it. Stories
+# not yet started must get their one [e2e] task from /taskmap before their last task can close.
+$e2eFile = Join-Path $proj "grades\e2e-exempt.txt"
+if (-not (Test-Path -LiteralPath $e2eFile)) {
+  try {
+    $udocs = Resolve-DocsDir $proj -Quiet
+    $started = New-Object System.Collections.Generic.List[string]
+    $uStories = Join-Path $udocs "STORIES.md"; $uTasks = Join-Path $udocs "TASKS.md"
+    if (Test-Path -LiteralPath $uStories) {
+      foreach ($ln in [System.IO.File]::ReadAllLines($uStories)) {
+        if ($ln -match '^#{1,6}\s' -and $ln -match '<!--\s*Status:\s*DONE\b' -and $ln -match '\b(S\d+[A-Za-z0-9._-]*)\b') { if (-not $started.Contains($Matches[1])) { $started.Add($Matches[1]) } }
+      }
+    }
+    if (Test-Path -LiteralPath $uTasks) {
+      foreach ($ln in [System.IO.File]::ReadAllLines($uTasks)) {
+        if ($ln -match '^###\s*\[x\]' -and $ln -match '\(Story\s+([A-Za-z0-9._-]+)\)') { if (-not $started.Contains($Matches[1])) { $started.Add($Matches[1]) } }
+      }
+    }
+    New-Item -ItemType Directory -Force (Join-Path $proj "grades") | Out-Null
+    $e2eEol = Get-ProjectEol $e2eFile
+    $body = "# Stories EXEMPT from the 'one [e2e] task per story' rule, one id per line. Human-owned: an agent never adds a line.`n" +
+            "# Written by upgrade-project (kit $kitVer): stories that were DONE or already under way when the rule arrived.`n" +
+            $(if ($started.Count) { ($started -join "`n") + "`n" } else { "" })
+    [System.IO.File]::WriteAllText($e2eFile, (ConvertTo-Eol $body $e2eEol), (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "  added grades\e2e-exempt.txt ($($started.Count) stor(y/ies) already under way are exempt; the rest need one [e2e] task - run /taskmap)" -ForegroundColor Green
+  } catch { Write-Host "  could not write grades\e2e-exempt.txt: $($_.Exception.Message)" -ForegroundColor Yellow }
+}
 # --- 1) Missing docs from templates (never overwrite existing) ---
 foreach ($doc in @("STATUS.md","RECIPES.md","SOURCES.md","DATASETS.md","STYLE.md","UI-TOOLING.md")) {
   $dst = Join-Path $proj "docs\$doc"

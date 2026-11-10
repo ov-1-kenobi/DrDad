@@ -43,7 +43,17 @@ Do:
    - has a single, observable acceptance check,
    - names the exact files/components it touches.
    Split anything bigger; merge anything trivially tiny. Order them so prerequisites come first.
-3. Work out **dependencies** between tasks (and across stories) and a single build order that respects them.
+2b. **Every story gets exactly ONE task tagged `[e2e]` in its title** - the task that makes the story
+   REACHABLE: its acceptance runs the real entry point (the CLI command, the HTTP route, the screen), not a
+   class in isolation. Example: `### [ ] T7.4 - [e2e] gdn copy <a> <b> copies a file between two swarms   (Story S7)`.
+   A story whose tasks are all library pieces closes green while nothing a user can run calls the code: one
+   project shipped a registered command whose core path was a stub, with every task ticked. `close-unit`
+   refuses to roll a story up to DONE when none of its tasks is tagged `[e2e]`, and `doc-stats` reports
+   `[taskmap]` for it. (Stories listed in `grades/e2e-exempt.txt` - the ones already under way when the rule
+   arrived - are exempt; never add a story to that file yourself.) If a story truly has no entry point
+   (pure research, a docs-only story), say so and ask me - do not tag an arbitrary task.
+   **A task only a HUMAN can do** (a live smoke test, a hardware check, a decision) is tagged `[human]` in
+   its title, so the open human gates can be counted and listed.3. Work out **dependencies** between tasks (and across stories) and a single build order that respects them.
 4. Write/refresh **`docs/TASKS.md`** (in the corpus, so it gets indexed) using the structure below.
    Preserve any `[x]` done-state already in the file when regenerating, and keep existing task ids stable
    (only add new ids for new tasks) - grades and done-state are keyed by task id.
