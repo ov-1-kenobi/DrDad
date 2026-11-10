@@ -21,7 +21,7 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
 | | before (0.60.0) | now |
 |---|---|---|
 | index size on disk | 279 MB (`chunks.json`) | 112 MB (`chunks.json` 32 MB text + `vectors.bin` 80 MB) |
-| reindex after one task box is ticked | re-embeds all 25,983 chunks | embeds 4 chunks, reuses 25,979; 1.3 s |
+| reindex after one task box is ticked | re-embeds all 25,983 chunks; 136 s | embeds 4 chunks, reuses 25,979; 1.3 s |
 | reindex when nothing changed | re-embeds everything | "Index up to date", 0.07 s |
 | one search from the shell (`docs-find`) | 4.6 s | 0.4 s |
 
@@ -39,6 +39,17 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
 - Context for the change: in that project the index was searched about 160 times (`search_datasheets` 131,
   `docs-find` 27) against about 5,000 greps and direct reads of the same documents, and explicitly rebuilt 164
   times on top of the rebuild at every close.
+
+### Added - issue 8 (option B): new epics are checked against the design's Goal
+- `/design` step 4a: before writing a new epic, the agent shows the epic and the Goal clause it serves, quoted, and
+  waits for confirmation; the epic then carries `- Serves: "<clause>"`. If no clause covers it, the human either
+  amends the Goal with a dated line (`- Amended YYYY-MM-DD (human): ...`) or the epic goes to the new
+  `## Deferred (outside the Goal - recorded, not built)` section. The agent may not stretch a clause or add it alone.
+- The DESIGN template carries the `Serves:` line, the Deferred section and a comment under `## Goal`.
+- `doc-stats -Findings` reports `[design]` for an epic with no `Serves:` line, for a `Serves:` that does not quote,
+  and for a quoted clause whose words are not in the Goal section (dated amendments count as part of the Goal).
+- UPGRADE PATH: none forced. A design with no `Serves:` line and no `## Deferred` section is not flagged; add both
+  the next time the design is unlocked. The experience template (`TEDD.md`) is unchanged.
 
 ## 0.60.0 - 2026-11-09
 

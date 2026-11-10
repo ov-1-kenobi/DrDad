@@ -9476,6 +9476,42 @@ Test-Case "0.61.0 index: a reindex reuses unchanged chunks, skips an unchanged c
   }
 }
 
+Test-Case "0.61.0 #8: every epic names the Goal clause it serves; doc-stats flags a missing or unquoted Serves and a clause that is not in the Goal; old designs stay quiet" {
+  $sb = New-Sandbox
+  try {
+    $ds = Join-Path $kit "doc-stats.ps1"
+    $p = Join-Path $sb "p"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    $head = "# Design`nStatus: DRAFT`nSecurity review: NOT-REQUIRED (test fixture, never deployed)`n`n## Goal`nA command-line tool that stores files on a private swarm and gets them back.`n- Amended 2026-11-01 (human): share a folder on the LAN - asked for by the owner`n`n"
+    function Find([string]$epics) {
+      [System.IO.File]::WriteAllText("$p\docs\DESIGN.md", ($head + $epics), (New-Object System.Text.UTF8Encoding($false)))
+      return (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $p -Findings 2>&1 | Out-String)
+    }
+    # an OLD design (no Serves anywhere, no Deferred section) is not flagged
+    $o = Find "## Epics`n### E1: Put and get`n- Scope: x`n### E2: Kiosk`n- Scope: y`n"
+    Assert ($o -notmatch "Serves") "an older design with no Serves lines was flagged:`n$o"
+    # adopted: E1 quotes the Goal, E2 quotes the dated amendment, E3 has none, E4 quotes words not in the Goal, E5 does not quote
+    $o = Find ("## Epics`n### E1: Put and get`n- Scope: x`n- Serves: `"stores files on a private swarm`"`n" +
+               "### E2: LAN share`n- Serves: `"share a folder on the LAN`"`n" +
+               "### E3: Kiosk playback`n- Scope: y`n" +
+               "### E4: App framework`n- Serves: `"self-maintaining apps for everyone`"`n" +
+               "### E5: Hubs`n- Serves: the storage goal`n`n## Deferred (outside the Goal - recorded, not built)`n- SDK - not in the brief (2026-11-01)`n")
+    Assert ($o -notmatch 'epic E1 ' -and $o -notmatch 'epic E2 ') "an epic that quotes the Goal (or its dated amendment) was flagged:`n$o"
+    Assert ($o -match "\[design\] epic E3 has no 'Serves:' line") "an epic with no Serves line was not flagged:`n$o"
+    Assert ($o -match '\[design\] epic E4 says it serves "self-maintaining apps for everyone" but those words are NOT') "a clause that is not in the Goal was not flagged:`n$o"
+    Assert ($o -match "\[design\] epic E5 'Serves:' does not QUOTE") "an unquoted Serves was not flagged:`n$o"
+    # the template itself is consistent with the rule, and /design carries the step
+    $tmpl = [System.IO.File]::ReadAllText((Join-Path $kit "templates\_common\docs\DESIGN.md"))
+    Assert ($tmpl -match '(?m)^- Serves: "<' -and $tmpl -match '(?m)^## Deferred \(outside the Goal') "the DESIGN template lacks the Serves line or the Deferred section"
+    $dm = [System.IO.File]::ReadAllText((Join-Path $kit "global\commands\design.md"))
+    Assert ($dm -match '4a\. \*\*Check EVERY new epic against' -and $dm -match 'WAIT for my confirmation') "/design has no Goal check for new epics"
+    # a freshly scaffolded project (template placeholders) is not flagged for its placeholder epic... it IS adopted, so E1's placeholder Serves must read as missing only once there is a real epic title
+    $np = Join-Path $sb "gen"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $np | Out-Null
+    $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $np -Findings 2>&1 | Out-String)
+    Assert ($o -notmatch "Serves") "a fresh scaffold (placeholder epic) was flagged:`n$o"
+  } finally { Remove-Sandbox $sb }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

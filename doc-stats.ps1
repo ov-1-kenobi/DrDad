@@ -416,6 +416,37 @@ if ($Findings) {
     }
   }
 
+  # --- [design] does every epic serve the Goal? (0.61.0, issue 8 option B) ---------------------------
+  # Scope grows one reasonable-sounding epic at a time, and nothing asked whether an epic still belonged to
+  # what the project said it was for. Each epic now carries `- Serves: "<Goal clause>"`. Two computed checks:
+  # an epic with no Serves line, and a quoted clause that does not occur in the Goal section. Only for a
+  # design that has adopted the convention (a '## Deferred' section, or any Serves line) - an older design
+  # is not buried in findings by a kit upgrade.
+  if ($designRaw) {
+    $epicSec = [regex]::Match($designRaw, '(?ms)^##\s*Epics\b.*?(?=^##\s|\z)')
+    $goalSec = [regex]::Match($designRaw, '(?ms)^##\s*Goal\b.*?(?=^##\s|\z)')
+    $adopted = ($designRaw -match '(?m)^##\s*Deferred\b') -or ($epicSec.Success -and $epicSec.Value -match '(?m)^\s*-\s*Serves:')
+    if ($epicSec.Success -and $adopted) {
+      $goalNorm = if ($goalSec.Success) { ([regex]::Replace($goalSec.Value, '\s+', ' ')).ToLowerInvariant() } else { "" }
+      $blocks = [regex]::Matches($epicSec.Value, '(?ms)^###\s*(E\d+[A-Za-z0-9-]*)\s*:\s*([^\r\n]*)\r?\n(.*?)(?=^###\s|\z)')
+      foreach ($b in $blocks) {
+        $eid = $b.Groups[1].Value
+        if ($b.Groups[2].Value.Trim().StartsWith('<')) { continue }      # the scaffold's placeholder epic
+        $sv = [regex]::Match($b.Groups[3].Value, '(?m)^\s*-\s*Serves:\s*(.*)$')
+        $val = if ($sv.Success) { $sv.Groups[1].Value.Trim() } else { "" }
+        if (-not $val -or $val -match '^"?<') {
+          $f.Add("[design] epic $eid has no 'Serves:' line - which clause of '## Goal' does it serve? Via /design: quote the clause (- Serves: `"...`"), or have the human amend the Goal with a dated line, or move the epic to '## Deferred'.")
+          continue
+        }
+        $q = [regex]::Match($val, '"([^"]{4,})"')
+        if (-not $q.Success) {
+          $f.Add("[design] epic $eid 'Serves:' does not QUOTE the Goal - write the clause's exact words in double quotes so it can be checked.")
+        } elseif ($goalNorm -and -not $goalNorm.Contains(([regex]::Replace($q.Groups[1].Value, '\s+', ' ')).ToLowerInvariant().Trim())) {
+          $f.Add("[design] epic $eid says it serves `"$($q.Groups[1].Value)`" but those words are NOT in '## Goal' - the Goal was not amended for it. Via /design: the human adds a dated amendment to the Goal, or the epic moves to '## Deferred'.")
+        }
+      }
+    }
+  }
   if ($designStatus -eq "(no design doc)") { $f.Add("[design] no design doc in docs\ - run /scaffold or /design") }
   elseif ($designStatus -notin @("DRAFT","LOCKED")) { $f.Add("[design] $designName Status: is '$designStatus' - must be DRAFT or LOCKED") }
 

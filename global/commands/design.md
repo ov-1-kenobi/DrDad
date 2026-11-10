@@ -93,6 +93,17 @@ vision model transcribes it to text - and use that as design input.)
    tradeoffs, recommend one, WAIT for my choice. Reindex after edits.
 4. **Group into epics** under `## Epics` - lightweight, coarse feature groups (`E1`, `E2`, ...). Keep it light:
    a small project may have one epic or none. These are what `/stories` expands into stories.
+4a. **Check EVERY new epic against `## Goal` - before writing it.** Read the Goal section and find the clause
+   the epic serves. Show me the epic and that clause, QUOTED exactly, and WAIT for my confirmation. Then write
+   the epic with `- Serves: "<the quoted clause>"`. If no clause of the Goal covers it, say so plainly and
+   give me the two choices - do NOT stretch a clause to fit, and do not add the epic on your own:
+     1. I AMEND the Goal: you add a dated line under `## Goal`
+        (`- Amended <YYYY-MM-DD> (human): <new clause> - <why>`) in my words, then the epic may cite it; or
+     2. the epic goes under `## Deferred (outside the Goal - recorded, not built)` with one line of why.
+   A design whose first brief was a small proof of concept once grew to fifteen epics this way, a third of
+   them inside the brief, with no point at which anyone was asked. `doc-stats -Findings` reports an epic with
+   no `Serves:` line, and one whose quoted clause is not in the Goal. (An older design with no `Serves:` lines
+   and no `## Deferred` section is not flagged; add both the next time it is unlocked.)
 4b. **Pricing ask - before moving on from a newly added requirement/epic that has no stories yet, say so and
    WAIT.** When step 3 adds a new requirement or step 4 adds a new epic grouping, count ONLY what currently
    exists (the requirements/epics/stories already in the doc) - there is no real story/task count for the

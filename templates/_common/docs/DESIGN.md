@@ -18,6 +18,9 @@ Security review: REQUIRED
 
 ## Goal
 <one paragraph: what this builds and why>
+<!-- The Goal is the yardstick for SCOPE. Every epic below names the Goal clause it serves ("Serves:").
+     An epic that serves no clause is not added quietly: either the human AMENDS the Goal here, as a dated
+     line ("- Amended YYYY-MM-DD (human): <new clause> - <why>"), or the epic goes to "## Deferred". -->
 
 ## Security decisions
 <!-- Written by security-agent (via /design) once the stack is known; each decision cites a source in
@@ -37,6 +40,13 @@ Security review: REQUIRED
      A small project can use a single epic or skip them. /stories expands epics into stories. -->
 ### E1: <epic title>
 - Scope: <one or two lines - what this epic covers>
+- Serves: "<the exact words of the Goal clause this epic serves, in double quotes>"
+
+## Deferred (outside the Goal - recorded, not built)
+<!-- Ideas and epics that do not serve the Goal as written. Parking them here is a decision, and it is
+     cheaper than a design that grows one reasonable-sounding epic at a time. To build one, amend the Goal
+     first (a dated human line under "## Goal") and move it up into "## Epics". -->
+- <idea or epic> - <why it is outside the Goal> (YYYY-MM-DD)
 
 ## Contracts (pin BEFORE locking - the architect-agent writes these)
 <!-- The load-bearing decisions: data formats, core-function semantics, invariants. The test: "could two
