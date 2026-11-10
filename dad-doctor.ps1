@@ -14,10 +14,70 @@
 # directory). That is how a stray scaffold - CLAUDE.md, .mcp.json, docs\, git init - landed in the
 # wrong folder. These scripts are invoked by MODELS, which typo parameter names.
 [CmdletBinding()]
-param([string]$ProjectDir = "")
+param([string]$ProjectDir = "", [switch]$PrunePermissions, [string]$PlanOut = "")
 $ErrorActionPreference = "Continue"     # this script probes things that are ALLOWED to be missing
 $kit = $PSScriptRoot
 . (Join-Path $kit "docs-dir.ps1")
+
+# --- permission allow-rules: what is clutter, and what is too broad (0.61.0, issue 16 option B) ---
+# ONE-OFF: a Bash rule that is a frozen snapshot of one command line - it will never match again.
+# BROAD:   a wildcard straight after a shell, an interpreter-of-shells or a network/delete tool, or a
+#          Read of a whole drive. "Bash(cmd.exe *)" approves every command there is; one project's list held
+#          Bash(curl *), Bash(cmd.exe *), Bash(wsl *) and rm -rf prefixes among about 180 accumulated rules.
+# Not broad: "Bash(dotnet:*)", "Bash(git:*)" and the like - one named tool, which is what the kit's own
+# global list grants (powershell and python are granted there too, so they are not flagged here).
+function Get-PermissionPlan([string]$settingsPath) {
+  $o = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+  $allow = @(); if ($o.permissions -and $o.permissions.allow) { $allow = @($o.permissions.allow) }
+  $broadRx = '^(?i)(Bash\((cmd|cmd\.exe|wsl|wsl\.exe|bash|sh|curl|wget|rm|del|rmdir|Remove-Item)([ :]|\.exe[ :])(-[A-Za-z]+[ :])*\*\)|Read\(/{1,2}[a-z](/{1,2}|:)?\*\*\))$'
+  $durableRx = '^Bash\([A-Za-z0-9_.\-]+[: ]\*\)$'
+  $broad = @($allow | Where-Object { $_ -match $broadRx })
+  $oneOff = @($allow | Where-Object { $_ -like 'Bash(*' -and $_ -notmatch $durableRx -and $broad -notcontains $_ })
+  $keep = @($allow | Where-Object { $broad -notcontains $_ -and $oneOff -notcontains $_ })
+  return [pscustomobject]@{ Object = $o; Allow = $allow; Broad = $broad; OneOff = $oneOff; Keep = $keep }
+}
+function Get-PrunedSettingsJson($plan) {
+  $plan.Object.permissions.allow = @($plan.Keep)
+  return (($plan.Object | ConvertTo-Json -Depth 20) -replace "`r`n", "`n") + "`n"
+}
+
+# dad doctor -PrunePermissions : show what would go, ask, back up, write. A HUMAN command: it asks at the
+# console and refuses when input is redirected, because pruning under a running agent session means more
+# permission prompts mid-run, and that is the owner's call. -PlanOut <file> writes the pruned settings to
+# ANOTHER file and changes nothing (how the result can be inspected, and how the suite checks it).
+if ($PrunePermissions) {
+  $pp = if ($ProjectDir) { $ProjectDir } else { (Get-Location).Path }
+  $sf = Join-Path $pp ".claude\settings.local.json"
+  if (-not (Test-Path -LiteralPath $sf)) { Write-Host "no .claude\settings.local.json in $pp - nothing to prune." -ForegroundColor Green; exit 0 }
+  $plan = $null
+  try { $plan = Get-PermissionPlan $sf } catch { Write-Host "settings.local.json is not valid JSON: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
+  Write-Host "== prune permissions: $sf ==" -ForegroundColor Cyan
+  Write-Host ("  {0} allow rule(s): {1} broad, {2} one-off, {3} kept" -f $plan.Allow.Count, $plan.Broad.Count, $plan.OneOff.Count, $plan.Keep.Count)
+  foreach ($r in $plan.Broad)  { Write-Host "  REMOVE (broad)   $r" -ForegroundColor Red }
+  foreach ($r in $plan.OneOff) { Write-Host "  REMOVE (one-off) $r" -ForegroundColor Yellow }
+  foreach ($r in $plan.Keep)   { Write-Host "  keep             $r" -ForegroundColor DarkGray }
+  if ($PlanOut) {
+    [System.IO.File]::WriteAllText($PlanOut, (Get-PrunedSettingsJson $plan), (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "  pruned settings written to $PlanOut - the real file is unchanged." -ForegroundColor Cyan
+    exit 0
+  }
+  if (($plan.Broad.Count + $plan.OneOff.Count) -eq 0) { Write-Host "  nothing to remove." -ForegroundColor Green; exit 0 }
+  $redirected = $false
+  try { $redirected = [Console]::IsInputRedirected } catch { $redirected = $true }
+  if ($redirected) {
+    Write-Host "  NOT changed: this asks a human for confirmation and input is not a console." -ForegroundColor Yellow
+    Write-Host "  Run it yourself in a terminal:  dad doctor -PrunePermissions" -ForegroundColor Yellow
+    exit 3
+  }
+  $ans = Read-Host "Remove the $($plan.Broad.Count + $plan.OneOff.Count) rule(s) marked REMOVE? A backup is kept. [y/N]"
+  if ($ans -notmatch '^(y|yes)$') { Write-Host "  nothing changed." -ForegroundColor Cyan; exit 0 }
+  $bak = "$sf.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+  Copy-Item -LiteralPath $sf -Destination $bak -Force
+  [System.IO.File]::WriteAllText($sf, (Get-PrunedSettingsJson $plan), (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host "  removed $($plan.Broad.Count + $plan.OneOff.Count) rule(s); backup: $bak" -ForegroundColor Green
+  Write-Host "  Expect permission prompts for commands those rules covered - approve the tool, not the command line." -ForegroundColor Cyan
+  exit 0
+}
 $GATES_LOG_WARN_BYTES = 5MB   # C3d: WARN past this size; the roll is a HUMAN rename, never automatic
 $script:fails = 0
 $script:warns = 0
@@ -489,11 +549,17 @@ if ($ProjectDir) {
         $bashRules = @($ls.permissions.allow | Where-Object { $_ -like 'Bash(*' })
         # A rule is "durable" if it grants a whole executable (Bash(dotnet:*)); anything else is a
         # frozen snapshot of one command line and will never match again.
-        $oneOff = @($bashRules | Where-Object { $_ -notmatch '^Bash\([A-Za-z0-9_.\-]+:\*\)$' })
+        $permPlan = Get-PermissionPlan $localSettings
+        $oneOff = @($permPlan.OneOff)
+        # 0.61.0 (issue 16): BROAD rules are the dangerous half - name each one.
+        if ($permPlan.Broad.Count -gt 0) {
+          Say "WARN" "project allow list" "$($permPlan.Broad.Count) BROAD rule(s) approve almost anything: $(($permPlan.Broad | Select-Object -First 8) -join '  ')" `
+              "dad doctor -PrunePermissions   (shows every removal, asks, keeps a backup; run it yourself)"
+        }
         if ($oneOff.Count -ge 3) {
           Say "WARN" "project allow list" "$($oneOff.Count) one-off Bash approvals accreted" `
-              "delete permissions.allow in $localSettings - the kit's global list already covers dotnet/git/powershell"
-        } elseif ($bashRules.Count) { Say "OK" "project allow list" "$($bashRules.Count) Bash rule(s), no clutter" }
+              "dad doctor -PrunePermissions   (or delete permissions.allow in $localSettings - the kit's global list already covers dotnet/git/powershell)"
+        } elseif ($bashRules.Count -and $permPlan.Broad.Count -eq 0) { Say "OK" "project allow list" "$($bashRules.Count) Bash rule(s), no clutter" }
       } catch { Say "WARN" "project allow list" "settings.local.json is not valid JSON" "fix or delete $localSettings" }
     }
 

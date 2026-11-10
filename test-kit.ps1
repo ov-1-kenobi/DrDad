@@ -9775,6 +9775,45 @@ Test-Case "0.61.0 #6: suggestions recurring on 3+ cards are listed at every roll
   Assert ([System.IO.File]::ReadAllText((Join-Path $kit "global\commands\retro.md")) -match 'dad grade-trends -RecordRetro') "/retro does not record itself"
 }
 
+Test-Case "0.61.0 #16: dad doctor names BROAD allow rules; -PrunePermissions plans the removal, changes nothing without a human at a console" {
+  $sb = New-Sandbox
+  try {
+    $dd = Join-Path $kit "dad-doctor.ps1"
+    $p = Join-Path $sb "proj"; New-Item -ItemType Directory -Force "$p\docs","$p\.claude" | Out-Null
+    "# Project: t" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    "{}" | Set-Content "$p\.mcp.json" -Encoding ASCII
+    $rules = @('Bash(dotnet:*)', 'Bash(git:*)', 'Bash(curl *)', 'Bash(cmd.exe *)', 'Bash(wsl *)', 'Bash(rm -rf *)', 'Read(//d//**)',
+               'Bash(echo "exit:$?")', 'Bash(ls src/Gdn.Cli)', 'Bash(find . -iname "*.csproj")', 'Read(//c/Users/me/.nuget/packages/system.commandline/**)', 'Bash(ipfs version *)')
+    $settings = [pscustomobject]@{ permissions = [pscustomobject]@{ allow = $rules; deny = @('Bash(shutdown:*)') }; other = "kept" }
+    $sf = "$p\.claude\settings.local.json"
+    [System.IO.File]::WriteAllText($sf, ($settings | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
+    $orig = [System.IO.File]::ReadAllText($sf)
+
+    # doctor (run in the project) warns and names the broad rules
+    Push-Location $p
+    try { $d = (& powershell -NoProfile -ExecutionPolicy Bypass -File $dd 2>&1 | Out-String) } finally { Pop-Location }
+    Assert ($d -match '(?s)WARN.{0,40}project allow list\s+5 BROAD rule') "dad doctor did not warn about the broad rules:`n$(($d -split "`n" | Where-Object { $_ -match 'allow list' }) -join "`n")"
+    Assert ($d -match 'Bash\(cmd\.exe \*\)' -and $d -match 'dad doctor -PrunePermissions') "the warning does not name the rules or the fix"
+
+    # the plan: broad and one-off rules go, durable tool rules and narrow reads stay; other keys untouched
+    $planFile = Join-Path $sb "pruned.json"
+    $o = ('' | & powershell -NoProfile -ExecutionPolicy Bypass -File $dd -ProjectDir $p -PrunePermissions -PlanOut $planFile 2>&1 | Out-String)
+    Assert (Test-Path $planFile) "no plan file was written:`n$o"
+    $pr = [System.IO.File]::ReadAllText($planFile) | ConvertFrom-Json
+    $kept = @($pr.permissions.allow)
+    Assert (($kept -join '|') -eq 'Bash(dotnet:*)|Bash(git:*)|Read(//c/Users/me/.nuget/packages/system.commandline/**)') "kept rules = '$($kept -join '|')'"
+    Assert (@($pr.permissions.deny).Count -eq 1 -and $pr.other -eq "kept") "the plan dropped other settings"
+    Assert ($o -match 'REMOVE \(broad\)\s+Bash\(curl \*\)' -and $o -match 'REMOVE \(one-off\)\s+Bash\(ls src/Gdn\.Cli\)') "the listing does not show what goes and why:`n$o"
+    Assert ([System.IO.File]::ReadAllText($sf) -eq $orig) "-PlanOut changed the real settings file"
+
+    # without a console (an agent's shell) it refuses to change anything
+    $o = ('y' | & powershell -NoProfile -ExecutionPolicy Bypass -File $dd -ProjectDir $p -PrunePermissions 2>&1 | Out-String)
+    Assert ($LASTEXITCODE -eq 3 -and $o -match 'NOT changed') "it did not refuse with redirected input (exit $LASTEXITCODE):`n$o"
+    Assert ([System.IO.File]::ReadAllText($sf) -eq $orig) "the settings file was changed without a human at a console"
+    Assert (@(Get-ChildItem "$p\.claude" -Filter "settings.local.json.bak-*").Count -eq 0) "a backup was written although nothing was changed"
+  } finally { Remove-Sandbox $sb }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

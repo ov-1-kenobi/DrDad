@@ -101,6 +101,16 @@ Measured on a copy of the reviewed project's corpus (431 files, 25,983 chunks), 
   project gets five further story closes before it can be held. "Same suggestion" means same tag and same theme
   (duplication, error handling, tests, naming, ...); it is deliberately crude.
 
+### Added - issue 16 (option B, the pruning part): broad permission allow-rules are named and can be pruned
+- `dad doctor` now WARNs with the exact BROAD rules in a project's `.claude\settings.local.json`: a wildcard straight
+  after a shell, `cmd`, `wsl`, `curl`, `wget`, `rm`/`del`, or a Read of a whole drive (`Bash(cmd.exe *)`,
+  `Read(//d//**)`). Single-tool rules such as `Bash(dotnet:*)` are not flagged.
+- `dad doctor -PrunePermissions` lists every rule as REMOVE (broad), REMOVE (one-off) or keep, asks y/N, writes a
+  timestamped backup next to the file and removes the marked rules; all other settings are preserved. It refuses to
+  change anything when input is not a console, so an agent cannot run it for you. `-PlanOut <file>` writes the pruned
+  settings to another file and changes nothing.
+- On the reviewed project's file the plan is: 185 rules, 5 broad, 174 one-off, 6 kept (planned only; not applied).
+
 ## 0.60.0 - 2026-11-09
 
 Process and tooling fixes from the review of a project built with the kit (Galactic Data Network).
