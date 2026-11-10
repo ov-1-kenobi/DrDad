@@ -9303,6 +9303,36 @@ Test-Case "0.60.0 #14: a story that rolled up to DONE owes its story-level close
   } finally { Remove-Sandbox $sb }
 }
 
+Test-Case "0.60.0 #15: scaffold creates grades\gates-log.jsonl in the initial commit; upgrade-project adds it to an older project" {
+  if (-not $haveGit) { Skip-Case "git is not installed" }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "gen"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "new-project.ps1") general $p | Out-Null
+    $log = "$p\grades\gates-log.jsonl"
+    Assert (Test-Path $log) "new-project did not create grades\gates-log.jsonl"
+    $rows = @([System.IO.File]::ReadAllLines($log) | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+    Assert ($rows.Count -eq 2) "expected the genesis line plus the scaffold line, found $($rows.Count)"
+    Assert ($rows[0].gate -eq "gates-log" -and $rows[0].reason -match 'log created') "line 1 is not the genesis line: $($rows[0].reason)"
+    Assert ($rows[1].gate -eq "gates-log" -and $rows[1].decision -eq "allow" -and $rows[1].reason -match 'project scaffolded \(general, kit \d+\.\d+\.\d+\)') "line 2 is not the scaffold line: $($rows[1].reason)"
+    $root = (git -C $p rev-list --max-parents=0 HEAD | Out-String).Trim()
+    Assert ((git -C $p show --stat --format= $root | Out-String) -match 'grades/gates-log\.jsonl') "the gate log is not part of the scaffold's initial commit"
+    Assert (-not ((git -C $p status --porcelain | Out-String).Trim())) "the scaffold left the tree dirty"
+    # the scaffold line does not count as a gate decision in the ratchet's eyes (grade bytes unchanged) nor as a block
+    Assert (@($rows | Where-Object { $_.decision -eq "block" }).Count -eq 0) "the scaffold wrote a block line"
+  } finally { Remove-Sandbox $sb }
+  $sb = New-Sandbox
+  try {
+    $p = Join-Path $sb "old"; New-Item -ItemType Directory -Force "$p\docs" | Out-Null
+    "# Project: t`n`n## Stack`n- x" | Set-Content "$p\CLAUDE.md" -Encoding UTF8
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") -ProjectDir $p 2>&1 | Out-Null
+    Assert (Test-Path "$p\grades\gates-log.jsonl") "upgrade-project did not add the gate log to an older project"
+    $before = [System.IO.File]::ReadAllText("$p\grades\gates-log.jsonl")
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "upgrade-project.ps1") -ProjectDir $p 2>&1 | Out-Null
+    Assert ([System.IO.File]::ReadAllText("$p\grades\gates-log.jsonl") -eq $before) "a second upgrade appended to an existing gate log"
+  } finally { Remove-Sandbox $sb }
+}
+
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "== $script:pass passed, $script:fail failed, $script:skip skipped ==" -ForegroundColor $(if ($script:fail) { "Red" } else { "Green" })

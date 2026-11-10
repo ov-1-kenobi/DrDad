@@ -94,6 +94,16 @@ if ($j.PSObject.Properties.Name -contains '_comment') {
 }
 [System.IO.File]::WriteAllText($mp, ($j | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
 
+# The gate log (grades\gates-log.jsonl) exists from the FIRST commit (0.60.0, issue 15). It used to be
+# created by whichever gate fired first - in one project eleven days after the scaffold - so the first
+# decisions of a project were never recorded, and the file first appeared as an untracked stray in the
+# middle of a run. dad-gates-log writes its genesis line plus this one; it fails open, so a scaffold never
+# fails over it. The gate id is the log's own ("gates-log"): no new id enters the pinned gate set.
+try {
+  $glVer = if (Test-Path $verFile) { (Get-Content $verFile -Raw).Trim() } else { "unknown" }
+  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-gates-log.ps1") -ProjectDir $proj -Gate "gates-log" -Decision "allow" -Reason "project scaffolded ($Kind, kit $glVer)" 2>$null | Out-Null
+} catch { }
+
 # Git safety net: init + first commit, so /build can checkpoint each passing unit and a mangled file
 # can be restored (git checkout) instead of hand-reconstructed.
 if (Get-Command git -ErrorAction SilentlyContinue) {
@@ -162,7 +172,7 @@ if (-not $env:DAD_HOME -and -not [Environment]::GetEnvironmentVariable("DAD_HOME
   Write-Host "  NOTE: DAD_HOME is not set. .mcp.json finds the kit through it - run the kit's install.cmd once" -ForegroundColor Yellow
   Write-Host "        (it sets DAD_HOME for every shell), then restart the editor." -ForegroundColor Yellow
 }
-Write-Host "  created: CLAUDE.md (generic), .mcp.json (docs -> $proj\docs), docs\$docName (Status: DRAFT), docs\RECIPES.md, docs\STATUS.md, docs\SOURCES.md + docs\sources\" -ForegroundColor Green
+Write-Host "  created: CLAUDE.md (generic), .mcp.json (docs -> $proj\docs), docs\$docName (Status: DRAFT), docs\RECIPES.md, docs\STATUS.md, docs\SOURCES.md + docs\sources\, grades\gates-log.jsonl" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Green
 Write-Host "  1. Open $proj in VS Code (Claude Code); approve the local-tools server."

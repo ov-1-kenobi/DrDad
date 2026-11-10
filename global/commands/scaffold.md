@@ -17,7 +17,8 @@ Run from the current project folder (it scaffolds into the current directory):
 ```
 dad new-project $ARGUMENTS
 ```
-After it runs, report exactly what it created (CLAUDE.md, .mcp.json, and `docs/DESIGN.md` or `docs/TEDD.md`
+After it runs, report exactly what it created (CLAUDE.md, .mcp.json, `grades/gates-log.jsonl` - the
+gate-decision log, committed from the first commit - and `docs/DESIGN.md` or `docs/TEDD.md`
 as DRAFT), then tell me to: approve the `local-tools` server, then run `/design` (design-first) or `/proto`
 - they grow the DRAFT doc and decide the stack FIRST (which fills CLAUDE.md's build/test). Do NOT fill the
 stack in yet.

@@ -169,6 +169,14 @@ try {
   if ($LASTEXITCODE -eq 0) { Write-Host "  moved docs\API-SURFACE.md -> .claude\API-SURFACE.md (out of docs\ and out of git; reindex to drop it from search)" -ForegroundColor Green }
 } catch { Write-Host "  could not move docs\API-SURFACE.md: $($_.Exception.Message)" -ForegroundColor Yellow }
 
+# --- 0d) The gate log exists from now on (0.60.0) - same reason as in new-project.ps1 ----------
+if (-not (Test-Path -LiteralPath (Join-Path $proj "grades\gates-log.jsonl"))) {
+  try {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "dad-gates-log.ps1") -ProjectDir $proj -Gate "gates-log" -Decision "allow" -Reason "project upgraded to kit $kitVer (log created by upgrade-project)" 2>$null | Out-Null
+    if (Test-Path -LiteralPath (Join-Path $proj "grades\gates-log.jsonl")) { Write-Host "  added grades\gates-log.jsonl (the gate-decision log; commit it)" -ForegroundColor Green }
+  } catch { }
+}
+
 # --- 1) Missing docs from templates (never overwrite existing) ---
 foreach ($doc in @("STATUS.md","RECIPES.md","SOURCES.md","DATASETS.md","STYLE.md","UI-TOOLING.md")) {
   $dst = Join-Path $proj "docs\$doc"

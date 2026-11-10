@@ -113,6 +113,13 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
   re-run a "real" file to stage and was one source of the duplicate commits. Rolled back with the rest if the commit
   fails.
 
+### Fixed - issue 15: `/scaffold` did not create the gate log
+- `new-project` now creates `grades\gates-log.jsonl` (genesis line plus one "project scaffolded" line) BEFORE the
+  initial commit, so the gate log is tracked from the first commit. It used to be created by whichever gate fired
+  first; in the reviewed project that was eleven days after the scaffold.
+- UPGRADE PATH: `upgrade-project` creates the log in a project that has none (never appends to an existing one).
+- No new gate id: both lines use the log's own id `gates-log`.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)
