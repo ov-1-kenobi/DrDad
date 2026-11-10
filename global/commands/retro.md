@@ -65,8 +65,9 @@ That appends a line to `grades/retro-log.md` (commit it). `close-unit` reads it:
 suggestions recur on three or more cards (`RECURRING SUGGESTIONS` in the grade-trends output) and five
 stories have closed since the last recorded retro, it refuses the next story close until a retro is
 recorded. For each recurring suggestion, the outcomes are the ones in step 3, plus one more: **a task** -
-if I approve, route it to taskmap-agent as a real task under the story it belongs to, so it gets built
-instead of being suggested a sixth time. Do not record a retro you did not run.
+if I approve, spawn **taskmap-agent** via the **Task tool** (subagent_type: "taskmap-agent" - an agent, not a
+skill) to add it as a real task under the story it belongs to, so it gets built instead of being suggested
+a sixth time. Do not record a retro you did not run.
 
 ## What this is for
 

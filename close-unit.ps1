@@ -867,9 +867,9 @@ else {
 $evidenceWritten = $null
 if ($script:storyFlipped) {
   try {
-    $tl = if ($SkipVerify) { "tests NOT verified (-SkipVerify)" }
-          elseif ($tcmd -and $null -ne $count) { "tests exit 0, $count ran" }
-          else { "no Test command in CLAUDE.md - tests NOT run" }
+    $tl = "no Test command in CLAUDE.md - tests NOT run"
+    if ($SkipVerify) { $tl = "tests NOT verified (-SkipVerify)" }
+    elseif ($tcmd -and $null -ne $count) { $tl = "tests exit 0, $count ran" }
     $evidenceWritten = Write-StoryEvidence $script:storyFlipped $tl
     $script:evidenceFresh = $script:storyFlipped
     $notes.Add("close evidence written for the grader: grades\$($script:storyFlipped)_EVIDENCE.md (the card must quote its Evidence line)")
