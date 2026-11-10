@@ -2,7 +2,10 @@
 <!-- The project DASHBOARD - a compact "where are we" so any session/agent can orient in one read.
      DERIVED, not authoritative: the librarian-agent is the ONLY writer and REGENERATES this from
      TASKS.md / STORIES.md / grades/ (those sources win on any conflict). The one original section is
-     "Issues & blockers". Keep the whole file under ~60 lines. Indexed - reindex after updating. -->
+     "Issues & blockers". Keep the whole file under ~60 lines. Indexed - reindex after updating.
+     The Snapshot section just below is GENERATED: close-unit rewrites it on every close (doc-stats -UpdateStatus),
+     so its counts are always current. The sections below it are prose and only as fresh as the last
+     /audit status - the Snapshot says how many units have closed since. -->
 
 ## Snapshot
 - As of: <YYYY-MM-DD>  (session model: <model>)

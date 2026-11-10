@@ -541,9 +541,11 @@ if ($script:shrinkAccepted -and $reasonText) { $allowText = "clean close: $Id - 
 
 # The bookkeeping files exactly as they are BEFORE this close writes to them (issue 2): if the commit
 # below does not land, they are put back, so a tick and a DONE stamp never sit on disk unbacked.
-$origTasks = $null; $origStories = $null
+$origTasks = $null; $origStories = $null; $origStatus = $null
+$statusFile = Join-Path $docs "STATUS.md"
 if (Test-Path $tasksFile)   { $origTasks = [System.IO.File]::ReadAllText($tasksFile) }
 if (Test-Path $storiesFile) { $origStories = [System.IO.File]::ReadAllText($storiesFile) }
+if (Test-Path $statusFile)  { $origStatus = [System.IO.File]::ReadAllText($statusFile) }
 $commitFailed = $false
 $rolledBack = $false
 
@@ -594,6 +596,25 @@ if ($storyClosed) {
     if ($RequireGrade) { $problems.Add("story $storyClosed : $gradeIssue - run /grade $storyClosed") }
     else { $warns.Add("story $storyClosed : $gradeIssue - run /grade $storyClosed") }
   } else { $notes.Add("story $storyClosed : grade card present") }
+}
+
+# --- 2c) keep the dashboard true: regenerate the STATUS.md Snapshot (issue 4, 0.60.0) ---
+# docs\STATUS.md is what every session reads first, and it was refreshed only when somebody remembered to
+# run /audit status: one project's dashboard was 200 closed tasks behind. The counts are computed, so
+# compute them here, in the same commit as the tick they describe. Only when this run changed the
+# bookkeeping (a re-run of a closed unit must not dirty the tree), and never fatal - a dashboard that
+# cannot be refreshed is a WARN, not a reason to refuse a verified close.
+$bookkeepingChanged = (($null -ne $origTasks -and [System.IO.File]::ReadAllText($tasksFile) -ne $origTasks) -or
+                       ($null -ne $origStories -and [System.IO.File]::ReadAllText($storiesFile) -ne $origStories))
+if ((Test-Path $statusFile) -and $bookkeepingChanged) {
+  try {
+    $ds = Join-Path $kit "doc-stats.ps1"
+    if (Test-Path $ds) {
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $ds -ProjectDir $proj -UpdateStatus -FromClose | Out-Null
+      if ($LASTEXITCODE -eq 0) { $notes.Add("docs\STATUS.md Snapshot regenerated (counts + next task)") }
+      else { $warns.Add("docs\STATUS.md Snapshot NOT refreshed (doc-stats exit $LASTEXITCODE) - run: dad doc-stats -UpdateStatus") }
+    }
+  } catch { $warns.Add("docs\STATUS.md Snapshot NOT refreshed: $($_.Exception.Message)") }
 }
 
 # --- 3) reindex so the next unit's agents see the updated state ---
@@ -694,6 +715,7 @@ if (-not $NoCommit) {
           $enc = New-Object System.Text.UTF8Encoding($false)
           if ($null -ne $origTasks -and [System.IO.File]::ReadAllText($tasksFile) -ne $origTasks) { [System.IO.File]::WriteAllText($tasksFile, $origTasks, $enc); $rolledBack = $true }
           if ($null -ne $origStories -and [System.IO.File]::ReadAllText($storiesFile) -ne $origStories) { [System.IO.File]::WriteAllText($storiesFile, $origStories, $enc); $rolledBack = $true }
+          if ($null -ne $origStatus -and (Test-Path $statusFile) -and [System.IO.File]::ReadAllText($statusFile) -ne $origStatus) { [System.IO.File]::WriteAllText($statusFile, $origStatus, $enc) }
           git reset -q | Out-Null
           if ($rolledBack) { $problems.Add("bookkeeping ROLLED BACK: the TASKS.md tick and any STORIES.md DONE marker were restored, because the commit did not land - '$Id' is NOT closed") }
         } catch { $problems.Add("could not roll the bookkeeping back after the failed commit: $($_.Exception.Message) - check docs\TASKS.md and docs\STORIES.md by hand") }

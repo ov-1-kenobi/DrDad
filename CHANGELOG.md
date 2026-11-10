@@ -48,6 +48,17 @@ Reproductions for each item are in `VERIFICATION.md`. Existing projects: run `up
   human's decision and that the agent passes the human's words, not its own.
 - BEHAVIOR CHANGE for existing projects: a script or habit that passes a bare `-AcceptShrink` must add `-Reason`.
 
+### Fixed - issue 4: `docs/STATUS.md` goes stale without anyone noticing
+- `close-unit` now regenerates the STATUS.md `## Snapshot` section on every close that changes the bookkeeping
+  (`doc-stats -UpdateStatus -FromClose`), and the refreshed file lands in the same commit as the tick. A re-run of an
+  already-closed unit does not touch it. If the commit fails, STATUS.md is rolled back with the rest.
+- The Snapshot gains one line: `Narrative sections below last refreshed (/audit status): <date>; units closed since:
+  <n>`. A plain `doc-stats -UpdateStatus` (the librarian's refresh) resets it; close-unit counts it up.
+- `doc-stats -Findings` reports `[status]` when the Snapshot's counts differ from the documents, when the dashboard
+  is still the template on a project with work done, and when 10 or more units have closed since the narrative was
+  refreshed. The reviewed project's dashboard said 35/54 stories and 307/362 tasks while the documents said 42/109
+  and 512/895.
+
 ## 0.59.4 - 2026-10-10
 
 ### Changed - Story S34 closes the three findings of the S28 grade card (`grades/S28_GRADE.md`)
